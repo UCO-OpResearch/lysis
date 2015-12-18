@@ -154,8 +154,8 @@ integer, dimension(num) :: bind1
 
 
   if( isBinary ) then
-     !filetype = 'unformatted' !if you compile with gfortran or f95
-     filetype = 'binary'      !if you compile with ifort
+     filetype = 'unformatted' !if you compile with gfortran or f95
+     !filetype = 'binary'      !if you compile with ifort
   else
      filetype = 'formatted'
   end if
@@ -177,8 +177,8 @@ kon = 1.0d-02 !1.0d+00             !tPA binding rate. units of inverse (micromol
 
 	uf = urcw1()
 
-	seed = mscw()
-    !seed= 284720241
+	!seed = mscw()
+    seed= 912309035
         write(*,*)' seed=',seed
 
     state(1) = 129281
@@ -618,7 +618,8 @@ tsave(1) = t
                    end if
                 enddo
                     
-                  if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
+            	!   if(colr2==0.or.colr2==1) write(*,*)' PROBLEM colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly' , colr2
+                  if(colr2==0.or.colr2==1) write(*,*)' PROBLEM colr2' , colr2
 
                percent2 = (CDFtPA(colr2)-r3)/(CDFtPA(colr2)-CDFtPA(colr2-1))
                ttPA = (tsec1(colr2)-(tsec1(colr2)-tsec1(colr2-1))*percent2)
@@ -737,7 +738,8 @@ tsave(1) = t
                      end if
                   enddo
                     
-                  if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
+                 ! if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
+                  if(colr2==0.or.colr2==1) write(*,*)' PROBLEM: colr2', colr2
 
                  percent2 = (CDFtPA(colr2)-r3)/(CDFtPA(colr2)-CDFtPA(colr2-1))
                  ttPA = (tsec1(colr2)-(tsec1(colr2)-tsec1(colr2-1))*percent2)
@@ -1499,7 +1501,8 @@ subroutine find10(numint,ans)
 
         enddo
  
-        if(ans==0) write(*,*) 'Problem: did not find correct multiple of 10'
+      !  if(ans==0) write(*,*)' Problem did not find correct multiple of 10'
+        if(ans==0) write(*,*)' Problem'        
  
 
 end subroutine find10
