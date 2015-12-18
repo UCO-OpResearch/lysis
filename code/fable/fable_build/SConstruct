@@ -1,0 +1,6 @@
+# THIS IS AN AUTOMATICALLY GENERATED FILE.
+# DO NOT EDIT! CHANGES WILL BE LOST.
+SConsignFile()
+Repository(r"/Users/bpaynter/ownCloud/_School/_Research/Computation/BloodClotting/code/fable_sources")
+SConscript("libtbx/SConscript")
+SConscript("fable/SConscript")
