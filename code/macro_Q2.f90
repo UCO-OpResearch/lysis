@@ -8,12 +8,14 @@ integer,parameter  :: F=121 !71 !81  !# of lattice nodes in one column in the ve
 integer,parameter  :: Ffree=29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
-integer,parameter  :: stats=10
-integer,parameter  :: num=(2*N-1)*F+N*(F-1)
+integer,parameter  :: stats=10 !the number of independent trials
+integer,parameter  :: num=(2*N-1)*F+N*(F-1) !the total number of fibers
 integer,parameter  :: M=43074 !total number of tPA molecules: 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM
 integer,parameter  :: tf=10*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
-integer  :: i, istat
+
+!the following variable are dummy or counter variables
+integer  :: i, istat 
 integer  :: j
 integer  :: k
 integer  :: ii 
@@ -25,7 +27,9 @@ integer  :: Ntot2
 integer  :: colr2, colr4 
 integer  :: z
 integer  :: numPLi
-double precision     :: t
+double precision     :: t !Time loop Counter
+integer                              :: name1, name2
+
 double precision     :: q
 double precision     :: delx
 double precision     :: Diff
@@ -34,74 +38,30 @@ double precision     :: num_t
 double precision     :: dist
 double precision     :: kon
 double precision     :: bs
-double precision     :: t_bind
+!double precision     :: t_bind
+
+!Microscale data
+double precision, dimension(101)       :: CDFtPA ! , CDFlys    Read in from file
+double precision, dimension(101)       :: tsec1  ! , tseclys   Read in from file
+double precision, dimension(100,100) :: lysismat              !Read in from file
+integer, dimension(100)  :: lenlysismat                       !Read in from file
+
 double precision     :: percent2, percent4
 double precision     :: rmicro, ttPA
+
+!Random number holders
 double precision     :: r, r1, r3, r2, r4
+integer  :: r400
+double precision, dimension(M)         :: rvect
 
 
+!File handling variables
 character(50) :: filetype,formatted
 character(70) :: filename1
 character(80) :: filename2
 character(90) :: filename3
 character(95) :: filename4
 character(75) :: filename6
-
-
-integer*1, dimension(num,num)  :: closeneigh
-integer, dimension(2,num)    :: endpts
-integer, dimension(8,num)    :: neighborc
-integer, dimension(2,M)   :: V
-double precision, dimension(enoFB)      :: init_state
-double precision, dimension(2)         :: p
-double precision, dimension(2)         :: pfit
-double precision, dimension(101)       :: CDFtPA, CDFlys
-double precision, dimension(101)       :: tsec1, tseclys
-double precision, dimension(num)      :: degrade
-double precision, dimension(num)      :: t_degrade
-double precision, dimension(M)        :: t_leave
-double precision, dimension(M)        :: bind
-integer, dimension(stats)             :: Nsavevect 
-integer                              :: name1, name2
-
-logical       :: isBinary =  .True.      ! flag for binary output
-integer       :: degunit = 20
-integer       :: Vunit = 21
-integer       :: V2unit = 22
-integer       :: Nunit = 23
-integer       :: tunit = 24
-character(50) :: degfile       ! degradation vector
-character(50) :: Vfile
-character(50) :: V2file
-character(50) :: Nfile
-character(50) :: tfile
-
-!stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
-!is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
-external :: mscw, kiss32, urcw1
-integer :: kiss32, mscw, seed, state(4), old_state(4), ui
-double precision :: uf, urcw1
-
-double precision, dimension(M)         :: rvect
-double precision, dimension(tf+1,num) :: degnext
-integer, dimension(tf+1,M) :: Vedgenext
-integer, dimension(tf+1,M) :: Vboundnext
-integer, dimension(F-1)  :: ind
-double precision, dimension(F-1)  :: place
-double precision, dimension(num)  :: degold
-double precision, dimension(tf+1) :: tsave
-integer  :: zero1
-integer, dimension(tf,N)  :: front
-integer, dimension(N)  :: firstdeg
-integer, dimension(N)  :: deglast
-integer, dimension(N,stats)  :: lastmove
-integer  :: fdeg
-integer  :: first0
-integer, dimension(N,N)  :: move
-integer  :: temp
-integer  :: lasti
-integer, dimension(N,N)  :: plotstuff, totmove,time2plot
-double precision, dimension(N,N)  :: plotstuff2
 integer       :: moveunit = 25
 integer       :: lastmoveunit = 26
 integer       :: plotunit = 27
@@ -113,19 +73,7 @@ character(50) :: lastmovefile
 character(50) :: plotfile   
 character(50) :: degnextfile  
 character(50) :: Venextfile  
-character(50) :: Vbdnextfile  
-
-integer, dimension(num)  :: intact2
-integer  :: countintact2, lenintact2, counth, countv, countpv
-integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
-integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx 
-integer, dimension(2,F*(N-1))  :: X1plot, Y1plot
-integer, dimension(2,N*(F-1))  :: X2plot, Y2plot
-integer, dimension(N*F)  :: Xvplot, Yvplot
-double precision, dimension(2,M)  :: bdtPA, freetPA
-double precision, dimension(100,100) :: lysismat
-integer, dimension(100)  :: lenlysismat
-integer  :: r400
+character(50) :: Vbdnextfile 
 integer  :: x1unit = 31
 integer  :: x2unit = 32
 integer  :: y1unit = 33
@@ -148,6 +96,78 @@ character(50)  :: tPAfreefile
 character(50)  :: cbindfile
 character(50)  :: cindfile
 character(50)  :: bind1file
+integer       :: degunit = 20
+integer       :: Vunit = 21
+integer       :: V2unit = 22
+integer       :: Nunit = 23
+integer       :: tunit = 24
+character(50) :: degfile       ! degradation vector
+character(50) :: Vfile
+character(50) :: V2file
+character(50) :: Nfile
+character(50) :: tfile
+
+
+integer*1, dimension(num,num)  :: closeneigh !Adjacency Matrix for fibers
+integer, dimension(8,num)    :: neighborc !List of nearest neighbors
+
+!Molecules State information
+!V (1,j) = index of the fiber molecule j is bound to
+!V (2,j) = 1 if molecule j is bound, 0 else
+integer, dimension(2,M)   :: V
+
+double precision, dimension(enoFB)      :: init_state !initial state of the system
+!double precision, dimension(2)         :: p
+!double precision, dimension(2)         :: pfit
+double precision, dimension(num)      :: degrade  !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
+double precision, dimension(num)      :: t_degrade !vector of the degradation times of each edge
+double precision, dimension(M)        :: t_leave  !vector of the tPA leaving times for each molecule
+double precision, dimension(M)        :: bind !vector of the binding times for each tPA
+!integer, dimension(stats)             :: Nsavevect 
+
+
+logical       :: isBinary =  .True.      ! flag for binary output
+
+
+!stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
+!is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
+external :: mscw, kiss32, urcw1
+integer :: kiss32, mscw, seed, state(4), old_state(4), ui
+double precision :: uf, urcw1
+
+!Stored State values
+double precision, dimension(tf+1,num) :: degnext !degnext(t,*) = degrade (*) at time T
+integer, dimension(tf+1,M) :: Vedgenext 
+integer, dimension(tf+1,M) :: Vboundnext
+
+integer, dimension(F-1)  :: ind
+double precision, dimension(F-1)  :: place
+double precision, dimension(num)  :: degold
+double precision, dimension(tf+1) :: tsave
+integer  :: zero1
+integer, dimension(tf,N)  :: front
+integer, dimension(N)  :: firstdeg
+integer, dimension(N)  :: deglast
+integer, dimension(N,stats)  :: lastmove
+integer  :: fdeg
+integer  :: first0
+integer, dimension(N,N)  :: move
+integer  :: temp
+integer  :: lasti
+integer, dimension(N,N)  :: plotstuff, totmove,time2plot
+double precision, dimension(N,N)  :: plotstuff2
+
+!Stuff for movie 
+integer, dimension(2,num)    :: endpts !End point nodes of each fiber
+integer, dimension(num)  :: intact2
+integer  :: countintact2, lenintact2, counth, countv, countpv
+integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
+integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx 
+integer, dimension(2,F*(N-1))  :: X1plot, Y1plot
+integer, dimension(2,N*(F-1))  :: X2plot, Y2plot
+integer, dimension(N*F)  :: Xvplot, Yvplot
+double precision, dimension(2,M)  :: bdtPA, freetPA
+
 integer :: countbind, countindep
 integer, dimension(stats,tf)  :: countbindV, countindepV, bind1V
 integer, dimension(num) :: bind1
