@@ -4,13 +4,14 @@
     <configuration>
         <data xmlns="http://www.netbeans.org/ns/make-project/1">
             <name>BloodClotting</name>
-            <c-extensions/>
+            <c-extensions>c</c-extensions>
             <cpp-extensions>cpp</cpp-extensions>
-            <header-extensions/>
+            <header-extensions>h</header-extensions>
             <sourceEncoding>UTF-8</sourceEncoding>
             <make-dep-projects/>
             <sourceRootList>
-                <sourceRootElem>C++ code</sourceRootElem>
+                <sourceRootElem>/Users/bpaynter/ownCloud/_School/_Research/Computation/BloodClotting/C++ code</sourceRootElem>
+                <sourceRootElem>/opt/local/include/boost</sourceRootElem>
             </sourceRootList>
             <confList>
                 <confElem>

@@ -49,9 +49,16 @@ MKDIR=mkdir
 CP=cp
 CCADMIN=CCadmin
 
+FOLDER = C++\ code/
+FILES =  ${FOLDER}macro_Q2.cpp # ${FOLDER}kiss.o
+#FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.o
 
+	
 # build
-build: .build-post
+build:	
+	g++ -std=c++11 -o bloodclotting ${FILES}
+	
+	
 
 .build-pre:
 # Add your pre 'build' code here...

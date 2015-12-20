@@ -35,7 +35,9 @@ OBJECTDIR=${CND_BUILDDIR}/${CND_CONF}/${CND_PLATFORM}
 
 # Object Files
 OBJECTFILES= \
-	${OBJECTDIR}/C++\ code/macro_Q2.o
+	${OBJECTDIR}/C++\ code/kiss.o \
+	${OBJECTDIR}/C++\ code/macro_Q2.o \
+	${OBJECTDIR}/C++\ code/tutorial.o
 
 
 # C Compiler Flags
@@ -62,11 +64,23 @@ ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/bloodclotting: ${OBJECTFILES}
 	${MKDIR} -p ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}
 	${LINK.cc} -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/bloodclotting ${OBJECTFILES} ${LDLIBSOPTIONS}
 
+.NO_PARALLEL:${OBJECTDIR}/C++\ code/kiss.o
+${OBJECTDIR}/C++\ code/kiss.o: C++\ code/kiss.c 
+	${MKDIR} -p ${OBJECTDIR} code
+	${RM} "$@.d"
+	$(COMPILE.c) -O2 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/C++\ code/kiss.o C++\ code/kiss.c
+
 .NO_PARALLEL:${OBJECTDIR}/C++\ code/macro_Q2.o
 ${OBJECTDIR}/C++\ code/macro_Q2.o: C++\ code/macro_Q2.cpp 
 	${MKDIR} -p ${OBJECTDIR} code
 	${RM} "$@.d"
 	$(COMPILE.cc) -O2 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/C++\ code/macro_Q2.o C++\ code/macro_Q2.cpp
+
+.NO_PARALLEL:${OBJECTDIR}/C++\ code/tutorial.o
+${OBJECTDIR}/C++\ code/tutorial.o: C++\ code/tutorial.cpp 
+	${MKDIR} -p ${OBJECTDIR} code
+	${RM} "$@.d"
+	$(COMPILE.cc) -O2 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/C++\ code/tutorial.o C++\ code/tutorial.cpp
 
 # Subprojects
 .build-subprojects:

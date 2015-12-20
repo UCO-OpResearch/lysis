@@ -41,10 +41,10 @@ double precision     :: bs
 !double precision     :: t_bind
 
 !Microscale data
-double precision, dimension(101)       :: CDFtPA ! , CDFlys    Read in from file
-double precision, dimension(101)       :: tsec1  ! , tseclys   Read in from file
-double precision, dimension(100,100) :: lysismat              !Read in from file
-integer, dimension(100)  :: lenlysismat                       !Read in from file
+double precision, dimension(101)        :: CDFtPA ! , CDFlys    Read in from file
+double precision, dimension(101)        :: tsec1  ! , tseclys   Read in from file
+double precision, dimension(100,100)    :: lysismat              !Read in from file
+integer, dimension(100)                 :: lenlysismat                       !Read in from file
 
 double precision     :: percent2, percent4
 double precision     :: rmicro, ttPA
