@@ -1,22 +1,23 @@
-/* 
- * File:   macro_Q2.cpp
- * Author: Dr. Brittany Bannish
- * Converted to C++ by Dr. Bradley Paynter
- *
- * Created on December 18, 2015, 4:28 PM
- * 
- * Runs the macroscale model in a clot 
- * with 72.7 nm diameter fibers and 
- * pore size. 1.0135 uM. 
- * FB conc. = 8.8 uM
- */
+/*******************************************************************************
+ *******************************************************************************
+ *** File:   macro_Q2.cpp
+ *** Author: Dr. Brittany Bannish
+ *** Converted to C++ by Dr. Bradley Paynter
+ ***
+ *** Created on December 18, 2015, 4:28 PM
+ ***
+ *** Runs the macroscale model in a clot
+ *** with 72.7 nm diameter fibers and
+ *** pore size. 1.0135 uM.
+ *** FB conc. = 8.8 uM
+ *******************************************************************************
+ *******************************************************************************/
 
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <cmath>
 #include <fstream>
-//#include <array>
 #include <sstream>
 
 extern "C" {
@@ -26,45 +27,87 @@ extern "C" {
 using namespace std;
 
 const bool verbose = true;
-
-// The number of lattice nodes in each (horizontal) row
-const int nodesInRow = 93;
-
-// The number of lattice nodes in each (vertical) column
-const int nodesInColumn = 121;
-
+/******************************************************************************
+ ** Physical Parameters
+ **
+ ******************************************************************************/
+// The tPA binding rate. Units of inverse (micromolar*sec)
+const float bindingRate = 1.0e-2; // kon
+// Pore size (distance betwen nodes), measured in centimeters
+const float poreSize = 1.0135e-4; // delx
+// Diffusion coefficient, measured in cm^2/s
+const float diffusionCoeff = 5.0e-7; // Diff
+// Concentration of binding sites in micromolar
+const float bindingSites = 4.27e+2; // bs
 /*
- * 1st node in vertical direction containing fibers. 
- * So if firstFiberRow=10, then rows 1-9 have no fibers, 
- * there's one more row of fiber-free planar vertical edges, 
- * and then the row starting with the firstFiberRow-th (e.g. 10th) vertical node 
- * is a full row of fibers
+ * Distance from the start of one fiber to the next, in microns 
+ * because distance between nodes is 1.0135 micron 
+ * and diameter of 1 fiber is 0.0727 micron
  */
-const int firstFiberRow = 29;
+const float gridSymmetryDistance = 1.0862; // dist
 
-// The number of independent trials to be run
-const int numberOfTrials = 10;
-
+/******************************************************************************
+ ** Model Parameters
+ **
+ ******************************************************************************/
+// The number of lattice nodes in each (horizontal) row
+const int nodesInRow = 93; // N
+// The number of lattice nodes in each (vertical) column
+const int nodesInColumn = 121; // F
 // The total number of fibers in the model
 const int numberOfFibers = (2*nodesInRow - 1)*nodesInColumn 
-                                       + nodesInRow*(nodesInColumn - 1);
-
-// The total number of tPA molecules: 
-//      43074 is Colin's [tPA]=0.6 nM 
-//      86148 is Colin's [tPA]=1.2 nM
-const int totalMolecules = 43074;
-
-// Total running time for model in seconds
-const int totalTime = 10*60;
-
+                                       + nodesInRow*(nodesInColumn - 1); // num
+/*
+ * 1st node in vertical direction containing fibers.
+ * So if firstFiberRow=10, then rows 1-9 have no fibers,
+ * there's one more row of fiber-free planar vertical edges,
+ * and then the row starting with the firstFiberRow-th (e.g. 10th) vertical node
+ * is a full row of fibers
+ */
+const int firstFiberRow = 29; // Ffree
 // The last edge number without fibrin
-const int lastGhostFiber = (3*nodesInRow - 1)*(firstFiberRow - 1);
+const int lastGhostFiber = (3*nodesInRow - 1)*(firstFiberRow - 1); // enoFB
+/* The total number of tPA molecules:
+ *      43074 is Colin's [tPA]=0.6 nM
+ *      86148 is Colin's [tPA]=1.2 nM
+ */
+const int totalMolecules = 43074; // M
+// The probability of moving. Make sure it is small enough that we've converged.
+const float movingProbability = 0.2; // q
 
-/*******************************************************************************
- * The following variables will hold the microscale data 
- * which will be read in from the named data files
+/******************************************************************************
+ ** Experimental Parameters
+ **
  ******************************************************************************/
+// The number of independent trials to be run
+const int numberOfTrials = 10; // stats
+// Total running time for model in seconds
+const int totalTime = 10*60; // tf
+// The length of one timestep, in seconds
+const double timeStep =
+        movingProbability*pow(poreSize,2)/(12*diffusionCoeff); // tstep
+// The total number of timesteps
+const int numberOfTimeSteps = totalTime / timeStep;
+// Seed for the random number generator
+UINT_LEAST32_T seed = 912309035; // seed
+UINT_LEAST32_T state[4] = { 129281, 362436069, 123456789, seed}; // state
+/******************************************************************************
+ ** Data Parameters
+ **
+ ******************************************************************************/
+// Data file names
 const string UnbindingTimeFile = "tsectPAPLG135_Q2.dat";
+const string lysisTimeFile = "lysismat_PLG135_Q2.dat";
+const string totalLysesFile = "lenlysisvect_PLG135_Q2.dat";
+// Data size parameters
+const unsigned int lysisBlocks = 100;
+const unsigned int unbindsPerBlock = 500;
+const unsigned int maxLysesPerBlock = 283;
+/******************************************************************************
+ ** The following variables will hold the microscale data
+ ** which will be read in from the named data files
+ ******************************************************************************/
+
 double UnbindingTimeDistribution[101];
 
 /*
@@ -75,10 +118,6 @@ double UnbindingTimeDistribution[101];
  * i.e. the first column, lysismat(:,1), gives the lysis times 
  * for the first 100 tPA leaving times.
  */
-const string lysisTimeFile = "lysismat_PLG135_Q2.dat";
-const unsigned int lysisBlocks = 100;
-const unsigned int unbindsPerBlock = 500;
-const unsigned int maxLysesPerBlock = 283;
 double lysisTime[maxLysesPerBlock][lysisBlocks];
 
 /*
@@ -87,15 +126,18 @@ double lysisTime[maxLysesPerBlock][lysisBlocks];
  * i.e., the first entry there's a 6000
  * i.e., out of the unbinds in the nth percentile (with respect to time),
  */
-const string totalLysesFile = "lenlysisvect_PLG135_Q2.dat";
 int lysesPerBlock[lysisBlocks];
 
-// The tPA binding rate. Units of inverse (micromolar*sec)
-const double kon = 1.0e-2;
+/******************************************************************************
+ ** Model State Variables
+ **
+ ******************************************************************************/
+// The index of the fiber 
+
 
 /*
- * The following two methods read in a 1- or 2-dimensional array of data 
- * from the named file.
+ * The following three methods read in the microscale data
+ * from the appropriate files.
  */
 bool readLysisTimeFromFile() {
     // Open data file for reading
@@ -223,23 +265,32 @@ bool readData() {
     return true;
 }
 
-
+/*
+ * Set up the random number generator 'kiss32' with the values from 'state'
+ */
+void initializeRandomGenerator() {
+    set_kiss32_(state);
+    get_kiss32_(state);
+}
 
 /*
  * 
  */
 int main(int argc, char** argv) {
-    cout << readData() << endl;
-    cout << "Time step length: " << 0.2 * pow(1.0135e-04, 2) / (12 * 5.0e-07) << endl;
-    cout << "I Worked!!" << endl;
-    cout << "The last ghost fiber is in position " << lastGhostFiber << endl;
-    
-    UINT_LEAST32_T seed = 912309035;
-    UINT_LEAST32_T state[] = {129281, 362436069, 123456789, 0};
-    state[3] = seed;
-    
-       set_kiss32_(state);
-   
+    cout << "Read in data.....";
+    bool success = readData();
+    cout << (success ? "Done." : "Failed!") << endl;
+    cout << "Parameters:" << endl;
+    cout << "   N = " << nodesInRow << endl;
+    cout << "   F = " << nodesInColumn << endl;
+    cout << "   Ffree = " << firstFiberRow << endl;
+    cout << "   num = " << numberOfFibers << endl;
+    cout << "   M = " << totalMolecules << endl;
+    cout << "   endFB = " << lastGhostFiber << endl;
+    cout << "Obtained using code macro_Q2.cpp" << endl;
+    cout << "Initializing random number generator.....";
+    initializeRandomGenerator();
+    cout << "Done." << endl;
     
     return 0;
 }
