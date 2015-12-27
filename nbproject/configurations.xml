@@ -19,6 +19,7 @@
       <logicalFolder name="C++ code" displayName="C++ code" projectFiles="true">
         <itemPath>C++ code/fileio.h</itemPath>
         <itemPath>C++ code/kiss.c</itemPath>
+        <itemPath>C++ code/kiss.h</itemPath>
         <itemPath>C++ code/macro_Q2.cpp</itemPath>
       </logicalFolder>
       <itemPath>Makefile</itemPath>
@@ -36,8 +37,7 @@
     </logicalFolder>
   </logicalFolder>
   <sourceRootList>
-    <Elem>/Users/bpaynter/ownCloud/_School/_Research/Computation/BloodClotting/C++ code</Elem>
-    <Elem>/opt/local/include/boost</Elem>
+    <Elem>C++ code</Elem>
   </sourceRootList>
   <projectmakefile>Makefile</projectmakefile>
   <confs>
@@ -50,58 +50,16 @@
       <compileType>
         <ccTool>
           <standard>8</standard>
-          <incDir>
-            <pElem>/opt/local/include/boost</pElem>
-          </incDir>
         </ccTool>
         <linkerTool>
-          <linkerAddLib>
-            <pElem>/opt/local/include/boost</pElem>
-          </linkerAddLib>
-          <linkerLibItems>
-            <linkerLibLibItem>boost_atomic-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_chrono-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_chrono-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_container-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_context-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_coroutine-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_date_time-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_exception-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_filesystem-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_graph-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_iostreams-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_locale-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_log-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_log_setup-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_math_c99-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_math_c99f-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_math_c99l-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_math_tr1-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_math_tr1f-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_math_tr1l-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_prg_exec_monitor-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_program_options-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_python-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_random-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_regex-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_serialization-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_signals-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_system-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_system-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_test_exec_monitor-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_thread-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_timer-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_timer-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_unit_test_framework-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_wave-mt</linkerLibLibItem>
-            <linkerLibLibItem>boost_wserialization-mt</linkerLibLibItem>
-            <linkerOptionItem>-l%libname%</linkerOptionItem>
-          </linkerLibItems>
+          <output>${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/bloodclotting</output>
         </linkerTool>
       </compileType>
       <item path="C++ code/fileio.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="C++ code/kiss.c" ex="false" tool="0" flavor2="0">
+      </item>
+      <item path="C++ code/kiss.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="C++ code/macro_Q2.cpp" ex="false" tool="1" flavor2="0">
       </item>
@@ -141,6 +99,8 @@
       <item path="C++ code/fileio.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="C++ code/kiss.c" ex="false" tool="0" flavor2="0">
+      </item>
+      <item path="C++ code/kiss.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="C++ code/macro_Q2.cpp" ex="false" tool="1" flavor2="0">
       </item>

@@ -70,8 +70,7 @@ static UINT_LEAST32_T jsr	= DEFAULT_JSR;
 static UINT_LEAST32_T x		= DEFAULT_X;
 static UINT_LEAST32_T y		= DEFAULT_Y;
 
-void
-get_kiss32_(UINT_LEAST32_T state[])
+void get_kiss32_(UINT_LEAST32_T state[])
 {
     state[0] = c;
     state[1] = jsr;
@@ -79,8 +78,7 @@ get_kiss32_(UINT_LEAST32_T state[])
     state[3] = y;
 }
 
-void
-set_kiss32_(UINT_LEAST32_T state[])
+void set_kiss32_(UINT_LEAST32_T state[])
 {
     c   = state[0];
     jsr = state[1];

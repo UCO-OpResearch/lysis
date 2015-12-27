@@ -54,7 +54,7 @@ FFLAGS=
 ASFLAGS=
 
 # Link Libraries and Options
-LDLIBSOPTIONS=-L/opt/local/include/boost -lboost_atomic-mt -lboost_chrono-mt -lboost_chrono-mt -lboost_container-mt -lboost_context-mt -lboost_coroutine-mt -lboost_date_time-mt -lboost_exception-mt -lboost_filesystem-mt -lboost_graph-mt -lboost_iostreams-mt -lboost_locale-mt -lboost_log-mt -lboost_log_setup-mt -lboost_math_c99-mt -lboost_math_c99f-mt -lboost_math_c99l-mt -lboost_math_tr1-mt -lboost_math_tr1f-mt -lboost_math_tr1l-mt -lboost_prg_exec_monitor-mt -lboost_program_options-mt -lboost_python-mt -lboost_random-mt -lboost_regex-mt -lboost_serialization-mt -lboost_signals-mt -lboost_system-mt -lboost_system-mt -lboost_test_exec_monitor-mt -lboost_thread-mt -lboost_timer-mt -lboost_timer-mt -lboost_unit_test_framework-mt -lboost_wave-mt -lboost_wserialization-mt -l%libname%
+LDLIBSOPTIONS=
 
 # Build Targets
 .build-conf: ${BUILD_SUBPROJECTS}
@@ -74,13 +74,13 @@ ${OBJECTDIR}/C++\ code/kiss.o: C++\ code/kiss.c
 ${OBJECTDIR}/C++\ code/macro_Q2.o: C++\ code/macro_Q2.cpp 
 	${MKDIR} -p ${OBJECTDIR} code
 	${RM} "$@.d"
-	$(COMPILE.cc) -g -I/opt/local/include/boost -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/C++\ code/macro_Q2.o C++\ code/macro_Q2.cpp
+	$(COMPILE.cc) -g -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/C++\ code/macro_Q2.o C++\ code/macro_Q2.cpp
 
 .NO_PARALLEL:${OBJECTDIR}/C++\ code/tutorial.o
 ${OBJECTDIR}/C++\ code/tutorial.o: C++\ code/tutorial.cpp 
 	${MKDIR} -p ${OBJECTDIR} code
 	${RM} "$@.d"
-	$(COMPILE.cc) -g -I/opt/local/include/boost -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/C++\ code/tutorial.o C++\ code/tutorial.cpp
+	$(COMPILE.cc) -g -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/C++\ code/tutorial.o C++\ code/tutorial.cpp
 
 # Subprojects
 .build-subprojects:

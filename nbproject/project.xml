@@ -10,8 +10,7 @@
             <sourceEncoding>UTF-8</sourceEncoding>
             <make-dep-projects/>
             <sourceRootList>
-                <sourceRootElem>/Users/bpaynter/ownCloud/_School/_Research/Computation/BloodClotting/C++ code</sourceRootElem>
-                <sourceRootElem>/opt/local/include/boost</sourceRootElem>
+                <sourceRootElem>C++ code</sourceRootElem>
             </sourceRootList>
             <confList>
                 <confElem>
