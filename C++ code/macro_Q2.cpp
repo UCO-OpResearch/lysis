@@ -17,12 +17,20 @@
 #include <iostream>
 #include <string>
 #include <cmath>
+#include <stdexcept>
 #include <fstream>
 #include <sstream>
 
 extern "C" {
 #include "kiss.h"
 }
+
+#define RIGHT 1
+#define LEFT -1
+#define UP 2
+#define DOWN -2
+#define OUT 3
+#define IN -3
     
 using namespace std;
 
@@ -54,8 +62,12 @@ const float gridSymmetryDistance = 1.0862; // dist
 const int nodesInRow = 93; // N
 // The number of lattice nodes in each (vertical) column
 const int nodesInColumn = 121; // F
+// Fibers in a full row
+const int fullRow = 3*nodesInRow - 1;
+// all right and out fibers in a row
+const int xzRow = 2*nodesInRow - 1;
 // The total number of fibers in the model
-const int numberOfFibers = (2*nodesInRow - 1)*nodesInColumn 
+const int totalFibers = (2*nodesInRow - 1)*nodesInColumn
                                        + nodesInRow*(nodesInColumn - 1); // num
 /*
  * 1st node in vertical direction containing fibers.
@@ -64,9 +76,9 @@ const int numberOfFibers = (2*nodesInRow - 1)*nodesInColumn
  * and then the row starting with the firstFiberRow-th (e.g. 10th) vertical node
  * is a full row of fibers
  */
-const int firstFiberRow = 29; // Ffree
+const int firstFiberRow = 29 - 1; // Ffree-1
 // The last edge number without fibrin
-const int lastGhostFiber = (3*nodesInRow - 1)*(firstFiberRow - 1); // enoFB
+const int lastGhostFiber = (3*nodesInRow - 1)*(firstFiberRow) - 1; // enoFB-1
 /* The total number of tPA molecules:
  *      43074 is Colin's [tPA]=0.6 nM
  *      86148 is Colin's [tPA]=1.2 nM
@@ -108,7 +120,7 @@ const unsigned int maxLysesPerBlock = 283;
  ** which will be read in from the named data files
  ******************************************************************************/
 
-double UnbindingTimeDistribution[101];
+double UnbindingTimeDistribution[101]; // tsec1;
 
 /*
  * lysismat_PLG135_Q2.dat is a matrix with column corresponding to 
@@ -118,7 +130,7 @@ double UnbindingTimeDistribution[101];
  * i.e. the first column, lysismat(:,1), gives the lysis times 
  * for the first 100 tPA leaving times.
  */
-double lysisTime[maxLysesPerBlock][lysisBlocks];
+double lysisTime[maxLysesPerBlock][lysisBlocks]; // lysismat
 
 /*
  * lenlysisvect_PLG135_Q2.dat saves the first row entry in each column of 
@@ -126,14 +138,23 @@ double lysisTime[maxLysesPerBlock][lysisBlocks];
  * i.e., the first entry there's a 6000
  * i.e., out of the unbinds in the nth percentile (with respect to time),
  */
-int lysesPerBlock[lysisBlocks];
+int lysesPerBlock[lysisBlocks]; // lenlysismat
 
 /******************************************************************************
  ** Model State Variables
  **
  ******************************************************************************/
-// The index of the fiber 
+// The index of the fiber that molecule j is bound to
+unsigned short boundTo[totalMolecules]; // V(1,:)
+// Whether or not molecule j is bound
+bool bound[totalMolecules]; // V(2,:)
+// Degradation state of each edge. 0=not degraded, -t=degraded at time t
+float degradationStatus[totalFibers]; // degrade
 
+/******************************************************************************
+ ** Methods
+ **
+ ******************************************************************************/
 
 /*
  * The following three methods read in the microscale data
@@ -274,7 +295,83 @@ void initializeRandomGenerator() {
 }
 
 /*
- * 
+ * Returns the (single-dimensional) index of the fiber 
+ * leaving node (nodeX, nodeY) in direction 'fiber'.
+ * NOTE: All of these indices are 0-indexed.
+ */
+unsigned short fiberIndex(unsigned short nodeX, unsigned short nodeY, char direction) {
+    if ((nodeX < 0) || (nodeY < 0))
+        throw invalid_argument("Index must be non-negative.");
+    else if (nodeX >= nodesInRow)
+        throw invalid_argument("Index out of bounds.");
+    else if (nodeY >= nodesInColumn)
+        throw invalid_argument("Index out of bounds.");
+    else
+        switch (direction) {
+            case DOWN:
+                return nodeY == 0 ? -1 : fiberIndex(nodeX, nodeY-1, UP);
+            case LEFT:
+                return nodeX == 0 ? -1 : fiberIndex(nodeX-1, nodeY, RIGHT);
+            case IN:
+                return fiberIndex(nodeX, nodeY, OUT);
+            case UP:
+                return (nodeY == nodesInColumn - 1) ? -1 :
+                    nodeY * fullRow + xzRow + nodeX;
+            case RIGHT:
+                return (nodeX == nodesInRow - 1) ? -1 :
+                    nodeY * fullRow + nodeX * 2 + 1;
+            case OUT:
+                return nodeY * fullRow + nodeX * 2;
+            default:
+                return -1;
+        }
+}
+
+/*
+ * Returns the x-coordinate of the node at the bottom/right endpoint
+ * of a fiber given the (single-dimensional) index of a fiber.
+ * NOTE: All of these indices are 0-indexed.
+ */
+unsigned short nodeX(unsigned short fiberIndex) {
+    if (fiberIndex < 0)
+        throw invalid_argument("Index must be non-negative.");
+    else if (fiberIndex >= totalFibers)
+        throw invalid_argument("Index out of bounds.");
+    unsigned short rowPosition = fiberIndex % fullRow;
+    return rowPosition >= xzRow ? rowPosition - xzRow :
+        (unsigned short)(rowPosition / 2);
+}
+
+/*
+ * Returns the y-coordinate of the node at the bottom/right endpoint
+ * of a fiber given the (single-dimensional) index of a fiber.
+ * NOTE: All of these indices are 0-indexed.
+ */
+unsigned short nodeY(unsigned short fiberIndex) {
+    if (fiberIndex < 0)
+        throw invalid_argument("Index must be non-negative.");
+    else if (fiberIndex >= totalFibers)
+        throw invalid_argument("Index out of bounds.");
+    return (unsigned short)(fiberIndex / fullRow);
+}
+
+
+/*
+ * Returns the direction of a fiber given the 
+ * (single-dimensional) index of a fiber.
+ * NOTE: All of these indices are 0-indexed.
+ */
+unsigned short fiberDirection(unsigned short fiberIndex) {
+    if (fiberIndex < 0)
+        throw invalid_argument("Index must be non-negative.");
+    else if (fiberIndex >= totalFibers)
+        throw invalid_argument("Index out of bounds.");
+    unsigned short rowPosition = fiberIndex % fullRow;
+    return rowPosition >= xzRow ? UP : (rowPosition % 2 == 0 ? OUT : RIGHT);
+}
+
+/*
+ *
  */
 int main(int argc, char** argv) {
     cout << "Read in data.....";
@@ -283,14 +380,30 @@ int main(int argc, char** argv) {
     cout << "Parameters:" << endl;
     cout << "   N = " << nodesInRow << endl;
     cout << "   F = " << nodesInColumn << endl;
-    cout << "   Ffree = " << firstFiberRow << endl;
-    cout << "   num = " << numberOfFibers << endl;
+    cout << "   Ffree-1 = " << firstFiberRow << endl;
+    cout << "   num = " << totalFibers << endl;
     cout << "   M = " << totalMolecules << endl;
-    cout << "   endFB = " << lastGhostFiber << endl;
+    cout << "   enoFB-1 = " << lastGhostFiber << endl;
     cout << "Obtained using code macro_Q2.cpp" << endl;
     cout << "Initializing random number generator.....";
     initializeRandomGenerator();
-    cout << "Done." << endl;
+    cout << "Done." << endl << endl;
+    
+    unsigned short fiber = fiberIndex(9,10,UP);
+    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
+    fiber = fiberIndex(0,2,DOWN);
+    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
+    fiber = fiberIndex(5,2,IN);
+    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
+    fiber = fiberIndex(9,10,RIGHT);
+    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
+    fiber = fiberIndex(nodesInRow-1,nodesInColumn-1,LEFT);
+    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
+    fiber = fiberIndex(nodesInRow-1,firstFiberRow,DOWN);
+    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
+    fiber = fiberIndex(15,2,DOWN);
+    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
+
     
     return 0;
 }
