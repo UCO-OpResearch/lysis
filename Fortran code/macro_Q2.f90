@@ -489,7 +489,7 @@ write(*,*)' bs=',bs
 
 !Initial distribution and boundedness of tPA molecules
 
-!V is matrix of edge loaction and state of boundedness for each tPA. first column is edge 
+!V is matrix of edge location and state of boundedness for each tPA. first column is edge
 !molecule is on, second column is 0 if unbound, 1 if bound. start with all molecules unbound
 
 do i=1,M

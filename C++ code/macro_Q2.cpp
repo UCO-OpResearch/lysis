@@ -16,6 +16,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <algorithm>
+#include <vector>
 #include <cmath>
 #include <stdexcept>
 #include <fstream>
@@ -92,14 +94,14 @@ const float movingProbability = 0.2; // q
  **
  ******************************************************************************/
 // The number of independent trials to be run
-const int numberOfTrials = 10; // stats
+const int totalTrials = 10; // stats
 // Total running time for model in seconds
 const int totalTime = 10*60; // tf
 // The length of one timestep, in seconds
 const double timeStep =
         movingProbability*pow(poreSize,2)/(12*diffusionCoeff); // tstep
 // The total number of timesteps
-const int numberOfTimeSteps = totalTime / timeStep;
+const int totalTimeSteps = totalTime / timeStep;
 // Seed for the random number generator
 UINT_LEAST32_T seed = 912309035; // seed
 UINT_LEAST32_T state[4] = { 129281, 362436069, 123456789, seed}; // state
@@ -145,11 +147,20 @@ int lysesPerBlock[lysisBlocks]; // lenlysismat
  **
  ******************************************************************************/
 // The index of the fiber that molecule j is bound to
-unsigned short boundTo[totalMolecules]; // V(1,:)
+unsigned short location[totalMolecules]; // V(1,:)
+
 // Whether or not molecule j is bound
 bool bound[totalMolecules]; // V(2,:)
-// Degradation state of each edge. 0=not degraded, -t=degraded at time t
-float degradationStatus[totalFibers]; // degrade
+
+// Timestep when the molecule will bind/unbind
+unsigned int unbindingTime[totalMolecules]; // bind/t_leave
+
+// Degradation state of each edge.
+bool degraded[totalFibers]; // degrade
+
+// Timestep when the fiber will degrade
+int degradeTime[totalFibers]; // t_degrade
+
 
 /******************************************************************************
  ** Methods
@@ -266,7 +277,6 @@ bool readLysesPerBlockFromFile() {
     return true;
 }
 
-
 /*
  * This method reads in the appropriate data from disk.
  * It returns "true" if all data read in correctly, 
@@ -295,6 +305,15 @@ void initializeRandomGenerator() {
 }
 
 /*
+ * Returns a random integer between 0 and N-1 inclusive.
+ */
+unsigned int randomInt(int N) {
+    double t = urcw1_();
+    // cout << t << " -> " << (unsigned int)(t*N) << endl;
+    return (unsigned int)(t*N);
+}
+
+/*
  * Returns the (single-dimensional) index of the fiber 
  * leaving node (nodeX, nodeY) in direction 'fiber'.
  * NOTE: All of these indices are 0-indexed.
@@ -309,9 +328,9 @@ unsigned short fiberIndex(unsigned short nodeX, unsigned short nodeY, char direc
     else
         switch (direction) {
             case DOWN:
-                return nodeY == 0 ? -1 : fiberIndex(nodeX, nodeY-1, UP);
+                return (nodeY == 0) ? -1 : fiberIndex(nodeX, nodeY-1, UP);
             case LEFT:
-                return nodeX == 0 ? -1 : fiberIndex(nodeX-1, nodeY, RIGHT);
+                return (nodeX == 0) ? -1 : fiberIndex(nodeX-1, nodeY, RIGHT);
             case IN:
                 return fiberIndex(nodeX, nodeY, OUT);
             case UP:
@@ -338,7 +357,7 @@ unsigned short nodeX(unsigned short fiberIndex) {
     else if (fiberIndex >= totalFibers)
         throw invalid_argument("Index out of bounds.");
     unsigned short rowPosition = fiberIndex % fullRow;
-    return rowPosition >= xzRow ? rowPosition - xzRow :
+    return (rowPosition >= xzRow) ? rowPosition - xzRow :
         (unsigned short)(rowPosition / 2);
 }
 
@@ -355,7 +374,6 @@ unsigned short nodeY(unsigned short fiberIndex) {
     return (unsigned short)(fiberIndex / fullRow);
 }
 
-
 /*
  * Returns the direction of a fiber given the 
  * (single-dimensional) index of a fiber.
@@ -367,44 +385,152 @@ unsigned short fiberDirection(unsigned short fiberIndex) {
     else if (fiberIndex >= totalFibers)
         throw invalid_argument("Index out of bounds.");
     unsigned short rowPosition = fiberIndex % fullRow;
-    return rowPosition >= xzRow ? UP : (rowPosition % 2 == 0 ? OUT : RIGHT);
+    return (rowPosition >= xzRow) ? UP : (rowPosition % 2 == 0 ? OUT : RIGHT);
 }
 
 /*
  *
  */
-int main(int argc, char** argv) {
-    cout << "Read in data.....";
-    bool success = readData();
-    cout << (success ? "Done." : "Failed!") << endl;
-    cout << "Parameters:" << endl;
-    cout << "   N = " << nodesInRow << endl;
-    cout << "   F = " << nodesInColumn << endl;
-    cout << "   Ffree-1 = " << firstFiberRow << endl;
-    cout << "   num = " << totalFibers << endl;
-    cout << "   M = " << totalMolecules << endl;
-    cout << "   enoFB-1 = " << lastGhostFiber << endl;
-    cout << "Obtained using code macro_Q2.cpp" << endl;
-    cout << "Initializing random number generator.....";
-    initializeRandomGenerator();
-    cout << "Done." << endl << endl;
-    
-    unsigned short fiber = fiberIndex(9,10,UP);
-    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
-    fiber = fiberIndex(0,2,DOWN);
-    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
-    fiber = fiberIndex(5,2,IN);
-    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
-    fiber = fiberIndex(9,10,RIGHT);
-    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
-    fiber = fiberIndex(nodesInRow-1,nodesInColumn-1,LEFT);
-    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
-    fiber = fiberIndex(nodesInRow-1,firstFiberRow,DOWN);
-    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
-    fiber = fiberIndex(15,2,DOWN);
-    cout << nodeX(fiber) << ", " << nodeY(fiber) << ", " << fiberDirection(fiber) << endl;
+void getNeighbors(unsigned short fiber, unsigned short neighbors[]) {
+    unsigned short x = nodeX(fiber);
+    unsigned short y = nodeY(fiber);
+    unsigned short dir = fiberDirection(fiber);
+    switch (dir) {
+        case UP:
+            neighbors[0] = (x != 0) ? fiberIndex(x,y,LEFT) : fiberIndex(x,y,RIGHT);
+            neighbors[1] = fiberIndex(x, y, OUT);
+            neighbors[2] = fiberIndex(x, y, IN);
+            neighbors[3] = (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT);
+            neighbors[4] = (x != 0) ? fiberIndex(x,y+1,LEFT) : fiberIndex(x,y+1,RIGHT);
+            neighbors[5] = fiberIndex(x, y+1, OUT);
+            neighbors[6] = fiberIndex(x, y+1, IN);
+            neighbors[7] = (x != nodesInRow-1) ? fiberIndex(x, y+1, RIGHT) : fiberIndex(x, y+1, LEFT);
+            break;
+        case RIGHT:
+            neighbors[0] = (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP);
+            neighbors[1] = fiberIndex(x, y, OUT);
+            neighbors[2] = fiberIndex(x, y, IN);
+            neighbors[3] = (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN);
+            neighbors[4] = (y != 0) ? fiberIndex(x+1, y, DOWN) : fiberIndex(x+1, y, UP);
+            neighbors[5] = fiberIndex(x, y, OUT);
+            neighbors[6] = fiberIndex(x, y, IN);
+            neighbors[7] = (y != nodesInColumn-1) ? fiberIndex(x+1, y, UP) : fiberIndex(x+1, y, DOWN);
+            break;
+        case OUT:
+            neighbors[0] = (x != 0) ? fiberIndex(x, y, LEFT) : fiberIndex(x, y, RIGHT); // z
+            neighbors[1] = (x != 0) ? fiberIndex(x, y, LEFT) : fiberIndex(x, y, RIGHT); // z+1
+            neighbors[2] = (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT); // z
+            neighbors[3] = (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT); // z+1
+            neighbors[4] = (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP); // z
+            neighbors[5] = (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP); // z+1
+            neighbors[6] = (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN); // z
+            neighbors[7] = (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN); // z+1
+            break;
+        default:
+            throw invalid_argument("Something went wrong while finding neighbors.");
+    }
+}
 
-    
+/*
+ * Output all parameter (constant) values to stout.
+ */
+void printParameters() {
+    cout << "Model Parameters:" << endl;
+    cout << "   (N)         Nodes per row                   = " << nodesInRow << endl;
+    cout << "   (F)         Nodes per column                = " << nodesInColumn << endl;
+    cout << "   (Ffree-1)   First row of fibers             = " << firstFiberRow << endl;
+    cout << "   (num)       Total fibers                    = " << totalFibers << endl;
+    cout << "   (M)         Total molecules                 = " << totalMolecules << endl;
+    cout << "   (enoFB-1)   Index of the last ghost fiber   = " << lastGhostFiber << endl;
+    cout << "   (tstep)     Length of timestep              = " << timeStep << " sec" << endl;
+    cout << "   (num_t)     Total timesteps                 = " << totalTimeSteps << endl;
+    cout << "   (tf)        Total time                      = " << totalTime << " sec" << endl;
+    cout << "   (seed)      Random number generator seed    = " << seed << endl;
+    cout << "   (q)         Molecule moving probability     = " << movingProbability << endl;
+    cout << "   (delx)      Distance between nodes          = " << poreSize << " cm" << endl;
+    cout << "   (kon)       Binding rate                    = " << bindingRate << " micromolar*sec" << endl;
+    cout << "   (bs)        Concentration of binding sites  = " << bindingSites << " micromolar" << endl;
+}
+
+/*
+ * Sets the model state variables to their initial values, that is,
+ * All fibers are undegraded and have no degrade time set
+ * All molecules are unbound, have no timer set, and their locations
+ * are uniformly distributed on the ghost fibers
+ */
+void initializeVariables() {
+    for (int i = 0; i < totalFibers; i++) {
+        degraded[i] = false;
+        degradeTime[i] = totalTimeSteps + 1;
+    }
+    for (int i = 0; i < totalMolecules; i++) {
+        bound[i] = false;
+        location[i] = randomInt(lastGhostFiber + 1);
+        unbindingTime[i] = totalTimeSteps + 1;
+    }
+}
+
+/*
+ *
+ */
+void degradeFibers(unsigned int t) {
+    for (int i = lastGhostFiber+1; i < totalFibers; i++) {
+        if (degradeTime[i] == t) {
+            degraded[i] = true;
+            for (int j = 0; j < totalMolecules; j++) {
+                if (location[j] == i) {
+                    bound[j] = false;
+                    unbindingTime[j] = t;
+                }
+            }
+        }
+    }
+}
+
+/*
+ *
+ */
+void runModel() {
+    for (unsigned int t = 0; t < totalTimeSteps; t++) {
+        if ((t % 400000 == 0) && verbose)
+            cout << "Time: " << t * timeStep << " sec" << endl;
+        degradeFibers(t);
+        for (unsigned int j = 0; j < totalMolecules; j++) {
+            if (bound[j] && (unbindingTime[j] == t)) {
+                bound[j] = false;
+                unbindingTime[j] = t - log(urcw1_()) / (bindingRate * bindingSites);
+            }
+            if (!bound[j]) {
+                if (urcw1_() <= 1-movingProbability) {
+                    
+                }
+            }
+        }
+    }
+}
+
+/******************************************************************************
+ ** Main
+ **
+ ******************************************************************************/
+int main(int argc, char** argv) {
+    if (verbose) cout << "Read in data.............................";
+    bool success = readData();
+    if (verbose) cout << (success ? "Done." : "Failed!") << endl;
+    cout << "Output obtained using code macro_Q2.cpp" << endl;
+    printParameters();
+    if (verbose) cout << "Initializing random number generator.....";
+    initializeRandomGenerator();
+    if (verbose) cout << "Done." << endl;
+    if (verbose) cout << "Initializing variables...................";
+    initializeVariables();
+    if (verbose) cout << "Done." << endl;
     return 0;
 }
+
+
+template <class T>
+struct heap {
+    
+};
 
