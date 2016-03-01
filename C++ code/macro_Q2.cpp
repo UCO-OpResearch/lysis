@@ -217,6 +217,11 @@ bool readLysisTimeFromFile() {
     return true;
 }
 
+/*
+ * This method reads the unbinding time given in a file.
+ * Extra entries are discarded, while an amount of files
+ * too small will close the file.
+ */
 bool readUnbindingTimeFromFile() {
     int i = 0;
     // Open data file for reading
@@ -247,6 +252,11 @@ bool readUnbindingTimeFromFile() {
     return true;
 }
 
+/*
+ * This method reads the Lyses per block from
+ * a file. Extra files will be removed, while
+ * an amount of files too small will close the file.
+ */
 bool readLysesPerBlockFromFile() {
     int i = 0;
     // Open data file for reading
@@ -389,7 +399,8 @@ unsigned short fiberDirection(unsigned short fiberIndex) {
 }
 
 /*
- *
+ * Gets the neighbors surrounding the selected fiber, given the
+ * index of a fiber.
  */
 void getNeighbors(unsigned short fiber, unsigned short neighbors[]) {
     unsigned short x = nodeX(fiber);
@@ -471,7 +482,7 @@ void initializeVariables() {
 }
 
 /*
- *
+ * Degrades fibers for a given value.
  */
 void degradeFibers(unsigned int t) {
     for (int i = lastGhostFiber+1; i < totalFibers; i++) {
@@ -488,7 +499,7 @@ void degradeFibers(unsigned int t) {
 }
 
 /*
- *
+ * Runs the BloodClotting Model.
  */
 void runModel() {
     for (unsigned int t = 0; t < totalTimeSteps; t++) {
