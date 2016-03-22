@@ -501,19 +501,36 @@ void degradeFibers(unsigned int t) {
 /*
  * Runs the BloodClotting Model.
  */
+void unBind(unsigned short j, unsigned int t, double r) {
+    bound[j] = false;
+    unbindingTime[j] = t - log(r) / (bindingRate * bindingSites);
+}
+
+/*
+ *
+ */
+void bind(unsigned short j, unsigned int t, double r) {
+    bound[j] = true;
+}
+
+/*
+ *
+ */
 void runModel() {
     for (unsigned int t = 0; t < totalTimeSteps; t++) {
         if ((t % 400000 == 0) && verbose)
             cout << "Time: " << t * timeStep << " sec" << endl;
         degradeFibers(t);
         for (unsigned int j = 0; j < totalMolecules; j++) {
-            if (bound[j] && (unbindingTime[j] == t)) {
-                bound[j] = false;
-                unbindingTime[j] = t - log(urcw1_()) / (bindingRate * bindingSites);
-            }
-            if (!bound[j]) {
-                if (urcw1_() <= 1-movingProbability) {
-                    
+            if (bound[j] && (unbindingTime[j] == t)) // If the molecule is bound, should it unbind?
+                unBind(j, t, urcw1_());
+            if (!bound[j]) { // If the molecule is unbound, should it move?
+                if (urcw1_() <= 1-movingProbability) { // If the molecule does not move, can it bind?
+                    if ((unbindingTime[j] <= t) && !degraded[location[j]]) { // It can bind.
+                        
+                    }
+                } else {
+                
                 }
             }
         }
@@ -539,9 +556,4 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-
-template <class T>
-struct heap {
-    
-};
 
