@@ -294,23 +294,23 @@ bool readLysesPerBlockFromFile() {
  */
 bool readData() {
     bool success;
-    success = readLysisTimeFromFile();
-    if (!success)
-        return false;
+    success = readLysisTimeFromFile(); // Will read the file to check if it is a success
+    if (!success)  // If it isn't a success
+        return false; // Then readData will not return true
     success = readUnbindingTimeFromFile();
     if (!success)
-        return false;
+        return false; // readData will not return true
     success = readLysesPerBlockFromFile();
     if (!success)
-        return false;
-    return true;
+        return false; // readData will not return true
+    return true; // If all are successful, then readData returns true
 }
 
 /*
  * Set up the random number generator 'kiss32' with the values from 'state'
  */
 void initializeRandomGenerator() {
-    set_kiss32_(state);
+    set_kiss32_(state); // Each command initialize the random generators
     get_kiss32_(state);
 }
 
@@ -329,14 +329,14 @@ unsigned int randomInt(int N) {
  * NOTE: All of these indices are 0-indexed.
  */
 unsigned short fiberIndex(unsigned short nodeX, unsigned short nodeY, char direction) {
-    if ((nodeX < 0) || (nodeY < 0))
+    if ((nodeX < 0) || (nodeY < 0)) // Checks to see if the nodes are non-negative
         throw invalid_argument("Index must be non-negative.");
-    else if (nodeX >= nodesInRow)
+    else if (nodeX >= nodesInRow) // Checks to see if the index is in bounds, row bound
         throw invalid_argument("Index out of bounds.");
-    else if (nodeY >= nodesInColumn)
+    else if (nodeY >= nodesInColumn) // Checks to see if the index is in bounds, column bound
         throw invalid_argument("Index out of bounds.");
     else
-        switch (direction) {
+        switch (direction) { // If the index is in bound, will get the index of the fiber depending on the direction given
             case DOWN:
                 return (nodeY == 0) ? -1 : fiberIndex(nodeX, nodeY-1, UP);
             case LEFT:
@@ -362,12 +362,12 @@ unsigned short fiberIndex(unsigned short nodeX, unsigned short nodeY, char direc
  * NOTE: All of these indices are 0-indexed.
  */
 unsigned short nodeX(unsigned short fiberIndex) {
-    if (fiberIndex < 0)
+    if (fiberIndex < 0)  // Checks if the index is non-negative
         throw invalid_argument("Index must be non-negative.");
-    else if (fiberIndex >= totalFibers)
+    else if (fiberIndex >= totalFibers) // Checks if the index is in bounds
         throw invalid_argument("Index out of bounds.");
-    unsigned short rowPosition = fiberIndex % fullRow;
-    return (rowPosition >= xzRow) ? rowPosition - xzRow :
+    unsigned short rowPosition = fiberIndex % fullRow;    
+    return (rowPosition >= xzRow) ? rowPosition - xzRow : // Finds the x-coordinate, and returns it
         (unsigned short)(rowPosition / 2);
 }
 
@@ -377,11 +377,11 @@ unsigned short nodeX(unsigned short fiberIndex) {
  * NOTE: All of these indices are 0-indexed.
  */
 unsigned short nodeY(unsigned short fiberIndex) {
-    if (fiberIndex < 0)
+    if (fiberIndex < 0)  // Checks if the index is non-negative
         throw invalid_argument("Index must be non-negative.");
-    else if (fiberIndex >= totalFibers)
+    else if (fiberIndex >= totalFibers) // Checks if the index is in bounds
         throw invalid_argument("Index out of bounds.");
-    return (unsigned short)(fiberIndex / fullRow);
+    return (unsigned short)(fiberIndex / fullRow); // Finds the y-coordinate, and returns it
 }
 
 /*
@@ -390,12 +390,12 @@ unsigned short nodeY(unsigned short fiberIndex) {
  * NOTE: All of these indices are 0-indexed.
  */
 unsigned short fiberDirection(unsigned short fiberIndex) {
-    if (fiberIndex < 0)
+    if (fiberIndex < 0) // Checks if the index is non-negative
         throw invalid_argument("Index must be non-negative.");
-    else if (fiberIndex >= totalFibers)
+    else if (fiberIndex >= totalFibers) // Checks if the index is in bounds
         throw invalid_argument("Index out of bounds.");
     unsigned short rowPosition = fiberIndex % fullRow;
-    return (rowPosition >= xzRow) ? UP : (rowPosition % 2 == 0 ? OUT : RIGHT);
+    return (rowPosition >= xzRow) ? UP : (rowPosition % 2 == 0 ? OUT : RIGHT); // Finds the direction of the fiber, and returns it
 }
 
 /*
@@ -403,12 +403,12 @@ unsigned short fiberDirection(unsigned short fiberIndex) {
  * index of a fiber.
  */
 void getNeighbors(unsigned short fiber, unsigned short neighbors[]) {
-    unsigned short x = nodeX(fiber);
-    unsigned short y = nodeY(fiber);
-    unsigned short dir = fiberDirection(fiber);
+    unsigned short x = nodeX(fiber); // Sets the x-coordinate to the fiber's x
+    unsigned short y = nodeY(fiber); // Sets the y-coordinate to the fiber's x
+    unsigned short dir = fiberDirection(fiber); // Sets the direction to the fiber's x
     switch (dir) {
-        case UP:
-            neighbors[0] = (x != 0) ? fiberIndex(x,y,LEFT) : fiberIndex(x,y,RIGHT);
+        case UP: // If the direction is set to UP
+            neighbors[0] = (x != 0) ? fiberIndex(x,y,LEFT) : fiberIndex(x,y,RIGHT); // Goes through each touching element of the fiber selected
             neighbors[1] = fiberIndex(x, y, OUT);
             neighbors[2] = fiberIndex(x, y, IN);
             neighbors[3] = (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT);
@@ -417,8 +417,8 @@ void getNeighbors(unsigned short fiber, unsigned short neighbors[]) {
             neighbors[6] = fiberIndex(x, y+1, IN);
             neighbors[7] = (x != nodesInRow-1) ? fiberIndex(x, y+1, RIGHT) : fiberIndex(x, y+1, LEFT);
             break;
-        case RIGHT:
-            neighbors[0] = (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP);
+        case RIGHT: // If the direction is set to RIGHT
+            neighbors[0] = (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP); // Goes through each touching element of the fiber selected
             neighbors[1] = fiberIndex(x, y, OUT);
             neighbors[2] = fiberIndex(x, y, IN);
             neighbors[3] = (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN);
@@ -427,7 +427,7 @@ void getNeighbors(unsigned short fiber, unsigned short neighbors[]) {
             neighbors[6] = fiberIndex(x, y, IN);
             neighbors[7] = (y != nodesInColumn-1) ? fiberIndex(x+1, y, UP) : fiberIndex(x+1, y, DOWN);
             break;
-        case OUT:
+        case OUT: // If the direction is set to OUT
             neighbors[0] = (x != 0) ? fiberIndex(x, y, LEFT) : fiberIndex(x, y, RIGHT); // z
             neighbors[1] = (x != 0) ? fiberIndex(x, y, LEFT) : fiberIndex(x, y, RIGHT); // z+1
             neighbors[2] = (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT); // z
@@ -437,7 +437,7 @@ void getNeighbors(unsigned short fiber, unsigned short neighbors[]) {
             neighbors[6] = (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN); // z
             neighbors[7] = (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN); // z+1
             break;
-        default:
+        default: // If something goes wrongs with the method
             throw invalid_argument("Something went wrong while finding neighbors.");
     }
 }
@@ -471,7 +471,7 @@ void printParameters() {
  */
 void initializeVariables() {
     for (int i = 0; i < totalFibers; i++) {
-        degraded[i] = false;
+        degraded[i] = false; 
         degradeTime[i] = totalTimeSteps + 1;
     }
     for (int i = 0; i < totalMolecules; i++) {
