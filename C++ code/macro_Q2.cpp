@@ -338,16 +338,16 @@ unsigned short fiberIndex(unsigned short nodeX, unsigned short nodeY, char direc
     else
         switch (direction) { // If the index is in bound, will get the index of the fiber depending on the direction given
             case DOWN:
-                return (nodeY == 0) ? -1 : fiberIndex(nodeX, nodeY-1, UP);
-            case LEFT:
-                return (nodeX == 0) ? -1 : fiberIndex(nodeX-1, nodeY, RIGHT);
+                return (nodeY == 0) ? -1 : fiberIndex(nodeX, nodeY-1, UP); // Will check if node Y is zero, if it is, then -1 will be returned. Else, the function will be called-
+            case LEFT:                                                     // -again but with parameters.
+                return (nodeX == 0) ? -1 : fiberIndex(nodeX-1, nodeY, RIGHT);// Will check if node X is zero, if it is, then -1 will be returned. Else, the function will be called-
             case IN:
-                return fiberIndex(nodeX, nodeY, OUT);
+                return fiberIndex(nodeX, nodeY, OUT); // If the direction is IN, it will call the function again but with the direction being OUT
             case UP:
-                return (nodeY == nodesInColumn - 1) ? -1 :
+                return (nodeY == nodesInColumn - 1) ? -1 : //If node Y is equal to the nodesInColumn -1, it will return -1, else it will return the equation after the question mark
                     nodeY * fullRow + xzRow + nodeX;
             case RIGHT:
-                return (nodeX == nodesInRow - 1) ? -1 :
+                return (nodeX == nodesInRow - 1) ? -1 : //If node X is equal to the nodesInRow -1, it will return -1, else it will return the equation after the question mark
                     nodeY * fullRow + nodeX * 2 + 1;
             case OUT:
                 return nodeY * fullRow + nodeX * 2;
@@ -409,22 +409,22 @@ void getNeighbors(unsigned short fiber, unsigned short neighbors[]) {
     switch (dir) {
         case UP: // If the direction is set to UP
             neighbors[0] = (x != 0) ? fiberIndex(x,y,LEFT) : fiberIndex(x,y,RIGHT); // Goes through each touching element of the fiber selected
-            neighbors[1] = fiberIndex(x, y, OUT);
-            neighbors[2] = fiberIndex(x, y, IN);
-            neighbors[3] = (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT);
-            neighbors[4] = (x != 0) ? fiberIndex(x,y+1,LEFT) : fiberIndex(x,y+1,RIGHT);
-            neighbors[5] = fiberIndex(x, y+1, OUT);
-            neighbors[6] = fiberIndex(x, y+1, IN);
-            neighbors[7] = (x != nodesInRow-1) ? fiberIndex(x, y+1, RIGHT) : fiberIndex(x, y+1, LEFT);
+            neighbors[1] = fiberIndex(x, y, OUT); // Calls the fiberIndex function to get this neighbor
+            neighbors[2] = fiberIndex(x, y, IN); // Calls the fiberIndex function to get this neighbor
+            neighbors[3] = (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT); // If x doesn't equal nodesInRow-1, then it will call fiberIndex to the right. Else, to the left
+            neighbors[4] = (x != 0) ? fiberIndex(x,y+1,LEFT) : fiberIndex(x,y+1,RIGHT); // If x doesn't equal 0, then it will call fiberIndex to the left. Else, to the right
+            neighbors[5] = fiberIndex(x, y+1, OUT); // Calls the fiberIndex function to get this neighbor
+            neighbors[6] = fiberIndex(x, y+1, IN); // Calls the fiberIndex function to get this neighbor
+            neighbors[7] = (x != nodesInRow-1) ? fiberIndex(x, y+1, RIGHT) : fiberIndex(x, y+1, LEFT); // If x doesn't equal nodesInRow-1, then it will call fiberIndex to the right. Else, to the left
             break;
         case RIGHT: // If the direction is set to RIGHT
             neighbors[0] = (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP); // Goes through each touching element of the fiber selected
-            neighbors[1] = fiberIndex(x, y, OUT);
-            neighbors[2] = fiberIndex(x, y, IN);
-            neighbors[3] = (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN);
-            neighbors[4] = (y != 0) ? fiberIndex(x+1, y, DOWN) : fiberIndex(x+1, y, UP);
-            neighbors[5] = fiberIndex(x, y, OUT);
-            neighbors[6] = fiberIndex(x, y, IN);
+            neighbors[1] = fiberIndex(x, y, OUT); // Calls the fiberIndex function to get this neighbor
+            neighbors[2] = fiberIndex(x, y, IN); // Calls the fiberIndex function to get this neighbor
+            neighbors[3] = (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN); // If y doesn't equal nodesInColumn-1, then it will call fiberIndex to UP. Else, DOWN
+            neighbors[4] = (y != 0) ? fiberIndex(x+1, y, DOWN) : fiberIndex(x+1, y, UP); // If y doesn't equal nodesInColumn-1, then it will call fiberIndex to DOWN. Else, UP
+            neighbors[5] = fiberIndex(x, y, OUT); // Calls the fiberIndex function to get this neighbor 
+            neighbors[6] = fiberIndex(x, y, IN); // Calls the fiberIndex function to get this neighbor
             neighbors[7] = (y != nodesInColumn-1) ? fiberIndex(x+1, y, UP) : fiberIndex(x+1, y, DOWN);
             break;
         case OUT: // If the direction is set to OUT
