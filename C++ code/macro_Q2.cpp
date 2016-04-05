@@ -511,6 +511,14 @@ void unBind(unsigned short j, unsigned int t, double r) {
  */
 void bind(unsigned short j, unsigned int t, double r) {
     bound[j] = true;
+    // Add code from lines 624 - 681 of the Fortran code
+}
+
+/*
+ *
+ */
+void move() {
+    // Add code from lines 694 - 740
 }
 
 /*
