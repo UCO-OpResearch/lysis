@@ -511,6 +511,14 @@ void unBind(unsigned short j, unsigned int t, double r) {
  */
 void bind(unsigned short j, unsigned int t, double r) {
     bound[j] = true;
+    // Add code from lines 624 - 681 of the Fortran code
+}
+
+/*
+ *
+ */
+void move() {
+    // Add code from lines 694 - 740
 }
 
 /*
@@ -527,10 +535,17 @@ void runModel() {
             if (!bound[j]) { // If the molecule is unbound, should it move?
                 if (urcw1_() <= 1-movingProbability) { // If the molecule does not move, can it bind?
                     if ((unbindingTime[j] <= t) && !degraded[location[j]]) { // It can bind.
-                        
+                        bind(j, t, urcwl_()); // If it can bind, bind it. If not, leave it as is.
                     }
                 } else {
-                
+                 if ((unbindingTime[j] <= t) && !degraded[location[j]]) { // If it can move, can it still bind?
+				      int rn = randomInt();
+					  if(rn > (unbindingTime[j])/totalTimeSteps){
+						   //If the random value is bigger, move it.
+					  }else{
+						   bind(j, t, urcwl_()); //If it is smaller, bind it.
+					  } 
+				   }
                 }
             }
         }
