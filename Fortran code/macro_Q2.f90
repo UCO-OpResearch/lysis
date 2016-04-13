@@ -749,7 +749,7 @@ tsave(1) = t
                   !will tell me the number of independent bindings (not necessarily successful ones) at each second
                   bind1(V(1,j))=1
 
-                  !find the time that tPA will unbind:
+                  !find the time that tPA will unbind: (colr2 is r3*100 rounded up)
                   colr2=0
                   do i=1,101
                      if(CDFtPA(i).ge.r3)then
@@ -761,8 +761,8 @@ tsave(1) = t
                  ! if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
                   if(colr2==0.or.colr2==1) write(*,*)' PROBLEM: colr2', colr2
 
-                 percent2 = (CDFtPA(colr2)-r3)/(CDFtPA(colr2)-CDFtPA(colr2-1))
-                 ttPA = (tsec1(colr2)-(tsec1(colr2)-tsec1(colr2-1))*percent2)
+                 percent2 = (CDFtPA(colr2)-r3)/(CDFtPA(colr2)-CDFtPA(colr2-1)) ! The amount r3*100 was rounded up
+                 ttPA = (tsec1(colr2)-(tsec1(colr2)-tsec1(colr2-1))*percent2) ! Interpolate the values for colr2-1 and colr2 to find r3
                  !end if
                     
                   t_leave(j) = t + ttPA - tstep/2 !time tPA leaves is current time plus leaving time drawn from distribution
@@ -770,7 +770,7 @@ tsave(1) = t
 
                     
                   !Using the tPA leaving time, find the lysis time by using the lysis time distribution for the given ttPA
-
+		! Interpolate lysis data to find new lysis time
                   r4=urcw1()
                   r400=ceiling(r4*100)+1  !find the bin number we need to access in the lysis time distribution
 
@@ -782,7 +782,7 @@ tsave(1) = t
                        percent4 = r400-1-r4*100
                        rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4)
                      end if
-
+		! See if new lysis timer is smaller than old. If so, replace.
                      if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before                   
                         t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
                                                                  !the cutting time obtained from the lysis time function
