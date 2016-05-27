@@ -551,7 +551,7 @@ void move(unsigned short j, unsigned short q,unsigned short z, unsigned int t, d
 		for(int c = 1; c < 8; c++){
 			 if ((1-q) < r && r <=((1-q)+c*q/8)){
 			 V(1,j) = neighborc(c,z); //I am unsure what the equivalent of these functions are in our C++ version.
-                      bind(j)=t-log(r1)/(kon*bs)-Timestep/2; 
+                      bind(j)=t-log(r1)/(bindingRate*bindingSites)- Timestep/2; 
 					  }
 		}
 		
