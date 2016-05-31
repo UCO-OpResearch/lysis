@@ -1,6 +1,6 @@
 program macrolysis
 
-!Runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM
+!Runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed
 implicit none
 
 integer,parameter  :: N=93  !# of lattice nodes in one row in the horizontal direction
@@ -8,14 +8,13 @@ integer,parameter  :: F=121 !71 !81  !# of lattice nodes in one column in the ve
 integer,parameter  :: Ffree=29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
-integer,parameter  :: stats=10 !the number of independent trials
-integer,parameter  :: num=(2*N-1)*F+N*(F-1) !the total number of fibers
-integer,parameter  :: M=43074 !total number of tPA molecules: 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM
+integer,parameter  :: stats=10
+integer,parameter  :: num=(2*N-1)*F+N*(F-1)
+integer,parameter  :: M=43074 !total number of tPA molecules: 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM; 21588 is Colin's [tPA]=0.3 nM
 integer,parameter  :: tf=10*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
-
-!the following variable are dummy or counter variables
-integer  :: i, istat 
+integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
+integer  :: i, istat
 integer  :: j
 integer  :: k
 integer  :: ii 
@@ -27,9 +26,7 @@ integer  :: Ntot2
 integer  :: colr2, colr4 
 integer  :: z
 integer  :: numPLi
-double precision     :: t !Time loop Counter
-integer                              :: name1, name2
-
+double precision     :: t
 double precision     :: q
 double precision     :: delx
 double precision     :: Diff
@@ -38,30 +35,74 @@ double precision     :: num_t
 double precision     :: dist
 double precision     :: kon
 double precision     :: bs
-!double precision     :: t_bind
-
-!Microscale data
-double precision, dimension(101)        :: CDFtPA ! , CDFlys    Read in from file
-double precision, dimension(101)        :: tsec1  ! , tseclys   Read in from file
-double precision, dimension(100,100)    :: lysismat              !Read in from file
-integer, dimension(100)                 :: lenlysismat                       !Read in from file
-
+double precision     :: t_bind
 double precision     :: percent2, percent4
 double precision     :: rmicro, ttPA
-
-!Random number holders
 double precision     :: r, r1, r3, r2, r4
-integer  :: r400
-double precision, dimension(M)         :: rvect
 
 
-!File handling variables
 character(50) :: filetype,formatted
 character(70) :: filename1
 character(80) :: filename2
 character(90) :: filename3
 character(95) :: filename4
 character(75) :: filename6
+
+
+integer*1, dimension(num,num)  :: closeneigh
+integer, dimension(2,num)    :: endpts
+integer, dimension(8,num)    :: neighborc
+integer, dimension(2,M)   :: V
+double precision, dimension(enoFB)      :: init_state
+double precision, dimension(2)         :: p
+double precision, dimension(2)         :: pfit
+double precision, dimension(101)       :: CDFtPA, CDFlys
+double precision, dimension(101)       :: tsec1, tseclys
+double precision, dimension(num)      :: degrade
+double precision, dimension(num)      :: t_degrade
+double precision, dimension(M)        :: t_leave
+double precision, dimension(M)        :: bind
+integer, dimension(stats)             :: Nsavevect 
+integer                              :: name1, name2
+
+logical       :: isBinary =  .True.      ! flag for binary output
+integer       :: degunit = 20
+integer       :: Vunit = 21
+integer       :: V2unit = 22
+integer       :: Nunit = 23
+integer       :: tunit = 24
+character(50) :: degfile       ! degradation vector
+character(50) :: Vfile
+character(50) :: V2file
+character(50) :: Nfile
+character(50) :: tfile
+
+!stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
+!is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
+external :: mscw, kiss32, urcw1
+integer :: kiss32, mscw, seed, state(4), old_state(4), ui
+double precision :: uf, urcw1
+
+double precision, dimension(M)         :: rvect
+double precision, dimension(tf+1,num) :: degnext
+integer, dimension(tf+1,M) :: Vedgenext
+integer, dimension(tf+1,M) :: Vboundnext
+integer, dimension(F-1)  :: ind
+double precision, dimension(F-1)  :: place
+double precision, dimension(num)  :: degold
+double precision, dimension(tf+1) :: tsave
+integer  :: zero1
+integer, dimension(tf,N)  :: front
+integer, dimension(N)  :: firstdeg
+integer, dimension(N)  :: deglast
+integer, dimension(N,stats)  :: lastmove
+integer  :: fdeg
+integer  :: first0
+integer, dimension(N,N)  :: move
+integer  :: temp
+integer  :: lasti
+integer, dimension(N,N)  :: plotstuff, totmove,time2plot
+double precision, dimension(N,N)  :: plotstuff2
 integer       :: moveunit = 25
 integer       :: lastmoveunit = 26
 integer       :: plotunit = 27
@@ -73,7 +114,19 @@ character(50) :: lastmovefile
 character(50) :: plotfile   
 character(50) :: degnextfile  
 character(50) :: Venextfile  
-character(50) :: Vbdnextfile 
+character(50) :: Vbdnextfile  
+
+integer, dimension(num)  :: intact2
+integer  :: countintact2, lenintact2, counth, countv, countpv
+integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
+integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx 
+integer, dimension(2,F*(N-1))  :: X1plot, Y1plot
+integer, dimension(2,N*(F-1))  :: X2plot, Y2plot
+integer, dimension(N*F)  :: Xvplot, Yvplot
+double precision, dimension(2,M)  :: bdtPA, freetPA
+double precision, dimension(nummicro,100) :: lysismat !(100,100) if only did 10,000 micro runs, (500,100) if did 50,000
+integer, dimension(100)  :: lenlysismat
+integer  :: r400
 integer  :: x1unit = 31
 integer  :: x2unit = 32
 integer  :: y1unit = 33
@@ -96,86 +149,14 @@ character(50)  :: tPAfreefile
 character(50)  :: cbindfile
 character(50)  :: cindfile
 character(50)  :: bind1file
-integer       :: degunit = 20
-integer       :: Vunit = 21
-integer       :: V2unit = 22
-integer       :: Nunit = 23
-integer       :: tunit = 24
-character(50) :: degfile       ! degradation vector
-character(50) :: Vfile
-character(50) :: V2file
-character(50) :: Nfile
-character(50) :: tfile
-
-
-integer*1, dimension(num,num)  :: closeneigh !Adjacency Matrix for fibers
-integer, dimension(8,num)    :: neighborc !List of nearest neighbors
-
-!Molecules State information
-!V (1,j) = index of the fiber molecule j is bound to
-!V (2,j) = 1 if molecule j is bound, 0 else
-integer, dimension(2,M)   :: V
-
-double precision, dimension(enoFB)      :: init_state !initial state of the system
-!double precision, dimension(2)         :: p
-!double precision, dimension(2)         :: pfit
-double precision, dimension(num)      :: degrade  !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
-double precision, dimension(num)      :: t_degrade !vector of the degradation times of each edge
-double precision, dimension(M)        :: t_leave  !vector of the tPA leaving times for each molecule
-double precision, dimension(M)        :: bind !vector of the binding times for each tPA
-!integer, dimension(stats)             :: Nsavevect 
-
-
-logical       :: isBinary =  .True.      ! flag for binary output
-
-
-!stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
-!is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
-external :: mscw, kiss32, urcw1
-integer :: kiss32, mscw, seed, state(4), old_state(4), ui
-double precision :: uf, urcw1
-
-!Stored State values
-double precision, dimension(tf+1,num) :: degnext !degnext(t,*) = degrade (*) at time T
-integer, dimension(tf+1,M) :: Vedgenext 
-integer, dimension(tf+1,M) :: Vboundnext
-
-integer, dimension(F-1)  :: ind
-double precision, dimension(F-1)  :: place
-double precision, dimension(num)  :: degold
-double precision, dimension(tf+1) :: tsave
-integer  :: zero1
-integer, dimension(tf,N)  :: front
-integer, dimension(N)  :: firstdeg
-integer, dimension(N)  :: deglast
-integer, dimension(N,stats)  :: lastmove
-integer  :: fdeg
-integer  :: first0
-integer, dimension(N,N)  :: move
-integer  :: temp
-integer  :: lasti
-integer, dimension(N,N)  :: plotstuff, totmove,time2plot
-double precision, dimension(N,N)  :: plotstuff2
-
-!Stuff for movie 
-integer, dimension(2,num)    :: endpts !End point nodes of each fiber
-integer, dimension(num)  :: intact2
-integer  :: countintact2, lenintact2, counth, countv, countpv
-integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
-integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx 
-integer, dimension(2,F*(N-1))  :: X1plot, Y1plot
-integer, dimension(2,N*(F-1))  :: X2plot, Y2plot
-integer, dimension(N*F)  :: Xvplot, Yvplot
-double precision, dimension(2,M)  :: bdtPA, freetPA
-
 integer :: countbind, countindep
 integer, dimension(stats,tf)  :: countbindV, countindepV, bind1V
 integer, dimension(num) :: bind1
 
 
   if( isBinary ) then
-     filetype = 'unformatted' !if you compile with gfortran or f95
-     !filetype = 'binary'      !if you compile with ifort
+     !filetype = 'unformatted' !if you compile with gfortran or f95
+     filetype = 'binary'      !if you compile with ifort
   else
      filetype = 'formatted'
   end if
@@ -418,9 +399,9 @@ enddo
 
 !lysismat_PLG135_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
-!lysismat(:,1)=the first column, i.e. the lysis times for the first 100 tPA leaving times 
+!lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
     OPEN(unit=1,FILE='lysismat_PLG135_Q2.dat')
-    do i=1,100
+    do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
        READ(1,*)(lysismat(i,ii),ii=1,100)
     enddo
     close(1)
@@ -489,7 +470,7 @@ write(*,*)' bs=',bs
 
 !Initial distribution and boundedness of tPA molecules
 
-!V is matrix of edge location and state of boundedness for each tPA. first column is edge
+!V is matrix of edge loaction and state of boundedness for each tPA. first column is edge 
 !molecule is on, second column is 0 if unbound, 1 if bound. start with all molecules unbound
 
 do i=1,M
@@ -518,18 +499,18 @@ enddo
 !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-write(degfile,'(43a)'  ) 'deg_tPA425_PLG135_Q2.dat'
-write(Nfile,'(45a)' ) 'Nsave_tPA425_PLG135_Q2.dat'
-write(tfile,'(45a)') 'tsave_tPA425_PLG135_Q2.dat'
-write(movefile,'(44a)') 'move_tPA425_PLG135_Q2.dat'
-write(lastmovefile,'(48a)') 'lastmove_tPA425_PLG135_Q2.dat'
-write(plotfile,'(44a)') 'plot_tPA425_PLG135_Q2.dat'
-write(degnextfile,'(47a)') 'degnext_tPA425_PLG135_Q2.dat'
-write(Venextfile,'(49a)') 'Vedgenext_tPA425_PLG135_Q2.dat'
-write(Vbdnextfile,'(47a)') 'Vbdnext_tPA425_PLG135_Q2.dat'
-write(cbindfile,'(47a)') 'numbind_tPA425_PLG135_Q2.dat'
-write(cindfile,'(47a)') 'numindbind_tPA425_PLG135_Q2.dat'
-write(bind1file,'(47a)') 'bind_tPA425_PLG135_Q2.dat'
+write(degfile,'(43a)'  ) 'deg_tPA425_PLG35_Q2_test2.dat'
+write(Nfile,'(45a)' ) 'Nsave_tPA425_PLG35_Q2_test2.dat'
+write(tfile,'(45a)') 'tsave_tPA425_PLG35_Q2_test2.dat'
+write(movefile,'(44a)') 'move_tPA425_PLG35_Q2_test2.dat'
+write(lastmovefile,'(48a)') 'lastmove_tPA425_PLG35_Q2_test2.dat'
+write(plotfile,'(44a)') 'plot_tPA425_PLG35_Q2_test2.dat'
+write(degnextfile,'(47a)') 'degnext_tPA425_PLG35_Q2_test2.dat'
+write(Venextfile,'(49a)') 'Vedgenext_tPA425_PLG35_Q2_test2.dat'
+write(Vbdnextfile,'(47a)') 'Vbdnext_tPA425_PLG35_Q2_test2.dat'
+write(cbindfile,'(47a)') 'numbind_tPA425_PLG35_Q2_test2.dat'
+write(cindfile,'(47a)') 'numindbind_tPA425_PLG35_Q2_test2.dat'
+write(bind1file,'(47a)') 'bind_tPA425_PLG35_Q2_test2.dat'
 open(degunit,file=degfile,form=filetype)
 open(Nunit,file=Nfile,form=filetype)
 open(tunit,file=tfile,form=filetype)
@@ -546,7 +527,7 @@ open(bind1unit,file=bind1file,form=filetype)
 write(degunit) degrade(:)
 write(tunit) t
 
-write(*,*)' save as deg_tPA425_PLG135_Q2.dat'
+write(*,*)' save as deg_tPA425_PLG35_Q2_test2.dat'
 
 
 Vedgenext(1,:)=V(1,:)
@@ -638,8 +619,7 @@ tsave(1) = t
                    end if
                 enddo
                     
-            	!   if(colr2==0.or.colr2==1) write(*,*)' PROBLEM colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly' , colr2
-                  if(colr2==0.or.colr2==1) write(*,*)' PROBLEM colr2' , colr2
+                  if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
 
                percent2 = (CDFtPA(colr2)-r3)/(CDFtPA(colr2)-CDFtPA(colr2-1))
                ttPA = (tsec1(colr2)-(tsec1(colr2)-tsec1(colr2-1))*percent2)
@@ -650,14 +630,21 @@ tsave(1) = t
 
                     
                 r4=urcw1()
-                r400=ceiling(r4*100)+1  !find the bin number we need to access in the lysis time distribution
+                r400=ceiling(r4*nummicro)+1  
+
+
+                !if r400=501, redefine it to be the 500th bin, since we don't have 501 entries
+                if(r400==nummicro+1) then
+                   r400=nummicro
+                end if !for if(r400==501) loop
+
 
                 if(r400.le.lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
                    if(r400==lenlysismat(colr2-1)) then
                      !percent4 = (CDFlys(r400)-r4)/CDFlys(r400)
                      rmicro = lysismat(r400-1,colr2-1)!tseclys(r400)-tseclys(r400)*percent4
                    else
-                     percent4 = r400-1-r4*100
+                     percent4 = r400-1-r4*nummicro 
                      rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4)
                    end if
 
@@ -758,8 +745,7 @@ tsave(1) = t
                      end if
                   enddo
                     
-                 ! if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
-                  if(colr2==0.or.colr2==1) write(*,*)' PROBLEM: colr2', colr2
+                  if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
 
                  percent2 = (CDFtPA(colr2)-r3)/(CDFtPA(colr2)-CDFtPA(colr2-1))
                  ttPA = (tsec1(colr2)-(tsec1(colr2)-tsec1(colr2-1))*percent2)
@@ -772,14 +758,19 @@ tsave(1) = t
                   !Using the tPA leaving time, find the lysis time by using the lysis time distribution for the given ttPA
 
                   r4=urcw1()
-                  r400=ceiling(r4*100)+1  !find the bin number we need to access in the lysis time distribution
+                  r400=ceiling(r4*nummicro)+1  
+
+                  !if r400=501, redefine it to be the 500th bin, since we don't have 501 entries
+                  if(r400==nummicro+1) then
+                     r400=nummicro
+                  end if !for if(r400==nummicro+1) loop
 
                   if(r400.le.lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
                      if(r400==lenlysismat(colr2-1)) then
                        !percent4 = (CDFlys(r400)-r4)/CDFlys(r400)
                        rmicro = lysismat(r400-1,colr2-1)!tseclys(r400)-tseclys(r400)*percent4
                      else
-                       percent4 = r400-1-r4*100
+                        percent4 = r400-1-r4*nummicro 
                        rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4)
                      end if
 
@@ -1105,17 +1096,17 @@ write(*,*)'r4=',r4
       end do
     end do  !for jj loop
 
-write(x1file,'(46a)'  ) 'X1plot_tPA425_PLG135_Q2.dat'
+write(x1file,'(46a)'  ) 'X1plot_tPA425_PLG35_Q2_test2.dat'
 open(x1unit,file=x1file,form=filetype)
-write(x2file,'(46a)'  ) 'X2plot_tPA425_PLG135_Q2.dat'
+write(x2file,'(46a)'  ) 'X2plot_tPA425_PLG35_Q2_test2.dat'
 open(x2unit,file=x2file,form=filetype)
-write(y1file,'(46a)'  ) 'Y1plot_tPA425_PLG135_Q2.dat'
+write(y1file,'(46a)'  ) 'Y1plot_tPA425_PLG35_Q2_test2.dat'
 open(y1unit,file=y1file,form=filetype)
-write(y2file,'(46a)'  ) 'Y2plot_tPA425_PLG135_Q2.dat'
+write(y2file,'(46a)'  ) 'Y2plot_tPA425_PLG35_Q2_test2.dat'
 open(y2unit,file=y2file,form=filetype)
-write(xvfile,'(46a)'  ) 'Xvplot_tPA425_PLG135_Q2.dat'
+write(xvfile,'(46a)'  ) 'Xvplot_tPA425_PLG35_Q2_test2.dat'
 open(xvunit,file=xvfile,form=filetype)
-write(yvfile,'(46a)'  ) 'Yvplot_tPA425_PLG135_Q2.dat'
+write(yvfile,'(46a)'  ) 'Yvplot_tPA425_PLG35_Q2_test2.dat'
 open(yvunit,file=yvfile,form=filetype)
 
 write(x1unit) X1plot
@@ -1205,9 +1196,9 @@ write(yvunit) Yvplot
      end do
 
 
-write(tPAbdfile,'(46a)'  ) 'tPAbd_tPA425_PLG135_Q2.dat'
+write(tPAbdfile,'(46a)'  ) 'tPAbd_tPA425_PLG35_Q2_test2.dat'
 open(tPAbdunit,file=tPAbdfile,form=filetype)
-write(tPAfreefile,'(47a)'  ) 'tPAfree_tPA425_PLG135_Q2.dat'
+write(tPAfreefile,'(47a)'  ) 'tPAfree_tPA425_PLG35_Q2_test2.dat'
 open(tPAfreeunit,file=tPAfreefile,form=filetype)
 
 write(tPAbdunit) bdtPA
@@ -1521,8 +1512,7 @@ subroutine find10(numint,ans)
 
         enddo
  
-      !  if(ans==0) write(*,*)' Problem did not find correct multiple of 10'
-        if(ans==0) write(*,*)' Problem'        
+        if(ans==0) write(*,*) 'Problem: did not find correct multiple of 10'
  
 
 end subroutine find10
