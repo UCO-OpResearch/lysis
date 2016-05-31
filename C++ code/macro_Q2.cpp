@@ -510,8 +510,16 @@ int findUnbindTime(unsigned short j, unsigned int t, double r3) {
 	return colr2;
 }
 
+/**
+ *
+ */
+int findBindingTime(unsigned short j, unsigned int t, double r) {
+	unbindingTime[j] = t - log(r) / (bindingRate * bindingSites) - timeStep/2; //!! Ask Dr. Bannish about this line in the context of line 583 (586 in Fortran)
+}
+
 /*
  * Part of Bind. Finds the degradation time.
+ * STILL NEEDS INPUT FROM DR BANNISH
  */
 void findDegradeTime(unsigned short i, unsigned int t, double colr3, double r4) {
 	int r400 = ceil(r4*100)+1;
@@ -526,11 +534,11 @@ void findDegradeTime(unsigned short i, unsigned int t, double colr3, double r4) 
 
 
 /*
- * Runs the BloodClotting Model.
+ * 
  */
 void unBind(unsigned short j, unsigned int t, double r) {
     bound[j] = false;
-    unbindingTime[j] = t - log(r) / (bindingRate * bindingSites);
+    findBindingTime(j,t,r);
 }
 
 /*
@@ -546,25 +554,25 @@ void bind(unsigned short j, unsigned short i, unsigned int t, double r1, double 
 /*
  *
  */
-void move(unsigned short j, unsigned short q,unsigned short z, unsigned int t, double r, double r1, double r2) {
-    if(r2 == (t-bind(j)/Timestep){
-		for(int c = 1; c < 8; c++){
-			 if ((1-q) < r && r <=((1-q)+c*q/8)){
-			 V(1,j) = neighborc(c,z); //I am unsure what the equivalent of these functions are in our C++ version.
-                      bind(j)=t-log(r1)/(bindingRate*bindingSites)- Timestep/2; 
-					  }
-		}
-		
+void move(unsigned short j, unsigned int t, double r) {
+    unsigned short neighbor = floor(8*((r-1) / movingProbability + 1));
+	location[j] = getNeighbor(location[j], neighbor);
+	findBindingTime(j, t, urcw1_());
 	}
-	
-	
-	// Add code from lines 694 - 740
+}
+
+/*
+ *
+ */
+void saveData(int t) {
+	// Include code from lines 866 - 878
 }
 
 /*  
  *
  */
 void runModel() {
+	int tenSeconds = ceil(10/timeStep);
     for (unsigned int t = 0; t < totalTimeSteps; t++) {
         if ((t % 400000 == 0) && verbose)
             cout << "Time: " << t * timeStep << " sec" << endl;
@@ -573,22 +581,27 @@ void runModel() {
             if (bound[j] && (unbindingTime[j] == t)) // If the molecule is bound, should it unbind?
                 unBind(j, t, urcw1_());
             if (!bound[j]) { // If the molecule is unbound, should it move?
-                if (urcw1_() <= 1-movingProbability) { // If the molecule does not move, can it bind?
+				double r = urcw1_()
+                if (r <= 1-movingProbability) { // If the molecule does not move, can it bind?
                     if ((unbindingTime[j] <= t) && !degraded[location[j]]) { // It can bind.
                         bind(j, t, urcwl_()); // If it can bind, bind it. If not, leave it as is.
                     }
                 } else {
-                 if ((unbindingTime[j] <= t) && !degraded[location[j]]) { // If it can move, can it still bind?
-				      int rn = randomInt();
-					  if(rn > (unbindingTime[j])/totalTimeSteps){
-						   //If the random value is bigger, move it.
-					  }else{
-						   bind(j, t, urcwl_()); //If it is smaller, bind it.
-					  } 
-				   }
+					if ((unbindingTime[j] <= t) && !degraded[location[j]]) { // If it can move, can it still bind?
+						int rn = urcw1_();
+						if(rn > (t - unbindingTime[j])/totalTimeSteps){
+							move(j, t, rn);
+						} else {
+							bind(j, t, urcwl_()); //If it is smaller, bind it.
+						} 
+					} else {// It could not bind, so move
+						move(j, t, rn);
+					}
                 }
             }
         }
+		if ((t % tenSeconds) == 0)
+			saveData(t);
     }
 }
 
