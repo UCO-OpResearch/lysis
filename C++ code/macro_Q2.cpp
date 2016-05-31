@@ -499,6 +499,33 @@ void degradeFibers(unsigned int t) {
 }
 
 /*
+ * Part of Bind. Finds the time to unbind, and returns colr2, for use in degradTime.
+ */
+int findUnbindTime(unsigned short j, unsigned int t, double r3) {
+    int colr2 = ceil(r3*100);
+	double slope = UnbindingTimeDistribution[colr2] - UnbindingTimeDistribution[colr2 - 1];
+    double step = (r3*100) - colr2;
+	double timeToUnbind = UnbindingTimeDistribution[colr2 -1] + (step*slope);
+	unbindingTime[j] = t + timeToUnbind/timestep;
+	return colr2;
+}
+
+/*
+ * Part of Bind. Finds the degradation time.
+ */
+void findDegradeTime(unsigned short i, unsigned int t, double colr3, double r4) {
+	int r400 = ceil(r4*100)+1;
+	if(r400 >= lysesPerBlock[colr3-1]) {
+		double slope = lysisTime[r400][colr3-1] - lysisTime[r400-1][colr3-1];
+		double step = (r4*100)-(r400-1);
+		double timeToDegrade = lysisTime[r400][colr3-1] + step*slope;
+		degradeTime[i] = min(degradeTime[i], t + timeToDegrade/timeStep);
+	}
+}
+    
+
+
+/*
  * Runs the BloodClotting Model.
  */
 void unBind(unsigned short j, unsigned int t, double r) {
@@ -509,19 +536,32 @@ void unBind(unsigned short j, unsigned int t, double r) {
 /*
  *
  */
-void bind(unsigned short j, unsigned int t, double r) {
+void bind(unsigned short j, unsigned short i, unsigned int t, double r1, double r2) {
     bound[j] = true;
+    int colr2 = findUnbindTime(j,t,r1);
+	findDegradeTime(i,t,colr2,r2);
     // Add code from lines 624 - 681 of the Fortran code
 }
 
 /*
  *
  */
-void move() {
-    // Add code from lines 694 - 740
+void move(unsigned short j, unsigned short q,unsigned short z, unsigned int t, double r, double r1, double r2) {
+    if(r2 == (t-bind(j)/Timestep){
+		for(int c = 1; c < 8; c++){
+			 if ((1-q) < r && r <=((1-q)+c*q/8)){
+			 V(1,j) = neighborc(c,z); //I am unsure what the equivalent of these functions are in our C++ version.
+                      bind(j)=t-log(r1)/(bindingRate*bindingSites)- Timestep/2; 
+					  }
+		}
+		
+	}
+	
+	
+	// Add code from lines 694 - 740
 }
 
-/*
+/*  
  *
  */
 void runModel() {
