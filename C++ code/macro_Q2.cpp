@@ -479,8 +479,8 @@ int getNeighbor(unsigned short fiber, unsigned short i){
  * index of a fiber.
  */
 void getNeighbors(unsigned short fiber, unsigned short neighbors[]) {
-  for (int i = 0, i < 8; i++){
-		neighbors[i] = getNeighbor(fiver,i);
+  for (int i = 0; i < 8; i++){
+		neighbors[i] = getNeighbor(fiber,i);
   }
 }
 
@@ -548,7 +548,7 @@ int findUnbindTime(unsigned short j, unsigned int t, double r3) {
 	double slope = UnbindingTimeDistribution[colr2] - UnbindingTimeDistribution[colr2 - 1];
     double step = (r3*100) - colr2;
 	double timeToUnbind = UnbindingTimeDistribution[colr2 -1] + (step*slope);
-	unbindingTime[j] = t + timeToUnbind/timestep;
+	unbindingTime[j] = t + timeToUnbind/timeStep;
 	return colr2;
 }
 
@@ -563,13 +563,13 @@ int findBindingTime(unsigned short j, unsigned int t, double r) {
  * Part of Bind. Finds the degradation time.
  * STILL NEEDS INPUT FROM DR BANNISH
  */
-void setDegradeTime(unsigned short i, unsigned int t, double colr3, double r4) {
+void setDegradeTime(unsigned short i, unsigned int t, int colr3, double r4) {
 	int r400 = ceil(r4*100)+1;
 	if(r400 >= lysesPerBlock[colr3-1]) {
 		double slope = lysisTime[r400][colr3-1] - lysisTime[r400-1][colr3-1];
 		double step = (r4*100)-(r400-1);
 		double timeToDegrade = lysisTime[r400][colr3-1] + step*slope;
-		degradeTime[i] = min(degradeTime[i], t + timeToDegrade/timeStep);
+		degradeTime[i] = min(degradeTime[i], (int)(t + floor(timeToDegrade/timeStep)));
 	}
 }
     
@@ -596,11 +596,13 @@ void bind(unsigned short j, unsigned short i, unsigned int t, double r1, double 
 /*
  *
  */
-void move(unsigned short j, unsigned int t, double r) {
-    unsigned short neighbor = floor(8*((r-1) / movingProbability + 1));
+void moveMolecule(unsigned short j, unsigned int t, double r) {
+    unsigned short neighbor = floor(8*((1-r) / movingProbability));
+//	if (verbose) {
+//		cout << "Finding neighbor " << neighbor << " for location " << location[j] << endl;
+//	}
 	location[j] = getNeighbor(location[j], neighbor);
 	findBindingTime(j, t, urcw1_());
-	}
 }
 
 /*
@@ -616,28 +618,36 @@ void saveData(int t) {
 void runModel() {
 	int tenSeconds = ceil(10/timeStep);
     for (unsigned int t = 0; t < totalTimeSteps; t++) {
-        if ((t % 400000 == 0) && verbose)
+        if ((t % tenSeconds == 0) && verbose) {
+			int testMolecule = 4364;
             cout << "Time: " << t * timeStep << " sec" << endl;
+			cout << "Location of molecule #" << testMolecule << " is fiber #" << location[testMolecule] << endl;
+			cout << "Molecule #" << testMolecule << " is " << (bound[testMolecule] ? "bound" : "unbound") << endl;
+			cout << "Fiber #" << location[testMolecule] << " is " << (degraded[location[testMolecule]] ? "degraded" : "not degraded") << endl;
+		}
         degradeFibers(t);
         for (unsigned int j = 0; j < totalMolecules; j++) {
             if (bound[j] && (unbindingTime[j] == t)) // If the molecule is bound, should it unbind?
                 unBind(j, t, urcw1_());
             if (!bound[j]) { // If the molecule is unbound, should it move?
-				double r = urcw1_()
+				double r = urcw1_();
+				// if (verbose) {
+					// cout << "Move roll:" << r << endl;
+				// }
                 if (r <= 1-movingProbability) { // If the molecule does not move, can it bind?
                     if ((unbindingTime[j] <= t) && !degraded[location[j]]) { // It can bind.
-                        bind(j, t, urcwl_()); // If it can bind, bind it. If not, leave it as is.
+                        bind(location[j], j, t, urcw1_(), urcw1_()); // If it can bind, bind it. If not, leave it as is.
                     }
                 } else {
+					double rn = urcw1_();
 					if ((unbindingTime[j] <= t) && !degraded[location[j]]) { // If it can move, can it still bind?
-						int rn = urcw1_();
 						if(rn > (t - unbindingTime[j])/totalTimeSteps){
-							move(j, t, rn);
+							moveMolecule(j, t, r);
 						} else {
-							bind(j, t, urcwl_()); //If it is smaller, bind it.
+							bind(location[j], j, t, urcw1_(), urcw1_()); //If it is smaller, bind it.
 						} 
 					} else {// It could not bind, so move
-						move(j, t, rn);
+						moveMolecule(j, t, r);
 					}
                 }
             }
@@ -662,6 +672,9 @@ int main(int argc, char** argv) {
     if (verbose) cout << "Done." << endl;
     if (verbose) cout << "Initializing variables...................";
     initializeVariables();
+    if (verbose) cout << "Done." << endl;
+	 if (verbose) cout << "Running Model...................";
+    runModel();
     if (verbose) cout << "Done." << endl;
     return 0;
 }

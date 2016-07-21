@@ -50,8 +50,8 @@ CP=cp
 CCADMIN=CCadmin
 
 FOLDER = C++\ code/
-FILES =  ${FOLDER}macro_Q2.cpp # ${FOLDER}kiss.o
-#FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.o
+FILES =  ${FOLDER}macro_Q2.cpp ${FOLDER}kiss.o
+#FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
 	
 # build
