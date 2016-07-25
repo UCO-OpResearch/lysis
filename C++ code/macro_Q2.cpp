@@ -605,11 +605,46 @@ void moveMolecule(unsigned short j, unsigned int t, double r) {
 	findBindingTime(j, t, urcw1_());
 }
 
+
+
+
+
+
 /*
- *
+ *For the set of vectors for saveData.
+ */
+struct counterSet{
+	short locationCheck;
+	bool boundCheck;
+	int timeCheck;
+	bool degradedCheck;
+	int totalBindingsCheck;
+	int totalaAttemptsCheck;
+	
+}
+
+
+
+
+/*
+ * This method will save the data every 10 seconds by pushing the data into a vector until the loop
+ * completes itself, then it will stop, and the vector can be viewed to see the gathered data.
  */
 void saveData(int t) {
 	// Include code from lines 866 - 878
+	vector<counterSet> dataVec;
+	int tenSecond = ceil(10/timeStep);
+		for (unsigned int t = 0; t < totalTimeSteps; t++){
+	      if ((t % tenSeconds == 0) && verbose) {
+		   dataVec.push_back(counterSet());
+		   dataVec[t].locationCheck = location[totalMolecules];
+		   dataVec[t].boundCheck = bound[totalMolecules];
+		   dataVec[t].timeCheck = totalTime;
+		   dataVec[t].degradedCheck = degraded[totalFibers];
+		   //dataVec[t].totalBindingsCheck =
+		  // dataVec[t].totalAttemptsCheck =
+		  }
+		}
 }
 
 /*  
