@@ -163,6 +163,32 @@ int degradeTime[totalFibers]; // t_degrade
 
 
 /******************************************************************************
+ ** Output Data Storage Variables
+ **
+ ******************************************************************************/
+ 
+//
+int successfulBinds;
+
+//
+int unsuccessfulBinds;
+
+//For the set of vectors for saveData.
+struct counterSet{
+	short locationCheck;
+	bool boundCheck;
+	int timeCheck;
+	bool degradedCheck;
+	int totalBindingsCheck;
+	int totalaAttemptsCheck;
+}
+
+//
+vector<counterSet> dataVec;
+
+
+
+/******************************************************************************
  ** Methods
  **
  ******************************************************************************/
@@ -610,18 +636,6 @@ void moveMolecule(unsigned short j, unsigned int t, double r) {
 
 
 
-/*
- *For the set of vectors for saveData.
- */
-struct counterSet{
-	short locationCheck;
-	bool boundCheck;
-	int timeCheck;
-	bool degradedCheck;
-	int totalBindingsCheck;
-	int totalaAttemptsCheck;
-	
-}
 
 
 
@@ -632,7 +646,6 @@ struct counterSet{
  */
 void saveData(int t) {
 	// Include code from lines 866 - 878
-	vector<counterSet> dataVec;
 	int tenSecond = ceil(10/timeStep);
 		for (unsigned int t = 0; t < totalTimeSteps; t++){
 	      if ((t % tenSeconds == 0) && verbose) {
@@ -690,6 +703,27 @@ void runModel() {
 		if ((t % tenSeconds) == 0)
 			saveData(t);
     }
+}
+
+/*
+ * 
+ */
+void processData() {
+	// INCLUDE FORTRAN CODE FROM LINES 883-979
+}
+
+/*
+ *
+ */
+void movieProcessing() {
+	// INCLUDE FORTRAN CODE FROM LINES 981 - 1205 (1209 - 1382)
+}
+
+/*
+ *
+ */
+void outputData() {
+	// INCLUDE FORTRAN CODE FROM LINES 1403 - 1422)
 }
 
 /******************************************************************************

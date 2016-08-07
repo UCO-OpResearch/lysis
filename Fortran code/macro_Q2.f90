@@ -154,13 +154,13 @@ integer, dimension(stats,tf)  :: countbindV, countindepV, bind1V
 integer, dimension(num) :: bind1
 
 
-  if( isBinary ) then
-     !filetype = 'unformatted' !if you compile with gfortran or f95
-     filetype = 'binary'      !if you compile with ifort
-  else
-     filetype = 'formatted'
-  end if
-  write(*,*)' filetype=',filetype
+if( isBinary ) then
+	!filetype = 'unformatted' !if you compile with gfortran or f95
+	filetype = 'binary'      !if you compile with ifort
+else
+	filetype = 'formatted'
+end if
+write(*,*)' filetype=',filetype
 
 
 write(*,*)' N=',N
@@ -172,23 +172,19 @@ write(*,*)' obtained using code macro_Q2.f90'
 
 kon = 1.0d-02 !1.0d+00             !tPA binding rate. units of inverse (micromolar*sec)
 
+ui = kiss32()
+uf = urcw1()
 
+!seed = mscw()
+seed= 912309035
+write(*,*)' seed=',seed
 
-        ui = kiss32()
-
-	uf = urcw1()
-
-	!seed = mscw()
-    seed= 912309035
-        write(*,*)' seed=',seed
-
-    state(1) = 129281
-	state(2) = 362436069
-	state(3) = 123456789
-	state(4) = seed
-	call set_kiss32(state)
-
-	call get_kiss32(state)
+state(1) = 129281
+state(2) = 362436069
+state(3) = 123456789
+state(4) = seed
+call set_kiss32(state)
+call get_kiss32(state)
 
 closeneigh=0
 neighborc=0
@@ -251,13 +247,13 @@ closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)-N-1) = 2
 !the bottom and top rows of vertical edges on the lattice (not including
 !the left-most and right-most edges)
 do j=2,N-1
-   closeneigh(1+2*(j-1),1+2*(j-1)-1) = 2
-   closeneigh(1+2*(j-1),1+2*(j-1)+1) = 2
-   closeneigh(1+2*(j-1),2*N-1+j) = 4
+	closeneigh(1+2*(j-1),1+2*(j-1)-1) = 2
+   	closeneigh(1+2*(j-1),1+2*(j-1)+1) = 2
+   	closeneigh(1+2*(j-1),2*N-1+j) = 4
    
-   closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)-1) = 2
-   closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)+1) = 2
-   closeneigh(1+2*(j-1)+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+(j-1)) = 4
+   	closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)-1) = 2
+   	closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)+1) = 2
+   	closeneigh(1+2*(j-1)+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+(j-1)) = 4
 
 enddo
 
