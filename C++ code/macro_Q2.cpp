@@ -538,11 +538,11 @@ void printParameters() {
  * are uniformly distributed on the ghost fibers
  */
 void initializeVariables() {
-    for (int i = 0; i < totalFibers; i++) {
+    for (int i = 0; i < totalFibers; i++) { //Goes through all possible fibers and sets them all to false. Also adds to degreade time.
         degraded[i] = false; 
         degradeTime[i] = totalTimeSteps + 1;
     }
-    for (int i = 0; i < totalMolecules; i++) {
+    for (int i = 0; i < totalMolecules; i++) {//Goes through all possible fibers and unbinds them, while counting the unbind time.
         bound[i] = false;
         location[i] = randomInt(lastGhostFiber + 1);
         unbindingTime[i] = totalTimeSteps + 1;
@@ -602,25 +602,24 @@ void setDegradeTime(unsigned short i, unsigned int t, int colr3, double r4) {
 
 
 /*
- * 
+ * This method unbinds a molecule, while also finding the binding time.
  */
 void unBind(unsigned short j, unsigned int t, double r) {
-    bound[j] = false;
-    findBindingTime(j,t,r);
+    bound[j] = false; //Sets bound to false, causing the point j to unbind.
+    findBindingTime(j,t,r); //This will find the binding time of the molecule.
 }
 
 /*
- *
+ * This method will bind two molecules using the findUnbindTime and setDegradeTime methods.
  */
 void bind(unsigned short j, unsigned short i, unsigned int t, double r1, double r2) {
-    bound[j] = true;
+    bound[j] = true; //Sets bound to true, which causes the point to bind.
     int colr2 = findUnbindTime(j,t,r1);
 	setDegradeTime(i,t,colr2,r2);
-    // Add code from lines 624 - 681 of the Fortran code
 }
 
 /*
- *
+ * This method moves the molecule depending on moving probability, then decides which neighbor to move to.
  */
 void moveMolecule(unsigned short j, unsigned int t, double r) {
     unsigned short neighbor = floor(8*((1-r) / movingProbability));
