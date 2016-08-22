@@ -887,16 +887,16 @@ write(*,*)'r4=',r4
 
   do i=2,nplt
 
-      degold=degnext(i,:)  
+      degold=degnext(i,:)  	! Store the Degredation state of all fibers
       ind=0
       place=0
-   do j=1,N
-       do k=1,F-1
+   do j=1,N 			! For each column
+       do k=1,F-1		! For each row
            ind(k) = (3*N-1)*(k-1) + 2*N + j-1 !ind is a vector containing the vertical planar edge numbers above node j
            place(k) = degold(ind(k))  !place(k) is the degradation state of each edge above node j
        enddo
        call findfirstreal(place,F-1,0,zero1)  !find the first undegraded vertical edge above node j 
-       front(i-1,j) = zero1
+       front(i-1,j) = zero1	! Store undegraded vertical edge location
    enddo
   enddo
 
@@ -915,17 +915,17 @@ write(*,*)'r4=',r4
   firstdeg=0
   deglast=0
 
-  do i=1,N
-      call findfirstineq(front(:,i),tf,1,fdeg)
-      if(fdeg==0) then
+  do i=1,N 		! For each column
+      call findfirstineq(front(:,i),tf,1,fdeg) ! Find the first time that the front stops being 1
+      if(fdeg==0) then		! If its always 1
           firstdeg(i)=1
       else
-          firstdeg(i)=fdeg
+          firstdeg(i)=fdeg	! Store the time the front moves back from 1
       end if
   enddo
 
-  do i=1,N
-      call findfirst(front(2:tf,i),tf-1,0,first0)
+  do i=1,N		! For each column
+      call findfirst(front(2:tf,i),tf-1,0,first0)	! Find the first time all fibers are degraded
       deglast(i)=first0
   enddo
 
@@ -936,12 +936,12 @@ write(*,*)'r4=',r4
   move=0
   move(1,:)=firstdeg
 
-  do j=2,N
-      do i=1,N
-          if(move(j-1,i)==0) then
+  do j=2,N	! For each column
+      do i=1,N	! For each column
+          if(move(j-1,i)==0) then  
               temp=0
           else
-              call findfirstineq(front(:,i),tf,front(move(j-1,i),i),temp)
+              call findfirstineq(front(:,i),tf,front(move(j-1,i),i),temp) ! Find the first time the front changes from the last value we found
           end if
           move(j,i)=temp
       enddo
@@ -950,7 +950,7 @@ write(*,*)'r4=',r4
   !so now "move" saves the saved-time-step at which the front moves for each x location
 
   do i=1,N
-      call findintineq(move(:,i),N,0,lasti)
+      call findintineq(move(:,i),N,0,lasti) ! Find the last time the front moved in column i
       lastmove(i,istat)=lasti
   enddo
 
@@ -959,8 +959,8 @@ write(*,*)'r4=',r4
 
   do j=1,N
       do i=1,lastmove(j,istat)
-          plotstuff(j,i)=front(move(i,j),j)
-          plotstuff2(j,i)=(plotstuff(j,i)-1)*dist
+          plotstuff(j,i)=front(move(i,j),j) 		! Collapse down the move() matrix
+          plotstuff2(j,i)=(plotstuff(j,i)-1)*dist	! Convert from coordinates to distance
       enddo
   enddo
     
