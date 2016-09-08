@@ -182,11 +182,16 @@ struct counterSet{
 	int totalBindingsCheck;
 	int totalaAttemptsCheck;
 }
-
+// A vector being used for processData.
+struct indSet{
+	int x;
+	bool place;
+}
 //
 vector<counterSet> dataVec;
-
-
+//
+vector<indSet> indVec;
+//
 
 /******************************************************************************
  ** Methods
@@ -707,7 +712,30 @@ void runModel() {
 /*
  * 
  */
-void processData() {
+void processData(unsigned short j) {
+	// ind is a vector containing the vertical planar edge numbers above node j
+	
+	
+	//Will fill vector IND with the edge numbers above j
+	//for(int n = 0; n < totalNumberOfEdgesAboveJ; n++ ){
+	//indVec[n].x = edgeValue[n] ;
+    //}
+
+	//place(k) is the degradation state of each edge above node j
+	//for(int m = 0; m < totalNumberOfEdgesAboveJ; m++ ){
+	//indVec[m].place = degraded[m];
+	//}
+	
+	// find the first undegraded vertical edge above node j 
+	// int firstUndegradedEdge;
+	// for(int d = 0; d < totalNumberOfEdgesAboveJ; d++ ){   
+	// if (indVec[d].place == false){
+	// firstUndegradedEdge = indVec[d].x;
+	// exit;
+	//    }
+	// }
+	
+	
 	// INCLUDE FORTRAN CODE FROM LINES 883-979
 }
 
