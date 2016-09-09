@@ -183,15 +183,21 @@ struct counterSet{
 	int totalaAttemptsCheck;
 }
 // A vector being used for processData.
-struct indSet{
+struct dvSet{
 	int x;
-	bool place;
+	int y;
+	bool deg;
+}
+
+struct checkSet{
+	bool degCheck;
 }
 //
 vector<counterSet> dataVec;
 //
-vector<indSet> indVec;
+vector<dvSet> degreeVector;
 //
+vector<checkSet> degradeCheckVector;
 
 /******************************************************************************
  ** Methods
@@ -712,37 +718,50 @@ void runModel() {
 /*
  * 
  */
-void processData(unsigned short j) {
+void processData(unsigned short j, unsigned short p, ) {
 	// ind is a vector containing the vertical planar edge numbers above node j
 	
-	
-	//Will fill vector IND with the edge numbers above j
-	//for(int n = 0; n < totalNumberOfEdgesAboveJ; n++ ){
-	//indVec[n].x = edgeValue[n] ;
-    //}
-
+	for(int i = 0 i < xznodes; i++){
+	degreeVector[i] = getNeighbor(i,UP);
 	//place(k) is the degradation state of each edge above node j
-	//for(int m = 0; m < totalNumberOfEdgesAboveJ; m++ ){
-	//indVec[m].place = degraded[m];
-	//}
-	
-	// find the first undegraded vertical edge above node j 
-	// int firstUndegradedEdge;
-	// for(int d = 0; d < totalNumberOfEdgesAboveJ; d++ ){   
-	// if (indVec[d].place == false){
-	// firstUndegradedEdge = indVec[d].x;
-	// exit;
-	//    }
-	// }
+    degradeCheckVector[i].degCheck = degraded[degreeVector[i]];
+	}
+	// find the first undegraded vertical edge above node j
+	for(int i = 0 i < xznodes; i++){
+    if (degradeCheckVector][i].degcheck == false){
+		// Have some kind of array or vector keep track of undegraded edges	
+	}
 	
 	
-	// INCLUDE FORTRAN CODE FROM LINES 883-979
+	//Find first inequal value
+	
+	//If the first degree is zero than it is set to 1
+	
+	//Otherwise it equals whatever number it can possibly be
+	
+	//Also store the data in an array or vector
+	
+	
+	
+	
+	
+	
+	
+	
+	// INCLUDE FORTRAN CODE FROM LINES 883-981
 }
 
 /*
  *
  */
 void movieProcessing() {
+	
+	//Uses a grid of nodes, starting at the bottom left and moving right.
+	//Endpoints have the node numbers corresponding to the endpoints of the fiber (edge)
+	
+	//Method appears to go through the whole grid, checking on what kind of edges it is dealing with
+	//as it moves through the grid
+	
 	// INCLUDE FORTRAN CODE FROM LINES 981 - 1205 (1209 - 1382)
 }
 
