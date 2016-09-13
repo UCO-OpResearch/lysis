@@ -716,35 +716,40 @@ void runModel() {
 }
 
 /*
- * 
+ * Collects the first undegraded edges in a column and puts them into a vector.
  */
 void processData(unsigned short j, unsigned short p, ) {
 	// ind is a vector containing the vertical planar edge numbers above node j
 	
-	for(int i = 0 i < xznodes; i++){
-	degreeVector[i] = getNeighbor(i,UP);
+	for(int i = 0; i < xznodes; i++){
+	  degreeVector[i] = getNeighbor(i,UP);
 	//place(k) is the degradation state of each edge above node j
-    degradeCheckVector[i].degCheck = degraded[degreeVector[i]];
+      degradeCheckVector[i].degCheck = degraded[degreeVector[i]];
 	}
 	// find the first undegraded vertical edge above node j
-	for(int i = 0 i < xznodes; i++){
-    if (degradeCheckVector][i].degcheck == false){
-		// Have some kind of array or vector keep track of undegraded edges	
+	for(int i = 0; i < xznodes; i++){
+       if (degradeCheckVector][i].degcheck == false){
+	   // Have some kind of array or vector keep track of undegraded edges	
 	}
 	
 	
-	//Find first inequal value
-	
+	//Find first inequal value 
+	for(int i = 0;i < placeHolderLimit; i ++){
+		    if (degreeVector[i].inequal){
 	//If the first degree is zero than it is set to 1
-	
+	             if(degreeVector[i] == 0)
+					 degreeVector[i] = 1;
+			}
+	placeHolderArray = degreeVector[i];
 	//Otherwise it equals whatever number it can possibly be
 	
 	//Also store the data in an array or vector
 	
+	//Also find the first undegraded vertical edge above node j
+	}
 	
 	
-	
-	
+	 
 	
 	
 	
@@ -769,7 +774,11 @@ void movieProcessing() {
  *
  */
 void outputData() {
+	//Closes a bunch of units??? Nothing else apparently
+	//Will print all the data out???
+	
 	// INCLUDE FORTRAN CODE FROM LINES 1403 - 1422)
+	
 }
 
 /******************************************************************************
