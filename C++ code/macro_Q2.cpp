@@ -757,7 +757,7 @@ void processData(unsigned short j, unsigned short p, ) {
 }
 
 /*
- *
+ * Processes data for a movie that can be produced with the data in this function after the fact.
  */
 void movieProcessing() {
 	
@@ -771,7 +771,7 @@ void movieProcessing() {
 }
 
 /*
- *
+ * Outputs all the processed data, then closes all the vectors???
  */
 void outputData() {
 	//Closes a bunch of units??? Nothing else apparently

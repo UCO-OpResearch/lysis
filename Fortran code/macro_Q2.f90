@@ -1547,10 +1547,10 @@ subroutine findintineq(g,sizeg,intspec,sizegnew)
   countg=0
 
     do i=1,sizeg
-       if(g(i)>intspec) then
+      if(g(i)>intspec) then
             countg=countg+1
             ! gnew(countg) = i
-        end if
+       end if
 
     enddo
 
