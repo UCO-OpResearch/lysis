@@ -764,6 +764,22 @@ void movieProcessing() {
 	//Uses a grid of nodes, starting at the bottom left and moving right.
 	//Endpoints have the node numbers corresponding to the endpoints of the fiber (edge)
 	
+	//Coordinates are set to zero on the grid
+	// If the next degree is equal to zero, then a counter known as countintact goes up then
+	// the system find the undegraded edge numbers and stores them somewhere
+	
+	//Goes through the grid going through the endpoints of the fibers
+	//Starts with vertical edges
+	//Then moves to horizontal edges
+	//then it has a section for vertical edges
+	
+	
+	//if theres a horizontal edge it finds the y value at which the horizontal edge occurs
+	//if there is a vertical edge (or planar) it will find the x value at twhich the vertical edge occurs
+	//and also to find the bottom endpoint of the vertical edge
+	
+	//Goes through and dots the location and boundedness of the grid, black dots if unbound, and green dots if bound.
+	
 	//Method appears to go through the whole grid, checking on what kind of edges it is dealing with
 	//as it moves through the grid
 	
