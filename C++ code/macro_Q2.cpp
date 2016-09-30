@@ -748,8 +748,12 @@ void processData(unsigned short j, unsigned short p, ) {
 	//Also find the first undegraded vertical edge above node j
 	}
 	
-	
+	//By now the successive y and x positions should be saved, and a bunch of data types need to be
+	//saved for later use in Matlab.
 	 
+	 //Records all the successive points
+	 //Lets you decide how many runs you want to save to make a movie
+	 //Unsure how this will be implemented. Maybe something could be showen to the user before move processing begins.
 	
 	
 	
@@ -783,7 +787,7 @@ void movieProcessing() {
 	//Method appears to go through the whole grid, checking on what kind of edges it is dealing with
 	//as it moves through the grid
 	
-	// INCLUDE FORTRAN CODE FROM LINES 981 - 1205 (1209 - 1382)
+	// INCLUDE FORTRAN CODE FROM LINES 982 - 1205 (1209 - 1382)
 }
 
 /*
