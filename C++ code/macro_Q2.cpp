@@ -174,19 +174,30 @@ int successfulBinds;
 int unsuccessfulBinds;
 
 //For the set of vectors for saveData.
-struct counterSet{
-	short locationCheck;
-	bool boundCheck;
-	int timeCheck;
-	bool degradedCheck;
-	int totalBindingsCheck;
-	int totalaAttemptsCheck;
-}
+//struct counterSet{
+//	short locationCheck;
+//	bool boundCheck;
+//	int timeCheck;
+//	bool degradedCheck;
+//	int totalBindingsCheck;
+//	int totalaAttemptsCheck;
+//}
+// A vector being used for processData.
+//struct dvSet{
+//	int x;
+//	int y;
+//	bool deg;
+//}
 
+//struct checkSet{
+//	bool degCheck;
+//}
 //
-vector<counterSet> dataVec;
-
-
+//vector<counterSet> dataVec;
+//
+//vector<dvSet> degreeVector;
+//
+//vector<checkSet> degradeCheckVector;
 
 /******************************************************************************
  ** Methods
@@ -643,21 +654,21 @@ void moveMolecule(unsigned short j, unsigned int t, double r) {
  * This method will save the data every 10 seconds by pushing the data into a vector until the loop
  * completes itself, then it will stop, and the vector can be viewed to see the gathered data.
  */
-void saveData(int t) {
-	// Include code from lines 866 - 878
-	int tenSecond = ceil(10/timeStep);
-		for (unsigned int t = 0; t < totalTimeSteps; t++){
-	      if ((t % tenSeconds == 0) && verbose) {
-		   dataVec.push_back(counterSet());
-		   dataVec[t].locationCheck = location[totalMolecules];
-		   dataVec[t].boundCheck = bound[totalMolecules];
-		   dataVec[t].timeCheck = totalTime;
-		   dataVec[t].degradedCheck = degraded[totalFibers];
-		   //dataVec[t].totalBindingsCheck =
-		  // dataVec[t].totalAttemptsCheck =
-		  }
-		}
-}
+//void saveData(int t) {
+//	// Include code from lines 866 - 878
+//	int tenSecond = ceil(10/timeStep);
+//		for (unsigned int t = 0; t < totalTimeSteps; t++){
+//	      if ((t % tenSeconds == 0) && verbose) {
+//		   dataVec.push_back(counterSet());
+//		   dataVec[t].locationCheck = location[totalMolecules];
+//		   dataVec[t].boundCheck = bound[totalMolecules];
+//		   dataVec[t].timeCheck = totalTime;
+//		   dataVec[t].degradedCheck = degraded[totalFibers];
+//		   //dataVec[t].totalBindingsCheck =
+//		  // dataVec[t].totalAttemptsCheck =
+//		  }
+//		}
+//}
 
 /*  
  *
@@ -699,30 +710,95 @@ void runModel() {
                 }
             }
         }
-		if ((t % tenSeconds) == 0)
-			saveData(t);
+//		if ((t % tenSeconds) == 0)
+//			saveData(t);
     }
 }
 
 /*
- * 
+ * Collects the first undegraded edges in a column and puts them into a vector.
  */
-void processData() {
-	// INCLUDE FORTRAN CODE FROM LINES 883-979
-}
+//void processData(unsigned short j, unsigned short p, ) {
+//	// ind is a vector containing the vertical planar edge numbers above node j
+//	
+//	for(int i = 0; i < xznodes; i++){
+//	  degreeVector[i] = getNeighbor(i,UP);
+//	//place(k) is the degradation state of each edge above node j
+//      degradeCheckVector[i].degCheck = degraded[degreeVector[i]];
+//	}
+//	// find the first undegraded vertical edge above node j
+//	for(int i = 0; i < xznodes; i++){
+//       if (degradeCheckVector][i].degcheck == false){
+//	   // Have some kind of array or vector keep track of undegraded edges	
+//	}
+//	
+//	
+//	//Find first inequal value 
+//	for(int i = 0;i < placeHolderLimit; i ++){
+//		    if (degreeVector[i].inequal){
+//	//If the first degree is zero than it is set to 1
+//	             if(degreeVector[i] == 0)
+//					 degreeVector[i] = 1;
+//			}
+//	placeHolderArray = degreeVector[i];
+//	//Otherwise it equals whatever number it can possibly be
+//	
+//	//Also store the data in an array or vector
+//	
+//	//Also find the first undegraded vertical edge above node j
+//	}
+//	
+//	//By now the successive y and x positions should be saved, and a bunch of data types need to be
+//	//saved for later use in Matlab.
+//	 
+//	 //Records all the successive points
+//	 //Lets you decide how many runs you want to save to make a movie
+//	 //Unsure how this will be implemented. Maybe something could be showen to the user before move processing begins.
+//	
+//	
+//	
+//	// INCLUDE FORTRAN CODE FROM LINES 883-981
+//}
 
 /*
- *
+ * Processes data for a movie that can be produced with the data in this function after the fact.
  */
 void movieProcessing() {
-	// INCLUDE FORTRAN CODE FROM LINES 981 - 1205 (1209 - 1382)
+	
+	//Uses a grid of nodes, starting at the bottom left and moving right.
+	//Endpoints have the node numbers corresponding to the endpoints of the fiber (edge)
+	
+	//Coordinates are set to zero on the grid
+	// If the next degree is equal to zero, then a counter known as countintact goes up then
+	// the system find the undegraded edge numbers and stores them somewhere
+	
+	//Goes through the grid going through the endpoints of the fibers
+	//Starts with vertical edges
+	//Then moves to horizontal edges
+	//then it has a section for vertical edges
+	
+	
+	//if theres a horizontal edge it finds the y value at which the horizontal edge occurs
+	//if there is a vertical edge (or planar) it will find the x value at twhich the vertical edge occurs
+	//and also to find the bottom endpoint of the vertical edge
+	
+	//Goes through and dots the location and boundedness of the grid, black dots if unbound, and green dots if bound.
+	
+	//Method appears to go through the whole grid, checking on what kind of edges it is dealing with
+	//as it moves through the grid
+	
+	// INCLUDE FORTRAN CODE FROM LINES 982 - 1205 (1209 - 1382)
 }
 
 /*
- *
+ * Outputs all the processed data, then closes all the vectors???
  */
 void outputData() {
+	//Closes a bunch of units??? Nothing else apparently
+	//Will print all the data out???
+	
 	// INCLUDE FORTRAN CODE FROM LINES 1403 - 1422)
+	
 }
 
 /******************************************************************************
