@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <vector>
 #include <cmath>
+#include <ncurses.h>
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
@@ -73,9 +74,9 @@ const float gridSymmetryDistance = 1.0862; // dist
  **       the physical properties of the model
  ******************************************************************************/
 // The number of lattice nodes in each (horizontal) row
-const int nodesInRow = 93; // N
+const int nodesInRow = 10; // N (93)
 // The number of lattice nodes in each (vertical) column
-const int nodesInColumn = 121; // F
+const int nodesInColumn = 15; // F (121)
 // Fibers in a full row
 const int fullRow = 3*nodesInRow - 1;
 // all right and out fibers in a row
@@ -84,20 +85,23 @@ const int xzRow = 2*nodesInRow - 1;
 const int totalFibers = (2*nodesInRow - 1)*nodesInColumn
                                        + nodesInRow*(nodesInColumn - 1); // num
 /*
- * 1st node in vertical direction containing fibers.
- * So if firstFiberRow=10, then rows 1-9 have no fibers,
- * there's one more row of fiber-free planar vertical edges,
- * and then the row starting with the firstFiberRow-th (e.g. 10th) vertical node
- * is a full row of fibers
+ * Only part of the grid is occupied by the clot (fibers). The bottom part of the 
+ * grid is occupied with 'ghost' fibers which serve as starting locations for the
+ * tPA molecules.
+ * The constant 'firstFiberRow' is the index of the 1st node in vertical 
+ * direction containing fibers. So if firstFiberRow=10, then rows 1-9 have no 
+ * fibers, there's one more row of fiber-free planar vertical edges, and then the 
+ * row starting with the firstFiberRow-th (e.g. 10th) vertical node is a full row 
+ * of fibers
  */
-const int firstFiberRow = 29 - 1; // Ffree-1
+const int firstFiberRow = 5 - 1; // Ffree-1 (29-1)
 // The last edge number without fibrin
 const int lastGhostFiber = (3*nodesInRow - 1)*(firstFiberRow) - 1; // enoFB-1
 /* The total number of tPA molecules:
  *      43074 is Colin's [tPA]=0.6 nM
  *      86148 is Colin's [tPA]=1.2 nM
  */
-const int totalMolecules = 43074; // M
+const int totalMolecules = 500; // M (43074)
 // The probability of moving. Make sure it is small enough that we've converged.
 const float movingProbability = 0.2; // q
 
@@ -107,7 +111,7 @@ const float movingProbability = 0.2; // q
  **       the running time and granularity of the model
  ******************************************************************************/
 // The number of independent trials to be run
-const int totalTrials = 10; // stats
+const int totalTrials = 1; // stats (10)
 // Total running time for model in seconds
 const int totalTime = 10*60; // tf
 // The length of one timestep, in seconds
@@ -131,6 +135,12 @@ const unsigned int lysisBlocks = 100;
 const unsigned int unbindsPerBlock = 500;
 const unsigned int maxLysesPerBlock = 283;
 
+
+/******************************************************************************
+ ** Output Parameters
+ **
+ ******************************************************************************/
+const int gridSize = 1;
 
 /******************************************************************************
  ******************************************************************************
@@ -177,13 +187,20 @@ unsigned short location[totalMolecules]; // V(1,:)
 bool bound[totalMolecules]; // V(2,:)
 
 // Timestep when the molecule will bind/unbind
-unsigned int unbindingTime[totalMolecules]; // bind/t_leave
+unsigned int bindUnbindTime[totalMolecules]; // bind/t_leave
 
 // Degradation state of each edge.
 bool degraded[totalFibers]; // degrade
 
 // Timestep when the fiber will degrade
 int degradeTime[totalFibers]; // t_degrade
+
+// A linked list of molecules located at the current fiber
+// Each fiber points to the first molecule located on it.
+// Each molecule points to the next molecule located on the same fiber.
+// nextMolecule is -1 if it is the last in the list.
+unsigned int firstMolecule[totalFibers];
+int nextMolecule[totalMolecules];
 
 
 /******************************************************************************
@@ -567,36 +584,79 @@ unsigned short fiberDirection(unsigned short fiberIndex) {
     unsigned short rowPosition = fiberIndex % fullRow;								// Find the fiber's position in its row 
     if (rowPosition >= xzRow)   													// If this fiber is in the second (y-fiber) part of its row
     	return UP;																		// It must be an UP fiber
-    else if (rowPosition % 2 == 0)													// Else, 
+    else if (rowPosition % 2 == 0)													// Else, the even fibers are OUT and the odd ones are RIGHT
     	return OUT;
     else
-    	return RIGHT; // Finds the direction of the fiber, and returns it
+    	return RIGHT; 
 }
 
-
-
-
-
-
 /*
- * Gets the neighbor surrounding the selected fiber, given the
- * index of a fiber.
+ * Given the index of a fiber, this method returns the i'th neighbor of that fiber.
+ * Each fiber has eight neighbors. The location of these neighbors depends which 
+ * plane the fiber is in:
+ * For an x-fiber the arrangement is as follows. 
+ * Note that, if the fiber is at the top or bottom of the grid, the opposite fiber 
+ * is substituted for the missing one.
+ * i.e., if the fiber is at the top of the grid, neighbors 3 and 7 do not exist, so
+ * fibers 0 and 4 occur as neighbors twice, once in their regular positions and once 
+ * each in place of the non-existent fibers.
+ *
+ *        3  2    7  6
+ *        | /     | /
+ *        |/      |/
+ *     ---O-------O---        
+ *       /|      /|
+ *      / |     / |
+ *     1  0    5  4
+ *
+ * For a y-fiber the arrangement is as follows. 
+ * Note that, if the fiber is at the left or right edge of the grid, the opposite fiber 
+ * is substituted for the missing one. See the example for the x-fiber for more info.
+ *
+ *             6
+ *          | /
+ *          |/  
+ *     4----O----7
+ *         /|
+ *        / |  2
+ *       5  | /
+ *          |/
+ *     0----O----3
+ *         /|
+ *        / |
+ *       1
+ *
+ * For a z-fiber the arrangement is as follows.
+ * Since the current model only uses one layer of nodes, each neighbor occurs twice.
+ * If the node is on an edge of the grid, the fibers are duplicated as in the x- and 
+ * y-fiber cases above. This means that an individual fiber would occur 4 times as a neighbor.
+ * i.e., If the node was at the top edge of the grid, the same DOWN fiber would be 
+ * neighbors 4,5,6, & 7
+ *
+ *       6,7  
+ *         | /
+ *         |/   
+ *   0,1---O---2,3
+ *        /|    
+ *       / |
+ *         4,5
+ *
  */
 int getNeighbor(unsigned short fiber, unsigned short i){
-	unsigned short x = nodeX(fiber); // Sets the x-coordinate to the fiber's x
-    unsigned short y = nodeY(fiber); // Sets the y-coordinate to the fiber's x
-    unsigned short dir = fiberDirection(fiber); // Sets the direction to the fiber's x
+	unsigned short x = nodeX(fiber); 												// Get the x-coordinate of the fiber's canonical node
+    unsigned short y = nodeY(fiber); 												// Get the y-coordinate of the fiber's canonical node
+    unsigned short dir = fiberDirection(fiber); 									// Get the direction of the fiber from its canonical node
 	switch (dir) {
         case UP:
 			switch(i){
 				case 0:
-				return (x != 0) ? fiberIndex(x,y,LEFT) : fiberIndex(x,y,RIGHT);
-				case 1: 
+				return (x != 0) ? fiberIndex(x,y,LEFT) : fiberIndex(x,y,RIGHT);						// Account for the left edge case
+				case 1: 																			
 				return fiberIndex(x, y, OUT); 
 				case 2:
 				return fiberIndex(x, y, IN);
 				case 3: 
-				return  (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT);
+				return  (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT);		// Account for the right edge case
 				case 4: 
 				return (x != 0) ? fiberIndex(x,y+1,LEFT) : fiberIndex(x,y+1,RIGHT);
 				case 5: 
@@ -609,54 +669,88 @@ int getNeighbor(unsigned short fiber, unsigned short i){
 		    case RIGHT:
 			switch(i){
 				case 0: 
-				return (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP); // 
+				return (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP); 					// Account for the bottom edge case
 				case 1: 
-				return fiberIndex(x, y, OUT); // 
+				return fiberIndex(x, y, OUT);
 				case 2:
-				return fiberIndex(x, y, IN); // 
+				return fiberIndex(x, y, IN);
 				case 3: 
-				return (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN); // 
+				return (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN); 		// Account for the top edge case
 				case 4: 
-				return (y != 0) ? fiberIndex(x+1, y, DOWN) : fiberIndex(x+1, y, UP); // 
+				return (y != 0) ? fiberIndex(x+1, y, DOWN) : fiberIndex(x+1, y, UP);
 				case 5: 
-				return fiberIndex(x, y, OUT); //  
+				return fiberIndex(x, y, OUT);
 				case 6:  
-				return fiberIndex(x, y, IN); // 
+				return fiberIndex(x, y, IN);
 				case 7: 
 				return (y != nodesInColumn-1) ? fiberIndex(x+1, y, UP) : fiberIndex(x+1, y, DOWN);
 			}
 			 case OUT:
 			switch(i){
 				case 0: 
-				return (x != 0) ? fiberIndex(x, y, LEFT) : fiberIndex(x, y, RIGHT); // z
+				return (x != 0) ? fiberIndex(x, y, LEFT) : fiberIndex(x, y, RIGHT); 				// Account for the left edge case
 				case 1: 
-				return (x != 0) ? fiberIndex(x, y, LEFT) : fiberIndex(x, y, RIGHT); // z+1
+				return (x != 0) ? fiberIndex(x, y, LEFT) : fiberIndex(x, y, RIGHT);
 				case 2:
-				return (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT); // z
+				return (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT); 		// Account for the right edge case
 				case 3: 
-				return (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT); // z+1
+				return (x != nodesInRow-1) ? fiberIndex(x, y, RIGHT) : fiberIndex(x, y, LEFT);
 				case 4: 
-				return  (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP); // z
+				return  (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP); 					// Account for the bottom edge case
 				case 5: 
-				return  (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP); // z+1
+				return  (y != 0) ? fiberIndex(x, y, DOWN) : fiberIndex(x, y, UP);
 				case 6: 
-				return (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN); // z
+				return (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN); 		// Account for the top edge case
 				case 7: 
-				return (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN); // z+1
+				return (y != nodesInColumn-1) ? fiberIndex(x, y, UP) : fiberIndex(x, y, DOWN);
 			}
-			default: // If something goes wrongs with the method
+			default: 																				// If something goes wrong with the method
             throw invalid_argument("Something went wrong while finding neighbors.");
 		}
 }
 
 /*
- * Gets the neighbors surrounding the selected fiber, given the
- * index of a fiber.
+ * Get the entire neighborhood of a fiber. This is returned in the 'neighbors' array
  */
 void getNeighbors(unsigned short fiber, unsigned short neighbors[]) {
-  for (int i = 0; i < 8; i++){
-		neighbors[i] = getNeighbor(fiber,i);
+  for (int i = 0; i < 8; i++){														// Loop through the eight neighbors
+		neighbors[i] = getNeighbor(fiber,i);										// Calculate each neighbor and store in the array
   }
+}
+
+
+/******************************************************************************
+ ** Output methods 
+ **
+ ******************************************************************************/
+
+const int black = 1;
+const int red = 2;
+const int green = 3;
+const int yellow = 4;
+const int blue = 5;
+const int white = 6;
+
+void initializeCurses() {
+	initscr();		
+	start_color();	
+	init_pair(black, COLOR_BLACK, COLOR_BLACK);
+	init_pair(red, COLOR_RED, COLOR_BLACK);
+	init_pair(green, COLOR_GREEN, COLOR_BLACK);
+	init_pair(yellow, COLOR_YELLOW, COLOR_BLACK);
+	init_pair(blue, COLOR_BLUE, COLOR_BLACK);
+	init_pair(white, COLOR_WHITE, COLOR_BLACK);
+}
+
+
+
+
+string color(string in, string color) {
+	// 
+	// attron(COLOR_PAIR(1));
+	// printw(in);
+	// attroff(COLOR_PAIR(1));
+	return in;
 }
 
 /*
@@ -681,36 +775,363 @@ void printParameters() {
 }
 
 /*
+ * Prints the location of an individual molecule, its status, and the status of the fiber it is on
+ */
+void printMoleculeStatus(int testMolecule, unsigned int t) {
+    cout << color("Time: ", red) << t * timeStep << " sec" << endl;
+	cout << "Location of molecule #" << testMolecule << " is fiber #" << location[testMolecule] << endl;
+	cout << "Molecule #" << testMolecule << " is " << (bound[testMolecule] ? "bound" : "unbound") << endl;
+	cout << "Fiber #" << location[testMolecule] << " is " << (degraded[location[testMolecule]] ? "degraded" : "not degraded") << endl;
+}
+
+/*
+ * Print one row of the grid in its current status
+ */
+void printRow(int y) {
+	string row[6];
+	row[0] = "";
+	row[1] = "";
+	row[2] = "";
+	row[3] = "  ";
+	row[4] = "";
+	row[5] = "";
+	for (int x = 0; x < nodesInRow; x++) {
+		if (y >= firstFiberRow) {
+			if (y == nodesInColumn-1)
+				row[2] += (degraded[fiberIndex(x,y,IN)] ? color("   /  ", red) : color("   /  ", blue));
+			else {
+				row[0] += (degraded[fiberIndex(x,y,UP)] ? color("  |   ", red) : color("  |   ", blue));
+				row[1] += (degraded[fiberIndex(x,y,UP)] ? color("  |   ", red) : color("  |   ", blue));
+				row[2] += (degraded[fiberIndex(x,y,UP)] ? color("  |", red) : color("  |", blue));
+				row[2] += (degraded[fiberIndex(x,y,IN)] ? color("/  ", red) : color("/  ", blue));
+			}
+			if (x == nodesInRow-1)
+				row[3] += "O";
+			else {
+				row[3] += "O" + (degraded[fiberIndex(x,y,RIGHT)] ? color("--", red) : color("--", blue));
+				if (firstMolecule[fiberIndex(x,y,RIGHT)] == -1)
+					row[3] += (degraded[fiberIndex(x,y,RIGHT)] ? color("-", red) : color("-", blue));
+				else {
+					int currentMolecule = firstMolecule[fiberIndex(x,y,RIGHT)];
+					while (currentMolecule >= 0) {
+						if (bound[currentMolecule]) {
+							row[3] += color("*", green);
+							currentMolecule = -2;
+						} else
+							currentMolecule = nextMolecule[currentMolecule];
+					}
+					if (currentMolecule == -1)
+						row[3] += color("*", yellow);
+				}
+				row[3] += (degraded[fiberIndex(x,y,RIGHT)] ? color("--", red) : color("--", blue));
+			}
+			if (y == firstFiberRow)
+				row[4] += (degraded[fiberIndex(x,y,OUT)] ? color(" /    ", red) : color(" /    ", blue));
+			else {
+				row[4] += (degraded[fiberIndex(x,y,OUT)] ? color(" /", red) : color(" /", blue));
+				row[4] += (degraded[fiberIndex(x,y,DOWN)] ? color("|   ", red) : color("|   ", blue));
+			}
+			if (firstMolecule[fiberIndex(x,y,OUT)] == -1)
+				row[5] += " ";
+			else {
+				int currentMolecule = firstMolecule[fiberIndex(x,y,OUT)];
+				while (currentMolecule >= 0) {
+					if (bound[currentMolecule]) {
+						row[5] += color("*", green);
+						currentMolecule = -2;
+					} else
+						currentMolecule = nextMolecule[currentMolecule];
+				}
+				if (currentMolecule == -1)
+					row[5] += color("*", yellow);
+			}
+			if (firstMolecule[fiberIndex(x,y,DOWN)] == -1) {
+				if (y == firstFiberRow)
+					row[5] += "     ";
+				else
+					row[5] += (degraded[fiberIndex(x,y,DOWN)] ? color(" |   ", red) : color(" |   ", blue));
+			} else {
+				int currentMolecule = firstMolecule[fiberIndex(x,y,DOWN)];
+				while (currentMolecule >= 0) {
+					if (bound[currentMolecule]) {
+						row[5] += color(" *   ", green);
+						currentMolecule = -2;
+					} else
+						currentMolecule = nextMolecule[currentMolecule];
+				}
+				if (currentMolecule == -1)
+					row[5] += color(" *   ", yellow);
+			}
+		} else {
+			if (x ==  nodesInRow-1)
+				row[3] += "O";
+			else {
+				row[3] += "O  ";
+				if (firstMolecule[fiberIndex(x,y,RIGHT)] == -1)
+					row[3] += " ";
+				else {
+					int currentMolecule = firstMolecule[fiberIndex(x,y,RIGHT)];
+					while (currentMolecule >= 0) {
+						if (bound[currentMolecule]) {
+							row[3] += color("*", green);
+							currentMolecule = -2;
+						} else
+							currentMolecule = nextMolecule[currentMolecule];
+					}
+					if (currentMolecule == -1)
+						row[3] += color("*", yellow);
+				}
+				row[3] += "  ";
+			}
+			if (y > 0) {
+				if (firstMolecule[fiberIndex(x,y,OUT)] == -1)
+					row[5] += " ";
+				else {
+					int currentMolecule = firstMolecule[fiberIndex(x,y,OUT)];
+					while (currentMolecule >= 0) {
+						if (bound[currentMolecule]) {
+							row[5] += color("*", green);
+							currentMolecule = -2;
+						} else
+							currentMolecule = nextMolecule[currentMolecule];
+					}
+					if (currentMolecule == -1)
+						row[5] += color("*", yellow);
+				}
+				if (firstMolecule[fiberIndex(x,y,DOWN)] == -1)
+					row[5] += "     ";
+				else {
+					int currentMolecule = firstMolecule[fiberIndex(x,y,DOWN)];
+					while (currentMolecule >= 0) {
+						if (bound[currentMolecule]) {
+							row[5] += color(" *   ", green);
+							currentMolecule = -2;
+						} else
+							currentMolecule = nextMolecule[currentMolecule];
+					}
+					if (currentMolecule == -1)
+						row[5] += color(" *   ", yellow);
+				}
+			}
+		}
+	}
+	mvprintw(50-y*3,0,row[2].c_str());
+	mvprintw(50-y*3+1,0,row[3].c_str());
+	//cout << row[4] << endl;
+	mvprintw(50-y*3+2,0,row[5].c_str());
+}
+
+/*
+ *
+ */
+void printNode(int x, int y) {
+	int maxY = 0, maxX = 0;
+	getmaxyx(stdscr, maxY, maxX);
+	int baseY = maxY - (y*gridSize*2 + 1);
+	int baseX = x*gridSize*2 + 1;
+	mvprintx(baseY, baseX, "O");
+	if (y < firstFiberRow) {
+		if (x != 0) {
+			if (degraded[fiberIndex(x,y,LEFT)])
+				attron(COLOR_PAIR(red));
+			else
+				attron(COLOR_PAIR(blue));
+			for (int i = 0; i < gridSize,)
+			mvprintx(baseY, baseX-1 - i, "-");
+		}
+		if (x != nodesInRow-1) {
+			if (degraded[fiberIndex(x,y,RIGHT)])
+				attron(COLOR_PAIR(red));
+			else
+				attron(COLOR_PAIR(blue));
+			for (int i = 0; i < gridSize,)
+			mvprintx(baseY, baseX+1 + i, "-");
+		}
+	}
+}
+
+/*
+ *
+ */
+void printGrid(int t) {
+	//clear();
+	mvprintw(0,0,color("Time: ", red).c_str(),to_string(t * timeStep).c_str()," sec");
+	for (int x = 0, x < nodesInRow; x++)
+		for (int y = 0; y < nodesInColumn; y++)
+			printNode(x,y);
+	refresh();
+	getch();
+}
+
+/*
+ *
+ */
+void printFiberStatus(int i, unsigned int t) {
+    cout << color("Time: ", red) << t * timeStep << " sec" << endl;
+    cout << "Fiber #" << i << " contains molecule(s) ";
+    int currentMolecule = firstMolecule[i];
+    while (currentMolecule != -1) {
+    	if (bound[currentMolecule])
+    		cout << color(to_string(currentMolecule), green) << ", ";
+    	else
+    		cout << color(to_string(currentMolecule), yellow) << ", ";
+    	currentMolecule = nextMolecule[currentMolecule];
+    }
+    cout << endl;
+}
+
+/*
+ * This method will save the data every 10 seconds by pushing the data into a vector until the loop
+ * completes itself, then it will stop, and the vector can be viewed to see the gathered data.
+ */
+/*void saveData(int t) {
+	// Include code from lines 866 - 878
+	int tenSecond = ceil(10/timeStep);
+		for (unsigned int t = 0; t < totalTimeSteps; t++){
+	      if ((t % tenSeconds == 0) && verbose) {
+		   dataVec.push_back(counterSet());
+		   dataVec[t].locationCheck = location[totalMolecules];
+		   dataVec[t].boundCheck = bound[totalMolecules];
+		   dataVec[t].timeCheck = totalTime;
+		   dataVec[t].degradedCheck = degraded[totalFibers];
+		   //dataVec[t].totalBindingsCheck =
+		  // dataVec[t].totalAttemptsCheck =
+		  }
+		}
+}*/
+
+
+/*
+ * Collects the first undegraded edges in a column and puts them into a vector.
+ */
+/*void processData(unsigned short j, unsigned short p, ) {
+	// ind is a vector containing the vertical planar edge numbers above node j
+	
+	for(int i = 0; i < xznodes; i++){
+	  degreeVector[i] = getNeighbor(i,UP);
+	//place(k) is the degradation state of each edge above node j
+     degradeCheckVector[i].degCheck = degraded[degreeVector[i]];
+	}
+	// find the first undegraded vertical edge above node j
+	for(int i = 0; i < xznodes; i++){
+      if (degradeCheckVector][i].degcheck == false){
+	   // Have some kind of array or vector keep track of undegraded edges	
+	}
+	
+	
+	//Find first inequal value 
+	for(int i = 0;i < placeHolderLimit; i ++){
+		    if (degreeVector[i].inequal){
+	//If the first degree is zero than it is set to 1
+	             if(degreeVector[i] == 0)
+					 degreeVector[i] = 1;
+			}
+	placeHolderArray = degreeVector[i];
+	//Otherwise it equals whatever number it can possibly be
+	
+	//Also store the data in an array or vector
+	
+	//Also find the first undegraded vertical edge above node j
+	}
+	
+	//By now the successive y and x positions should be saved, and a bunch of data types need to be
+	//saved for later use in Matlab.
+	 
+	 //Records all the successive points
+	 //Lets you decide how many runs you want to save to make a movie
+	 //Unsure how this will be implemented. Maybe something could be showen to the user before move processing begins.
+	
+	
+	
+	// INCLUDE FORTRAN CODE FROM LINES 883-981
+}*/
+
+/*
+ * Processes data for a movie that can be produced with the data in this function after the fact.
+ */
+/*void movieProcessing() {
+	
+	Uses a grid of nodes, starting at the bottom left and moving right.
+	Endpoints have the node numbers corresponding to the endpoints of the fiber (edge)
+	
+	Coordinates are set to zero on the grid
+	If the next degree is equal to zero, then a counter known as countintact goes up then
+	the system find the undegraded edge numbers and stores them somewhere
+	
+	Goes through the grid going through the endpoints of the fibers
+	Starts with vertical edges
+	Then moves to horizontal edges
+	then it has a section for vertical edges
+	
+	
+	if theres a horizontal edge it finds the y value at which the horizontal edge occurs
+	if there is a vertical edge (or planar) it will find the x value at twhich the vertical edge occurs
+	and also to find the bottom endpoint of the vertical edge
+	
+	Goes through and dots the location and boundedness of the grid, black dots if unbound, and green dots if bound.
+	
+	Method appears to go through the whole grid, checking on what kind of edges it is dealing with
+	as it moves through the grid
+	
+	// INCLUDE FORTRAN CODE FROM LINES 982 - 1205 (1209 - 1382)
+}*/
+
+/*
+ * Outputs all the processed data, then closes all the vectors???
+ */
+void outputData() {
+	//Closes a bunch of units??? Nothing else apparently
+	//Will print all the data out???
+	
+	// INCLUDE FORTRAN CODE FROM LINES 1403 - 1422)
+	
+}
+
+/******************************************************************************
+ ** Model running methods 
+ **
+ ******************************************************************************
+
+
+/*
  * Sets the model state variables to their initial values, that is,
  * All fibers are non-degraded and have no degrade time set
  * All molecules are unbound, have no timer set, and their locations
  * are uniformly distributed on the ghost fibers
  */
 void initializeVariables() {
-    for (int i = 0; i < totalFibers; i++) { //Goes through all possible fibers 
-        degraded[i] = false; 
-        degradeTime[i] = totalTimeSteps + 1;
+    for (int i = 0; i < totalFibers; i++) { 										// Loop over all fibers 
+        degraded[i] = false; 														// Set the fiber to non-degraded
+        degradeTime[i] = totalTimeSteps + 1;										// Set the fiber to never degrade
+        firstMolecule[i] = -1;														// Set the fiber to empty of molecules
     }
-    for (int i = 0; i < totalMolecules; i++) { //Goes through all possible fibers and unbinds them, while counting the unbind time.
-        bound[i] = false;
-        location[i] = randomInt(lastGhostFiber + 1);
-        unbindingTime[i] = totalTimeSteps + 1;
+    for (int j = 0; j < totalMolecules; j++) { 										// Loop over all molecules
+        bound[j] = false;															// Set the molecule to unbound
+        location[j] = randomInt(lastGhostFiber + 1);								// Set the molecule's location to a random position outside the clot
+        nextMolecule[j] = firstMolecule[location[j]];								// Insert this molecule at the beginning of the linked list for the fiber
+        firstMolecule[location[j]] = j;
+        bindUnbindTime[j] = totalTimeSteps + 1;										// Set the molecule to never bind
+        //printFiberStatus(location[j], 0);
     }
 }
 
 /*
- * Degrades fibers for a given value.
+ * Checks all fibers and degrades those where the current time 't' is 
+ * past their degradeTime. Also unbinds all molecules on those fibers
  */
 void degradeFibers(unsigned int t) {
-    for (int i = lastGhostFiber+1; i < totalFibers; i++) {
-        if (degradeTime[i] == t) {
-            degraded[i] = true;
-            for (int j = 0; j < totalMolecules; j++) {
-                if (location[j] == i) {
-                    bound[j] = false;
-                    unbindingTime[j] = t;
+    for (int i = lastGhostFiber+1; i < totalFibers; i++) {							// Loop over all true fibers
+        if (!degraded[i] && (degradeTime[i] <= t)) {								// If the fiber is not already degraded and its degradeTime has passed
+            degraded[i] = true;														// Degrade the fiber
+            int currentMolecule = firstMolecule[i];
+            while (currentMolecule != -1) {											// Step through the linked list of molecules located on this fiber
+                if (bound[currentMolecule]) {										// If the molecule is bound
+                    bound[currentMolecule] = false;										// Unbind the molecule
+                    bindUnbindTime[currentMolecule] = t;								// Set the molecule's unbind time to the current time
                 }
+                currentMolecule = nextMolecule[currentMolecule];
             }
+            //printFiberStatus(i, t);
         }
     }
 }
@@ -723,7 +1144,7 @@ int findUnbindTime(unsigned short j, unsigned int t, double r3) {
 	double slope = UnbindingTimeDistribution[colr2] - UnbindingTimeDistribution[colr2 - 1];
     double step = (r3*100) - colr2;
 	double timeToUnbind = UnbindingTimeDistribution[colr2 -1] + (step*slope);
-	unbindingTime[j] = t + timeToUnbind/timeStep;
+	bindUnbindTime[j] = t + timeToUnbind/timeStep;
 	return colr2;
 }
 
@@ -731,7 +1152,7 @@ int findUnbindTime(unsigned short j, unsigned int t, double r3) {
  *
  */
 int findBindingTime(unsigned short j, unsigned int t, double r) {
-	unbindingTime[j] = t - log(r) / (bindingRate * bindingSites) - timeStep/2; //!! Ask Dr. Bannish about this line in the context of line 583 (586 in Fortran)
+	bindUnbindTime[j] = t - log(r) / (bindingRate * bindingSites) - timeStep/2; //!! Ask Dr. Bannish about this line in the context of line 583 (586 in Fortran)
 }
 
 /*
@@ -740,9 +1161,9 @@ int findBindingTime(unsigned short j, unsigned int t, double r) {
  */
 void setDegradeTime(unsigned short i, unsigned int t, int colr3, double r4) {
 	int r400 = ceil(r4*100)+1;
-	if(r400 >= lysesPerBlock[colr3-1]) {
+	if (r400 <= lysesPerBlock[colr3-1]) {
 		double slope = lysisTime[r400][colr3-1] - lysisTime[r400-1][colr3-1];
-		double step = (r4*100)-(r400-1);
+		double step = (r4*100) - (r400-1);
 		double timeToDegrade = lysisTime[r400][colr3-1] + step*slope;
 		degradeTime[i] = min(degradeTime[i], (int)(t + floor(timeToDegrade/timeStep)));
 	}
@@ -772,41 +1193,26 @@ void bind(unsigned short j, unsigned short i, unsigned int t, double r1, double 
  */
 void moveMolecule(unsigned short j, unsigned int t, double r) {
     unsigned short neighbor = floor(8*((1-r) / movingProbability));
-//	if (verbose) {
-//		cout << "Finding neighbor " << neighbor << " for location " << location[j] << endl;
-//	}
+    //printMoleculeStatus(j, t);
+    //printFiberStatus(location[j], t);
+    if (firstMolecule[location[j]] == j) {
+    	firstMolecule[location[j]] = nextMolecule[j];
+    } else {
+    	int currentMolecule = firstMolecule[location[j]];
+    	while (nextMolecule[currentMolecule] != j) {
+    		currentMolecule = nextMolecule[currentMolecule];
+    		if (currentMolecule == -1)
+    			throw logic_error("Broken Linked List.");
+    	}
+    	nextMolecule[currentMolecule] = nextMolecule[j];
+    }
 	location[j] = getNeighbor(location[j], neighbor);
+	nextMolecule[j] = firstMolecule[location[j]];
+	firstMolecule[location[j]] = j;
 	findBindingTime(j, t, urcw1_());
 }
 
 
-
-
-
-
-
-
-
-
-/*
- * This method will save the data every 10 seconds by pushing the data into a vector until the loop
- * completes itself, then it will stop, and the vector can be viewed to see the gathered data.
- */
-//void saveData(int t) {
-//	// Include code from lines 866 - 878
-//	int tenSecond = ceil(10/timeStep);
-//		for (unsigned int t = 0; t < totalTimeSteps; t++){
-//	      if ((t % tenSeconds == 0) && verbose) {
-//		   dataVec.push_back(counterSet());
-//		   dataVec[t].locationCheck = location[totalMolecules];
-//		   dataVec[t].boundCheck = bound[totalMolecules];
-//		   dataVec[t].timeCheck = totalTime;
-//		   dataVec[t].degradedCheck = degraded[totalFibers];
-//		   //dataVec[t].totalBindingsCheck =
-//		  // dataVec[t].totalAttemptsCheck =
-//		  }
-//		}
-//}
 
 /*  
  *
@@ -814,16 +1220,15 @@ void moveMolecule(unsigned short j, unsigned int t, double r) {
 void runModel() {
 	int tenSeconds = ceil(10/timeStep);
     for (unsigned int t = 0; t < totalTimeSteps; t++) {
+    	printGrid(t);
         if ((t % tenSeconds == 0) && verbose) {
-			int testMolecule = 4364;
-            cout << "Time: " << t * timeStep << " sec" << endl;
-			cout << "Location of molecule #" << testMolecule << " is fiber #" << location[testMolecule] << endl;
-			cout << "Molecule #" << testMolecule << " is " << (bound[testMolecule] ? "bound" : "unbound") << endl;
-			cout << "Fiber #" << location[testMolecule] << " is " << (degraded[location[testMolecule]] ? "degraded" : "not degraded") << endl;
+			//printMoleculeStatus(43, t);
+			//printGrid(t);
+			
 		}
         degradeFibers(t);
         for (unsigned int j = 0; j < totalMolecules; j++) {
-            if (bound[j] && (unbindingTime[j] == t)) // If the molecule is bound, should it unbind?
+            if (bound[j] && (bindUnbindTime[j] <= t)) // If the molecule is bound, should it unbind?
                 unBind(j, t, urcw1_());
             if (!bound[j]) { // If the molecule is unbound, should it move?
 				double r = urcw1_();
@@ -831,13 +1236,13 @@ void runModel() {
 					// cout << "Move roll:" << r << endl;
 				// }
                 if (r <= 1-movingProbability) { // If the molecule does not move, can it bind?
-                    if ((unbindingTime[j] <= t) && !degraded[location[j]]) { // It can bind.
+                    if ((bindUnbindTime[j] <= t) && !degraded[location[j]]) { // It can bind.
                         bind(location[j], j, t, urcw1_(), urcw1_()); // If it can bind, bind it. If not, leave it as is.
                     }
                 } else {
 					double rn = urcw1_();
-					if ((unbindingTime[j] <= t) && !degraded[location[j]]) { // If it can move, can it still bind?
-						if(rn > (t - unbindingTime[j])/totalTimeSteps){
+					if ((bindUnbindTime[j] <= t) && !degraded[location[j]]) { // If it can move, can it still bind?
+						if(rn > (t - bindUnbindTime[j])/totalTimeSteps){
 							moveMolecule(j, t, r);
 						} else {
 							bind(location[j], j, t, urcw1_(), urcw1_()); //If it is smaller, bind it.
@@ -853,97 +1258,13 @@ void runModel() {
     }
 }
 
-/*
- * Collects the first undegraded edges in a column and puts them into a vector.
- */
-//void processData(unsigned short j, unsigned short p, ) {
-//	// ind is a vector containing the vertical planar edge numbers above node j
-//	
-//	for(int i = 0; i < xznodes; i++){
-//	  degreeVector[i] = getNeighbor(i,UP);
-//	//place(k) is the degradation state of each edge above node j
-//      degradeCheckVector[i].degCheck = degraded[degreeVector[i]];
-//	}
-//	// find the first undegraded vertical edge above node j
-//	for(int i = 0; i < xznodes; i++){
-//       if (degradeCheckVector][i].degcheck == false){
-//	   // Have some kind of array or vector keep track of undegraded edges	
-//	}
-//	
-//	
-//	//Find first inequal value 
-//	for(int i = 0;i < placeHolderLimit; i ++){
-//		    if (degreeVector[i].inequal){
-//	//If the first degree is zero than it is set to 1
-//	             if(degreeVector[i] == 0)
-//					 degreeVector[i] = 1;
-//			}
-//	placeHolderArray = degreeVector[i];
-//	//Otherwise it equals whatever number it can possibly be
-//	
-//	//Also store the data in an array or vector
-//	
-//	//Also find the first undegraded vertical edge above node j
-//	}
-//	
-//	//By now the successive y and x positions should be saved, and a bunch of data types need to be
-//	//saved for later use in Matlab.
-//	 
-//	 //Records all the successive points
-//	 //Lets you decide how many runs you want to save to make a movie
-//	 //Unsure how this will be implemented. Maybe something could be showen to the user before move processing begins.
-//	
-//	
-//	
-//	// INCLUDE FORTRAN CODE FROM LINES 883-981
-//}
 
-/*
- * Processes data for a movie that can be produced with the data in this function after the fact.
- */
-void movieProcessing() {
-	
-	//Uses a grid of nodes, starting at the bottom left and moving right.
-	//Endpoints have the node numbers corresponding to the endpoints of the fiber (edge)
-	
-	//Coordinates are set to zero on the grid
-	// If the next degree is equal to zero, then a counter known as countintact goes up then
-	// the system find the undegraded edge numbers and stores them somewhere
-	
-	//Goes through the grid going through the endpoints of the fibers
-	//Starts with vertical edges
-	//Then moves to horizontal edges
-	//then it has a section for vertical edges
-	
-	
-	//if theres a horizontal edge it finds the y value at which the horizontal edge occurs
-	//if there is a vertical edge (or planar) it will find the x value at twhich the vertical edge occurs
-	//and also to find the bottom endpoint of the vertical edge
-	
-	//Goes through and dots the location and boundedness of the grid, black dots if unbound, and green dots if bound.
-	
-	//Method appears to go through the whole grid, checking on what kind of edges it is dealing with
-	//as it moves through the grid
-	
-	// INCLUDE FORTRAN CODE FROM LINES 982 - 1205 (1209 - 1382)
-}
-
-/*
- * Outputs all the processed data, then closes all the vectors???
- */
-void outputData() {
-	//Closes a bunch of units??? Nothing else apparently
-	//Will print all the data out???
-	
-	// INCLUDE FORTRAN CODE FROM LINES 1403 - 1422)
-	
-}
 
 /******************************************************************************
  ** Main
  **
  ******************************************************************************/
-int main(int argc, char** argv) {
+int main(int argc, char** argv) {	
     if (verbose) cout << "Read in data.............................";
     bool success = readData();
     if (verbose) cout << (success ? "Done." : "Failed!") << endl;
@@ -955,8 +1276,10 @@ int main(int argc, char** argv) {
     if (verbose) cout << "Initializing variables...................";
     initializeVariables();
     if (verbose) cout << "Done." << endl;
-	 if (verbose) cout << "Running Model...................";
+	if (verbose) cout << "Running Model..................." << endl;
+	initializeCurses();
     runModel();
-    if (verbose) cout << "Done." << endl;
+    if (verbose) cout << "Run Complete." << endl;
+    endwin();
     return 0;
 }

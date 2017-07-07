@@ -56,7 +56,7 @@ FILES =  ${FOLDER}macro_Q2.cpp ${FOLDER}kiss.o
 	
 # build
 build:	
-	g++ -std=c++11 -o bloodclotting ${FILES}
+	g++ -std=c++11 -o bloodclotting ${FILES} -lncurses
 	
 	
 
