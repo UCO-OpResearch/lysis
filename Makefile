@@ -1,135 +1,70 @@
 #
-#  There exist several targets which are by default empty and which can be 
-#  used for execution of your targets. These targets are usually executed 
-#  before and after some main targets. They are: 
-#
-#     .build-pre:              called before 'build' target
-#     .build-post:             called after 'build' target
-#     .clean-pre:              called before 'clean' target
-#     .clean-post:             called after 'clean' target
-#     .clobber-pre:            called before 'clobber' target
-#     .clobber-post:           called after 'clobber' target
-#     .all-pre:                called before 'all' target
-#     .all-post:               called after 'all' target
-#     .help-pre:               called before 'help' target
-#     .help-post:              called after 'help' target
-#
-#  Targets beginning with '.' are not intended to be called on their own.
-#
-#  Main targets can be executed directly, and they are:
-#  
-#     build                    build a specific configuration
-#     clean                    remove built files from a configuration
-#     clobber                  remove all built files
-#     all                      build all configurations
-#     help                     print help mesage
-#  
-#  Targets .build-impl, .clean-impl, .clobber-impl, .all-impl, and
-#  .help-impl are implemented in nbproject/makefile-impl.mk.
-#
-#  Available make variables:
-#
-#     CND_BASEDIR                base directory for relative paths
-#     CND_DISTDIR                default top distribution directory (build artifacts)
-#     CND_BUILDDIR               default top build directory (object files, ...)
-#     CONF                       name of current configuration
-#     CND_PLATFORM_${CONF}       platform name (current configuration)
-#     CND_ARTIFACT_DIR_${CONF}   directory of build artifact (current configuration)
-#     CND_ARTIFACT_NAME_${CONF}  name of build artifact (current configuration)
-#     CND_ARTIFACT_PATH_${CONF}  path to build artifact (current configuration)
-#     CND_PACKAGE_DIR_${CONF}    directory of package (current configuration)
-#     CND_PACKAGE_NAME_${CONF}   name of package (current configuration)
-#     CND_PACKAGE_PATH_${CONF}   path to package (current configuration)
-#
-# NOCDDL
 
 
-# Environment 
+# Environment
 MKDIR=mkdir
 CP=cp
 CCADMIN=CCadmin
+#VPATH=Build/
 
-FOLDER = C++\ code/
-FILES =  ${FOLDER}macro_Q2.cpp ${FOLDER}kiss.o
+CPP_DIR =  C++\ code/
+CPP_SRC = macro_Q2_cpp.o kiss.o -lncurses
+CPP_FLAGS = -std=c++11
 #FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
-	
+C_FLAGS = -w
+
+FORTRAN_DIR = Fortran\ code/
+NCURSES_DIR = ${FORTRAN_DIR}pdsrc/
+FORTRAN_SRC = macro_Q2_fort.o kiss.o macros.o ncurses.o -lncurses
+FORTRAN_FLAGS = -I${NCURSES_DIR} -J${NCURSES_DIR} \
+		-ffree-line-length-none
+
+
 # build
-build:	
-	g++ -std=c++11 -o bloodclotting ${FILES} -lncurses
-	
-	
+build: 		.pre-build build_c build_fortran
 
-.build-pre:
-# Add your pre 'build' code here...
+full:		clean build_c build_fortran .post-build
 
-.build-post: .build-impl
-# Add your post 'build' code here...
+#${C_SRC}: %.o : %.c
+#	gcc -c $< -o $@
 
 
-# clean
-clean: .clean-post
+macro_Q2_cpp.o:
+	g++ ${CPP_FLAGS} -c ${CPP_DIR}macro_Q2.cpp -o ${VPATH}$@
 
-.clean-pre:
-# Add your pre 'clean' code here...
+kiss.o:
+	gcc ${C_FLAGS} -c ${CPP_DIR}kiss.c -o ${VPATH}$@
 
-.clean-post: .clean-impl
-# Add your post 'clean' code here...
+build_c:	${CPP_SRC}
+	g++ ${CPP_FLAGS} ${CPP_SRC} -o macro_Q2_cpp
 
+macros.o:
+	gcc ${C_FLAGS} -c ${NCURSES_DIR}macros.c -o ${VPATH}$@
 
-# clobber
-clobber: .clobber-post
+ncurses.o:
+	gfortran ${FORTRAN_FLAGS} -c ${NCURSES_DIR}ncurses.f90 -o ${VPATH}$@
 
-.clobber-pre:
-# Add your pre 'clobber' code here...
+macro_Q2_fort.o:
+	gfortran ${FORTRAN_FLAGS} -c ${FORTRAN_DIR}macro_Q2.f90 -o ${VPATH}$@
 
-.clobber-post: .clobber-impl
-# Add your post 'clobber' code here...
-
-
-# all
-all: .all-post
-
-.all-pre:
-# Add your pre 'all' code here...
-
-.all-post: .all-impl
-# Add your post 'all' code here...
+build_fortran:	${FORTRAN_SRC}
+	gfortran ${FORTRAN_FLAGS} ${FORTRAN_SRC} -o macro_Q2_fort
 
 
-# build tests
-build-tests: .build-tests-post
+clean:
+	rm -f *.o
+	rm -f macro_Q2*
 
-.build-tests-pre:
-# Add your pre 'build-tests' code here...
+.pre-build:
+	@if [ -e macro_Q2_fort.o ]; then \
+		if [ "$(shell stat -c %Y macro_Q2_fort.o)" -lt "$(shell stat -c %Y ${FORTRAN_DIR}macro_Q2.f90)" ]; then \
+			rm macro_Q2_fort.o; echo "Removing out-of-date Fortran source."; \
+		fi; \
+	fi
+	@if [ "$(shell stat -c %Y macro_Q2_cpp.o)" -lt "$(shell stat -c %Y ${CPP_DIR}macro_Q2.cpp)" ]; then \
+		rm macro_Q2_cpp.o; echo "Removing out-of-date C++ source."; \
+	fi
 
-.build-tests-post: .build-tests-impl
-# Add your post 'build-tests' code here...
+.post-build:
 
-
-# run tests
-test: .test-post
-
-.test-pre: build-tests
-# Add your pre 'test' code here...
-
-.test-post: .test-impl
-# Add your post 'test' code here...
-
-
-# help
-help: .help-post
-
-.help-pre:
-# Add your pre 'help' code here...
-
-.help-post: .help-impl
-# Add your post 'help' code here...
-
-
-
-# include project implementation makefile
-include nbproject/Makefile-impl.mk
-
-# include project make variables
-include nbproject/Makefile-variables.mk

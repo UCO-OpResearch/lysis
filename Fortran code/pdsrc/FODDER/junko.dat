@@ -1,0 +1,22 @@
+################################################################################
+#  Name:  ___________________                                                  #
+#  Date:  ___________________            #######################               #
+#  Value: ___________________            ^      ^       ^      ^               #
+#                                       EAST   WEST   NORTH  SOUTH             #
+################################################################################
+
+   ~######################~   `AA``BB``CC``DD``EE``FF``GG``HH`
+   ~#   January 2015     #~\  `II``JJ``KK``LL``MM``NN``OO``PP`
+   ~######################~\  `QQ``RR``SS``TT``UU``VV``WW``XX`
+   ~#Su#Mo#Tu#We#Th#Fr#Sa#~\  `YY``ZZ`
+   ~######################~\   
+   ~#  #  #  #  # 1# 2# 3#~\   The ncurses(3c) library lets you read and identify
+   ~# 4# 5# 6# 7# 8# 9#10#~\   function keys and characters one key at a time if
+   ~#11#12#13#14#15#16#17#~\   desired; lets you control what characters are 
+   ~#18#19#20#21#22#23#24#~\   displayed by treating the screen as a grid of 
+   ~#25#26#27#28#29#30#31#~\   character cells; and lets you assign attributes 
+   ~######################~\   like color, italics, and underlining to characters
+    \\\\\\\\\\\\\\\\\\\\\\\\   on most terminals. Mouse support is also often
+                               available.
+
+You can create subwindows in your screen and scroll individual regions.

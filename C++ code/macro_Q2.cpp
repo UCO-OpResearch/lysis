@@ -13,6 +13,7 @@
  *******************************************************************************
  *******************************************************************************/
 
+
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -74,9 +75,9 @@ const float gridSymmetryDistance = 1.0862; // dist
  **       the physical properties of the model
  ******************************************************************************/
 // The number of lattice nodes in each (horizontal) row
-const int nodesInRow = 10; // N (93)
+const int nodesInRow = 30; // N (93)
 // The number of lattice nodes in each (vertical) column
-const int nodesInColumn = 15; // F (121)
+const int nodesInColumn = 11; // F (121)
 // Fibers in a full row
 const int fullRow = 3*nodesInRow - 1;
 // all right and out fibers in a row
@@ -94,7 +95,7 @@ const int totalFibers = (2*nodesInRow - 1)*nodesInColumn
  * row starting with the firstFiberRow-th (e.g. 10th) vertical node is a full row 
  * of fibers
  */
-const int firstFiberRow = 5 - 1; // Ffree-1 (29-1)
+const int firstFiberRow = 4 - 1; // Ffree-1 (29-1)
 // The last edge number without fibrin
 const int lastGhostFiber = (3*nodesInRow - 1)*(firstFiberRow) - 1; // enoFB-1
 /* The total number of tPA molecules:
@@ -103,7 +104,7 @@ const int lastGhostFiber = (3*nodesInRow - 1)*(firstFiberRow) - 1; // enoFB-1
  */
 const int totalMolecules = 500; // M (43074)
 // The probability of moving. Make sure it is small enough that we've converged.
-const float movingProbability = 0.2; // q
+const float movingProbability = 0.5; // q (0.2)
 
 /******************************************************************************
  ** Model Time Parameters
@@ -733,6 +734,8 @@ const int white = 6;
 
 void initializeCurses() {
 	initscr();		
+	noecho();
+ 	curs_set(FALSE);
 	start_color();	
 	init_pair(black, COLOR_BLACK, COLOR_BLACK);
 	init_pair(red, COLOR_RED, COLOR_BLACK);
@@ -778,147 +781,10 @@ void printParameters() {
  * Prints the location of an individual molecule, its status, and the status of the fiber it is on
  */
 void printMoleculeStatus(int testMolecule, unsigned int t) {
-    cout << color("Time: ", red) << t * timeStep << " sec" << endl;
+    cout << "Time: " << t * timeStep << " sec" << endl;
 	cout << "Location of molecule #" << testMolecule << " is fiber #" << location[testMolecule] << endl;
 	cout << "Molecule #" << testMolecule << " is " << (bound[testMolecule] ? "bound" : "unbound") << endl;
 	cout << "Fiber #" << location[testMolecule] << " is " << (degraded[location[testMolecule]] ? "degraded" : "not degraded") << endl;
-}
-
-/*
- * Print one row of the grid in its current status
- */
-void printRow(int y) {
-	string row[6];
-	row[0] = "";
-	row[1] = "";
-	row[2] = "";
-	row[3] = "  ";
-	row[4] = "";
-	row[5] = "";
-	for (int x = 0; x < nodesInRow; x++) {
-		if (y >= firstFiberRow) {
-			if (y == nodesInColumn-1)
-				row[2] += (degraded[fiberIndex(x,y,IN)] ? color("   /  ", red) : color("   /  ", blue));
-			else {
-				row[0] += (degraded[fiberIndex(x,y,UP)] ? color("  |   ", red) : color("  |   ", blue));
-				row[1] += (degraded[fiberIndex(x,y,UP)] ? color("  |   ", red) : color("  |   ", blue));
-				row[2] += (degraded[fiberIndex(x,y,UP)] ? color("  |", red) : color("  |", blue));
-				row[2] += (degraded[fiberIndex(x,y,IN)] ? color("/  ", red) : color("/  ", blue));
-			}
-			if (x == nodesInRow-1)
-				row[3] += "O";
-			else {
-				row[3] += "O" + (degraded[fiberIndex(x,y,RIGHT)] ? color("--", red) : color("--", blue));
-				if (firstMolecule[fiberIndex(x,y,RIGHT)] == -1)
-					row[3] += (degraded[fiberIndex(x,y,RIGHT)] ? color("-", red) : color("-", blue));
-				else {
-					int currentMolecule = firstMolecule[fiberIndex(x,y,RIGHT)];
-					while (currentMolecule >= 0) {
-						if (bound[currentMolecule]) {
-							row[3] += color("*", green);
-							currentMolecule = -2;
-						} else
-							currentMolecule = nextMolecule[currentMolecule];
-					}
-					if (currentMolecule == -1)
-						row[3] += color("*", yellow);
-				}
-				row[3] += (degraded[fiberIndex(x,y,RIGHT)] ? color("--", red) : color("--", blue));
-			}
-			if (y == firstFiberRow)
-				row[4] += (degraded[fiberIndex(x,y,OUT)] ? color(" /    ", red) : color(" /    ", blue));
-			else {
-				row[4] += (degraded[fiberIndex(x,y,OUT)] ? color(" /", red) : color(" /", blue));
-				row[4] += (degraded[fiberIndex(x,y,DOWN)] ? color("|   ", red) : color("|   ", blue));
-			}
-			if (firstMolecule[fiberIndex(x,y,OUT)] == -1)
-				row[5] += " ";
-			else {
-				int currentMolecule = firstMolecule[fiberIndex(x,y,OUT)];
-				while (currentMolecule >= 0) {
-					if (bound[currentMolecule]) {
-						row[5] += color("*", green);
-						currentMolecule = -2;
-					} else
-						currentMolecule = nextMolecule[currentMolecule];
-				}
-				if (currentMolecule == -1)
-					row[5] += color("*", yellow);
-			}
-			if (firstMolecule[fiberIndex(x,y,DOWN)] == -1) {
-				if (y == firstFiberRow)
-					row[5] += "     ";
-				else
-					row[5] += (degraded[fiberIndex(x,y,DOWN)] ? color(" |   ", red) : color(" |   ", blue));
-			} else {
-				int currentMolecule = firstMolecule[fiberIndex(x,y,DOWN)];
-				while (currentMolecule >= 0) {
-					if (bound[currentMolecule]) {
-						row[5] += color(" *   ", green);
-						currentMolecule = -2;
-					} else
-						currentMolecule = nextMolecule[currentMolecule];
-				}
-				if (currentMolecule == -1)
-					row[5] += color(" *   ", yellow);
-			}
-		} else {
-			if (x ==  nodesInRow-1)
-				row[3] += "O";
-			else {
-				row[3] += "O  ";
-				if (firstMolecule[fiberIndex(x,y,RIGHT)] == -1)
-					row[3] += " ";
-				else {
-					int currentMolecule = firstMolecule[fiberIndex(x,y,RIGHT)];
-					while (currentMolecule >= 0) {
-						if (bound[currentMolecule]) {
-							row[3] += color("*", green);
-							currentMolecule = -2;
-						} else
-							currentMolecule = nextMolecule[currentMolecule];
-					}
-					if (currentMolecule == -1)
-						row[3] += color("*", yellow);
-				}
-				row[3] += "  ";
-			}
-			if (y > 0) {
-				if (firstMolecule[fiberIndex(x,y,OUT)] == -1)
-					row[5] += " ";
-				else {
-					int currentMolecule = firstMolecule[fiberIndex(x,y,OUT)];
-					while (currentMolecule >= 0) {
-						if (bound[currentMolecule]) {
-							row[5] += color("*", green);
-							currentMolecule = -2;
-						} else
-							currentMolecule = nextMolecule[currentMolecule];
-					}
-					if (currentMolecule == -1)
-						row[5] += color("*", yellow);
-				}
-				if (firstMolecule[fiberIndex(x,y,DOWN)] == -1)
-					row[5] += "     ";
-				else {
-					int currentMolecule = firstMolecule[fiberIndex(x,y,DOWN)];
-					while (currentMolecule >= 0) {
-						if (bound[currentMolecule]) {
-							row[5] += color(" *   ", green);
-							currentMolecule = -2;
-						} else
-							currentMolecule = nextMolecule[currentMolecule];
-					}
-					if (currentMolecule == -1)
-						row[5] += color(" *   ", yellow);
-				}
-			}
-		}
-	}
-	mvprintw(50-y*3,0,row[2].c_str());
-	mvprintw(50-y*3+1,0,row[3].c_str());
-	//cout << row[4] << endl;
-	mvprintw(50-y*3+2,0,row[5].c_str());
 }
 
 /*
@@ -927,26 +793,80 @@ void printRow(int y) {
 void printNode(int x, int y) {
 	int maxY = 0, maxX = 0;
 	getmaxyx(stdscr, maxY, maxX);
-	int baseY = maxY - (y*gridSize*2 + 1);
-	int baseX = x*gridSize*2 + 1;
-	mvprintx(baseY, baseX, "O");
-	if (y < firstFiberRow) {
+	int baseY = maxY - y*(gridSize*2 + 2) - 5;
+	int baseX = x*(gridSize*2 + 2) + 1;
+	attron(COLOR_PAIR(white));
+	mvprintw(baseY, baseX, "O");
+	if (y >= firstFiberRow) {
 		if (x != 0) {
 			if (degraded[fiberIndex(x,y,LEFT)])
 				attron(COLOR_PAIR(red));
 			else
 				attron(COLOR_PAIR(blue));
-			for (int i = 0; i < gridSize,)
-			mvprintx(baseY, baseX-1 - i, "-");
+			for (int i = 0; i < gridSize+1; i++)
+				mvprintw(baseY, baseX-1 - i, "-");
 		}
 		if (x != nodesInRow-1) {
 			if (degraded[fiberIndex(x,y,RIGHT)])
 				attron(COLOR_PAIR(red));
 			else
 				attron(COLOR_PAIR(blue));
-			for (int i = 0; i < gridSize,)
-			mvprintx(baseY, baseX+1 + i, "-");
+			for (int i = 0; i < gridSize; i++)
+				mvprintw(baseY, baseX+1 + i, "-");
 		}
+		if (y != firstFiberRow) {
+			if (degraded[fiberIndex(x,y,DOWN)])
+				attron(COLOR_PAIR(red));
+			else
+				attron(COLOR_PAIR(blue));
+			for (int i = 0; i < gridSize+1; i++)
+				mvprintw(baseY+1 + i, baseX, "|");
+		}
+		if (y != nodesInColumn-1) {
+			if (degraded[fiberIndex(x,y,UP)])
+				attron(COLOR_PAIR(red));
+			else
+				attron(COLOR_PAIR(blue));
+			for (int i = 0; i < gridSize; i++)
+				mvprintw(baseY-1 - i, baseX, "|");
+		}
+		if (degraded[fiberIndex(x,y,OUT)])
+			attron(COLOR_PAIR(red));
+		else
+			attron(COLOR_PAIR(blue));
+		mvprintw(baseY+1, baseX-1, "/");
+		if (degraded[fiberIndex(x,y,IN)])
+			attron(COLOR_PAIR(red));
+		else
+			attron(COLOR_PAIR(blue));
+		mvprintw(baseY-1, baseX+1, "/");
+	}
+}
+
+void printMolecule(int j) {
+	int maxY = 0, maxX = 0;
+	getmaxyx(stdscr, maxY, maxX);
+	int x = nodeX(location[j]);
+	int y = nodeY(location[j]);
+	int baseY = maxY - y*(gridSize*2 + 2) - 5;
+	int baseX = x*(gridSize*2 + 2) + 1;
+	if (bound[j])
+		attron(COLOR_PAIR(yellow));
+	else
+		attron(COLOR_PAIR(green));
+	int direction = fiberDirection(location[j]);
+	switch (direction) {
+		case UP:
+			mvprintw(baseY-2, baseX, "*");
+			break;
+		case RIGHT:
+			mvprintw(baseY, baseX+2, "*");
+			break;
+		case OUT:
+			mvprintw(baseY+1, baseX-1, "*");
+			break;
+		default:
+			mvprintw(baseY, baseX, "X");
 	}
 }
 
@@ -955,10 +875,28 @@ void printNode(int x, int y) {
  */
 void printGrid(int t) {
 	//clear();
-	mvprintw(0,0,color("Time: ", red).c_str(),to_string(t * timeStep).c_str()," sec");
-	for (int x = 0, x < nodesInRow; x++)
+	int maxY = 0, maxX = 0;
+	getmaxyx(stdscr, maxY, maxX);
+	maxX = nodesInRow*(gridSize*2 + 2) + 10;
+	attron(COLOR_PAIR(red));
+	mvprintw(10, maxX, "|");
+	attron(COLOR_PAIR(blue));
+	mvprintw(12, maxX, "|");
+	attron(COLOR_PAIR(green));
+	mvprintw(14, maxX, "*");
+	attron(COLOR_PAIR(yellow));
+	mvprintw(16, maxX, "*");
+	attron(COLOR_PAIR(white));
+	mvprintw(10, maxX+2, "Degraded Fiber");
+	mvprintw(12, maxX+2, "Non-degraded Fiber");
+	mvprintw(14, maxX+2, "Unbound Molecule");
+	mvprintw(16, maxX+2, "Bound Molecule");
+	mvprintw(0, 0, ("Time: " + to_string(t * timeStep) + " sec").c_str());
+	for (int x = 0; x < nodesInRow; x++)
 		for (int y = 0; y < nodesInColumn; y++)
 			printNode(x,y);
+	for (int j = 0; j < totalMolecules; j++)
+		printMolecule(j);
 	refresh();
 	getch();
 }
@@ -967,14 +905,14 @@ void printGrid(int t) {
  *
  */
 void printFiberStatus(int i, unsigned int t) {
-    cout << color("Time: ", red) << t * timeStep << " sec" << endl;
+    cout << "Time: " << t * timeStep << " sec" << endl;
     cout << "Fiber #" << i << " contains molecule(s) ";
     int currentMolecule = firstMolecule[i];
     while (currentMolecule != -1) {
     	if (bound[currentMolecule])
-    		cout << color(to_string(currentMolecule), green) << ", ";
+    		cout << to_string(currentMolecule) << ", ";
     	else
-    		cout << color(to_string(currentMolecule), yellow) << ", ";
+    		cout << to_string(currentMolecule) << ", ";
     	currentMolecule = nextMolecule[currentMolecule];
     }
     cout << endl;
@@ -1218,12 +1156,12 @@ void moveMolecule(unsigned short j, unsigned int t, double r) {
  *
  */
 void runModel() {
-	int tenSeconds = ceil(10/timeStep);
+	int outputInterval = ceil(0.1/timeStep);
     for (unsigned int t = 0; t < totalTimeSteps; t++) {
-    	printGrid(t);
-        if ((t % tenSeconds == 0) && verbose) {
+    	//printGrid(t);
+        if ((t % outputInterval == 0) && verbose) {
 			//printMoleculeStatus(43, t);
-			//printGrid(t);
+			printGrid(t);
 			
 		}
         degradeFibers(t);
@@ -1237,7 +1175,7 @@ void runModel() {
 				// }
                 if (r <= 1-movingProbability) { // If the molecule does not move, can it bind?
                     if ((bindUnbindTime[j] <= t) && !degraded[location[j]]) { // It can bind.
-                        bind(location[j], j, t, urcw1_(), urcw1_()); // If it can bind, bind it. If not, leave it as is.
+                        bind(j, location[j], t, urcw1_(), urcw1_()); // If it can bind, bind it. If not, leave it as is.
                     }
                 } else {
 					double rn = urcw1_();
@@ -1277,9 +1215,10 @@ int main(int argc, char** argv) {
     initializeVariables();
     if (verbose) cout << "Done." << endl;
 	if (verbose) cout << "Running Model..................." << endl;
-	initializeCurses();
+	if (verbose) initializeCurses();
     runModel();
+    if (verbose) getch();
+    if (verbose) endwin();
     if (verbose) cout << "Run Complete." << endl;
-    endwin();
     return 0;
 }

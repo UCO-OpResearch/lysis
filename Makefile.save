@@ -1,0 +1,33 @@
+#
+
+
+# Environment
+MKDIR=mkdir
+CP=cp
+CCADMIN=CCadmin
+
+C++_DIR = C++\ code/
+C++_DEPS = ${C++_DIR}kiss
+C++_SRC =  ${C++_DIR}macro_Q2.cpp
+#FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
+
+FORTRAN_DIR = Fortran\ code/
+NCURSES_DIR
+
+
+# build
+build: 
+	build_c
+	build_fortran
+
+build_c_deps:
+	gcc -c ${C++_DEPS}.c -o 
+
+build_c:
+	g++ -std=c++11 -o macro_Q2_C++ ${C++FILES} -lncurses
+
+build_fortran:
+	gcc -w -c ${FORTFOLDER}pdsrc/macros.c -o ${FORTFOLDER}pdsrc/macros.o
+	gfortran -J./${FORTFOLDER}pdsrc -c ${FORTFOLDER}pdsrc/ncurses.f90
+
+
