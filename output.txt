@@ -1,0 +1,23 @@
+Read in data.............................Done.
+Output obtained using code macro_Q2.cpp
+Model Parameters:
+   (N)         Nodes per row                   = 93
+   (F)         Nodes per column                = 121
+   (Ffree-1)   First row of fibers             = 28
+   (num)       Total fibers                    = 33545
+   (M)         Total molecules                 = 43074
+   (enoFB-1)   Index of the last ghost fiber   = 7783
+   (tstep)     Length of timestep              = 0.000342394 sec
+   (num_t)     Total timesteps                 = 1752366
+   (tf)        Total time                      = 600 sec
+   (seed)      Random number generator seed    = 912309035
+   (q)         Molecule moving probability     = 0.2
+   (delx)      Distance between nodes          = 0.00010135 cm
+   (kon)       Binding rate                    = 0.01 micromolar*sec
+   (bs)        Concentration of binding sites  = 427 micromolar
+Initializing random number generator.....Done.
+Initializing variables...................Done.
+Running Model...................Time: 0 sec
+Location of molecule #4364 is fiber #2276
+Molecule #4364 is unbound
+Fiber #2276 is not degraded
