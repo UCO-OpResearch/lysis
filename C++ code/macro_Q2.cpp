@@ -898,7 +898,7 @@ void printGrid(int t) {
 	for (int j = 0; j < totalMolecules; j++)
 		printMolecule(j);
 	refresh();
-	getch();
+//	getch();
 }
 
 /*

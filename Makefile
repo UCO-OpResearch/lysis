@@ -22,7 +22,7 @@ FORTRAN_FLAGS = -I${NCURSES_DIR} -J${NCURSES_DIR} \
 
 
 # build
-build: 		.pre-build build_c build_fortran
+build: 		.pre-build build_c
 
 full:		clean build_c build_fortran .post-build
 
