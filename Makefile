@@ -49,14 +49,14 @@ MKDIR=mkdir
 CP=cp
 CCADMIN=CCadmin
 
-FOLDER = C++\ code/
+FOLDER = src/cpp/
 FILES =  ${FOLDER}macro_Q2.cpp ${FOLDER}kiss.o
 #FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
 	
 # build
 build:	
-	g++ -std=c++11 -o bloodclotting ${FILES}
+	g++ -std=c++11 -o ./bin/bloodclotting ${FILES}
 	
 	
 
@@ -127,9 +127,3 @@ help: .help-post
 # Add your post 'help' code here...
 
 
-
-# include project implementation makefile
-include nbproject/Makefile-impl.mk
-
-# include project make variables
-include nbproject/Makefile-variables.mk
