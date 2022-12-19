@@ -594,6 +594,7 @@ int findUnbindTime(unsigned short j, unsigned int t, double r3) {
  */
 int findBindingTime(unsigned short j, unsigned int t, double r) {
 	unbindingTime[j] = t - log(r) / (bindingRate * bindingSites) - timeStep/2; //!! Ask Dr. Bannish about this line in the context of line 583 (586 in Fortran)
+    return -1;
 }
 
 /*

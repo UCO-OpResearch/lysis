@@ -1,0 +1,4 @@
+**/*.code-workspace
+*.vscode
+*.idea
+*.conda

@@ -13,7 +13,7 @@ integer,parameter  :: num=(2*N-1)*F+N*(F-1)
 integer,parameter  :: M=43074 !total number of tPA molecules: 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM; 21588 is Colin's [tPA]=0.3 nM
 integer,parameter  :: tf=10*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
-integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
+integer,parameter  :: nummicro=100 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
 integer  :: i, istat
 integer  :: j
 integer  :: k
@@ -155,8 +155,8 @@ integer, dimension(num) :: bind1
 
 
 if( isBinary ) then
-	!filetype = 'unformatted' !if you compile with gfortran or f95
-	filetype = 'binary'      !if you compile with ifort
+	filetype = 'unformatted' !if you compile with gfortran or f95
+	!filetype = 'binary'      !if you compile with ifort
 else
 	filetype = 'formatted'
 end if
@@ -375,7 +375,7 @@ enddo
 
 
 
-  write(filename2,'(a44)')'tPAleavePLG135_Q2.dat'
+  write(filename2,'(a21)')'tPAleavePLG135_Q2.dat'
   open(200,file=filename2)
   do i=1,101
      read(200,*)CDFtPA(i)
@@ -383,7 +383,7 @@ enddo
   close(200)
   write(*,*)'read tPAleavePLG135_Q2.dat'
 
-  write(filename3,'(a43)')'tsectPAPLG135_Q2.dat'
+  write(filename3,'(a20)')'tsectPAPLG135_Q2.dat'
   open(300,file=filename3)
   do i=1,101
      read(300,*)tsec1(i)
