@@ -1,6 +1,6 @@
 program macrolysis
 
-!This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed
+!This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
 
 integer,parameter  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
@@ -113,12 +113,14 @@ integer       :: plotunit = 27
 integer       :: degnextunit = 28
 integer       :: Venextunit = 29
 integer       :: Vbdnextunit = 30
+integer       :: mfptunit = 42
 character(80) :: movefile
 character(80) :: lastmovefile
 character(80) :: plotfile
 character(80) :: degnextfile
 character(80) :: Venextfile
 character(80) :: Vbdnextfile
+character(80) :: mfptfile
 
 integer, dimension(num)  :: intact2
 integer  :: countintact2, lenintact2, counth, countv, countpv, countmacrounbd, countmicrounbd
@@ -157,6 +159,10 @@ integer :: countbind, countindep
 integer, dimension(stats,tf)  :: countbindV, countindepV, bind1V
 integer, dimension(num) :: bind1
 integer, dimension(M) :: forcedunbdbydeg
+integer  :: backrow !defines the first fiber number making up the back row of fibers.
+double precision, dimension(M) :: mfpt !vector I'll use to save the first passage times of each tPA molecule
+integer, dimension(M) :: yesfpt !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
+
 
 
   if( isBinary ) then
@@ -177,7 +183,7 @@ write(*,*)' obtained using code macro_Q2_diffuse_into_and_along.f90'
 
 !!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
 kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-frac_forced =0.08487726033 !0.00572 !0.08487726033 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+frac_forced =0.0852 !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
 avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
 
 write(*,*)'fraction of time tPA is forced to unbind',frac_forced
@@ -430,6 +436,12 @@ enddo
 
 write(*,*)'enoFB=',enoFB
 
+backrow=num-(2*N-1)+1 !defines the first fiber number in the back row of the clot. To calculate mean first passage time, I will record the first time that each tPA molecule diffuses to a fiber with edge number backrow or greater
+
+!initialize variables for MFPT calculation out here b/c we only do this on the first run
+yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
+mfpt=0
+
 !!!!!! DO "STATS" RUNS OF THE MACRO MODEL
 do istat=1,stats
 
@@ -512,25 +524,27 @@ enddo
 !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-write(degfile,'(73a)'  ) 'deg_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
-write(Nfile,'(75a)' ) 'Nsave_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
-write(tfile,'(75a)') 'tsave_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
-write(movefile,'(74a)') 'move_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
-write(lastmovefile,'(78a)') 'lastmove_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
-write(plotfile,'(74a)') 'plot_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+write(degfile,'(73a)'  ) 'deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+write(Nfile,'(75a)' ) 'Nsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+write(tfile,'(75a)') 'tsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+write(movefile,'(74a)') 'move_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+write(lastmovefile,'(78a)') 'lastmove_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+write(plotfile,'(74a)') 'plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+write(mfptfile,'(74a)') 'mfpt_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-!write(degnextfile,'(57a)') 'degnext_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
-!write(Venextfile,'(59a)') 'Vedgenext_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
-!write(Vbdnextfile,'(57a)') 'Vbdnext_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
-!write(cbindfile,'(57a)') 'numbind_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
-!write(cindfile,'(57a)') 'numindbind_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
-!write(bind1file,'(57a)') 'bind_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+!write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!write(Vbdnextfile,'(57a)') 'Vbdnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 open(degunit,file=degfile,form=filetype)
 open(Nunit,file=Nfile,form=filetype)
 open(tunit,file=tfile,form=filetype)
 open(moveunit,file=movefile,form=filetype)
 open(lastmoveunit,file=lastmovefile,form=filetype)
 open(plotunit,file=plotfile,form=filetype)
+open(mfptunit,file=mfptfile,form=filetype)
 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
 !open(degnextunit,file=degnextfile,form=filetype)
 !open(Venextunit,file=Venextfile,form=filetype)
@@ -542,7 +556,7 @@ open(plotunit,file=plotfile,form=filetype)
 write(degunit) degrade(:)
 write(tunit) t
 
-write(*,*)' save as deg_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+write(*,*)' save as deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 
 
 Vedgenext(1,:)=V(1,:)
@@ -928,6 +942,14 @@ tsave(1) = t
               end if !end r statement        
   
        end if !end V(2,j)=0 statement
+
+      !for the first run only, at the end of each step, check to see if the molecule hit a fiber in the back row
+      if(istat==1) then
+       if (V(1,j)>=backrow.and.yesfpt(j)==0) then !if the molecule is on the back row and it hasn't made it there before
+         mfpt(j)=t
+         yesfpt(j)=1 !set entry to 1 so we don't track this molecule any more
+       end if !end if(V(1,j)>=backrow....) loop
+      end if !end if(istat=1) loop
     enddo !for j=1,M loop
 
 
@@ -1183,17 +1205,17 @@ write(*,*)'r4=',r4
       end do
     end do  !for jj loop
 
-write(x1file,'(76a)'  ) 'X1plot_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+write(x1file,'(76a)'  ) 'X1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 open(x1unit,file=x1file,form=filetype)
-write(x2file,'(76a)'  ) 'X2plot_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+write(x2file,'(76a)'  ) 'X2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 open(x2unit,file=x2file,form=filetype)
-write(y1file,'(76a)'  ) 'Y1plot_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+write(y1file,'(76a)'  ) 'Y1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 open(y1unit,file=y1file,form=filetype)
-write(y2file,'(76a)'  ) 'Y2plot_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+write(y2file,'(76a)'  ) 'Y2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 open(y2unit,file=y2file,form=filetype)
-write(xvfile,'(76a)'  ) 'Xvplot_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+write(xvfile,'(76a)'  ) 'Xvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 open(xvunit,file=xvfile,form=filetype)
-write(yvfile,'(76a)'  ) 'Yvplot_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+write(yvfile,'(76a)'  ) 'Yvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 open(yvunit,file=yvfile,form=filetype)
 
 write(x1unit) X1plot
@@ -1283,9 +1305,9 @@ write(yvunit) Yvplot
      end do
 
 
-write(tPAbdfile,'(76a)'  ) 'tPAbd_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+write(tPAbdfile,'(76a)'  ) 'tPAbd_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 open(tPAbdunit,file=tPAbdfile,form=filetype)
-write(tPAfreefile,'(77a)'  ) 'tPAfree_into_and_alongtPA425_PLG2_tPA01_Q2.dat'
+write(tPAfreefile,'(77a)'  ) 'tPAfree_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 open(tPAfreeunit,file=tPAfreefile,form=filetype)
 
 write(tPAbdunit) bdtPA
@@ -1496,6 +1518,7 @@ write(*,*)'Nsavevect=',Nsavevect(:)
 !write(bind1unit) bind1V
 write(Nunit) Nsavevect(:)
 write(lastmoveunit) lastmove(:,:)
+write(mfptunit) mfpt(:)
 
 close(degunit)
 close(Nunit)
@@ -1503,6 +1526,7 @@ close(tunit)
 close(moveunit)
 close(lastmoveunit)
 close(plotunit)
+close(mfptunit)
 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
 !close(degnextunit)
 !close(Venextunit)
