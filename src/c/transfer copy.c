@@ -63,96 +63,88 @@ void transferToOtherRanks(NodeGrid* grid, RankGrid* rankGrid, Parameters* parame
 	/*****************************/
 	// up transfers
 
-    int* recvRight = NULL, * recvLeft = NULL, * recvUp = NULL, * recvDown = NULL;
-    int numRequests = 0;
-    MPI_Request requests[8]; // 8 is the max number of requests needed
+    int* recvRight, * recvLeft, * recvUp, * recvDown;
+    int numRequests = 8;
+    MPI_Request requests[numRequests];
 
 	if (rankGrid->length > 1) {
 
 		if (!grid->topBoundary) {
-			MPI_Isend(grid->transferUnboundToUpArray, grid->transferUnboundToUpArrayCount, MPI_INT, grid->MPIRank + rankGrid->width, 0, MPI_COMM_WORLD, &requests[numRequests]);
-            numRequests++;
+			MPI_Isend(grid->transferUnboundToUpArray, grid->transferUnboundToUpArrayCount, MPI_INT, grid->MPIRank + rankGrid->width, 0, MPI_COMM_WORLD, &requests[0]);
 		}
+        else{
+            requests[0] = MPI_REQUEST_NULL;
+        }
 
 		if (!grid->bottomBoundary) {
 			recvUp = (int*)malloc(sizeof(int) * grid->transferUnboundToUpArrayCount);
-			MPI_Irecv(recvUp, grid->transferUnboundToUpArrayCount, MPI_INT, grid->MPIRank - rankGrid->width, MPI_ANY_TAG, MPI_COMM_WORLD, &requests[numRequests]);
-            numRequests++;
+			MPI_Irecv(recvUp, grid->transferUnboundToUpArrayCount, MPI_INT, grid->MPIRank - rankGrid->width, MPI_ANY_TAG, MPI_COMM_WORLD, &requests[1]);
 		}
+        else{
+            requests[1] = MPI_REQUEST_NULL;
+        }
 
 		/*****************************/
 		//down transfers
 
 		if (!grid->bottomBoundary) {
-			MPI_Isend(grid->transferUnboundToDownArray, grid->transferUnboundToDownArrayCount, MPI_INT, grid->MPIRank - rankGrid->width, 0, MPI_COMM_WORLD, &requests[numRequests]);
-            numRequests++;
+			MPI_Isend(grid->transferUnboundToDownArray, grid->transferUnboundToDownArrayCount, MPI_INT, grid->MPIRank - rankGrid->width, 0, MPI_COMM_WORLD, &requests[2]);
 		}
+        else{
+            requests[2] = MPI_REQUEST_NULL;
+        }
 
 		if (!grid->topBoundary) {
 			recvDown = (int*)malloc(sizeof(int) * grid->transferUnboundToDownArrayCount);
-			MPI_Irecv(recvDown, grid->transferUnboundToDownArrayCount, MPI_INT, grid->MPIRank + rankGrid->width, MPI_ANY_TAG, MPI_COMM_WORLD, &requests[numRequests]);
-            numRequests++;
+			MPI_Irecv(recvDown, grid->transferUnboundToDownArrayCount, MPI_INT, grid->MPIRank + rankGrid->width, MPI_ANY_TAG, MPI_COMM_WORLD, &requests[3]);
 		}
+        else{
+            requests[3] = MPI_REQUEST_NULL;
+        }
 
 	}
+    else{
+        requests[0] = MPI_REQUEST_NULL;
+        requests[1] = MPI_REQUEST_NULL;
+        requests[2] = MPI_REQUEST_NULL;
+        requests[3] = MPI_REQUEST_NULL;
+    }
 
 	/*****************************/
 	//right transfers
 
 	if (!grid->rightBoundary) {
-		MPI_Isend(grid->transferUnboundToRightArray, grid->transferUnboundToRightArrayCount, MPI_INT, grid->MPIRank + 1, 0, MPI_COMM_WORLD, &requests[numRequests]);
-        numRequests++;
+		MPI_Isend(grid->transferUnboundToRightArray, grid->transferUnboundToRightArrayCount, MPI_INT, grid->MPIRank + 1, 0, MPI_COMM_WORLD, &requests[4]);
 	}
+    else{
+        requests[4] = MPI_REQUEST_NULL;
+    }
 
 	if (!grid->leftBoundary) {
 		recvRight = (int*)malloc(sizeof(int) * grid->transferUnboundToRightArrayCount);
-		MPI_Irecv(recvRight, grid->transferUnboundToRightArrayCount, MPI_INT, grid->MPIRank - 1, MPI_ANY_TAG, MPI_COMM_WORLD, &requests[numRequests]);
-        numRequests++;
+		MPI_Irecv(recvRight, grid->transferUnboundToRightArrayCount, MPI_INT, grid->MPIRank - 1, MPI_ANY_TAG, MPI_COMM_WORLD, &requests[5]);
 	}
+    else{
+        requests[5] = MPI_REQUEST_NULL;
+    }
 
 	/*****************************/
 	//left transfers
 
 	if (!grid->leftBoundary) {
-		MPI_Isend(grid->transferUnboundToLeftArray, grid->transferUnboundToLeftArrayCount, MPI_INT, grid->MPIRank - 1, 0, MPI_COMM_WORLD, &requests[numRequests]);
-        numRequests++;
+		MPI_Isend(grid->transferUnboundToLeftArray, grid->transferUnboundToLeftArrayCount, MPI_INT, grid->MPIRank - 1, 0, MPI_COMM_WORLD, &requests[6]);
 	}
+    else{
+        requests[6] = MPI_REQUEST_NULL;
+    }
 
 	if (!grid->rightBoundary) {
 		recvLeft = (int*)malloc(sizeof(int) * grid->transferUnboundToLeftArrayCount);
-		MPI_Irecv(recvLeft, grid->transferUnboundToLeftArrayCount, MPI_INT, grid->MPIRank + 1, MPI_ANY_TAG, MPI_COMM_WORLD, &requests[numRequests]);
-        numRequests++;
+		MPI_Irecv(recvLeft, grid->transferUnboundToLeftArrayCount, MPI_INT, grid->MPIRank + 1, MPI_ANY_TAG, MPI_COMM_WORLD, &requests[7]);
 	}
-
-    // printf("Number of requests: %i\n", numRequests);
-    MPI_Waitall(numRequests, requests, MPI_STATUSES_IGNORE);
-    //printf("Done Waiting\n");
-
-    if(rankGrid->length > 1){
-        if(!grid->bottomBoundary){
-            bufferIntoFibers_Up(grid, parameters, time, recvUp);
-        }
-        if(!grid->topBoundary){
-			bufferIntoFibers_Down(grid, parameters, time, recvDown);
-        }
+    else{
+        requests[7] = MPI_REQUEST_NULL;
     }
-
-    if (!grid->leftBoundary){
-		bufferIntoFibers_Right(grid, parameters, time, recvRight);
-    }
-
-	if (!grid->rightBoundary) {
-		bufferIntoFibers_Left(grid, parameters, time, recvLeft);
-	}
-
-    // printf("Done moving data\n");
-
-    free(recvRight);
-    free(recvLeft);
-    free(recvUp);
-    free(recvDown);
-
-    // printf("Done freeing\n");
 
 
 	/*****************************/
@@ -213,6 +205,30 @@ void transferToOtherRanks(NodeGrid* grid, RankGrid* rankGrid, Parameters* parame
 			addMultipleUnboundToFiber(&grid->nodeArray[nodeIndex].forwardFiber, parameters, time, buffer);
 		}
 	}
+
+    MPI_Waitall(numRequests, requests, MPI_STATUSES_IGNORE);
+
+    if(rankGrid->length > 1){
+        if(!grid->bottomBoundary){
+            bufferIntoFibers_Up(grid, parameters, time, recvUp);
+        }
+        if(!grid->topBoundary){
+			bufferIntoFibers_Down(grid, parameters, time, recvDown);
+        }
+    }
+
+    if (!grid->leftBoundary){
+		bufferIntoFibers_Right(grid, parameters, time, recvRight);
+    }
+
+	if (!grid->rightBoundary) {
+		bufferIntoFibers_Left(grid, parameters, time, recvLeft);
+	}
+
+    free(recvRight);
+    free(recvLeft);
+    free(recvUp);
+    free(recvDown);
 
 	/*****************************/
 	// reset the transfer arrays

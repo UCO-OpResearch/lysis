@@ -27,6 +27,7 @@ SOURCE = initializeData.c kiss.c main.c nodeGrid.c parameters.c retrieve.c simul
 # Switched to gcc 4.7.2 because the version of gdb debugger program on Buddy doesn't work with 4.9.2
 # C_COMPILER = /act/openmpi-1.8/gcc-4.7.2/bin/mpicc
 C_COMPILER = /home/Bryan/shared/mpich-3.4/bin/mpicc
+OPENMPI_COMPILER = /home/Bryan/shared/openmpi-4.1.0/bin/mpicc
 
 # Compilation Options
 # -std=c11 sets the c language standard to 2011
@@ -41,19 +42,25 @@ C_COMPILER = /home/Bryan/shared/mpich-3.4/bin/mpicc
 	# will not be able to find the library.
 # -D NEWTIMELIST for new TimeList
 
-# uncomment to use these options. Only one should be uncommented, otherwise the others will be overwritten.
-
 # These are the typical options for normal runs
 OPTIONS = -O3 -lm -std=c11
 
 # For typical debugging
-# OPTIONS = -ggdb -lm -std=c11
+DEBUG_OPTIONS = -ggdb -lm -std=c11
 
 # For use with backtrace
-# OPTIONS = -g -rdynamic -lm -std=c11 -D BACKTRACE
-
+BACKTRACE_OPTIONS = -g -rdynamic -lm -std=c11 -D BACKTRACE
 
 #############################################################
 
 ParallelMacro: ${HEADERS} ${SOURCE} # This line sets what files make looks at to determine if it needs to recompile.
 	${C_COMPILER} ${OPTIONS} -o ParallelMacro ${SOURCE}
+
+backtrace: ${HEADERS} ${SOURCE}
+	${C_COMPILER} ${BACKTRACE_OPTIONS} -o ParallelMacro ${SOURCE}
+
+debug: ${HEADERS} ${SOURCE}
+	${C_COMPILER} ${DEBUG_OPTIONS} -o ParallelMacro ${SOURCE}
+
+openmpi: ${HEADERS} ${SOURCE}
+	${OPENMPI_COMPILER} ${OPTIONS} -o ParallelMacro ${SOURCE}

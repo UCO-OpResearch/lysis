@@ -14,4 +14,7 @@
 # /act/openmpi-1.8/gcc-4.9.2/bin/mpirun -np 32 --tag-output ParallelMacro
 
 # for MPICH without slurm:
-HYDRA_TOPO_DEBUG=1 /home/Bryan/shared/mpich-3.4/bin/mpiexec --hosts=node1,node2 -np 14 --bind-to socket --map-by hwthread -prepend-rank ./ParallelMacro
+/home/Bryan/shared/mpich-3.4/bin/mpiexec --hosts=node1,node2 -np 14 -bind-to socket -map-by hwthread -prepend-rank ./ParallelMacro
+
+# for OpenMPI without slurm
+# /home/Bryan/shared/openmpi-4.1.0/bin/mpiexec --host node1:7,node2:7 -np 14 --tag-output ./ParallelMacro
