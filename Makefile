@@ -24,8 +24,6 @@
 #     all                      build all configurations
 #     help                     print help mesage
 #  
-#  Targets .build-impl, .clean-impl, .clobber-impl, .all-impl, and
-#  .help-impl are implemented in nbproject/makefile-impl.mk.
 #
 #  Available make variables:
 #
@@ -49,31 +47,52 @@ MKDIR=mkdir
 CP=cp
 CCADMIN=CCadmin
 
-FOLDER = src/cpp/
-FILES =  ${FOLDER}macro_Q2.cpp ${FOLDER}kiss.o
+BUILD_DIR = ./bin
+CPP_SRC_DIR = ./src/cpp
+FORT_SRC_DIR = ./src/fortran
+FORT_MICRO = micro_rates.f90
+FORT_MACRO = macro_Q2_diffuse_into_and_along.f90
 #FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
 	
 # build
-build:	
-	g++ -std=c++11 -o ./bin/bloodclotting ${FILES}
-	
-	
+build: .build-pre cpp fort
+
+fort: fort-micro $(BUILD_DIR)/macro
+
+fort-micro: $(BUILD_DIR)/micro_rates
+
+$(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(BUILD_DIR)/kiss.o
+	ifort -r8 -mcmodel medium $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
+
+$(BUILD_DIR)/macro: $(FORT_SRC_DIR)/$(FORT_MACRO) $(BUILD_DIR)/kiss.o
+	ifort -r8 -mcmodel medium $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/$(FORT_MACRO) -o $(BUILD_DIR)/macro
+
+cpp: $(BUILD_DIR)/cpp_macro_Q2
+
+$(BUILD_DIR)/cpp_macro_Q2: $(CPP_SRC_DIR)/macro_Q2.cpp $(BUILD_DIR)/kiss.o
+	g++ -std=c++11 -o ./bin/cpp_macro_Q2 $(CPP_SRC_DIR)/macro_Q2.cpp $(BUILD_DIR)/kiss.o
+
+$(BUILD_DIR)/kiss.o: $(FORT_SRC_DIR)/kiss.c
+	gcc -c $(FORT_SRC_DIR)/kiss.c -o $(BUILD_DIR)/kiss.o
+
+
 
 .build-pre:
-# Add your pre 'build' code here...
 
-.build-post: .build-impl
+.build-post:
 # Add your post 'build' code here...
 
 
 # clean
 clean: .clean-post
+	rm -r $(BUILD_DIR)
+	mkdir $(BUILD_DIR)
 
 .clean-pre:
 # Add your pre 'clean' code here...
 
-.clean-post: .clean-impl
+.clean-post:
 # Add your post 'clean' code here...
 
 
@@ -83,7 +102,7 @@ clobber: .clobber-post
 .clobber-pre:
 # Add your pre 'clobber' code here...
 
-.clobber-post: .clobber-impl
+.clobber-post:
 # Add your post 'clobber' code here...
 
 
@@ -93,7 +112,7 @@ all: .all-post
 .all-pre:
 # Add your pre 'all' code here...
 
-.all-post: .all-impl
+.all-post:
 # Add your post 'all' code here...
 
 
@@ -103,7 +122,7 @@ build-tests: .build-tests-post
 .build-tests-pre:
 # Add your pre 'build-tests' code here...
 
-.build-tests-post: .build-tests-impl
+.build-tests-post:
 # Add your post 'build-tests' code here...
 
 
@@ -113,7 +132,7 @@ test: .test-post
 .test-pre: build-tests
 # Add your pre 'test' code here...
 
-.test-post: .test-impl
+.test-post:
 # Add your post 'test' code here...
 
 
@@ -123,7 +142,7 @@ help: .help-post
 .help-pre:
 # Add your pre 'help' code here...
 
-.help-post: .help-impl
+.help-post:
 # Add your post 'help' code here...
 
 
