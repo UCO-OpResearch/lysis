@@ -1,0 +1,17 @@
+#!/bin/bash
+#SBATCH --job-name=ParallelMacroTesting
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=16
+#SBATCH --partition=all
+#SBATCH --nodelist=buddy08,buddy09
+#SBATCH --exclusive
+
+# use below when using gprof
+#setenv GMON_OUT_PREFIX 'gmon.out'
+
+# --mca mpi_show_mca_params 1 --mca mpi_abort_delay -1
+
+# /act/openmpi-1.8/gcc-4.9.2/bin/mpirun -np 32 --tag-output ParallelMacro
+
+# for MPICH without slurm:
+HYDRA_TOPO_DEBUG=1 /home/Bryan/shared/mpich-3.4/bin/mpiexec --hosts=node1,node2 -np 14 --bind-to socket --map-by hwthread -prepend-rank ./ParallelMacro
