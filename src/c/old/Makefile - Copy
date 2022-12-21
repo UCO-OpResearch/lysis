@@ -1,0 +1,35 @@
+
+CPP_COMPILER = /act/openmpi-1.8/gcc-4.9.2/bin/mpic++
+C_COMPILER = /act/openmpi-1.8/gcc-4.9.2/bin/mpicc
+CPP_STANDARD = -std=c++11
+HEADERS = parameters.h
+OPTIONS = -lm -std=c11 # -lm links the math.h library
+
+# -c makes the compiler just compile and not link
+
+ParallelMacro: main.o initializeData.o nodeGrid.o processBoundaryInfo.o simulation.o kiss.o retrieve.o parameters.o
+	${C_COMPILER} -o ParallelMacro main.o initializeData.o nodeGrid.o processBoundaryInfo.o simulation.o kiss.o retrieve.o parameters.o ${OPTIONS}
+
+parameters.o: parameters.c
+	${C_COMPILER} -c parameters.c ${OPTIONS}
+
+retrieve.o: retrieve.c
+	${C_COMPILER} -c retrieve.c ${OPTIONS}
+
+kiss.o: kiss.c
+	${C_COMPILER} -c kiss.c ${OPTIONS}
+
+simulation.o: simulation.c
+	${C_COMPILER} -c simulation.c ${OPTIONS}
+
+processBoundaryInfo.o: processBoundaryInfo.c
+	${C_COMPILER} -c processBoundaryInfo.c ${OPTIONS}
+
+nodeGrid.o: nodeGrid.c
+	${C_COMPILER} -c nodeGrid.c ${OPTIONS}
+
+initializeData.o: initializeData.c
+	${C_COMPILER} -c initializeData.c ${OPTIONS}
+
+main.o: main.c parameters.h
+	${C_COMPILER} -c main.c ${OPTIONS}
