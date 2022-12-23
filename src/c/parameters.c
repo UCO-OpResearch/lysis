@@ -82,10 +82,10 @@ void initializeFiles(Files* files) {
 	*/
 
 	// Data file names
-	char dataFileDir[] = "data/";
-	char unbindingTimeFile[] = "data/tsectPAPLG135_Q2.dat";
-	char lysisTimeFile[] = "data/lysismat_PLG135_Q2.dat";
-	char totalLysesFile[] = "data/lenlysisvect_PLG135_Q2.dat";
+	char dataFileDir[] = "../data/2021-01-01-0000";
+	char unbindingTimeFile[] = "../data/2021-01-01-0000/tsectPAPLG135_Q2.dat";
+	char lysisTimeFile[] = "../data/2021-01-01-0000/lysismat_PLG135_Q2.dat";
+	char totalLysesFile[] = "../data/2021-01-01-0000/lenlysisvect_PLG135_Q2.dat";
 
 	// Dynamically allocate
 	files->dataFileDir = (char*)malloc(sizeof(dataFileDir) + 1);
@@ -99,9 +99,9 @@ void initializeFiles(Files* files) {
 	strcpy(files->totalLysesFile, totalLysesFile);
 
 	// Output file names
-	char boundMolecules[] = "output/boundMolecules.dat";
-	char unboundMolecules[] = "output/unboundMolecules.dat";
-	char fibers[] = "output/fibers.dat";
+	char boundMolecules[] = "../data/2021-01-01-0000/boundMolecules.dat";
+	char unboundMolecules[] = "../data/2021-01-01-0000/unboundMolecules.dat";
+	char fibers[] = "../data/2021-01-01-0000/fibers.dat";
 
 	// Dynamically allocate
 	files->boundMolecules = (char*)malloc(sizeof(boundMolecules) + 1);
