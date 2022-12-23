@@ -5,6 +5,10 @@
 close all
 clear all
 
+expCode = '2022-12-20-1600';
+fileCode = 'tPA425_PLG2_tPA01_into_and_along_Q2.dat';
+folder = strcat('../../data/', expCode);
+
 isBinary = 1;
   arch = 'lin'
   if (isBinary ~= 0 & isBinary ~=1)
@@ -31,43 +35,42 @@ num=(2*N-1)*F+N*(F-1);
 %Find and replace all the file name endings to correspond to the names you
 %used in the macroscale model. There should be 17 names that change.
 %("lowPLG_tPA018_coarse.dat")
-fids(1) = fopen('X1plot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
+fids(1) = fopen(strcat(folder, '/X1plot_', fileCode), 'r', binaryformat);
 X1plotc = fread(fids(1),[2,F*(N-1)],'int');
 fclose(fids(1));
 
-fids(2) = fopen('X2plot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
+fids(2) = fopen(strcat(folder, '/X2plot_', fileCode),'r',binaryformat);
 X2plotc = fread(fids(2),[2,N*(F-1)],'int');
 fclose(fids(2));
 
-fids(3) = fopen('Y1plot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
+fids(3) = fopen(strcat(folder, '/Y1plot_', fileCode),'r',binaryformat);
 Y1plotc = fread(fids(3),[2,F*(N-1)],'int');
 fclose(fids(3));
 
-fids(4) = fopen('Y2plot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
+fids(4) = fopen(strcat(folder, '/Y2plot_', fileCode),'r',binaryformat);
 Y2plotc = fread(fids(4),[2,N*(F-1)],'int');
 fclose(fids(4));
 
-fids(5) = fopen('Xvplot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
+fids(5) = fopen(strcat(folder, '/Xvplot_', fileCode),'r',binaryformat);
 tempc = fread(fids(5),inf,'int');
 npltc=length(tempc)/(F*N);
 fclose(fids(5));
 
-fids(5) = fopen('Xvplot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
+fids(5) = fopen(strcat(folder, '/Xvplot_', fileCode),'r',binaryformat);
 Xvplotc = fread(fids(5),N*F,'int');
 fclose(fids(5));
 
-fids(6) = fopen('Yvplot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
+fids(6) = fopen(strcat(folder, '/Yvplot_', fileCode),'r',binaryformat);
 Yvplotc = fread(fids(6),N*F,'int');
 fclose(fids(6));
 
-fids(7) = fopen('tPAbd_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
+fids(7) = fopen(strcat(folder, '/tPAbd_', fileCode),'r',binaryformat);
 bdtPAc = fread(fids(7),[2,M],'double');
 fclose(fids(7));
 
-fids(8) = fopen('tPAfree_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
+fids(8) = fopen(strcat(folder, '/tPAfree_', fileCode),'r',binaryformat);
 freetPAc = fread(fids(8),[2,M],'double');
 fclose(fids(8));
-
 
 %First plot initial condition
 
@@ -138,14 +141,14 @@ hold off
 
 Fmov2(1)=getframe(gcf);
 
-fids(1) = fopen('X1plot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
-fids(2) = fopen('X2plot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
-fids(3) = fopen('Y1plot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
-fids(4) = fopen('Y2plot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
-fids(5) = fopen('Xvplot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
-fids(6) = fopen('Yvplot_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
-fids(7) = fopen('tPAbd_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.dat','r',binaryformat);
-%fids(8) = fopen('tPAfree_forceddiffusiontPA425_PLG2_tPA01_Q2_mfpt.datforce','r',binaryformat);
+fids(1) = fopen(strcat(folder, '/X1plot_', fileCode),'r',binaryformat);
+fids(2) = fopen(strcat(folder, '/X2plot_', fileCode),'r',binaryformat);
+fids(3) = fopen(strcat(folder, '/Y1plot_', fileCode),'r',binaryformat);
+fids(4) = fopen(strcat(folder, '/Y2plot_', fileCode),'r',binaryformat);
+fids(5) = fopen(strcat(folder, '/Xvplot_', fileCode),'r',binaryformat);
+fids(6) = fopen(strcat(folder, '/Yvplot_', fileCode),'r',binaryformat);
+fids(7) = fopen(strcat(folder, '/tPAbd_', fileCode),'r',binaryformat);
+%fids(8) = fopen(strcat(folder, '/tPAfree_', fileCode),'r',binaryformat);
 
 
 for iplt=2:npltc
