@@ -79,11 +79,13 @@ C_SOURCE = $(C_SRC_DIR)/initializeData.c \
 # build
 build: .build-pre fort
 
-fort: fort-micro $(BUILD_DIR)/macro
+fort: fort-micro fort-macro
 
 c: c-macro
 
 fort-micro: $(BUILD_DIR)/micro_rates
+
+fort-macro: $(BUILD_DIR)/macro
 
 $(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(BUILD_DIR)/kiss.o
 	ifort -r8 -mcmodel medium $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
