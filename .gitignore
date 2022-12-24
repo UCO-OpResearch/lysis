@@ -5,3 +5,4 @@
 .ipynb_checkpoints
 bin
 octave-workspace
+__pycache__
