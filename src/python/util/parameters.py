@@ -1,8 +1,12 @@
 from datetime import datetime
+import os
 
 
 class Experiment(object):
-    def __init__(self, experiment_code=-1):
+    def __init__(self, data_root, experiment_code=-1):
+        if not os.path.isdir(data_root):
+            raise RuntimeError('Data folder not found.')
+        self.os_data_root = data_root
         if experiment_code == -1:
             now = datetime.now()
             self.experiment_code = str.join('', [str(now.year),
@@ -16,7 +20,36 @@ class Experiment(object):
                                                  ])
         else:
             self.experiment_code = experiment_code
+
+        self.os_path = os.path.join(data_root, str(self.experiment_code))
+        self.os_param_file = os.path.join(self.os_path, 'params.json')
+        if os.path.isfile(self.os_param_file):
+            raise RuntimeError('Experiment already exists. Use load_experiment() instead.')
+
+        self.micro_params = None
         self.macro_params = None
+
+    def __str__(self):
+        values = self.to_dict()
+        output = ''
+        nl = os.linesep
+        key_len = 0
+        for k in values.keys():
+            key_len = max(len(k), key_len)
+        key_len += 1
+        values.pop('micro_params', None)
+        values.pop('macro_params', None)
+        for k, v in values.items():
+            output += f'{k:<{key_len}}: {v}' + nl
+        tab = ' '*(key_len+2)
+        for param in ['micro_params', 'macro_params']:
+            output += f'{param:<{key_len}}: '
+            if self.__dict__[param] is None:
+                output += 'None' + nl
+            else:
+                param_string = str(self.__dict__[param])
+                output += tab.join(param_string.splitlines(True))
+        return output
 
     def initialize_macro_param(self, macro_ver, params=None):
         my_params = MacroParameters(macro_ver)
@@ -103,6 +136,9 @@ class Experiment(object):
 
     def to_dict(self):
         output = self.__dict__.copy()
+        for k in list(output.keys()):
+            if k[:2] == 'os':
+                output.pop(k, None)
         output["macro_params"] = self.macro_params.to_dict()
         return output
 
@@ -121,6 +157,18 @@ class MacroParameters(object):
         self.__diffusion_coeff = 1
         self.__total_time = 0
         self.__calculate_dependent_parameters()
+
+    def __str__(self):
+        values = self.to_dict()
+        output = ''
+        nl = os.linesep
+        key_len = 0
+        for k in values.keys():
+            key_len = max(len(k), key_len)
+        key_len += 1
+        for k, v in values.items():
+            output += f'{k:<{key_len}}: {v}' + nl
+        return output
 
     @property
     def rows(self):
