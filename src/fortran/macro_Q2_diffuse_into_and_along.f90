@@ -209,6 +209,16 @@ write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 closeneigh=0
 neighborc=0
 
+! neighborc is a num x 8 array
+! neighborc(i, k) = j where fiber j is the kth neighbor of fiber i
+! Note that fibers may occur more than once in a row due to edge conditions
+! These are reflection (x- and y-directions) and toroidal (z-direction)
+!
+! closeneigh is a num x num array
+! closeneigh(i, j) = n where n is the number of times fiber j occurs in row i of neighborc
+! closeneigh(i, j) = 0 if a molecule on fiber i cannot move to fiber j in one time-step
+! closeneigh(i, j) > 0 if a molecule on fiber i can move to fiber j in one time-step
+
 !the corner vertical (3-D) edges
 closeneigh(1,2) = 4
 closeneigh(1,2*N) = 4
