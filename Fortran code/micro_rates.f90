@@ -1,6 +1,7 @@
 program micromodel
 
 implicit none
+character(15) :: expCode = '2022-12-20-1600'
 !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
 !!!! Lines 19-25 allow you to set the various dissociation constants, binding rates, and the concentration of free PLG
 !!!! This code treats degradation and exposure in the gillespie algorithm, rather than separately with 
@@ -18,11 +19,11 @@ integer          :: stats
 !Define the Kd's and on rates that will be used in the given run. These will be used to help define the off rates later.
 double precision, parameter  :: KdtPAyesplg = 0.02 !0.02 !units uM, tPA Kd in presence of PLG
 double precision, parameter  :: KdtPAnoplg = 0.36 !0.36 !units uM, tPA Kd in absence of PLG
-double precision, parameter  :: KdPLGintact = 10 !10 !units uM, PLG Kd to intact fibrin !38 in original model
-double precision, parameter  :: KdPLGnicked = 1 !1 !units uM, PLG Kd to nicked fibrin !2.2 in original model
+double precision, parameter  :: KdPLGintact = 38 !10 !units uM, PLG Kd to intact fibrin !38 in original model
+double precision, parameter  :: KdPLGnicked = 2.2 !1 !units uM, PLG Kd to nicked fibrin !2.2 in original model
 double precision, parameter  :: ktPAon = 0.1 !0.1 !units 1/(uM*s), tPA binding rate to fibrin !0.01 in original model
 double precision, parameter  :: kplgon = 0.1 !units 1/(uM*s), PLG bindind rate to fibrin
-double precision, parameter  :: freeplg = 1.5 !1.5 !units uM, concentration of free PLG
+double precision, parameter  :: freeplg = 2 !1.5 !units uM, concentration of free PLG
 
 !double precision  :: prob_N02
 !double precision  :: prob_N00
@@ -30,10 +31,10 @@ double precision, parameter  :: freeplg = 1.5 !1.5 !units uM, concentration of f
 double precision  :: radius
 double precision, dimension(11,2)  :: param  !matrix that holds all the various parameter values we can use
 
-integer, dimension(Ntot,nodes**2)  :: state, statetemp  !recall: in fortran, columns are listed 1st, rows 2nd
+integer, dimension(Ntot,nodes**2)  :: state, statetemp !matrices to save the state of each doublet. There are 6 doublets at each node, and nodes^2 total nodes. recall: in fortran, columns are listed 1st, rows 2nd
 double precision, dimension(nodes)  :: init_state, cumsuminit
 integer  :: init_entry
-integer, dimension(nodes**2,nodes**2)  :: Lat
+integer, dimension(nodes**2,nodes**2)  :: Lat !matrix of the connections between nodes. For instance, if node 1 is not a direct neighbor of node 6, then there would be a 0 in the (1,6) and (6,1) entries of Lat
 
 double precision  :: r, rin, randdegexp
 integer  :: Tdoublets
@@ -49,8 +50,8 @@ double precision  :: kncat
 double precision  :: kdeg
 
 
-integer, dimension(9,sV) :: V
-integer, dimension(9*sV)  :: V_tmp
+integer, dimension(9,sV) :: V !stoichiometric matrix. each row corresponds to a different reaction and each column represents a different state
+integer, dimension(9*sV)  :: V_tmp !temporary stoichiometric matrix (it gets reshaped into V). each row corresponds to a different reaction and each column represents a different state
 double precision  :: c2, c3, c5, c6, c8, c8a, c9
 double precision  :: c11, c12, c13, c14, c15, c20, c25
 integer, dimension(9,9)  :: q
@@ -62,7 +63,7 @@ integer  :: countstate6, countstate7, countstate8, countstate9, countstate10, co
 integer  :: countstate11, countstate12, countstate13, countstate14, countstate15, countstate10a, countstate11a
 integer  :: countstate11b,cccc
 integer  :: plotnumber
-double precision, dimension(1000000)  :: tvals
+double precision, dimension(1000000)  :: tvals !vector of times at which reactions happened. These vectors are set to 1000000 because I don't know how many timesteps will be taken during the Gillespie Algorithm
 integer, dimension(1000000)  :: Anumber  
 double precision, dimension(300)  :: PLideg, tau2 
 integer, dimension(300)  :: ones
@@ -81,15 +82,15 @@ integer, dimension(1000000)  :: undegrade_new
 integer, dimension(1000000)  :: PLi_loc
 integer  :: temp
 
-integer, dimension(nodes**2,nodes**2)  :: num_degrade
-integer, dimension(nodes**2,nodes**2)  :: num_undegrade
+integer, dimension(nodes**2,nodes**2)  :: num_degrade !I don't think this gets used anymore
+integer, dimension(nodes**2,nodes**2)  :: num_undegrade !I don't think this gets used anymore
 double precision  :: tnext
 double precision  :: D
 double precision  :: vol3
 double precision  :: bs, bs0
 integer, dimension(300)  :: row, col, rowPLi, colPLi
 integer  :: A
-double precision, dimension(12000)  :: tau
+double precision, dimension(12000)  :: tau !these vectors are likely WAY bigger than necessary. They only need to be as big as the total number of "active" sites in the fiber, i.e., doublets that have tPA and/or plasmin on them, or are degraded. Likely this would never be bigger than 2*6*nodes^2... Could define an integer parameter like "sizeGillespievector" and make all of these have dimension "sizeGillespievector". Then we could play around with the actual value in a simpler way than manually having to change all of these each time
 double precision, dimension(12000,sV)  :: aa 
 double precision, dimension(sV)  :: cumsumaa, asumtemp
 double precision, dimension(12000,9)  :: qstate
@@ -289,13 +290,13 @@ double precision :: uf, urcw1
   end if
   write(*,*)' filetype=',filetype
 
-
+!the next part (up until the definition of pi) is related to the random numer generator
      ui = kiss32()
 
      uf = urcw1()
 
-     seed = mscw()
-     !seed=1663552521
+     !seed = mscw() !randomly generate seed
+     seed=981681759
      write(*,*),' seed=',seed
 
       stater(1) = 129281
@@ -314,24 +315,24 @@ double precision :: uf, urcw1
 
  if(nodes==5) then
      radius=0.02875      !radius of fiber, in microns, with diameter 57.5 nm
-     !!!Read in Latthin matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='LatQ1.dat')
+     !!!Read in LatQ1 matrix that I generated in matlab - this is matrix of connectivities
+     OPEN(unit=1,FILE='../data/' // expCode // '/LatQ1.dat')
      do i=1,nodes**2
         READ(1,*)(Lat(i,ii),ii=1,nodes**2)
      enddo
      close(1)
  elseif(nodes==7) then
      radius=0.03635        !radius of fiber, in microns, with diameter 72.7 nm
-     !!!Read in Latthin matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='LatQ2.dat')
+     !!!Read in LatQ2 matrix that I generated in matlab - this is matrix of connectivities
+     OPEN(unit=1,FILE='../data/' // expCode // '/LatQ2.dat')
      do i=1,nodes**2
      READ(1,*)(Lat(i,ii),ii=1,nodes**2)
      enddo
      close(1)
  elseif(nodes==8) then
      radius=0.04065        !radius of fiber, in microns, with diameter 81.3 nm
-     !!!Read in Latthin matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='LatQ3.dat')
+     !!!Read in LatQ3 matrix that I generated in matlab - this is matrix of connectivities
+     OPEN(unit=1,FILE='../data/' // expCode // '/LatQ3.dat')
      do i=1,nodes**2
         READ(1,*)(Lat(i,ii),ii=1,nodes**2)
      enddo
@@ -366,7 +367,7 @@ double precision :: uf, urcw1
   param(10,1) = 0.1                  !kapcat  units 1/s, tPA-mediated rate of conversion of PLG to PLi
   param(11,1) = 5                    !kncat  units 1/s, PLi-mediated rate of exposure of new binding sites
 
-  !case 2 (baseline parameter values with [plg]=0.92 uM)
+  !case 2 (baseline parameter values with [plg]=0.92 uM).
   param(1,2) = 5     !kdeg    units 1/s, degradation rate
   param(2,2) = 0.92      !freeplg  constant concentration of free plasminogen, in muM
   param(3,2) = 3.8    !kplgoff  units 1/s
@@ -418,7 +419,7 @@ V_tmp = (/(/0, -1, 1, 0, 0, 0, 0, 0, 0/),&  !, N12 goes to  N10
 
 V=reshape(V_tmp, (/9, sV/))
 
-  q=0
+  q=0 !q is a diagonal matrix with 1's down the diagonal
   do i=1,9
        q(i,i)=1
   enddo
@@ -430,39 +431,40 @@ countfp=0
 write(*,*)'runs=',runs
 
 
-
+!below starts the big loop where we do 50000 independent simulations ("do stats=1,runs")
 do stats = 1,runs
-
-  write(*,*)' stats=',stats
+  !if(MODULO(stats,1000)==1) then
+    write(*,*)' stats=',stats
+  !endif
   Nsave=0
   persave=0
   tsave=0
 
 
   if(stats.le.runs) then   !change back to 10000 when I change runs
-   ipar=1
+   ipar=1 !says if stats<=50000, use the "case 1" parameters defined around line 357
 
   !elseif(stats.le.20000.and.stats.gt.10000) then
    !ipar=16
   endif
 
   if(stats==1) then
-    write(lysfile,'(58a)'  ) 'lysisPLG15_KdP101_KdT002036_Q2.dat'
-    write(tPAfile,'(61a)'  ) 'tPA_timePLG15_KdP101_KdT002036_Q2.dat'
-    write(PLifile,'(56a)' ) 'PLiPLG15_KdP101_KdT002036_Q2.dat'
-    write(endfile,'(64a)' ) 'lyscompletePLG15_KdP101_KdT002036_Q2.dat'
-    write(plgfile,'(56a)' ) 'PLGPLG15_KdP101_KdT002036_Q2.dat'
-    write(ctfile,'(58a)' ) 'countPLG15_KdP101_KdT002036_Q2.dat'
-    !write(plgbdfile,'(27a)') 'PLGunbindPLG15_KdP101_KdT002036_Q2.dat' 
-    !write(plgunbdfile,'(29a)') 'PLGbindPLG15_KdP101_KdT002036_Q2.dat' 
-    write(plitimefile,'(63a)') 'PLitimePLG15_KdP101_KdT002036_Q2.dat'
-    write(tPAPLifile,'(63a)') 'tPAPLiunbdPLG15_KdP101_KdT002036_Q2.dat'
-    !write(sfile,'(28a)' ) 'statetPAPLG15_KdP101_KdT002036_Q2.dat'
-    !write(profile,'(23a)' ) 'persavePLG15_KdP101_KdT002036_Q2.dat'
-    !write(t2file,'(23a)' ) 'tsavePLG15_KdP101_KdT002036_Q2.dat'
-    write(tPAunbdfile,'(61a)') 'tPAunbindPLG15_KdP101_KdT002036_Q2.dat'
-    write(s2file,'(67a)' ) 'lasttPAPLG15_KdP101_KdT002036_Q2.dat'
-    write(fpfile,'(77a)') 'firstPLiPLG15_KdP101_KdT002036_Q2.dat'
+    write(lysfile,'(58a)'  ) '../data/' // expCode // '/lysisPLG2_tPA01_Q2.dat'
+    write(tPAfile,'(61a)'  ) '../data/' // expCode // '/tPA_timePLG2_tPA01_Q2.dat'
+    write(PLifile,'(56a)' ) '../data/' // expCode // '/PLiPLG2_tPA01_Q2.dat'
+    write(endfile,'(64a)' ) '../data/' // expCode // '/lyscompletePLG2_tPA01_Q2.dat'
+    write(plgfile,'(56a)' ) '../data/' // expCode // '/PLGPLG2_tPA01_Q2.dat'
+    write(ctfile,'(58a)' ) '../data/' // expCode // '/countPLG2_tPA01_Q2.dat'
+    !write(plgbdfile,'(27a)') '../data/' // expCode // '/PLGunbindPLG2_tPA01_Q2.dat'
+    !write(plgunbdfile,'(29a)') '../data/' // expCode // '/PLGbindPLG2_tPA01_Q2.dat'
+    write(plitimefile,'(63a)') '../data/' // expCode // '/PLitimePLG2_tPA01_Q2.dat'
+    write(tPAPLifile,'(63a)') '../data/' // expCode // '/tPAPLiunbdPLG2_tPA01_Q2.dat'
+    !write(sfile,'(28a)' ) '../data/' // expCode // '/statetPAPLG2_tPA01_Q2.dat'
+    !write(profile,'(23a)' ) 'p../data/' // expCode // '/ersavePLG2_tPA01_Q2.dat'
+    !write(t2file,'(23a)' ) '../data/' // expCode // '/tsavePLG2_tPA01_Q2.dat'
+    write(tPAunbdfile,'(61a)') '../data/' // expCode // '/tPAunbindPLG2_tPA01_Q2.dat'
+    write(s2file,'(67a)' ) '../data/' // expCode // '/lasttPAPLG2_tPA01_Q2.dat'
+    write(fpfile,'(77a)') '../data/' // expCode // '/firstPLiPLG2_tPA01_Q2.dat'
     open(lysunit,file=lysfile,form=filetype)
     open(tPAunit,file=tPAfile,form=filetype)
     open(PLiunit,file=PLifile,form=filetype)
@@ -496,7 +498,7 @@ do stats = 1,runs
 
   end if
 
-
+!set the reaction rates to be the appropriate parameters. I think we likely don't need this step in future versions of the code; we could directly use the parameters, e.g. "kplgon*KdPLGintact" to represent the unbinding rate of PLG
    c2 = param(3,ipar)
    c3 = param(4,ipar)*param(2,ipar)
    c5 = param(6,ipar)
@@ -515,7 +517,7 @@ do stats = 1,runs
    kncat = param(11,ipar)
 
 
-!define the plg probabilities (calculated in thesis, or see "PLG_prob_calc.mw"):
+!define the plg probabilities (calculated in thesis, or see "PLG_prob_calc.mw"). These are the probabilities of an Nplg doublet being N02, N00, or N22. i.e., having 1 PLG bound, no PLG bound, or 2 PLG bound
 !probability for fully intact fibrin
 prob_N02i = 1/(1+(0.5*KdPLGintact/freeplg)+(0.5*freeplg/KdPLGintact))
 prob_N00i = 0.5*KdPLGintact/(freeplg*(1+(0.5*KdPLGintact/freeplg)+(0.5*freeplg/KdPLGintact)))
@@ -537,9 +539,9 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
 !write(*,*)'sumNs=',prob_N02i+prob_N00i+prob_N22i+prob_N02n+prob_N22n+prob_N00n
 
   state = 0
-  state(1:Nplginit,1:nodes**2) = 1
+  state(1:Nplginit,1:nodes**2) = 1 !set the initial state of all exposed doublets to be Nplg (1)
   
-  !!begin by setting one of the exposed doublets to an activated doublet: either N12 (2) or N10 (3).
+  !begin by setting one of the exposed doublets to an activated doublet: either N12 (2) or N10 (3).
 
   init_state = 1.0/nodes   !vector that's length of one row of lattice, scaled so sum(init_state)=1
 
@@ -548,7 +550,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
   call cumsum(init_state,nodes,cumsuminit)
   do i=1,nodes
         if(cumsuminit(i).ge.rin) then
-             init_entry = i
+             init_entry = i !find the first entry in the cumsum vector that is >= random number, and have this be the doublet tPA starts on
              exit
         endif
   enddo
@@ -560,17 +562,17 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
   r = urcw1()    !pick a different random number to determine whether we get N12 or N10 I don't take into account the fact
                  !that the Nplg on that site could be an N22...is this a problem? What I do below just says, "if r isn't
                  !less than prob_N02, make state be a 3" even though there's a small chance it is an N22, and therefore tPA
-                 !can't bind...
+                 !can't bind...I don't think it's an issue, because in the macroscale model I'm assuming tPA DOES bind, so it must have a site to bind to (i.e., not be N22)
   if(r.le.prob_N02i) then
-      state(1,init_entry) = 2
+      state(1,init_entry) = 2 !set the state of the doublet to be N12
   else
-      state(1,init_entry) = 3
+      state(1,init_entry) = 3 !set the state of the double to be N10
   end if
 
   write(*,*)'state(1,init_entry)=',state(1,init_entry)
   
   t = 0
-  tfinal = 24*60*60
+  tfinal = 24*60*60 !final time to run Gillespie algorithm for (if the algorithm doesn't stop before then because fiber degraded or all tPA and PLi unbound)
   count = 1
   countPLi=0
   PLGbind=0
@@ -608,7 +610,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
   countstate=0
   countstate2=0 
 
-!find the number of doublets in states 2 and 6
+!find the number of doublets in states 2 and 6, i.e. the number of N12 and N23 doublets. the goal is to count up the amount of PLG
   do i=1,nodes**2
       do j=1,Ntot
            if(state(j,i)==2.or.state(j,i)==6) then
@@ -617,7 +619,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
       enddo
   enddo
 
-!find the number of doublets in state 1
+!find the number of doublets in state 1, i.e. the number of Nplg doublets.
   do i=1,nodes**2
       do j=1,Ntot
            if(state(j,i)==1) then
@@ -626,28 +628,28 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
       enddo
   enddo
 
-  PLG(1) = countstate+(prob_N02i+2*prob_N22i)*countstate2
+  PLG(1) = countstate+(prob_N02i+2*prob_N22i)*countstate2 !the initial amount of PLG = (amount in states N12 and N23) + (amount in state Nplg)*(probability the doublet was N02 or N22)
   degrade_tot(1)=0          !we initially start with no degraded doublets
   num_degrade=0
-  num_undegrade=0
-  num_undegrade(1,1:nodes**2)=Nplginit
-  percent_degrade(1) = 0
+  num_undegrade=0 !don't think this gets used anymore
+  num_undegrade(1,1:nodes**2)=Nplginit !don't think this gets used anymore
+  percent_degrade(1) = 0 !vector that saves the percentage of doublets that have been degraded at each time step
 
   D=10**(7)             !diffusion coefficient in units of nm^2/s
 
-  vol3=0.001*(radius)**2*pi   !volume of 1 "location", i.e. cleavage site is 1nm=0.001microns times radius squared times pi.
+  vol3=0.001*(radius)**2*pi   !volume of 1 "location", i.e. cleavage site, is 1nm=0.001microns times radius squared times pi.
 
   bs=Nplginit*nodes**2/vol3  !# of binding sites per volume where we take only the volume of the current cleavage site -
                              ! not the whole fiber.
   bs=bs/602.2                !converts bs from units of #/volume to units of micromolar
 
 
-   
+  !Now do the Gillespie algorithm
    do
 
      if(t>tfinal) exit     !only do the loop while t<=tfinal 
 
-     !find where active sites are located in state vector
+     !find where "active" sites (i.e., doublets with tPA and/or plasmin) are located in state vector
       countstate3=0
        row=0
        col=0
@@ -655,7 +657,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
        do j=1,Ntot
            do i=1,nodes**2
                 if(state(j,i)>1) then
-                     countstate3=countstate3+1
+                     countstate3=countstate3+1 !if the state of the doublet is larger than 1 (i.e., any state other than Nplg), count it as an active site
                      row(countstate3)=i
                      col(countstate3)=j
                 end if
@@ -677,9 +679,10 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
       currentPLi=0
       countcurPLi=0
 
+      !loop over all active sites. Every doublet that has tPA or plasmin bound is a doublet on which the next reaction can happen. We'll compile all possible "next" reactions and corresponding reaction times, and then choose the one that happens soonest
       do i=1,A  
       
-          qstate(i,:)=q(state(col(i),row(i)),:)
+          qstate(i,:)=q(state(col(i),row(i)),:) !qstate(i,:) is a vector that has a "1" in the entry corresponding to the state of the active site, and 0's elsewhere
           qconvert=0
           numN=0
           numP2=0
@@ -696,15 +699,15 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
           nplgi=0
           nplgn2=0
 
-          call findint(state(:,row(i)),Ntot,0,numN) !find the number of N's on the binding location of interest
+          call findint(state(:,row(i)),Ntot,0,numN) !find the number of N's (i.e., cryptic, unexposed doublets) on the binding location of interest
 
-         !!!comment out below if tPA can convert any PLG at same binding location
-          !if the doublet of interest has a tPA bound, find the number of PLG molecules on the current binding location
+         !!!uncomment below if tPA can convert any PLG at same binding location
+          !if the doublet of interest has a tPA bound (i.e., state is 2, 3, or 4), find the number of PLG molecules on the current binding location
           if(state(col(i),row(i)).ge.2.and.state(col(i),row(i)).le.4) then
-             call findint(state(:,row(i)),Ntot,2,numP2)
-             call findint(state(2:Ntot,row(i)),Ntot-1,1,numP1)
-             call findint(state(1,row(i)),1,1,numP1b)
-             call findint(state(:,row(i)),Ntot,6,numP6)
+             call findint(state(:,row(i)),Ntot,2,numP2) !find number of N12
+             call findint(state(2:Ntot,row(i)),Ntot-1,1,numP1) !find number of exposed (or "nicked") Nplg
+             call findint(state(1,row(i)),1,1,numP1b) !find number of intact Nplg
+             call findint(state(:,row(i)),Ntot,6,numP6) !find number of N23
              numPt=(2*prob_N22n+prob_N02n)*numP1+numP2+numP6+(2*prob_N22i+prob_N02i)*numP1b
              if(numPt>0) then  !if there are PLG molecules at the current binding location AND a tPA molecule
                qconvert=1
@@ -730,13 +733,13 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
         !current state of active doublet i. aa is a matrix of propensity fcns.
         !the first entry of aa represents the doublet. So if there are 3 "active" doublets (i.e., doublets with tPA or plasmin bound), then aa(1:3,:). If there's only 1, we have aa(1,:). The second entry of aa represents the reaction number. So in this case, there are 26 different reactions that can occur.
 
-        !WHAT IS qstate?!?!?! 2nd entry in qstate represents the type of doublet we have: 1=Nplg, 2=N12, 3=N10, 4=N13, 5=N03, 6=N23, 7=N33, 8=degraded, 9=degraded with 1 plasmin bound
+        !WHAT IS qstate(i,:)?!?!?! It's a vector with 0's in all entries except for the entry corresponding to the state of the doublet (which has entry "1"). 2nd entry in qstate represents the type of doublet we have: 1=Nplg, 2=N12, 3=N10, 4=N13, 5=N03, 6=N23, 7=N33, 8=degraded, 9=degraded with 1 plasmin bound. so qstate(i,4) means that the ith active site is of type 4 (N13)
 
 
-        if(col(i)==1) then       !if the doublet is in column 1 of state vector (i.e. was initially exposed) us intact
+        if(col(i)==1) then       !if the doublet is in column 1 of state vector (i.e. was initially exposed) use intact fibrin rates
             aa(i,1)=c2*qstate(i,2)   !N12 goes to N10 on intact
             aa(i,6)=c2*qstate(i,6)   !N23 goes to N03 on intact
-        elseif(col(i)>1) then       !if doublet is in columns 2-6 of state vector (i.e. was unexposed) use nicked
+        elseif(col(i)>1) then       !if doublet is in columns 2-6 of state vector (i.e. was unexposed) use nicked fibrin rates
             aa(i,1)=c8a*qstate(i,2)   !N12 goes to N10 on nicked
             aa(i,6)=c8a*qstate(i,6)   !N23 goes to N03 on nicked
         end if
@@ -750,7 +753,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
         aa(i,10)=c14*qstate(i,5)   !N03 goes to Nplg
         aa(i,11)=c15*qstate(i,6)   !N23 goes to Nplg
         !aa(i,12)=c20*qstate(i,2)   !N12 goes to N13
-        !comment below aa(i,12) when tPA only converts PLG on same doublet. Comment above aa(i,12) when it can convert any PLG on same location
+        !comment out below aa(i,12) when tPA only converts PLG on same doublet. Comment out above aa(i,12) when it can convert any PLG on same location
         aa(i,12)=c20*numPt*qconvert   !tPA converts PLG to PLi
         aa(i,13)=c25*qstate(i,9)   !degraded doublet with one PLi goes to degraded doublet w/no PLi
         aa(i,14)=kdeg*n13    !N13 goes to degraded
@@ -767,20 +770,20 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
         aa(i,25)=kdeg*nplgi  !intact Nplg goes to degraded
         aa(i,26)=kdeg*nplgn2  !nicked Nplg goes to degraded
 
-  
+        !find the sum of the propensity functions
         asum(i) = sum(aa(i,:))
-        asumtemp=aa(i,:)/asum(i)
+        asumtemp=aa(i,:)/asum(i) !create new vector of propensities that is scaled by the total sum
         cumsumaa=0
-        call cumsum(asumtemp,sV,cumsumaa)
+        call cumsum(asumtemp,sV,cumsumaa) !define cumsumaa to be a vector of the cumulative sums of the asumtemp vector. e.g., if asumtemp=(0.3, 0.6, 0.1) then cumsumaa=(0.3,0.9,1.0)
         aa(i,:)=0   !reset to 0
 
-          r = urcw1()
-          rin = urcw1()
+          r = urcw1() !pick a random number to choose next time reaction occurs
+          rin = urcw1() !pick another random number to choose next reaction that occurs
           tau(i) = log(1/r)/asum(i)       !picks the next time an event will occur
           asum(i)=0
-          do j=1,sV
+          do j=1,sV !loop over all possible reactions and choose the first one for which cumsumaa(j) is bigger than or equal to rin
                if(cumsumaa(j).ge.rin) then
-                    bigJ(i)  = j          !picks the next state by choosing which reaction happens next
+                    bigJ(i)  = j          !picks the next state by choosing which reaction happens next. j should be a number between 1 and 26
                     exit
                endif
           enddo          
@@ -788,7 +791,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
 
 
     
-     !choose the smallest time, and make that the next time step. then change the state associated with that time. 
+     !choose the smallest time (out of all possible reaction times found above), and make that the next time step. then change the state associated with that time.
      !"place" is the location in the vector the smallest entry is found, and "entry" is its value
 
      call minvect(tau,12000,place)       !find the location of minimum non-zero value in tautot vector
@@ -825,11 +828,12 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
         !if N13 degrades
         call findfirst(state(:,row(place)),Ntot,4,findit) !find the first entry that is N13
         if(findit==0) write(*,*)'Problem: should have an N13'
-        state(findit,row(place))=-1
-        
-        do iPLi=1,countPLi
+        state(findit,row(place))=-1 !set the state of the doublet to be -1, i.e., degraded
+
+        !I think the next do and if statements are mostly checks that nothing funny is going on. The critical step is defining "loc", the location of the plasmin molecule
+        do iPLi=1,countPLi !for all the plasmin in the system, check to see how much of it is involved in the current reaction
               if(PLilocation(1,iPLi)==row(place).and.PLilocation(2,iPLi)==findit) then
-                  countcurPLi=countcurPLi+1
+                  countcurPLi=countcurPLi+1 !counts the number of plasmin molecules on the current binding location
                   currentPLib(countcurPLi)=iPLi
               end if
         enddo
@@ -846,12 +850,12 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
              write(*,*)'countcurPLi=',countcurPLi
          end if
         
-          count = count + 1
+          count = count + 1 !update "count", which keeps track of the number of time steps taken
           t = t + entry        !entry=tau(place);
 
-          tvals(count) = t 
-          Anumber(count)=A
-          reaction(count)=bigJ(place)
+          tvals(count) = t !saves the time associated with time step "count"
+          Anumber(count)=A !saves the number of active sites at time step "count"
+          reaction(count)=bigJ(place) !saves the reaction that happened at time step "count"
           connect_ind=0     
           countlat=0
           do j=1,nodes**2
@@ -863,14 +867,14 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
           enddo
           sizenonzero_connectind=countlat
           
-          !release one tPA and one PLi. start with tPA:
+          !release one tPA and one PLi (because when doublet degrades, tPA and plasmin are released). start with tPA:
                       
           call movetpa(Ntot,nodes,state,prob_N02i,prob_N00i,prob_N02n,prob_N00n,vol3,param(9,ipar),D,count,p_rebind)
           write(*,*)'p_rebind=',p_rebind
 
           reaction3=reaction3+1
                  
-          !then move PLi
+          !then move PLi and update the state of the doublets
           call movepli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,prob_N02i,prob_N00i, & 
                        prob_N02n,prob_N00n,loc,PLilocation,PLilocationt,statetemp)
           PLilocation=PLilocationt
@@ -917,7 +921,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
           enddo
           sizenonzero_connectind=countlat
           
-          !release 1 PLi
+          !release 1 PLi and update state of the doublets
 
           call movepli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,prob_N02i,prob_N00i, & 
                        prob_N02n,prob_N00n,loc,PLilocation,PLilocationt,statetemp)
@@ -967,7 +971,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
           enddo
           sizenonzero_connectind=countlat
           
-          !release 1 PLi
+          !release 1 PLi and update state of the doublets
 
           call movepli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,prob_N02i,prob_N00i, & 
                        prob_N02n,prob_N00n,loc,PLilocation,PLilocationt,statetemp)
@@ -1015,7 +1019,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
           enddo
           sizenonzero_connectind=countlat
       
-      !release 2 PLi
+      !release 2 PLi and update state
              PLilocsmall(1)=PLilocation(1,loc)
              PLilocsmall(2)=PLilocation(2,loc)
              do iPLi2=1,countPLi
@@ -1268,16 +1272,16 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
 		  countPLi=countPLi+1                         !keep track of # of PLi
 		  PLilocation(1,countPLi)=row(place)          !location of current PLi
 
-                  call findint(state(:,row(place)),Ntot,2,numP2)
-                  call findint(state(2:Ntot,row(place)),Ntot-1,1,numP1)
-                  call findint(state(1,row(place)),1,1,numP1b)
-                  call findint(state(:,row(place)),Ntot,6,numP6)
-                  numPt=(2*prob_N22n+prob_N02n)*numP1+numP2+numP6+(2*prob_N22i+prob_N02i)*numP1b 
+                  call findint(state(:,row(place)),Ntot,2,numP2) !find number N12
+                  call findint(state(2:Ntot,row(place)),Ntot-1,1,numP1) !find number newly exposed ("nicked") Nplg
+                  call findint(state(1,row(place)),1,1,numP1b) !find number initially exposed ("intact") Nplg
+                  call findint(state(:,row(place)),Ntot,6,numP6) !find number N23
+                  numPt=(2*prob_N22n+prob_N02n)*numP1+numP2+numP6+(2*prob_N22i+prob_N02i)*numP1b !find total number of PLG
 		  
 		  !figure out which PLG molecule gets converted, i.e. which doublet the PLG molecule is on
 		  probnumP(1)=(2*prob_N22n+prob_N02n)*dble(numP1)/numPt   !nicked Nplg
-		  probnumP(2)=dble(numP2)/numPt
-		  probnumP(3)=dble(numP6)/numPt
+		  probnumP(2)=dble(numP2)/numPt !N12
+		  probnumP(3)=dble(numP6)/numPt !N23
 		  probnumP(4)=(2*prob_N22i+prob_N02i)*dble(numP1b)/numPt  !intact Nplg
 		  call cumsum(probnumP,4,cumprobnumP)
  
@@ -1315,13 +1319,13 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
           end if
 
 
-		  !update the current doublet to its new state
+		  !!update the current doublet to its new state
 		  !newstate=qstate(place,:)+V(:,bigJ(place))
 		  qstate(place,:)=0   !reset qstate to 0 so we're ready for the next timestep
  
 		  !change the PLG to PLi:
 		  if(state(colPLG,row(place))==1) then
-			!either statetype=6 or statetype=5 figure out which
+			!if state of doublet is Nplg, new state is either statetype=6 or statetype=5 figure out which
 			rP=urcw1()
 			if(colPLG==1) then
 			  if(rP.le.prob_N02i/(prob_N02i+prob_N22i)) then
@@ -1337,9 +1341,9 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
 			  end if
 			endif
 		  elseif(state(colPLG,row(place))==2) then
-			statetype =4 
+			statetype =4 !if state of doublet is N12, new state is N13
 		  elseif(state(colPLG,row(place))==6) then
-			statetype =7
+			statetype =7 !if state of doublet is N23, new state is N33
 		  else
 			write(*,*)'Problem: should be a doublet with PLG'
 		  end if
@@ -1386,7 +1390,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
           reaction(count)=bigJ(place)
 
       
-         !!figure out how to move tPA
+         !!figure out how to move tPA. I'm not sure I allow tPA to move (if it unbinds, it's gone forever). If I do let it move, I'll need to look more carefully here...
 
          connect_ind=0
          countlat3=0
@@ -1553,7 +1557,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
       do i=1,Ntot
          do j=1,nodes**2
             if(state(i,j).gt.-1.and.state(i,j).lt.9)then
-               countstate12=countstate12+1
+               countstate12=countstate12+1 !count up the number of undegraded doublets, i.e, those doublets not in state -1 or 9
                row2(countstate12) = j
                col2(countstate12) = i
             end if
@@ -1561,8 +1565,8 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
       enddo
 
 
-    Tdoublets2=6.0*nodes**2
-    percent_degrade(count)=1-countstate12/Tdoublets2
+    Tdoublets2=6.0*nodes**2 !total number of doublets is 6*nodes^2 because there are 6 doublets at each node
+    percent_degrade(count)=1-countstate12/Tdoublets2 !the percent of doublets that have been degraded is 1 minus the fraction of undegraded doublets
     if(mod(count,runs)==0) then
       write(*,*)'percent_degrade=',percent_degrade(count)
       write(*,*)'t=',t
@@ -1587,7 +1591,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
     end if
 
 
- enddo !enddo for big "do" loop 
+ enddo !enddo for big "do" Gillespie loop 
 
 !!!!!uncomment below 2 lines, as well as above 5/4/11 stuff if I want to save percent degraded
 !write(permit) persave
