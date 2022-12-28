@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+import json
 
 
 class Experiment(object):
@@ -24,7 +25,7 @@ class Experiment(object):
         self.os_path = os.path.join(data_root, str(self.experiment_code))
         self.os_param_file = os.path.join(self.os_path, 'params.json')
         if os.path.isfile(self.os_param_file):
-            raise RuntimeError('Experiment already exists. Use load_experiment() instead.')
+            raise RuntimeError('Experiment already exists. Use parmeters.from_file() instead.')
 
         self.micro_params = None
         self.macro_params = None
@@ -139,8 +140,16 @@ class Experiment(object):
         for k in list(output.keys()):
             if k[:2] == 'os':
                 output.pop(k, None)
-        output["macro_params"] = self.macro_params.to_dict()
+        if self.macro_params is not None:
+            output["macro_params"] = self.macro_params.to_dict()
+        if self.micro_params is not None:
+            output["micro_params"] = self.micro_params.to_dict()
         return output
+    
+    def to_file(self):
+        with open(self.os_param_file, 'w') as file:
+            json.dump(self.to_dict(), file)
+            
 
 #class MicroParameters(object):
 
@@ -265,4 +274,8 @@ class MacroParameters(object):
         return output
 
 
-
+def from_file(data_path, experiment_code):
+    if not os.path.isdir(data_root):
+            raise RuntimeError('Data folder not found.')
+    
+    
