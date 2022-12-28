@@ -1,0 +1,8 @@
+**/*.code-workspace
+*.vscode
+*.idea
+*.conda
+.ipynb_checkpoints
+bin
+octave-workspace
+__pycache__
