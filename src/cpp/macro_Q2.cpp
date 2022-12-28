@@ -43,7 +43,7 @@ const bool verbose = true;
  ******************************************************************************/
 // The tPA binding rate. Units of inverse (micromolar*sec)
 const float bindingRate = 1.0e-2; // kon
-// Pore size (distance betwen nodes), measured in centimeters
+// Pore size (distance between nodes), measured in centimeters
 const float poreSize = 1.0135e-4; // delx
 // Diffusion coefficient, measured in cm^2/s
 const float diffusionCoeff = 5.0e-7; // Diff
