@@ -1,14 +1,38 @@
 from datetime import datetime
 import os
 import json
+import numpy as np
 
 
 class Experiment(object):
-    def __init__(self, data_root, experiment_code=-1):
+    """Houses all information about a given experimental run.
+
+    This object contains:
+    - Data location
+    - Experiment parameters
+    - Experiment data
+
+    It includes methods for
+    - Initializing with default parameters
+    - Reading parameters from disk
+    - Saving parameters to disk
+    - Reading input data from disk
+    - Writing result data to disk
+    """
+    def __init__(self, data_root, experiment_code=None):
+        """Creates an Experiment object with the location of its settings and data
+
+        Args:
+            data_root: The path of the folder containing datasets
+            experiment_code: The code number of the experiment.
+                This will be the name of the folder containing the data specific to this experiment.
+                This should be a date and time in 'YYYY-MM-DD-hhmm' format
+                If no code is given, one will be generated from the current date and time.
+        """
         if not os.path.isdir(data_root):
             raise RuntimeError('Data folder not found.')
         self.os_data_root = data_root
-        if experiment_code == -1:
+        if experiment_code is None:
             now = datetime.now()
             self.experiment_code = str.join('', [str(now.year),
                                                  '_',
@@ -27,28 +51,11 @@ class Experiment(object):
 
         self.micro_params = None
         self.macro_params = None
+        self.data = Data()
 
     def __str__(self):
         values = self.to_dict()
-        output = ''
-        nl = os.linesep
-        key_len = 0
-        for k in values.keys():
-            key_len = max(len(k), key_len)
-        key_len += 1
-        values.pop('micro_params', None)
-        values.pop('macro_params', None)
-        for k, v in values.items():
-            output += f'{k:<{key_len}}: {v}' + nl
-        tab = ' '*(key_len+2)
-        for param in ['micro_params', 'macro_params']:
-            output += f'{param:<{key_len}}: '
-            if self.__dict__[param] is None:
-                output += 'None' + nl
-            else:
-                param_string = str(self.__dict__[param])
-                output += tab.join(param_string.splitlines(True))
-        return output
+        return dict_to_formatted_str(values)
 
     def initialize_macro_param(self, params=None):
         self.macro_params = MacroParameters(params)
@@ -80,8 +87,28 @@ class Experiment(object):
         else:
             raise RuntimeError('Experiment parameter file not found.')
 
+    def read_macro_input_data(self):
+        if self.macro_params is None:
+            raise RuntimeError('Macro Parameters not initialized.')
+        for array, filename in self.macro_params['data_files'].items():
+            if array == 'total_lyses':
+                self.data[array] = np.loadtxt(os.path.join(self.os_path, filename), dtype=int, converters=float)
+            elif array == 'lysis_time':
+                self.data[array] = np.loadtxt(os.path.join(self.os_path, filename)).T
+            else:
+                self.data[array] = np.loadtxt(os.path.join(self.os_path, filename))
+        self.data.lysis_time = np.delete(self.data.lysis_time, np.s_[self.data.total_lyses.max():], 1)
 
-# class MicroParameters(object):
+    def save_data(self, data, as_text=False):
+        for filename, array in data.items():
+            if as_text:
+                np.savetxt(os.path.join(self.os_path, filename + '.dat'), array, newline=os.linesep)
+            else:
+                np.save(os.path.join(self.os_path, filename))
+
+
+class MicroParameters(object):
+    pass
 
 
 class MacroParameters(object):
@@ -154,13 +181,12 @@ class MacroParameters(object):
         # Data Parameters
         #####################################
         # Data file names
-        'unbinding_time_filename': "tsectPA.dat",
-        'lysis_time_filename':     "lysismat.dat",
-        'total_lyses_filename':    "lenlysisvect.dat",
-        # Data size parameters
-        'lysis_blocks':            100,
-        'unbinds_per_block':       500,
-        'max_lyses_per_block':     283,
+        'data_files': {
+            'unbinding_time': "tsectPA.dat",
+        #    'leaving_time':   "tPAleave.dat",
+            'lysis_time':     "lysismat.dat",
+            'total_lyses':    "lenlysisvect.dat",
+        }
     }
 
     independent_parameters = defaults.keys()
@@ -209,15 +235,7 @@ class MacroParameters(object):
 
     def __str__(self):
         values = self.to_dict()
-        output = ''
-        nl = os.linesep
-        key_len = 0
-        for k in values.keys():
-            key_len = max(len(k), key_len)
-        key_len += 1
-        for k, v in values.items():
-            output += f'{k:<{key_len}}: {v}' + nl
-        return output
+        return dict_to_formatted_str(values)
 
     def set_default_parameters(self):
         self.params = self.defaults.copy()
@@ -239,4 +257,25 @@ class MacroParameters(object):
     def to_dict(self):
         return self.params
 
-    
+
+class Data(dict):
+    def __init__(self, *args, **kwargs):
+        super(Data, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+
+def dict_to_formatted_str(d):
+    output = ''
+    nl = os.linesep
+    key_len = 0
+    for k in d.keys():
+        key_len = max(len(k), key_len)
+    key_len += 1
+    tab = ' ' * (key_len + 2)
+    for k, v in d.items():
+        if isinstance(v, dict):
+            output += f'{k:<{key_len}}: '
+            output += tab.join(dict_to_formatted_str(v).splitlines(True))
+        else:
+            output += f'{k:<{key_len}}: {v}' + nl
+    return output
