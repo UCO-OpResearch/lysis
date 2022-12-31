@@ -1,23 +1,35 @@
 from enum import Enum, unique
 
+__author__ = "Brittany Bannish and Bradley Paynter"
+__copyright__ = "Copyright 2022, Brittany Bannish"
+__credits__ = ["Brittany Bannish", "Bradley Paynter"]
+__license__ = ""
+__version__ = "0.1"
+__maintainer__ = "Bradley Paynter"
+__email__ = "bpaynter@uco.edu"
+__status__ = "Development"
 
-class Const(dict):
-    """Encapsulates a dictionary so that its elements can be accessed as properties.
 
-    e.g.,
-        >>> my_const = Const()
-        >>> my_const['test'] = 'hat'
-        >>> my_const.test
-        'hat'
-    """
-
+class Const:
     def __init__(self):
-        """Creates a blank Const object."""
-        # Call the super-constructor
-        super(Const, self).__init__()
-        # This is where the wizardry happens.
-        # We define the classes parameters as the dictionary itself
-        self.__dict__ = self
+        self.BOUND = BoundaryDirection
+        self.BOUND_COND = BoundaryCondition
+        self.DIR = FiberDirection
+        self.NEIGHBORHOOD = Neighbors()
+
+
+class Neighbors:
+    def __init__(self):
+        self.X = ((-1, -1, 0, 0, 0, 0, 0, 0),
+                  (-2, 1, -2, 1, -1, -1, 2, 2))
+        self.Y = ((0, 0, 1, 1, 0, 1, 0, 1),
+                  (1, 1, 1, 1, -1, -1, 2, 2))
+        self.Z = ((-1, -1, 0, 0, 0, 0, 0, 0),
+                  (-1, -1, -1, -1, -2, -2, 1, 1))
+        self.TOP = (0, 0, -1, -1, 0, 0, 0, 0)
+        self.BOTTOM = (1, 1, 0, 0, 0, 0, 0, 0)
+        self.LEFT = (0, 0, 0, 0, 3, 3, 0, 0)
+        self.RIGHT = (0, 0, 0, 0, 0, 0, -3, -3)
 
 
 @unique
@@ -29,7 +41,7 @@ class BoundaryDirection(Enum):
 
 
 @unique
-class BoundaryConditions(Enum):
+class BoundaryCondition(Enum):
     REFLECTING = 0
     PERIODIC = 1
     CONTINUING = 2
@@ -43,12 +55,3 @@ class FiberDirection(Enum):
     RIGHT = -2
     OUT = 3
     IN = -3
-
-
-def get_constants() -> Const:
-    CONST = Const()
-    CONST.BOUND = BoundaryDirection
-    CONST.BOUND_COND = BoundaryConditions
-    CONST.DIR = FiberDirection
-    return CONST
-

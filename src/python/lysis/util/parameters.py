@@ -5,22 +5,21 @@ It contains classes to house these and make them accessible to the rest of the c
 It also handles the storing and reading of parameters and data to/from disk.
 
 Typical usage example:
+    * Create a new experiment
+        >>> exp = Experiment('path/to/data')
+        >>> param = {'override_parameter': 2.54, 'another_new_parameter': 32}
+        >>> exp.initialize_macro_param(param)
+        >>> exp.to_file()
 
-* Create a new experiment
-    >>> exp = Experiment('path/to/data')
-    >>> param = {'override_parameter': 2.54, 'another_new_parameter': 32}
-    >>> exp.initialize_macro_param(param)
-    >>> exp.to_file()
+    * Load an existing experiment
+        >>> exp = Experiment('path/to/data', '2022-12-27-1100')
+        >>> exp.read_file()
 
-* Load an existing experiment
-    >>> exp = Experiment('path/to/data', '2022-12-27-1100')
-    >>> exp.read_file()
+    * Access a parameter
+        >>> exp.macro_param['pore_size']
 
-* Access a parameter
-    >>> exp.macro_param['pore_size']
-
-* Access data
-    >>> exp.data.lysis_time[i][j]
+    * Access data
+        >>> exp.data.lysis_time[i][j]
 """
 
 import errno
@@ -30,6 +29,15 @@ from datetime import datetime
 from typing import Any, AnyStr, Mapping
 
 import numpy as np
+
+__author__ = "Brittany Bannish and Bradley Paynter"
+__copyright__ = "Copyright 2022, Brittany Bannish"
+__credits__ = ["Brittany Bannish", "Bradley Paynter"]
+__license__ = ""
+__version__ = "0.1"
+__maintainer__ = "Bradley Paynter"
+__email__ = "bpaynter@uco.edu"
+__status__ = "Development"
 
 
 class Experiment(object):

@@ -9,6 +9,17 @@ Subpackages
 
    lysis.util
 
+Submodules
+----------
+
+lysis.macroscale module
+-----------------------
+
+.. automodule:: lysis.macroscale
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 
