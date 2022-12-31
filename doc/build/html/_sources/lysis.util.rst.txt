@@ -4,6 +4,14 @@ lysis.util package
 Submodules
 ----------
 
+lysis.util.constants module
+---------------------------
+
+.. automodule:: lysis.util.constants
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 lysis.util.kiss module
 ----------------------
 
