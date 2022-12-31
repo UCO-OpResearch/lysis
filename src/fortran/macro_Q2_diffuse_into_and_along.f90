@@ -211,8 +211,8 @@ neighborc=0
 
 ! neighborc is a num x 8 array
 ! neighborc(i, k) = j where fiber j is the kth neighbor of fiber i
-! Note that fibers may occur more than once in a row due to edge conditions
-! These are reflection (x- and y-directions) and toroidal (z-direction)
+! Note that fibers may occur more than once in a row due to boundary conditions
+! which are reflecting (x- and y-directions) and periodic (z-direction)
 !
 ! closeneigh is a num x num array
 ! closeneigh(i, j) = n where n is the number of times fiber j occurs in row i of neighborc
