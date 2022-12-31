@@ -48,6 +48,7 @@ CP=cp
 CCADMIN=CCadmin
 
 BUILD_DIR = ./bin
+LIB_DIR = ./lib
 C_SRC_DIR = ./src/c
 CPP_SRC_DIR = ./src/cpp
 FORT_SRC_DIR = ./src/fortran
@@ -87,6 +88,8 @@ fort-micro: $(BUILD_DIR)/micro_rates
 
 fort-macro: $(BUILD_DIR)/macro
 
+shared: $(LIB_DIR)/kiss.so
+
 $(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(BUILD_DIR)/kiss.o
 	ifort -r8 -mcmodel medium $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
 
@@ -97,6 +100,9 @@ cpp: $(BUILD_DIR)/cpp_macro_Q2
 
 $(BUILD_DIR)/cpp_macro_Q2: $(CPP_SRC_DIR)/macro_Q2.cpp $(BUILD_DIR)/kiss.o
 	g++ -std=c++11 -o $(BUILD_DIR)/cpp_macro_Q2 $(CPP_SRC_DIR)/macro_Q2.cpp $(BUILD_DIR)/kiss.o
+
+$(LIB_DIR)/kiss.so: $(C_SRC_DIR)/kiss.c
+	gcc -fPIC -shared -o $(LIB_DIR)/kiss.so $(C_SRC_DIR)/kiss.c
 
 $(BUILD_DIR)/kiss.o: $(C_SRC_DIR)/kiss.c
 	gcc -c $(C_SRC_DIR)/kiss.c -o $(BUILD_DIR)/kiss.o
