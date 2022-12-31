@@ -510,7 +510,7 @@ class Data(dict):
 def dict_to_formatted_str(d: Mapping[AnyStr, Any]) -> str:
     """Converts a dictionary into a formatted, JSON-like string.
 
-    Aligns keys and values, including the alignment of sub-dicts.
+    Align keys and values, including the alignment of sub-dicts.
 
     e.g.,
         >>> d = {'Hat': 'Large', 'Pants': {'Waist': 40, 'Inseam': 38}}
