@@ -1,4 +1,4 @@
-from enum import Enum, unique
+from enum import Enum, IntEnum, unique
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -26,14 +26,14 @@ class Neighbors:
                   (1, 1, 1, 1, -1, -1, 2, 2))
         self.Z = ((-1, -1, 0, 0, 0, 0, 0, 0),
                   (-1, -1, -1, -1, -2, -2, 1, 1))
-        self.TOP = (0, 0, -1, -1, 0, 0, 0, 0)
-        self.BOTTOM = (1, 1, 0, 0, 0, 0, 0, 0)
-        self.LEFT = (0, 0, 0, 0, 3, 3, 0, 0)
-        self.RIGHT = (0, 0, 0, 0, 0, 0, -3, -3)
+        self.TOP_REFL = (0, 0, -1, -1, 0, 0, 0, 0)
+        self.BOTTOM_REFL = (1, 1, 0, 0, 0, 0, 0, 0)
+        self.LEFT_REFL = (0, 0, 0, 0, 3, 3, 0, 0)
+        self.RIGHT_REFL = (0, 0, 0, 0, 0, 0, -3, -3)
 
 
 @unique
-class BoundaryDirection(Enum):
+class BoundaryDirection(IntEnum):
     TOP = 0
     BOTTOM = 1
     LEFT = 2
