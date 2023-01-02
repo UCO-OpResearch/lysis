@@ -1,8 +1,8 @@
-from typing import Tuple
+from typing import Any, Callable, List, Mapping, Tuple
 
 import numpy as np
 
-from .util import Const, BoundaryCondition, Neighbors
+from .util import Const, BoundaryCondition
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -18,7 +18,7 @@ CONST = Const()
 
 
 class EdgeGrid(object):
-    """The main class containing a 3-D grid of edges. This represents a slice, one edge high, of a clot.
+    """The main class containing a 3-D grid of edges. This represents an xy-planar slice, one edge high, of a clot.
 
     Co-ordinate arrangement::
 
@@ -53,8 +53,27 @@ class EdgeGrid(object):
                  nodes_in_row: int,
                  empty_rows: int,
                  boundary_conditions: Tuple[BoundaryCondition,
-                                            BoundaryCondition]
+                                            BoundaryCondition],
+                 initial_fiber_status: float,
                  ):
+        """Initializes an EdgeGrid.
+
+        Args:
+            rows: The number of rows in this EdgeGrid
+                **NOTE**: This does not count duplicated edges used with CONTINUING boundary conditions.
+                That is, if this EdgeGrid is in the middle of a larger grid,
+                there will actually be two more rows in this grid,
+                "Row -1", which will represent the top row ("Row rows-1") of the grid below, and
+                "Row rows", which will represent the bottom row ("Row 0") of the grid above.
+            nodes_in_row: The number of nodes (not edges) in each row of this EdgeGrid.
+            empty_rows: The number of empty (fibrin-free) rows in this EdgeGrid.
+                These will always be the bottom rows of the grid (i.e., "Row 0" through "Row empty_rows-1").
+                If "Row -1" exists, it is NOT counted in this number. This row is always treated as empty because,
+                even if it does have fibrin, those fibers exist in a different EdgeGrid.
+            boundary_conditions: A tuple that maps boundaries from CONST.BOUND to conditions from CONST.BOUND_COND.
+            initial_fiber_status: The initial value of the fiber status.
+                This should generally be an infinite degrade time (degrade time > experiment length).
+        """
         self.rows = rows
         self.nodes_in_row = nodes_in_row
         self.empty_rows = empty_rows
@@ -62,11 +81,53 @@ class EdgeGrid(object):
 
         self.edges_in_row = 3*self.nodes_in_row - 1
         self.fiber_rows = self.rows - self.empty_rows
-        if self.boundary_conditions[CONST.BOUND_COND.TOP] == CONST.BOUND_COND.CONTINUING:
-            self.fiber_rows -= 1
-        if self.boundary_conditions[CONST.BOUND_COND.TOP] == CONST.BOUND_COND.CONTINUING:
-            self.fiber_rows -= 1
-        self.fiber_status = np.ones((self.rows, self.edges_in_row))
+        self._fiber_status = initial_fiber_status * np.ones((self.fiber_rows, self.edges_in_row),
+                                                            dtype=np.double)
+
+        row_shift: Callable[[int], int] = lambda i: i-self.empty_rows
+        identity: Callable[[int], int] = lambda j: j
+        self.fiber_status = self._ShiftedArrayAccess(self._fiber_status, (row_shift, identity))
+
+        self._molecules = [[[] for j in range(self.edges_in_row)] for i in range(self.rows)]
+        if self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.CONTINUING:
+            self._molecules.append([[] for j in range(self.edges_in_row)])
+        if self.boundary_conditions[CONST.BOUND.BOTTOM] == CONST.BOUND_COND.CONTINUING:
+            self._molecules.append([[] for j in range(self.edges_in_row)])
+
+            row_shift: Callable[[int], int] = lambda i: i + 1
+            identity: Callable[[int], int] = lambda j: j
+            self.molecules = self._ShiftedArrayAccess(self._molecules, (row_shift, identity))
+        else:
+            self.molecules = self._ShiftedArrayAccess(self._molecules)
+
+    def _is_valid_index(self, i: int, j: int) -> str | None:
+        """Checks if (i, j) is a valid index.
+
+        Args:
+            i: The index of the edge's row.
+            j: The index of the edge within its row.
+
+        Returns: None if the index is valid, or an error message (as a string) if the index is invalid.
+        """
+        # Edges are 0 through self.edges_in_row-1
+        if j < 0 or j > self.edges_in_row - 1:
+            return (f'Index j={j} out of bounds. '
+                             + f'This model only has edges [0..{self.edges_in_row - 1}] in each row.')
+        # Rows are 0 through self.rows-1
+        if i < 0 or i > self.rows - 1:
+            return f'Index i={i} out of bounds. This model only has rows [0..{self.rows - 1}].'
+        # If this EdgeGrid is at the top of a larger sliced grid, or is the whole grid itself,
+        # then the top row has no y-edges in it.
+        if (
+                i == self.rows - 1
+                and
+                self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.REFLECTING
+                and
+                j % 3 == 0
+           ):
+            return f'y-edges do not exist on the top row of this grid (row {self.rows - 1}). Location ({i}, {j})'
+        # Everything seems fine, so return None
+        return None
 
     def neighbor(self, i: int, j: int, k: int) -> Tuple[int, int]:
         """Finds the co-ordinates of a neighboring edge.
@@ -143,48 +204,11 @@ class EdgeGrid(object):
         # Neighbors are 0 through 7
         if k < 0 or k > 7:
             raise IndexError(f'Index k={k} out of bounds. Each neighborhood has items [0..7].')
-        # Edges are 0 through self.edges_in_row-1
-        if j < 0 or j > self.edges_in_row-1:
-            raise IndexError(f'Index j={j} out of bounds. '
-                             + f'This model only has edges [0..{self.edges_in_row-1}] in each row.')
-        # Rows are 0 through self.rows-1
-        if i < 0 or i > self.rows-1:
-            raise IndexError(f'Index i={i} out of bounds. This model only has rows [0..{self.rows-1}].')
+        # Check if i and j are valid
+        valid_index = self._is_valid_index(i, j)
+        if valid_index is not None:
+            raise IndexError(valid_index)
 
-        # If this EdgeGrid is in the middle of a larger sliced grid,
-        # then the bottom row of this grid represents the top row of the next grid down
-        # (actually row self.rows-2 of that grid, since row self.rows-1 of that grid is row 1 of this one)
-        #
-        # While tPA molecules can move to row zero,
-        # they should be transferred to the next grid and never processed here.
-        if (
-                i == 0
-                and
-                self.boundary_conditions[CONST.BOUND.BOTTOM] == CONST.BOUND_COND.CONTINUING
-           ):
-            raise IndexError(f'The bottom row of this grid (row 0) represents the top row of the next grid'
-                             + f' and should not be processed here. Location ({i}, {j})')
-        if i == self.rows-1:
-            # If this EdgeGrid is in the middle of a larger sliced grid,
-            # then the top row of this grid represents the bottom row of the next grid up
-            # (actually row 1 of that grid, since row 1 of that grid is row self.rows-1 of this one)
-            #
-            # While tPA molecules can move to row self.rows-1,
-            # they should be transferred to the next grid and never processed here.
-            if self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.CONTINUING:
-                raise IndexError(f'The top row of this grid (row {self.rows-1}) represents the bottom row of '
-                                 + f'the next grid and should not be processed here. Location ({i}, {j})')
-            # If this EdgeGrid is at the top of a larger sliced grid, or is the whole grid itself,
-            # then the top row has no y-edges in it.
-            #
-            # tPA molecules cannot move onto these edges.
-            if (
-                    self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.REFLECTING
-                    and
-                    j % 3 == 0
-               ):
-                raise IndexError(f'y-edges do not exist on the top row of this grid (row {self.rows-1}). '
-                                 + f'Location ({i}, {j})')
         # The index of the neighboring fiber being requested
         neighbor_i = i
         neighbor_j = j
@@ -243,6 +267,60 @@ class EdgeGrid(object):
 
         # Return the co-ordinates of the requested neighbor.
         return neighbor_i, neighbor_j
+
+    def pop_molecule_row(self, i: int) -> List[List[int]]:
+        if -1 < i < self.rows:
+            raise IndexError('You should not be removing molecules from the actual rows of this grid. '
+                             'Only shadow rows allowed.')
+        row = self.molecules[i].copy()
+        self.molecules[i] = [[] for j in range(self.edges_in_row)]
+        return row
+
+
+    class _ShiftedArrayAccess:
+        def __init__(self,
+                     array: List[List[Any]],
+                     shift: Tuple[Callable[[int], int], ...],
+                     ):
+            self.array = array
+            self.shift = shift
+
+        @staticmethod
+        def _shift_key(key: slice | int,
+                       shift_func: Callable[[int], int]
+                       ) -> slice | int:
+            if isinstance(key, slice):
+                start = shift_func(key.start) if key.start is not None else None
+                stop = shift_func(key.stop) if key.stop is not None else None
+                return slice(start, stop, key.step)
+            else:
+                return shift_func(key)
+
+        def __getitem__(self, key: int | slice | Tuple[int | slice]) -> Any:
+            if isinstance(key, Tuple):
+                shifted_keys = tuple([self._shift_key(k, self.shift[idx]) for idx, k in enumerate(key)])
+            else:
+                shifted_keys = (self._shift_key(key, self.shift[0]),)
+            if isinstance(self.array, np.ndarray):
+                return self.array[shifted_keys]
+            else:
+                out = self.array
+                for k in shifted_keys:
+                    out = out[k]
+                return out
+
+        def __setitem__(self, key: int | slice | Tuple[int | slice], value: Any):
+            if isinstance(key, Tuple):
+                shifted_keys = tuple([self._shift_key(k, self.shift[idx]) for idx, k in enumerate(key)])
+            else:
+                shifted_keys = (self._shift_key(key, self.shift[0]),)
+            if isinstance(self.array, np.ndarray):
+                self.array[shifted_keys] = value
+            else:
+                place = self.array
+                for k in shifted_keys[:-1]:
+                    place = place[k]
+                place[shifted_keys[-1]] = value
 
 
 def from_fortran_edge_index(index: int, rows: int, nodes_in_row: int) -> Tuple[int, int]:
