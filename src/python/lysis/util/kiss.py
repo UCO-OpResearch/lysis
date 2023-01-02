@@ -116,7 +116,7 @@ class KissRandomGenerator(Random):
         # Get the current state (since the seed is the fourth element of the state)
         state = self.getstate()
         # Replace the fourth element of the state with the new seed
-        state = state[:3] + (seed,)
+        state = (int(state[0]), int(state[1]), int(state[2]), seed)
         # Set the new state
         self.setstate(state)
 
@@ -129,7 +129,7 @@ class KissRandomGenerator(Random):
         # memory that the "c_state" pointer points to will be modified by the function call.
         self.__get_kiss32(c_state)
         # Unpack the C array and convert to a tuple
-        return tuple(int(i) for i in c_state)
+        return c_state[0], c_state[1], c_state[2], c_state[3]
 
     def random(self) -> float:
         """Returns the next double-precision random number from the pseudo-random number stream. This is distributed
