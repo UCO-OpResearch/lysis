@@ -18,7 +18,7 @@ CONST = Const()
 
 
 class EdgeGrid(object):
-    """The main class containing a 3-D grid of fibers. This represents a slice, one fiber high, of a clot.
+    """The main class containing a 3-D grid of edges. This represents a slice, one edge high, of a clot.
 
     Co-ordinate arrangement::
 
@@ -61,7 +61,12 @@ class EdgeGrid(object):
         self.boundary_conditions = boundary_conditions
 
         self.edges_in_row = 3*self.nodes_in_row - 1
-        # self.edges = np.zeros((self.rows, self.edges_in_row))
+        self.fiber_rows = self.rows - self.empty_rows
+        if self.boundary_conditions[CONST.BOUND_COND.TOP] == CONST.BOUND_COND.CONTINUING:
+            self.fiber_rows -= 1
+        if self.boundary_conditions[CONST.BOUND_COND.TOP] == CONST.BOUND_COND.CONTINUING:
+            self.fiber_rows -= 1
+        self.fiber_status = np.ones((self.rows, self.edges_in_row))
 
     def neighbor(self, i: int, j: int, k: int) -> Tuple[int, int]:
         """Finds the co-ordinates of a neighboring edge.
