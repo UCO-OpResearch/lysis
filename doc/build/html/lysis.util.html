@@ -95,7 +95,7 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.html#submodules">Submodules</a></li>
-<li class="toctree-l3"><a class="reference internal" href="lysis.html#lysis-macroscale-module">lysis.macroscale module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.html#module-lysis.edge_grid">lysis.edge_grid module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.html#module-lysis">Module contents</a></li>
 </ul>
 </li>
@@ -205,8 +205,18 @@
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">lysis.util.constants.</span></span><span class="sig-name descname"><span class="pre">BoundaryDirection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qualname</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.util.constants.BoundaryDirection" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">IntEnum</span></code></p>
 <dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.util.constants.BoundaryDirection.BACK">
+<span class="sig-name descname"><span class="pre">BACK</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">5</span></em><a class="headerlink" href="#lysis.util.constants.BoundaryDirection.BACK" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="lysis.util.constants.BoundaryDirection.BOTTOM">
 <span class="sig-name descname"><span class="pre">BOTTOM</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#lysis.util.constants.BoundaryDirection.BOTTOM" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.util.constants.BoundaryDirection.FRONT">
+<span class="sig-name descname"><span class="pre">FRONT</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4</span></em><a class="headerlink" href="#lysis.util.constants.BoundaryDirection.FRONT" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -380,40 +390,24 @@ uniformly from zero through one.</p>
 It contains classes to house these and make them accessible to the rest of the code.
 It also handles the storing and reading of parameters and data to/from disk.</p>
 <dl>
-<dt>Typical usage example:</dt><dd><ul>
-<li><dl>
-<dt>Create a new experiment</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span> <span class="o">=</span> <span class="n">Experiment</span><span class="p">(</span><span class="s1">&#39;path/to/data&#39;</span><span class="p">)</span>
+<dt>Typical usage example:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a new experiment</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span> <span class="o">=</span> <span class="n">Experiment</span><span class="p">(</span><span class="s1">&#39;path/to/data&#39;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">param</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;override_parameter&#39;</span><span class="p">:</span> <span class="mf">2.54</span><span class="p">,</span> <span class="s1">&#39;another_new_parameter&#39;</span><span class="p">:</span> <span class="mi">32</span><span class="p">}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span><span class="o">.</span><span class="n">initialize_macro_param</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span><span class="o">.</span><span class="n">to_file</span><span class="p">()</span>
-</pre></div>
-</div>
-</dd>
-</dl>
-</li>
-<li><dl>
-<dt>Load an existing experiment</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span> <span class="o">=</span> <span class="n">Experiment</span><span class="p">(</span><span class="s1">&#39;path/to/data&#39;</span><span class="p">,</span> <span class="s1">&#39;2022-12-27-1100&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Load an existing experiment</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span> <span class="o">=</span> <span class="n">Experiment</span><span class="p">(</span><span class="s1">&#39;path/to/data&#39;</span><span class="p">,</span> <span class="s1">&#39;2022-12-27-1100&#39;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span><span class="o">.</span><span class="n">read_file</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Access a parameter</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span><span class="o">.</span><span class="n">macro_params</span><span class="p">[</span><span class="s1">&#39;pore_size&#39;</span><span class="p">]</span>
 </pre></div>
 </div>
-</dd>
-</dl>
-</li>
-<li><dl>
-<dt>Access a parameter</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span><span class="o">.</span><span class="n">macro_param</span><span class="p">[</span><span class="s1">&#39;pore_size&#39;</span><span class="p">]</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Read data from disk</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span><span class="o">.</span><span class="n">read_macro_input_data</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Access data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lysis_time</span><span class="p">[</span><span class="mi">4</span><span class="p">][</span><span class="mi">18</span><span class="p">]</span>          <span class="c1"># type: ignore</span>
 </pre></div>
 </div>
-</dd>
-</dl>
-</li>
-<li><dl>
-<dt>Access data</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">exp</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lysis_time</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">j</span><span class="p">]</span>
-</pre></div>
-</div>
-</dd>
-</dl>
-</li>
-</ul>
 </dd>
 </dl>
 <dl class="py class">
@@ -424,7 +418,7 @@ It also handles the storing and reading of parameters and data to/from disk.</p>
 <dl>
 <dt>e.g.,</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">my_data</span> <span class="o">=</span> <span class="n">Data</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">my_data</span><span class="p">[</span><span class="s1">&#39;test&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;hat&#39;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">my_data</span><span class="o">.</span><span class="n">test</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_data</span><span class="o">.</span><span class="n">test</span>                        <span class="c1"># type: ignore # Python allows this, but is a little confused</span>
 <span class="go">&#39;hat&#39;</span>
 </pre></div>
 </div>
@@ -470,6 +464,11 @@ It also handles the storing and reading of parameters and data to/from disk.</p>
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.util.parameters.Experiment.micro_params">
+<span class="sig-name descname"><span class="pre">micro_params</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#lysis.util.parameters.Experiment.micro_params" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="lysis.util.parameters.Experiment.read_file">
@@ -543,12 +542,23 @@ in JSON format.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="lysis.util.parameters.MacroParameters">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">lysis.util.parameters.</span></span><span class="sig-name descname"><span class="pre">MacroParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">AnyStr</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.util.parameters.MacroParameters" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></p>
 <p>Contains parameters for the Macroscale model.</p>
+<p>Parameters can be accessed in dictionary fashion.
+Independent parameters should only be set at initialization.
+Dependent parameters should never be set manually, but are automatically calculated by internal code.</p>
 <p>Should only be used inside an Experiment object.</p>
-<p>Parameters can be accessed in dictionary fashion.</p>
 <dl>
-<dt>i.e.,</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">macro_param</span><span class="p">[</span><span class="s1">&#39;binding_rate&#39;</span><span class="p">]</span>
+<dt>i.e.,</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Initialize using the default values</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">macro_params_default</span> <span class="o">=</span> <span class="n">MacroParameters</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Get parameter value</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">macro_params_default</span><span class="p">[</span><span class="s1">&#39;pore_size&#39;</span><span class="p">]</span>
+<span class="go">1.0135e-4</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Set parameter value</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">macro_params_default</span><span class="p">[</span><span class="s1">&#39;binding_rate&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.2e-2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Initialize overriding some default values</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;binding_rate&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s1">&#39;pore_size&#39;</span><span class="p">:</span> <span class="mi">3</span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">macro_params_override</span> <span class="o">=</span> <span class="n">MacroParameters</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
 </pre></div>
 </div>
 </dd>
@@ -589,8 +599,8 @@ Microscale parameters.</p>
 <dd><p>Converts a dictionary into a formatted, JSON-like string.</p>
 <p>Align keys and values, including the alignment of sub-dicts.</p>
 <dl>
-<dt>e.g.,</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;Hat&#39;</span><span class="p">:</span> <span class="s1">&#39;Large&#39;</span><span class="p">,</span> <span class="s1">&#39;Pants&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;Waist&#39;</span><span class="p">:</span> <span class="mi">40</span><span class="p">,</span> <span class="s1">&#39;Inseam&#39;</span><span class="p">:</span> <span class="mi">38</span><span class="p">}}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dict_to_formatted_str</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+<dt>e.g.,</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">measurements</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;Hat&#39;</span><span class="p">:</span> <span class="s1">&#39;Large&#39;</span><span class="p">,</span> <span class="s1">&#39;Pants&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;Waist&#39;</span><span class="p">:</span> <span class="mi">40</span><span class="p">,</span> <span class="s1">&#39;Inseam&#39;</span><span class="p">:</span> <span class="mi">38</span><span class="p">}}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dict_to_formatted_str</span><span class="p">(</span><span class="n">measurements</span><span class="p">)</span>
 <span class="go">Hat   : Large</span>
 <span class="go">Pants : Waist  : 40</span>
 <span class="go">        Inseam : 38</span>

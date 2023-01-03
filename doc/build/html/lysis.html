@@ -96,7 +96,12 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#submodules">Submodules</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#lysis-macroscale-module">lysis.macroscale module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-lysis.edge_grid">lysis.edge_grid module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#lysis.edge_grid.EdgeGrid"><code class="docutils literal notranslate"><span class="pre">EdgeGrid</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#lysis.edge_grid.from_fortran_edge_index"><code class="docutils literal notranslate"><span class="pre">from_fortran_edge_index()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#lysis.edge_grid.to_fortran_edge_index"><code class="docutils literal notranslate"><span class="pre">to_fortran_edge_index()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="#module-lysis">Module contents</a></li>
 </ul>
 </li>
@@ -187,7 +192,9 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryDirection"><code class="docutils literal notranslate"><span class="pre">BoundaryDirection</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryDirection.BACK"><code class="docutils literal notranslate"><span class="pre">BoundaryDirection.BACK</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryDirection.BOTTOM"><code class="docutils literal notranslate"><span class="pre">BoundaryDirection.BOTTOM</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryDirection.FRONT"><code class="docutils literal notranslate"><span class="pre">BoundaryDirection.FRONT</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryDirection.LEFT"><code class="docutils literal notranslate"><span class="pre">BoundaryDirection.LEFT</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryDirection.RIGHT"><code class="docutils literal notranslate"><span class="pre">BoundaryDirection.RIGHT</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryDirection.TOP"><code class="docutils literal notranslate"><span class="pre">BoundaryDirection.TOP</span></code></a></li>
@@ -222,6 +229,7 @@
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Data"><code class="docutils literal notranslate"><span class="pre">Data</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment"><code class="docutils literal notranslate"><span class="pre">Experiment</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.initialize_macro_param"><code class="docutils literal notranslate"><span class="pre">Experiment.initialize_macro_param()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.micro_params"><code class="docutils literal notranslate"><span class="pre">Experiment.micro_params</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.read_file"><code class="docutils literal notranslate"><span class="pre">Experiment.read_file()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.read_macro_input_data"><code class="docutils literal notranslate"><span class="pre">Experiment.read_macro_input_data()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.save_data"><code class="docutils literal notranslate"><span class="pre">Experiment.save_data()</span></code></a></li>
@@ -248,8 +256,286 @@
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this heading">¶</a></h2>
 </section>
-<section id="lysis-macroscale-module">
-<h2>lysis.macroscale module<a class="headerlink" href="#lysis-macroscale-module" title="Permalink to this heading">¶</a></h2>
+<section id="module-lysis.edge_grid">
+<span id="lysis-edge-grid-module"></span><h2>lysis.edge_grid module<a class="headerlink" href="#module-lysis.edge_grid" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">lysis.edge_grid.</span></span><span class="sig-name descname"><span class="pre">EdgeGrid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment" title="lysis.util.parameters.Experiment"><span class="pre">Experiment</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">thisgrid_rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thisgrid_starting_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary_conditions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryCondition" title="lysis.util.constants.BoundaryCondition"><span class="pre">BoundaryCondition</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryCondition" title="lysis.util.constants.BoundaryCondition"><span class="pre">BoundaryCondition</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_fiber_status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">inf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>The main class containing a 3-D grid of edges. This represents an xy-planar slice, one edge high, of a clot.</p>
+<p>Co-ordinate arrangement:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s1">&#39;         {        /           /           /           /           /</span>
+<span class="s1">&#39;   Row 3 {       1           4           7           10          13</span>
+<span class="s1">&#39;         {      /           /           /           /           /</span>
+<span class="s1">&#39;         {     +-----2-----+-----5-----+-----8-----+-----11----+</span>
+<span class="s1">&#39;              /|          /|          /|          /|          /|</span>
+<span class="s1">&#39;             / |         / |         / |         / |         / |</span>
+<span class="s1">&#39;         {     0  /        3  /        6  /        9  /       12  /</span>
+<span class="s1">&#39;   Row 2 {     | 1         | 4         | 7         | 10        | 13</span>
+<span class="s1">&#39;         {     |/          |/          |/          |/          |/</span>
+<span class="s1">&#39;         {     +-----2-----+-----5-----+-----8-----+-----11----+</span>
+<span class="s1">&#39;              /|          /|          /|          /|          /|</span>
+<span class="s1">&#39;             / |         / |         / |         / |         / |</span>
+<span class="s1">&#39;         {     0  /        3  /        6  /        9  /       12  /</span>
+<span class="s1">&#39;   Row 1 {     | 1         | 4         | 7         | 10        | 13</span>
+<span class="s1">&#39;         {     |/          |/          |/          |/          |/</span>
+<span class="s1">&#39;         {     +-----2-----+-----5-----+-----8-----+-----11----+</span>
+<span class="s1">&#39;              /|          /|          /|          /|          /|</span>
+<span class="s1">&#39;             / |         / |         / |         / |         / |</span>
+<span class="s1">&#39;         {     0  /        3  /        6  /        9  /       12  /</span>
+<span class="s1">&#39;   Row 0 {     | 1         | 4         | 7         | 10        | 13</span>
+<span class="s1">&#39;         {     |/          |/          |/          |/          |/</span>
+<span class="s1">&#39;         {     +-----2-----+-----5-----+-----8-----+-----11----+</span>
+<span class="s1">&#39;              /           /           /           /           /</span>
+<span class="s1">&#39;             /           /           /           /           /</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.fiber_status">
+<span class="sig-name descname"><span class="pre">fiber_status</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.fiber_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>The status of the fibers in this EdgeGrid. This is essentially the degrade time of the fiber.
+If degrade time &lt; current time, the fiber is degraded.
+e.g., self.fiber_status[60, 25] is the status of the fiber located along edge [60, 25].</p>
+<p>Supports two-dimensional slicing.</p>
+<p>Note that the location should be given in reference to the entire grid, not just this EdgeGrid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.molecules">
+<span class="sig-name descname"><span class="pre">molecules</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.molecules" title="Permalink to this definition">¶</a></dt>
+<dd><p>A structure containing the indices of the molecules currently
+located at each edge of this EdgeGrid.
+e.g., self.molecules[60, 25] is a list of molecules currently located at edge [60, 25].</p>
+<p>Supports slicing in one dimension only.</p>
+<p>Note that the location should be given in reference to the entire grid, not just this EdgeGrid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List[List[List]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.move_molecule">
+<span class="sig-name descname"><span class="pre">move_molecule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.move_molecule" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.neighbor">
+<span class="sig-name descname"><span class="pre">neighbor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">j</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.neighbor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Finds the co-ordinates of a neighboring edge.</p>
+<p>Given the co-ordinates of an edge, and the index (in the neighborhood) of a neighboring edge,
+this method will find the co-ordinates of the requested neighbor,
+taking appropriate boundary conditions into account.</p>
+<p>Neighborhoods each contain eight other edges and are constructed as in the following examples
+(without boundary conditions). Note that in each situation, the generating edge is labelled “(i,j)”
+and the members of the neighborhood are labelled “k:(i+p,j+q)” where (p,q) is the vector from the
+generating edge to the neighbor.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">*</span> <span class="n">x</span><span class="o">-</span><span class="n">edge</span> <span class="n">neighborhood</span><span class="p">::</span>
+
+    <span class="s1">&#39;        2:(i,j-2)     3:(i,j+1)</span>
+    <span class="s1">&#39;            |             |</span>
+    <span class="s1">&#39;            |  /          |  /</span>
+    <span class="s1">&#39;            | 5:(i,j-1)   | 7:(i,j+2)</span>
+    <span class="s1">&#39;            |/            |/</span>
+    <span class="s1">&#39;            +----(i,j)----+</span>
+    <span class="s1">&#39;          / |            /|</span>
+    <span class="s1">&#39; 4:(i,j-1)  |   6:(i,j+2) |</span>
+    <span class="s1">&#39;        /   |          /  |</span>
+    <span class="s1">&#39;            |             |</span>
+    <span class="s1">&#39;      0:(i-1,j-2)   1:(i-1,j+1)</span>
+
+<span class="o">*</span> <span class="n">y</span><span class="o">-</span><span class="n">edge</span> <span class="n">neighborhood</span><span class="p">::</span>
+
+    <span class="s1">&#39;                    /</span>
+    <span class="s1">&#39;                   3:(i+1,j+1)</span>
+    <span class="s1">&#39;                  /</span>
+    <span class="s1">&#39; 5:(i+1,j-1)-----+-----7:(i+1,j+2)</span>
+    <span class="s1">&#39;                /|</span>
+    <span class="s1">&#39;     2:(i+1,j+1) |</span>
+    <span class="s1">&#39;              /  |</span>
+    <span class="s1">&#39;               (i,j)</span>
+    <span class="s1">&#39;                 |  /</span>
+    <span class="s1">&#39;                 | 1:(i,j+1)</span>
+    <span class="s1">&#39;                 |/</span>
+    <span class="s1">&#39;   4:(i,j-1)-----+-----6:(i,j+2)</span>
+    <span class="s1">&#39;                /</span>
+    <span class="s1">&#39;       0:(i,j+1)</span>
+    <span class="s1">&#39;              /</span>
+
+<span class="o">*</span> <span class="n">z</span><span class="o">-</span><span class="n">edge</span> <span class="n">neighborhood</span><span class="p">::</span>
+
+    <span class="s1">&#39;                         |</span>
+    <span class="s1">&#39;               3:(i+1,j-1)</span>
+    <span class="s1">&#39;                         |</span>
+    <span class="s1">&#39;         5:(i+1,j-2)-----+-----7:(i+1,j+1)</span>
+    <span class="s1">&#39;                        /|</span>
+    <span class="s1">&#39;                       / 1:(i,j-1)</span>
+    <span class="s1">&#39;                      /  |</span>
+    <span class="s1">&#39;                   (i,j)</span>
+    <span class="s1">&#39;                 |  /</span>
+    <span class="s1">&#39;       2:(i+1,j-1) /</span>
+    <span class="s1">&#39;                 |/</span>
+    <span class="s1">&#39; 4:(i+1,j-2)-----+-----6:(i+1,j+1)</span>
+    <span class="s1">&#39;                 |</span>
+    <span class="s1">&#39;                 0:(i,j-1)</span>
+    <span class="s1">&#39;                 |</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>i</strong> – The row of the generating edge.</p></li>
+<li><p><strong>j</strong> – The index of the generating edge within its row.</p></li>
+<li><p><strong>k</strong> – The index of the neighbor in the neighborhood (i.e., the (k+1)st neighbor)</p></li>
+</ul>
+</dd>
+</dl>
+<p>Returns: The pair of co-ordinates (in the EdgeGrid) of the requested neighbor.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.nodes_in_row">
+<span class="sig-name descname"><span class="pre">nodes_in_row</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.nodes_in_row" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of nodes (not edges) in each row of this EdgeGrid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.place_molecule_row">
+<span class="sig-name descname"><span class="pre">place_molecule_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.place_molecule_row" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.pop_molecule_row">
+<span class="sig-name descname"><span class="pre">pop_molecule_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.pop_molecule_row" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.thisgrid_empty_rows">
+<span class="sig-name descname"><span class="pre">thisgrid_empty_rows</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.thisgrid_empty_rows" title="Permalink to this definition">¶</a></dt>
+<dd><p>Number of empty rows in this EdgeGrid. If they exist they are
+“Row thisgrid_starting_row” through “Row max(thisgrid_starting_row, total_empty_rows)-1”
+If a top and/or bottom “shadow” row exists, it is NOT counted in this number.
+This row is always treated as empty because, even if it does have fibrin,
+those fibers exist in a different EdgeGrid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.total_empty_rows">
+<span class="sig-name descname"><span class="pre">total_empty_rows</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.total_empty_rows" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of empty (fibrin-free) rows in the entire grid.
+There are only empty rows in this EdgeGrid if total_empty_rows &gt; thisgrid_starting_row.
+These will always be the bottom rows of the grid (i.e., “Row 0” through “Row empty_rows-1”)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.total_rows">
+<span class="sig-name descname"><span class="pre">total_rows</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.total_rows" title="Permalink to this definition">¶</a></dt>
+<dd><p>The total number of rows in the entire grid (of which this EdgeGrid is either a part or the whole).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="lysis.edge_grid.from_fortran_edge_index">
+<span class="sig-prename descclassname"><span class="pre">lysis.edge_grid.</span></span><span class="sig-name descname"><span class="pre">from_fortran_edge_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes_in_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#lysis.edge_grid.from_fortran_edge_index" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a 1-dimensional index of an edge to its 2-dimensional index.</p>
+<p>Converts from the index for an edge used in the “Macro” Fortran data structures and data files
+into the (i, j) index used by this package.</p>
+<p><strong>NOTE</strong>: All indices in this method are zero-indexed.
+They will need to be incremented by one if used in Fortran code.</p>
+<p>This method exists to aid with compatability with the Fortran “Macro” code during the transition phase.
+It should be depreciated once the Python code is complete.</p>
+<p>For an example of the 2-dimensional index, see the DocString for the EdgeGrid class.
+The 1-dimensional index arrangement for the same setup is as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s1">&#39;        /           /           /           /           /</span>
+<span class="s1">&#39;      42          44          46           48          50</span>
+<span class="s1">&#39;      /           /           /           /           /</span>
+<span class="s1">&#39;     +-----43----+-----45----+-----47----+-----49----+</span>
+<span class="s1">&#39;    /|          /|          /|          /|          /|</span>
+<span class="s1">&#39;   / |         / |         / |         / |         / |</span>
+<span class="s1">&#39;    37  /       38  /       39  /       40  /       41  /</span>
+<span class="s1">&#39;     | 28        | 30        | 32        | 34        | 36</span>
+<span class="s1">&#39;     |/          |/          |/          |/          |/</span>
+<span class="s1">&#39;     +-----29----+-----31----+-----33----+-----35----+</span>
+<span class="s1">&#39;    /|          /|          /|          /|          /|</span>
+<span class="s1">&#39;   / |         / |         / |         / |         / |</span>
+<span class="s1">&#39;    23  /       24  /       25  /       26  /       27  /</span>
+<span class="s1">&#39;     | 14        | 16        | 18        | 20        | 22</span>
+<span class="s1">&#39;     |/          |/          |/          |/          |/</span>
+<span class="s1">&#39;     +-----15----+-----17----+-----19----+-----21----+</span>
+<span class="s1">&#39;    /|          /|          /|          /|          /|</span>
+<span class="s1">&#39;   / |         / |         / |         / |         / |</span>
+<span class="s1">&#39;     9  /       10  /       11  /       12  /       13  /</span>
+<span class="s1">&#39;     | 0         | 2         | 4         | 6         | 8</span>
+<span class="s1">&#39;     |/          |/          |/          |/          |/</span>
+<span class="s1">&#39;     +-----1-----+-----3-----+-----5-----+-----7-----+</span>
+<span class="s1">&#39;    /           /           /           /           /</span>
+<span class="s1">&#39;   /           /           /           /           /</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> – The index of an edge in the 1-dimensional system</p></li>
+<li><p><strong>rows</strong> – The number of rows in the grid</p></li>
+<li><p><strong>nodes_in_row</strong> – The number of nodes each row of the grid</p></li>
+</ul>
+</dd>
+</dl>
+<p>Returns: The pair of co-ordinates for the edge in the 2-dimensional system.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="lysis.edge_grid.to_fortran_edge_index">
+<span class="sig-prename descclassname"><span class="pre">lysis.edge_grid.</span></span><span class="sig-name descname"><span class="pre">to_fortran_edge_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">j</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes_in_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#lysis.edge_grid.to_fortran_edge_index" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a 2-dimensional index of an edge to its 1-dimensional index.</p>
+<p>Converts from the (i, j) index for an edge used by this package into the index used in
+“Macro” Fortran data structures and data files.</p>
+<p><strong>NOTE</strong>: All indices in this method are zero-indexed.
+They will need to be incremented by one if used in Fortran code.</p>
+<p>This method exists to aid with compatability with the Fortran “Macro” code during the transition phase.
+It should be depreciated once the Python code is complete.</p>
+<p>For an example of the 2-dimensional index, see the DocString for the EdgeGrid class.
+For a matching example of the 1-dimensional index, see the DocString for the from_fortran_edge_index() method.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>i</strong> – The index of the edge’s row.</p></li>
+<li><p><strong>j</strong> – The index of the edge within its row.</p></li>
+<li><p><strong>rows</strong> – The number of rows in the grid.</p></li>
+<li><p><strong>nodes_in_row</strong> – The number of nodes in each row of the grid.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Returns: A zero-indexed address of the edge in the Fortran Macro structure.</p>
+</dd></dl>
+
 </section>
 <section id="module-lysis">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-lysis" title="Permalink to this heading">¶</a></h2>
