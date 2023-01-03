@@ -24,9 +24,11 @@ Typical usage example:
 
 import errno
 import json
+import logging
 import os
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, AnyStr, Mapping
+from typing import Any, AnyStr, Mapping, Tuple
 
 import numpy as np
 
@@ -122,7 +124,10 @@ class Experiment(object):
                 For example,
                     >>> {'binding_rate': 10, 'pore_size': 3,}
         """
-        self.macro_params = MacroParameters(params)
+        if params is not None:
+            self.macro_params = MacroParameters(**params)
+        else:
+            self.macro_params = MacroParameters()
 
     def to_dict(self) -> dict:
         """Returns the internally stored data as a dictionary.
@@ -136,10 +141,10 @@ class Experiment(object):
                   }
         # Convert the Macroscale parameters to a dictionary
         if self.macro_params is not None:
-            output["macro_params"] = self.macro_params.to_dict()
+            output["macro_params"] = asdict(self.macro_params)
         # Convert the Microscale parameters to a dictionary
         # if self.micro_params is not None:
-        #     output["micro_params"] = self.micro_params.to_dict()
+        #     output["micro_params"] = asdict(self.macro_params)
         return output
     
     def to_file(self) -> None:
@@ -153,6 +158,7 @@ class Experiment(object):
             # Convert the internal parameters to a dictionary and then use the JSON module to save to disk.
             json.dump(self.to_dict(), file)
 
+    # TODO(bpaynter): This is broken since the conversion to DataClass and needs to be fixed.
     def read_file(self) -> None:
         """Load the experiment parameters from disk.
 
@@ -170,10 +176,11 @@ class Experiment(object):
             # and create a new MacroParameters object using its values
             macro_params = params.pop('macro_params', None)
             if macro_params is not None:
-                self.macro_params = MacroParameters(macro_params)
+                self.macro_params = MacroParameters(**macro_params)
             else:
                 self.macro_params = None
 
+    # TODO(bpaynter): Redo with a DataClass
     def read_macro_input_data(self) -> None:
         """Reads matrices used by the macroscale model from disk.
 
@@ -195,7 +202,7 @@ class Experiment(object):
         if self.macro_params is None:
             raise RuntimeError('Macro Parameters not initialized.')
         # Get the requested matrices from the parameters
-        for array, filename in self.macro_params['data_files'].items():
+        for array, filename in self.macro_params.data_files.items():
             # Check if the requested filename exists
             if not os.path.isfile(os.path.join(self.os_path, filename)):
                 raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), os.path.join(self.os_path, filename))
@@ -265,244 +272,269 @@ class MicroParameters(dict):
     pass
 
 
-class MacroParameters(dict):
+@dataclass(frozen=True)
+class MacroParameters:
     """Contains parameters for the Macroscale model.
 
-    Parameters can be accessed in dictionary fashion.
+    Parameters can be accessed as attributes.
     Independent parameters should only be set at initialization.
     Dependent parameters should never be set manually, but are automatically calculated by internal code.
 
     Should only be used inside an Experiment object.
 
 
-    Args:
-        params: A dictionary of parameters that will be used to override the default values.
-
     Example:
         >>> # Initialize using the default values
         >>> macro_params_default = MacroParameters()
         >>> # Get parameter value
-        >>> macro_params_default['pore_size']
+        >>> macro_params_default.pore_size
         1.0135e-4
-        >>> # Set parameter value
-        >>> macro_params_default['binding_rate'] = 1.2e-2
         >>> # Initialize overriding some default values
         >>> p = {'binding_rate': 10, 'pore_size': 3}
-        >>> macro_params_override = MacroParameters(p)
+        >>> macro_params_override = MacroParameters(**p)
     """
+    #####################################
+    # Physical Parameters
+    #####################################
 
-    # A dictionary containing the default independent parameters for the Macroscale model.
-    # These values are used to fill in any parameter not specifically given at construction time.
-    _defaults = {
-        # A string identifying which version of the Macroscale model is being run
-        # This string was included in data filenames stored by the Fortran code.
-        'macro_version':           'diffuse_into_and_along',
-        #####################################
-        # Physical Parameters
-        #####################################
-        # The tPA binding rate. Units of inverse (micromolar*sec)
-        'binding_rate':            1.0e-2,          # Fortran: kon
-        # Pore size (distance between fibers/nodes), measured in centimeters
-        'pore_size':               1.0135e-4,       # Fortran: delx
-        # Diffusion coefficient, measured in cm^2/s
-        'diffusion_coeff':         5.0e-7,          # Fortran: Diff
-        # Concentration of binding sites in micromolar
-        'binding_sites':           4.27e+2,         # Fortran: bs
-        # Distance from the start of one fiber to the next, in microns
-        # because distance between nodes is 1.0135 micron
-        # and diameter of 1 fiber is 0.0727 micron
-        # TODO(bpaynter): This value should derive from pore_size and MicroParameters['fiber_diameter']
-        'grid_node_distance':      1.0862,          # Fortran: dist
+    # TODO(bpaynter): This value should derive from MicroParameters
+    binding_rate: float = 0.1
+    """The tPA binding rate.
+    
+    :Units: (micromolar*sec)^-1
+    :Fortran: kon"""
 
-        #####################################
-        # Model Parameters
-        #####################################
-        # The number of lattice nodes in each (horizontal) row
-        'rows':                    93,              # Fortran: N
-        # The number of lattice nodes in each (vertical) column
-        'cols':                    121,             # Fortran: F
-        # 1st node in vertical direction containing fibers.
-        # So if first_fiber_row = 10, then rows 0-9 have no fibers,
-        # there's one more row of fiber-free planar vertical edges,
-        # and then the row with index 'first_fiber_row' (e.g. 11th)
-        # is a full row of fibers
-        'first_fiber_row':         29 - 1,          # Fortran: Ffree-1
-        # The total number of tPA molecules:
-        #      43074 is Colin's [tPA]=0.6 nM
-        #      86148 is Colin's [tPA]=1.2 nM
-        'total_molecules':         43074,           # Fortran: M
-        # The probability of moving.
-        # Make sure it is small enough that we've converged.
-        'moving_probability':      0.2,             # Fortran: q
+    pore_size: float = 1.0135e-4
+    """Pore size (distance between fibers/nodes)
+    
+    :Units: centimeters
+    :Fortran: delx"""
 
-        #####################################
-        # Experimental Parameters
-        #####################################
-        # The number of independent trials to be run
-        'total_trials':            10,              # Fortran: stats
-        # Total running time for model in seconds
-        'total_time':              10 * 60,         # Fortran: tf
+    diffusion_coeff: float = 5.0e-7
+    """Diffusion coefficient
+    
+    :Units: cm^2/s.
+    :Fortran: Diff"""
 
-        # Seed for the random number generator
-        'seed':                    (-2137354075),   # Fortran: seed
-        # State for the random number generator
-        'state':                   (129281,
-                                    362436069,
-                                    123456789,
-                                    None),          # Fortran: state
+    binding_sites: float = 4.27e+2
+    """Concentration of binding sites.
+     
+    :Units: micromolar
+    :Fortran: bs"""
 
-        # How much debugging information to write out to the console
-        'verbose':                  False,
-        # Whether the Python code should follow the Fortran code step-by-step.
-        # Theoretically, with this set to "True", both sets of code will produce the exact same output.
-        # This will impact performance negatively.
-        'duplicate_fortran':        True,
+    # TODO(bpaynter): This value should derive from MicroParameters
+    forced_unbind: float = 0.0852
+    """Fraction of times tPA was forced to unbind in microscale model.
+    
+    :Units: None
+    :Fortran: frac_forced"""
 
-        #####################################
-        # Data Parameters
-        #####################################
-        # Data file names
-        'data_files': {
-            'unbinding_time': "tsectPA.dat",        # Fortran: tsec1
-            # 'leaving_time': "tPAleave.dat",       # Fortran: CDFtPA
-            'lysis_time':     "lysismat.dat",       # Fortran: lysismat
-            'total_lyses':    "lenlysisvect.dat",   # Fortran: lenlysismat
-        }
-    }
+    # TODO(bpaynter): This value should derive from MicroParameters
+    average_bind_time: float = 27.8
+    """this is the average time a tPA molecule stays bound to fibrin. 
+    For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
+    
+    :Units: seconds
+    :Fortran: avgwait = 1/koff"""
 
-    # A list of all independent parameters for the Macroscale model.
-    # This list is derived from the defaults dictionary above.
-    # It is used to determine which parameters can be set manually.
-    _independent_parameters = _defaults.keys()
+    # TODO(bpaynter): This value should derive from pore_size and MicroParameters['fiber_diameter']
+    grid_node_distance: float = 1.0862
+    """Distance from the start of one fiber to the next 
+    because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron.
+    
+    :Units: microns
+    :Fortran: dist"""
 
-    # A list of the dependent parameters for the Macroscale model.
-    # These parameters should never be set manually, but should be calculated from the independent parameters.
-    # This is done internally by the _calculate_dependent_parameters() method.
-    _dependent_parameters = [
-        # Edges in a full row of nodes
-        'full_row',
-        # Number of all x- and z-edges in a row
-        'xz_row',
-        # The total number of edges in the model
-        'total_edges',                             # Fortran: num
-        # The 1-D index of the last edge without fibrin
-        # This is probably unnecessary when using a 2-D data structure, but is kept for historical reasons.
-        'last_ghost_edge',                         # Fortran: enoFB-1
-        # The length of one timestep, in seconds
-        'time_step',                                # Fortran: tstep
-        # The total number of timesteps
-        'total_time_steps',
-        ]
+    #####################################
+    # Model Parameters
+    #####################################
 
-    def __init__(self, params: Mapping[AnyStr, Any] = None):
-        super(MacroParameters, self).__init__()
-        # Create the params dictionary and populate with the default parameters
-        # self.params = {}
-        self.set_default_parameters()
+    rows: int = 93
+    """The number of lattice nodes in each (horizontal) row
+    
+    :Units: nodes
+    :Fortran: N"""
 
-        # If override parameters were given, store their values appropriately
-        if params is not None:
-            for k, v in params.items():
-                if k in MacroParameters._independent_parameters:
-                    self.__dict__[k] = v
+    cols: int = 121
+    """The number of lattice nodes in each (vertical) column
+    
+    :Units: nodes
+    :Fortran: F"""
 
-        # Calculate the dependent parameters. This must be done last in the constructor.
-        self._calculate_dependent_parameters()
+    full_row: int = field(init=False)
+    """Edges in a full row of nodes
+    
+    :Units: edges
+    :Fortran: None"""
 
-    def __getitem__(self, item: AnyStr) -> Any:
-        """Dictionary-like access to the stored parameters.
+    xz_row: int = field(init=False)
+    """Number of all x- and z-edges in a row
+    
+    :Units: edges
+    :Fortran: None"""
 
-        This method allows outside access to the internal parameters in dict fashion.
+    total_edges: int = field(init=False)
+    """The total number of edges in the model
+    
+    :Units: edges
+    :Fortran: num"""
 
-        Example::
-            >>> # Initialize using the default values
-            >>> macro_params_default = MacroParameters()
-            >>> macro_params_default['pore_size']
-            1.0135e-4
+    first_fiber_row: int = 29 - 1
+    """1st node in vertical direction containing fibers.
+    So if first_fiber_row = 10, then rows 0-9 have no fibers, there's one more row of fiber-free planar vertical edges,
+    and then the row with index 'first_fiber_row' (e.g. 11th) is a full row of fibers
+    
+    :Units: nodes
+    :Fortran: Ffree-1"""
 
-        Args:
-            item: The name of the parameter being requested
+    last_ghost_edge: int = field(init=False)
+    """The 1-D index of the last edge without fibrin
+    
+    This is probably unnecessary when using a 2-D data structure, but is kept for historical reasons.
+    
+    :Units: edges
+    :Fortran: enoFB-1"""
 
-        Returns: The value of the parameter from the internal dictionary
-        """
-        return self.__dict__[item]
+    total_molecules: int = 43074
+    """The total number of tPA molecules:
+    
+        * 43074 is Colin's [tPA]=0.6 nM
+        * 86148 is Colin's [tPA]=1.2 nM
+        
+    :Units: molecules
+    :Fortran: M"""
 
-    # TODO(bpaynter): This should probably be changed/removed so that values can only be changed
-    #                 by the object constructor.
-    #                 It is unlikely to be desirable that parameters change midway through an experiment
-    #   2023-01-03: Done?
-    def __setitem__(self, key: Any, value: Any) -> None:
-        """Raises an Error. Should not be used!
+    moving_probability: float = 0.2
+    """The probability of moving.
+    
+    Make sure it is small enough that we've converged.
+    
+    :Units: None
+    :Fortran: q"""
 
-        Args:
-            key (str): The name of the parameter being requested.
-            value: The value to be assigned to the parameter in the internal dictionary.
+    #####################################
+    # Experimental Parameters
+    #####################################
 
-        Raises:
-            AttributeError: An attempt is made to modify a dependent parameter.
-            KeyError: An attempt is made to create a new parameter.
-        """
-        raise NotImplementedError('Parameters should not be set after initialization. '
-                                  'If you need a different value, pass it to the constructor.')
+    total_trials: int = 10
+    """The number of independent trials to be run
+    
+    :Units: trials
+    :Fortran: stats"""
 
-    def __str__(self) -> str:
-        """Returns a human-readable, JSON-like string of all parameters."""
-        # Convert the internal parameters into one dictionary
-        values = self.to_dict()
-        # Format the dictionary and return
-        return dict_to_formatted_str(values)
+    total_time: int = 10 * 60
+    """Total running time for model.
+     
+    :Units: seconds
+    :Fortran: tf"""
 
-    def set_default_parameters(self) -> None:
-        """Sets all internal parameters to the defaults."""
-        # Copy the list of default parameters
-        for k, v in MacroParameters._defaults.items():
-            self.__dict__[k] = v
-        # Recalculate dependent parameters
-        self._calculate_dependent_parameters()
+    time_step: float = field(init=False)
+    """The length of one timestep.
+    
+    :Units: seconds
+    :Fortran: tstep"""
 
-    def _calculate_dependent_parameters(self) -> None:
-        """Calculates the values of all dependent parameters."""
+    total_time_steps: int = field(init=False)
+    """The total number of timesteps.
+    
+    :Units: timesteps
+    :Fortran: num_t"""
+
+    seed: int = (-2137354075)
+    """Seed for the random number generator
+    
+    :Units: None
+    :Fortran: seed"""
+
+    state: Tuple[int, int, int, int] = (129281,
+                                        362436069,
+                                        123456789,
+                                        None)
+    """State for the random number generator.
+    
+    :Units: None
+    :Fortran: state"""
+
+    #####################################
+    # Data Parameters
+    #####################################
+
+    data_files: dict[str, str] = None
+    """Data file names"""
+
+    #####################################
+    # Code Parameters
+    #####################################
+
+    macro_version: str = 'diffuse_into_and_along'
+    """A string identifying which version of the Macroscale model is being run.
+    This string was included in data filenames stored by the Fortran code."""
+
+    log_lvl: int = logging.WARNING
+    """How much debugging information to write out to the console
+
+    :Units: None
+    :Fortran: None"""
+
+    duplicate_fortran: bool = True
+    """Whether the Python code should follow the Fortran code step-by-step.
+    Theoretically, with this set to "True", both sets of code will produce the exact same output.
+    This will impact performance negatively.
+
+    :Units: None
+    :Fortran: None"""
+
+    def __post_init__(self):
+        if self.data_files is None:
+            object.__setattr__(self, 'data_files', {
+                                                        'unbinding_time': "tsectPA.dat",        # Fortran: tsec1
+                                                        # 'leaving_time': "tPAleave.dat",       # Fortran: CDFtPA
+                                                        'lysis_time':     "lysismat.dat",       # Fortran: lysismat
+                                                        'total_lyses':    "lenlysisvect.dat",   # Fortran: lenlysismat
+                                                    })
         # A full row of the fiber grid contains a 'right', 'up', and 'out' edge for each node,
         # except the last node which contains no 'right' edge.
-        self.__dict__['full_row'] = 3 * self['cols'] - 1
+        object.__setattr__(self, 'full_row', 3 * self.cols - 1)
 
         # A full row of 'right' and 'out' edges is two per node, except the last node which has no 'right' edge.
-        self.__dict__['xz_row'] = 2 * self['cols'] - 1
+        object.__setattr__(self, 'xz_row', 2 * self.cols - 1)
 
         # The total number of edges in the grid is a full_row for each, except the last row which has no 'up' edges.
-        self.__dict__['total_edges'] = (self['full_row'] * (self['rows'] - 1)
-                                        + self['xz_row'])
+        object.__setattr__(self, 'total_edges', self.full_row * (self.rows - 1) + self.xz_row)
 
         # The 1-D index of the last edge in the fibrin-free region is the total number of edges in the
         # fibrin-free region -1.
         # The total rows in the fibrin-free region is equal to the (0-based) index of the first fiber row
         # The total edges in this region is one full row of edges for each row
-        self.__dict__['last_ghost_edge'] = (self['full_row'] * self['first_fiber_row'] - 1)
+        object.__setattr__(self, 'last_ghost_edge', self.full_row * self.first_fiber_row - 1)
 
         # Equation (2.4) page 25 from Bannish, et. al. 2014
         # https://doi.org/10.1093/imammb/dqs029
-        self.__dict__['time_step'] = (self['moving_probability']
-                                      * self['pore_size'] ** 2
-                                      / (12 * self['diffusion_coeff']))
+        object.__setattr__(self, 'time_step', (self.moving_probability
+                                               * self.pore_size ** 2
+                                               / (12 * self.diffusion_coeff)))
 
         # Total timesteps is total time divided by length of one timestep
-        self.__dict__['total_time_steps'] = self['total_time'] / self['time_step']
+        object.__setattr__(self, 'total_time_steps', self.total_time / self.time_step)
 
         # If no seed was given in the state, set it from the seed
-        if self['state'][3] is None:
-            self.__dict__['state'] = self['state'][:3] + (self['seed'],)
+        if self.state[3] is None:
+            object.__setattr__(self, 'state', self.state[:3] + (self.seed,))
 
-    def to_dict(self) -> Mapping[str, Any]:
-        """Gives a dictionary of internal parameters."""
-        return self.__dict__.copy()
+    def __str__(self) -> str:
+        """Returns a human-readable, JSON-like string of all parameters."""
+        # Convert the internal parameters into one dictionary
+        values = asdict(self)
+        # Format the dictionary and return
+        return dict_to_formatted_str(values)
 
     @staticmethod
     def print_default_values() -> str:
         """Returns the default parameters for the Macroscale model."""
         # Create a new MacroParameters object with the default values
-        macro_params = MacroParameters()
+        default_macro_params = MacroParameters()
         # Convert to a dict, then to a formatted string, and return
-        return dict_to_formatted_str(macro_params.to_dict())
+        return str(default_macro_params)
 
 
 class Data(dict):
