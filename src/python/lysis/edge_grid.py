@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Mapping, Tuple
+from typing import Any, Callable, List, Tuple
 
 import numpy as np
 
@@ -48,6 +48,11 @@ class EdgeGrid(object):
         '             /           /           /           /           /  
 
     """
+    # TODO(bpaynter): Redo so that externally the row numbers represent the numbering in the larger grid
+    #                   while still starting at zero internally.
+    #                   That is, if there are 100 rows total, split into 5 grids (0 through 4),
+    #                   of which I am Grid[3], then externally my rows are 60 through 79.
+    #                   Internally I have storage for 22 rows which represent global rows 59 through 80.
     def __init__(self,
                  rows: int,
                  nodes_in_row: int,
@@ -87,18 +92,22 @@ class EdgeGrid(object):
         row_shift: Callable[[int], int] = lambda i: i-self.empty_rows
         identity: Callable[[int], int] = lambda j: j
         self.fiber_status = self._ShiftedArrayAccess(self._fiber_status, (row_shift, identity))
-
-        self._molecules = [[[] for j in range(self.edges_in_row)] for i in range(self.rows)]
+        """np.ndarray: The status of the fibers in this EdgeGrid. This is essentially the degrade time of the fiber.
+        If degrade time < current time, the fiber is degraded."""
+        self.molecules = None
+        """List[List[List]]: A way to access the molecules with the index fixed."""
+        self._molecules = [[[] for _ in range(self.edges_in_row)] for _ in range(self.rows)]
         if self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.CONTINUING:
-            self._molecules.append([[] for j in range(self.edges_in_row)])
+            self._molecules.append([[] for _ in range(self.edges_in_row)])
         if self.boundary_conditions[CONST.BOUND.BOTTOM] == CONST.BOUND_COND.CONTINUING:
-            self._molecules.append([[] for j in range(self.edges_in_row)])
+            self._molecules.append([[] for _ in range(self.edges_in_row)])
 
             row_shift: Callable[[int], int] = lambda i: i + 1
             identity: Callable[[int], int] = lambda j: j
             self.molecules = self._ShiftedArrayAccess(self._molecules, (row_shift, identity))
         else:
-            self.molecules = self._ShiftedArrayAccess(self._molecules)
+            identity: Callable[[int], int] = lambda j: j
+            self.molecules = self._ShiftedArrayAccess(self._molecules, (identity, identity))
 
     def _is_valid_index(self, i: int, j: int) -> str | None:
         """Checks if (i, j) is a valid index.
@@ -112,7 +121,7 @@ class EdgeGrid(object):
         # Edges are 0 through self.edges_in_row-1
         if j < 0 or j > self.edges_in_row - 1:
             return (f'Index j={j} out of bounds. '
-                             + f'This model only has edges [0..{self.edges_in_row - 1}] in each row.')
+                    f'This model only has edges [0..{self.edges_in_row - 1}] in each row.')
         # Rows are 0 through self.rows-1
         if i < 0 or i > self.rows - 1:
             return f'Index i={i} out of bounds. This model only has rows [0..{self.rows - 1}].'
@@ -273,8 +282,18 @@ class EdgeGrid(object):
             raise IndexError('You should not be removing molecules from the actual rows of this grid. '
                              'Only shadow rows allowed.')
         row = self.molecules[i].copy()
-        self.molecules[i] = [[] for j in range(self.edges_in_row)]
+        self.molecules[i] = [[] for _ in range(self.edges_in_row)]
         return row
+
+    def place_molecule_row(self, i: int, row: List[List[int]]):
+        if 0 < i < self.rows-1:
+            raise IndexError('You should only add a row to the first or last rows of this grid.')
+        for j in range(self.edges_in_row):
+            self.molecules[i, j].append(row[j])
+
+    def move_molecule(self, m: int, start: Tuple[int, int], end: Tuple[int, int]):
+        self.molecules[start].remove(m)
+        self.molecules[end].append(m)
 
 
     class _ShiftedArrayAccess:
@@ -296,7 +315,7 @@ class EdgeGrid(object):
             else:
                 return shift_func(key)
 
-        def __getitem__(self, key: int | slice | Tuple[int | slice]) -> Any:
+        def __getitem__(self, key: int | slice | Tuple[int | slice, ...]) -> Any:
             if isinstance(key, Tuple):
                 shifted_keys = tuple([self._shift_key(k, self.shift[idx]) for idx, k in enumerate(key)])
             else:
@@ -460,6 +479,3 @@ def to_fortran_edge_index(i: int, j: int, rows: int, nodes_in_row: int) -> int:
             raise IndexError(f'No y-edges on the top row (row {rows-1}).')
 
     return index
-
-
-
