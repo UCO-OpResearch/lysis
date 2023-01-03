@@ -23,6 +23,7 @@ Typical usage example:
 """
 
 import errno
+import inspect
 import json
 import logging
 import os
@@ -158,7 +159,6 @@ class Experiment(object):
             # Convert the internal parameters to a dictionary and then use the JSON module to save to disk.
             json.dump(self.to_dict(), file)
 
-    # TODO(bpaynter): This is broken since the conversion to DataClass and needs to be fixed.
     def read_file(self) -> None:
         """Load the experiment parameters from disk.
 
@@ -176,8 +176,20 @@ class Experiment(object):
             # and create a new MacroParameters object using its values
             macro_params = params.pop('macro_params', None)
             if macro_params is not None:
+                # We are checking here to make sure that saved, dependent parameters
+                # don't get passed to the MacroParameters constructor
+
+                # Find the parameters needed to initialize a new MacroParameters object
+                sig = inspect.signature(MacroParameters)
+                # Get the keys we read from the JSON
+                for key in list(macro_params.keys()):
+                    # If that key is not needed, then toss it
+                    if key not in sig.parameters:
+                        macro_params.pop(key)
+                # Now unpack whatever is left in the dict and pass it to the constructor
                 self.macro_params = MacroParameters(**macro_params)
             else:
+                # If there were no parameters in the file, then we leave the object null.
                 self.macro_params = None
 
     # TODO(bpaynter): Redo with a DataClass
@@ -485,6 +497,8 @@ class MacroParameters:
     :Fortran: None"""
 
     def __post_init__(self):
+        """This method calculates the dependent parameters once the MacroParameters object is created.
+        It is automatically called by the DataClass.__init__()"""
         if self.data_files is None:
             object.__setattr__(self, 'data_files', {
                                                         'unbinding_time': "tsectPA.dat",        # Fortran: tsec1
