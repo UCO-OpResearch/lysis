@@ -5,21 +5,21 @@ It contains classes to house these and make them accessible to the rest of the c
 It also handles the storing and reading of parameters and data to/from disk.
 
 Typical usage example:
-    * Create a new experiment
-        >>> exp = Experiment('path/to/data')
-        >>> param = {'override_parameter': 2.54, 'another_new_parameter': 32}
-        >>> exp.initialize_macro_param(param)
-        >>> exp.to_file()
+    >>> # Create a new experiment
+    >>> exp = Experiment('path/to/data')
+    >>> param = {'override_parameter': 2.54, 'another_new_parameter': 32}
+    >>> exp.initialize_macro_param(param)
+    >>> exp.to_file()
+    >>> # Load an existing experiment
+    >>> exp = Experiment('path/to/data', '2022-12-27-1100')
+    >>> exp.read_file()
+    >>> # Access a parameter
+    >>> exp.macro_params['pore_size']
 
-    * Load an existing experiment
-        >>> exp = Experiment('path/to/data', '2022-12-27-1100')
-        >>> exp.read_file()
-
-    * Access a parameter
-        >>> exp.macro_param['pore_size']
-
-    * Access data
-        >>> exp.data.lysis_time[i][j]
+    >>> # Read data from disk
+    >>> exp.read_macro_input_data()
+    >>> # Access data
+    >>> exp.data.lysis_time[4][18]          # type: ignore
 """
 
 import errno
@@ -56,20 +56,24 @@ class Experiment(object):
     * Saving parameters to disk
     * Reading input data from disk
     * Writing result data to disk
+
+    Args:
+        data_root: The path of the folder containing datasets
+        experiment_code: The code number of the experiment.
+            This will be the name of the folder containing the data specific to this experiment.
+            This should be a date and time in 'YYYY-MM-DD-hhmm' format
+            If no code is given, one will be generated from the current date and time.
+
+    Attributes:
+        experiment_code (str): The code number of the experiment.
+        os_path (str): The path to the folder containing this experiment's data
+        micro_params (dict): A dictionary of
+
+
+    Raises:
+        RuntimeError: An invalid data folder was given.
     """
     def __init__(self, data_root: AnyStr, experiment_code: str = None):
-        """Creates an Experiment object with the location of its settings and data
-
-        Args:
-            data_root: The path of the folder containing datasets
-            experiment_code: The code number of the experiment.
-                This will be the name of the folder containing the data specific to this experiment.
-                This should be a date and time in 'YYYY-MM-DD-hhmm' format
-                If no code is given, one will be generated from the current date and time.
-
-        Raises:
-            RuntimeError: An invalid data folder was given.
-        """
         # Check if the data folder path is valid
         if not os.path.isdir(data_root):
             raise RuntimeError('Data folder not found.')
@@ -94,7 +98,7 @@ class Experiment(object):
         self.os_param_file = os.path.join(self.os_path, 'params.json')
 
         # Initialize the internal storage as empty
-        self.micro_params = None
+        self.micro_params: Mapping[str, Any] | None = None
         self.macro_params = None
         self.data = Data()
 
@@ -134,8 +138,8 @@ class Experiment(object):
         if self.macro_params is not None:
             output["macro_params"] = self.macro_params.to_dict()
         # Convert the Microscale parameters to a dictionary
-        if self.micro_params is not None:
-            output["micro_params"] = self.micro_params.to_dict()
+        # if self.micro_params is not None:
+        #     output["micro_params"] = self.micro_params.to_dict()
         return output
     
     def to_file(self) -> None:
@@ -219,7 +223,7 @@ class Experiment(object):
         # The total_lyses matrix contains the number of finite values in each row of the lysis_time matrix
         # At the end of finite data, the rest of the row is filled with the value 6000 to indicate null or infinite.
         # Thus, we trim the lysis_time matrix to the length of the longest row of finite data (plus one).
-        self.data.lysis_time = np.delete(self.data.lysis_time, np.s_[self.data.total_lyses.max():], 1)
+        self.data.lysis_time = np.delete(self.data.lysis_time, np.s_[self.data.total_lyses.max():], 1)  # type: ignore
 
     def save_data(self, data: Mapping[AnyStr, np.ndarray], as_text: bool = False) -> None:
         """Save a selection of NumPy matrices to disk.
@@ -237,10 +241,13 @@ class Experiment(object):
         for name, array in data.items():
             if as_text:
                 # Save as a text file with the extension .dat
-                np.savetxt(os.path.join(self.os_path, name + '.dat'), array, newline=os.linesep)
+                np.savetxt(os.path.join(self.os_path, name + '.dat'),
+                           array,   # type: ignore  # Not really sure. Issue with the Typing in NumPy?
+                           newline=os.linesep)
             else:
                 # Save as a NumPy file with the extension .npy
                 np.save(os.path.join(self.os_path, name))
+
 
 # TODO(bpaynter): Needs to be implemented. This implementation should include:
 #                   * Standard Microscale parameters
@@ -248,7 +255,7 @@ class Experiment(object):
 #                   * The modification of the Microscale Fortran code to read/write JSON parameters
 #                   * The modification of the MacroParameters class to derive the appropriate parameters
 #                       from the MicroParameters class
-class MicroParameters(object):
+class MicroParameters(dict):
     """This will contain the parameters for the Microscale model.
     This will need to be implemented and the Fortran microscale code modified to work with it.
 
@@ -258,15 +265,30 @@ class MicroParameters(object):
     pass
 
 
-class MacroParameters(object):
+class MacroParameters(dict):
     """Contains parameters for the Macroscale model.
+
+    Parameters can be accessed in dictionary fashion.
+    Independent parameters should only be set at initialization.
+    Dependent parameters should never be set manually, but are automatically calculated by internal code.
 
     Should only be used inside an Experiment object.
 
-    Parameters can be accessed in dictionary fashion.
 
-    i.e.,
-        >>> macro_param['binding_rate']
+    Args:
+        params: A dictionary of parameters that will be used to override the default values.
+
+    Example:
+        >>> # Initialize using the default values
+        >>> macro_params_default = MacroParameters()
+        >>> # Get parameter value
+        >>> macro_params_default['pore_size']
+        1.0135e-4
+        >>> # Set parameter value
+        >>> macro_params_default['binding_rate'] = 1.2e-2
+        >>> # Initialize overriding some default values
+        >>> p = {'binding_rate': 10, 'pore_size': 3}
+        >>> macro_params_override = MacroParameters(p)
     """
 
     # A dictionary containing the default independent parameters for the Macroscale model.
@@ -328,6 +350,14 @@ class MacroParameters(object):
                                     362436069,
                                     123456789,
                                     None),          # Fortran: state
+
+        # How much debugging information to write out to the console
+        'verbose':                  False,
+        # Whether the Python code should follow the Fortran code step-by-step.
+        # Theoretically, with this set to "True", both sets of code will produce the exact same output.
+        # This will impact performance negatively.
+        'duplicate_fortran':        True,
+
         #####################################
         # Data Parameters
         #####################################
@@ -365,25 +395,16 @@ class MacroParameters(object):
         ]
 
     def __init__(self, params: Mapping[AnyStr, Any] = None):
-        """Constructs a set of parameters for the Macroscale model.
-
-        If parameters are passed via the params argument, these will be used to override the default values.
-
-        Args:
-            params: A dictionary of parameters that should be different from the default values
-
-                For example:
-                    >>> {'binding_rate': 10, 'pore_size': 3}
-        """
+        super(MacroParameters, self).__init__()
         # Create the params dictionary and populate with the default parameters
-        self.params = {}
+        # self.params = {}
         self.set_default_parameters()
 
         # If override parameters were given, store their values appropriately
         if params is not None:
             for k, v in params.items():
-                if k in self._independent_parameters:
-                    self[k] = v
+                if k in MacroParameters._independent_parameters:
+                    self.__dict__[k] = v
 
         # Calculate the dependent parameters. This must be done last in the constructor.
         self._calculate_dependent_parameters()
@@ -392,51 +413,37 @@ class MacroParameters(object):
         """Dictionary-like access to the stored parameters.
 
         This method allows outside access to the internal parameters in dict fashion.
-        e.g., instead of accessing a parameter as
-        >>> macro_params.params['pore_size']
-        it can be accessed as
-        >>> macro_params['pore_size']
+
+        Example::
+            >>> # Initialize using the default values
+            >>> macro_params_default = MacroParameters()
+            >>> macro_params_default['pore_size']
+            1.0135e-4
 
         Args:
             item: The name of the parameter being requested
 
         Returns: The value of the parameter from the internal dictionary
-
         """
-        return self.params[item]
+        return self.__dict__[item]
 
     # TODO(bpaynter): This should probably be changed/removed so that values can only be changed
     #                 by the object constructor.
     #                 It is unlikely to be desirable that parameters change midway through an experiment
+    #   2023-01-03: Done?
     def __setitem__(self, key: Any, value: Any) -> None:
-        """Dictionary-like setting of the internally stored parameters.
-
-        This method allows outside access to the internal parameters in dict fashion.
-        e.g., instead of accessing a parameter as
-        >>> macro_params.params['pore_size'] = 10
-        it can be accessed as
-        >>> macro_params['pore_size'] = 10
+        """Raises an Error. Should not be used!
 
         Args:
-            key: The name of the parameter being requested.
+            key (str): The name of the parameter being requested.
             value: The value to be assigned to the parameter in the internal dictionary.
 
         Raises:
             AttributeError: An attempt is made to modify a dependent parameter.
             KeyError: An attempt is made to create a new parameter.
         """
-        # Determine if the requested key is independent
-        if key in self._independent_parameters:
-            # Assign the value
-            self.params[key] = value
-            # Recalculate any dependent parameters
-            self._calculate_dependent_parameters()
-        # Determine if the requested key is dependent
-        elif key in self._dependent_parameters:
-            raise AttributeError('Cannot set the value of a dependent parameter directly.')
-        # Else the requested key does not exist
-        else:
-            raise KeyError('Parameter not found.')
+        raise NotImplementedError('Parameters should not be set after initialization. '
+                                  'If you need a different value, pass it to the constructor.')
 
     def __str__(self) -> str:
         """Returns a human-readable, JSON-like string of all parameters."""
@@ -448,7 +455,8 @@ class MacroParameters(object):
     def set_default_parameters(self) -> None:
         """Sets all internal parameters to the defaults."""
         # Copy the list of default parameters
-        self.params = self._defaults.copy()
+        for k, v in MacroParameters._defaults.items():
+            self.__dict__[k] = v
         # Recalculate dependent parameters
         self._calculate_dependent_parameters()
 
@@ -456,37 +464,37 @@ class MacroParameters(object):
         """Calculates the values of all dependent parameters."""
         # A full row of the fiber grid contains a 'right', 'up', and 'out' edge for each node,
         # except the last node which contains no 'right' edge.
-        self.params['full_row'] = 3 * self['cols'] - 1
+        self.__dict__['full_row'] = 3 * self['cols'] - 1
 
         # A full row of 'right' and 'out' edges is two per node, except the last node which has no 'right' edge.
-        self.params['xz_row'] = 2 * self['cols'] - 1
+        self.__dict__['xz_row'] = 2 * self['cols'] - 1
 
         # The total number of edges in the grid is a full_row for each, except the last row which has no 'up' edges.
-        self.params['total_edges'] = (self['full_row'] * (self['rows'] - 1)
-                                      + self['xz_row'])
+        self.__dict__['total_edges'] = (self['full_row'] * (self['rows'] - 1)
+                                        + self['xz_row'])
 
         # The 1-D index of the last edge in the fibrin-free region is the total number of edges in the
         # fibrin-free region -1.
         # The total rows in the fibrin-free region is equal to the (0-based) index of the first fiber row
         # The total edges in this region is one full row of edges for each row
-        self.params['last_ghost_edge'] = (self['full_row'] * self['first_fiber_row'] - 1)
+        self.__dict__['last_ghost_edge'] = (self['full_row'] * self['first_fiber_row'] - 1)
 
         # Equation (2.4) page 25 from Bannish, et. al. 2014
         # https://doi.org/10.1093/imammb/dqs029
-        self.params['time_step'] = (self['moving_probability']
-                                    * self['pore_size'] ** 2
-                                    / (12 * self['diffusion_coeff']))
+        self.__dict__['time_step'] = (self['moving_probability']
+                                      * self['pore_size'] ** 2
+                                      / (12 * self['diffusion_coeff']))
 
         # Total timesteps is total time divided by length of one timestep
-        self.params['total_time_steps'] = self['total_time'] / self['time_step']
+        self.__dict__['total_time_steps'] = self['total_time'] / self['time_step']
 
         # If no seed was given in the state, set it from the seed
         if self['state'][3] is None:
-            self.params['state'] = self['state'][:3] + (self['seed'],)
+            self.__dict__['state'] = self['state'][:3] + (self['seed'],)
 
     def to_dict(self) -> Mapping[str, Any]:
         """Gives a dictionary of internal parameters."""
-        return self.params
+        return self.__dict__.copy()
 
     @staticmethod
     def print_default_values() -> str:
@@ -503,7 +511,7 @@ class Data(dict):
     e.g.,
         >>> my_data = Data()
         >>> my_data['test'] = 'hat'
-        >>> my_data.test
+        >>> my_data.test                        # type: ignore # Python allows this, but is a little confused
         'hat'
     """
     def __init__(self):
@@ -521,14 +529,14 @@ def dict_to_formatted_str(d: Mapping[AnyStr, Any]) -> str:
     Align keys and values, including the alignment of sub-dicts.
 
     e.g.,
-        >>> d = {'Hat': 'Large', 'Pants': {'Waist': 40, 'Inseam': 38}}
-        >>> dict_to_formatted_str(d)
+        >>> measurements = {'Hat': 'Large', 'Pants': {'Waist': 40, 'Inseam': 38}}
+        >>> dict_to_formatted_str(measurements)
         Hat   : Large
         Pants : Waist  : 40
                 Inseam : 38
 
     Args:
-        d: A dictionary with string-like keys.
+        d (dict): A dictionary with string-like keys.
     """
     # Initialize the output string
     output = ''

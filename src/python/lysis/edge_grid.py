@@ -2,7 +2,7 @@ from typing import Any, Callable, List, Tuple
 
 import numpy as np
 
-from .util import Const, BoundaryCondition
+from .util import Const, BoundaryCondition, Experiment
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -48,69 +48,107 @@ class EdgeGrid(object):
         '             /           /           /           /           /  
 
     """
-    # TODO(bpaynter): Redo so that externally the row numbers represent the numbering in the larger grid
-    #                   while still starting at zero internally.
-    #                   That is, if there are 100 rows total, split into 5 grids (0 through 4),
-    #                   of which I am Grid[3], then externally my rows are 60 through 79.
-    #                   Internally I have storage for 22 rows which represent global rows 59 through 80.
     def __init__(self,
-                 rows: int,
-                 nodes_in_row: int,
-                 empty_rows: int,
-                 boundary_conditions: Tuple[BoundaryCondition,
-                                            BoundaryCondition],
-                 initial_fiber_status: float,
+                 exp: Experiment,
+                 thisgrid_rows: int | None = None,
+                 thisgrid_starting_row: int = 0,
+                 boundary_conditions: Tuple[BoundaryCondition, BoundaryCondition] | None = None,
+                 initial_fiber_status: float = float('inf'),
                  ):
         """Initializes an EdgeGrid.
 
         Args:
-            rows: The number of rows in this EdgeGrid
+            exp: The experiment that this EdgeGrid is a part of.
+                This structure passes many of the parameters used to set up the experiment.
+            thisgrid_rows: The number of rows in this EdgeGrid
                 **NOTE**: This does not count duplicated edges used with CONTINUING boundary conditions.
                 That is, if this EdgeGrid is in the middle of a larger grid,
                 there will actually be two more rows in this grid,
-                "Row -1", which will represent the top row ("Row rows-1") of the grid below, and
-                "Row rows", which will represent the bottom row ("Row 0") of the grid above.
-            nodes_in_row: The number of nodes (not edges) in each row of this EdgeGrid.
-            empty_rows: The number of empty (fibrin-free) rows in this EdgeGrid.
-                These will always be the bottom rows of the grid (i.e., "Row 0" through "Row empty_rows-1").
-                If "Row -1" exists, it is NOT counted in this number. This row is always treated as empty because,
-                even if it does have fibrin, those fibers exist in a different EdgeGrid.
+                "Row thisgrid_starting_row-1", which will represent the top row of the grid below, and
+                "Row thisgrid_starting_row + thisgrid_rows", which will represent the bottom row of the grid above.
+            thisgrid_starting_row: The first row in this EdgeGrid (in the larger grid numbering system.
             boundary_conditions: A tuple that maps boundaries from CONST.BOUND to conditions from CONST.BOUND_COND.
             initial_fiber_status: The initial value of the fiber status.
                 This should generally be an infinite degrade time (degrade time > experiment length).
         """
-        self.rows = rows
-        self.nodes_in_row = nodes_in_row
-        self.empty_rows = empty_rows
-        self.boundary_conditions = boundary_conditions
+        # TODO(bpaynter): Redo so that externally the row numbers represent the numbering in the larger grid
+        #                   while still starting at zero internally.
+        #                   That is, if there are 100 rows total, split into 5 grids (0 through 4),
+        #                   of which I am Grid[3], then externally my rows are 60 through 79.
+        #                   Internally I have storage for 22 rows which represent global rows 59 through 80.
+        #   2023-01-03:  Was busy with this but need to finish!
+
+        self.total_rows = exp.macro_params['rows']
+        """int: The total number of rows in the entire grid (of which this EdgeGrid is either a part or the whole)."""
+        self.nodes_in_row = exp.macro_params['cols']
+        """int: The number of nodes (not edges) in each row of this EdgeGrid."""
+        self.total_empty_rows = exp.macro_params['first_fiber_row']
+        """int: The number of empty (fibrin-free) rows in the entire grid.
+                There are only empty rows in this EdgeGrid if total_empty_rows > thisgrid_starting_row.
+                These will always be the bottom rows of the grid (i.e., "Row 0" through "Row empty_rows-1")"""
+        self.thisgrid_rows = thisgrid_rows if thisgrid_rows is not None else self.total_rows
+        self.thisgrid_starting_row = thisgrid_starting_row
+        self.thisgrid_empty_rows = max(self.total_empty_rows - self.thisgrid_starting_row, 0)
+        """int: Number of empty rows in this EdgeGrid. If they exist they are 
+                "Row thisgrid_starting_row" through "Row max(thisgrid_starting_row, total_empty_rows)-1"
+                If a top and/or bottom "shadow" row exists, it is NOT counted in this number. 
+                This row is always treated as empty because, even if it does have fibrin, 
+                those fibers exist in a different EdgeGrid."""
+        # Sanity check
+        if self.thisgrid_starting_row + self.thisgrid_rows > self.total_rows:
+            raise AttributeError('This EdgeGrid overruns the top of the total grid.')
+        # Set the appropriate boundary conditions
+        if boundary_conditions is not None:
+            self.boundary_conditions = boundary_conditions
+        elif self.thisgrid_rows == self.total_rows:                                 # We are the entire grid
+            self.boundary_conditions = (CONST.BOUND_COND.REFLECTING, CONST.BOUND_COND.REFLECTING)
+        elif self.thisgrid_starting_row == 0:                                       # We are the bottom EdgeGrid
+            self.boundary_conditions = (CONST.BOUND_COND.CONTINUING, CONST.BOUND_COND.REFLECTING)
+        elif self.thisgrid_rows + self.thisgrid_starting_row == self.total_rows:    # We are the top EdgeGrid
+            self.boundary_conditions = (CONST.BOUND_COND.REFLECTING, CONST.BOUND_COND.CONTINUING)
+        else:                                                                       # We are a middle EdgeGrid
+            self.boundary_conditions = (CONST.BOUND_COND.CONTINUING, CONST.BOUND_COND.CONTINUING)
 
         self.edges_in_row = 3*self.nodes_in_row - 1
-        self.fiber_rows = self.rows - self.empty_rows
+        self.fiber_rows = self.thisgrid_rows - self.thisgrid_empty_rows
         self._fiber_status = initial_fiber_status * np.ones((self.fiber_rows, self.edges_in_row),
                                                             dtype=np.double)
 
-        row_shift: Callable[[int], int] = lambda i: i-self.empty_rows
+        row_shift: Callable[[int], int] = lambda i: i - self.thisgrid_starting_row - self.thisgrid_empty_rows
         identity: Callable[[int], int] = lambda j: j
         self.fiber_status = self._ShiftedArrayAccess(self._fiber_status, (row_shift, identity))
         """np.ndarray: The status of the fibers in this EdgeGrid. This is essentially the degrade time of the fiber.
-        If degrade time < current time, the fiber is degraded."""
+            If degrade time < current time, the fiber is degraded.
+            e.g., self.fiber_status[60, 25] is the status of the fiber located along edge [60, 25].
+            
+            Supports two-dimensional slicing.
+            
+            Note that the location should be given in reference to the entire grid, not just this EdgeGrid."""
+
         self.molecules = None
-        """List[List[List]]: A way to access the molecules with the index fixed."""
-        self._molecules = [[[] for _ in range(self.edges_in_row)] for _ in range(self.rows)]
+        """List[List[List]]: A structure containing the indices of the molecules currently
+            located at each edge of this EdgeGrid. 
+            e.g., self.molecules[60, 25] is a list of molecules currently located at edge [60, 25].
+             
+            Supports slicing in one dimension only.
+             
+            Note that the location should be given in reference to the entire grid, not just this EdgeGrid."""
+        self._molecules = [[[] for _ in range(self.edges_in_row)] for _ in range(self.thisgrid_rows)]
         if self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.CONTINUING:
             self._molecules.append([[] for _ in range(self.edges_in_row)])
         if self.boundary_conditions[CONST.BOUND.BOTTOM] == CONST.BOUND_COND.CONTINUING:
             self._molecules.append([[] for _ in range(self.edges_in_row)])
 
-            row_shift: Callable[[int], int] = lambda i: i + 1
+            row_shift: Callable[[int], int] = lambda i: i - self.thisgrid_starting_row + 1
             identity: Callable[[int], int] = lambda j: j
             self.molecules = self._ShiftedArrayAccess(self._molecules, (row_shift, identity))
         else:
+            row_shift: Callable[[int], int] = lambda i: i - self.thisgrid_starting_row
             identity: Callable[[int], int] = lambda j: j
-            self.molecules = self._ShiftedArrayAccess(self._molecules, (identity, identity))
+            self.molecules = self._ShiftedArrayAccess(self._molecules, (row_shift, identity))
 
     def _is_valid_index(self, i: int, j: int) -> str | None:
-        """Checks if (i, j) is a valid index.
+        """Checks if [i, j] is a valid index for this EdgeGrid.
 
         Args:
             i: The index of the edge's row.

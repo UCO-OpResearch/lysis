@@ -12,10 +12,10 @@ Subpackages
 Submodules
 ----------
 
-lysis.macroscale module
+lysis.edge_grid module
 -----------------------
 
-.. automodule:: lysis.macroscale
+.. automodule:: lysis.edge_grid
    :members:
    :undoc-members:
    :show-inheritance:
