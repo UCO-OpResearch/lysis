@@ -20,6 +20,8 @@ import os
 from random import Random
 from typing import Tuple
 
+import numpy as np
+
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
@@ -30,7 +32,7 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 
-class KissRandomGenerator(Random):
+class KissRandomGenerator:
     """A Pseudo-random Number Generator.
 
     Wrapper class for kiss.so C module
@@ -43,7 +45,6 @@ class KissRandomGenerator(Random):
         Args:
             seed: The seed for the RNG
         """
-        super(KissRandomGenerator, self).__init__()
         # Determine the current path and find the kiss.so library
         path = os.path.dirname(__file__)
         lib_path = os.path.join(path, '..', '..', '..', '..', 'lib')
@@ -56,9 +57,9 @@ class KissRandomGenerator(Random):
         self.state_type = ctypes.c_uint * 4
 
         # Import the U(0,1) generator function
-        self.random = my_kiss.urcw1_
+        self.urcw1 = my_kiss.urcw1_
         # It returns a double-precision (64-bit) float (equivalent to Python float)
-        self.random.restype = ctypes.c_double
+        self.urcw1.restype = ctypes.c_double
 
         # Import the random seed function
         self.mscw = my_kiss.mscw_
@@ -131,11 +132,13 @@ class KissRandomGenerator(Random):
         # Unpack the C array and convert to a tuple
         return c_state[0], c_state[1], c_state[2], c_state[3]
 
-    def random(self) -> float:
+    def random(self, size=None, dtype=np.float64, out=None) -> float | np.ndarray:
         """Returns the next double-precision random number from the pseudo-random number stream. This is distributed
         uniformly from zero through one."""
         # This method will be overwritten by the one from the C library when the class is initialized.
-        pass
+        if out is not None:
+            for i in out.shape[0]:
+                out[i] = self.random(size=size, dtype=dtype, out=out[i])
 
     def mscw(self) -> int:
         """Returns a pseudo-random 32-bit unsigned integer (i.e., [0..(2^32)-1]).

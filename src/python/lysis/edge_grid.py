@@ -78,11 +78,11 @@ class EdgeGrid(object):
         #                   Internally I have storage for 22 rows which represent global rows 59 through 80.
         #   2023-01-03:  Was busy with this but need to finish!
 
-        self.total_rows = exp.macro_params['rows']
+        self.total_rows = exp.macro_params.rows
         """int: The total number of rows in the entire grid (of which this EdgeGrid is either a part or the whole)."""
-        self.nodes_in_row = exp.macro_params['cols']
+        self.nodes_in_row = exp.macro_params.cols
         """int: The number of nodes (not edges) in each row of this EdgeGrid."""
-        self.total_empty_rows = exp.macro_params['first_fiber_row']
+        self.total_empty_rows = exp.macro_params.empty_rows
         """int: The number of empty (fibrin-free) rows in the entire grid.
                 There are only empty rows in this EdgeGrid if total_empty_rows > thisgrid_starting_row.
                 These will always be the bottom rows of the grid (i.e., "Row 0" through "Row empty_rows-1")"""
@@ -161,18 +161,18 @@ class EdgeGrid(object):
             return (f'Index j={j} out of bounds. '
                     f'This model only has edges [0..{self.edges_in_row - 1}] in each row.')
         # Rows are 0 through self.rows-1
-        if i < 0 or i > self.rows - 1:
-            return f'Index i={i} out of bounds. This model only has rows [0..{self.rows - 1}].'
+        if i < 0 or i > self.thisgrid_rows - 1:
+            return f'Index i={i} out of bounds. This model only has rows [0..{self.thisgrid_rows - 1}].'
         # If this EdgeGrid is at the top of a larger sliced grid, or is the whole grid itself,
         # then the top row has no y-edges in it.
         if (
-                i == self.rows - 1
+                i == self.thisgrid_rows - 1
                 and
                 self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.REFLECTING
                 and
                 j % 3 == 0
            ):
-            return f'y-edges do not exist on the top row of this grid (row {self.rows - 1}). Location ({i}, {j})'
+            return f'y-edges do not exist on the top row of this grid (row {self.thisgrid_rows - 1}). Location ({i}, {j})'
         # Everything seems fine, so return None
         return None
 
@@ -293,7 +293,7 @@ class EdgeGrid(object):
         # If this row is the top of one slice (CONTINUING) then this row represents the bottom row of the next slice
         # and should not be processed here
         elif (
-                i == self.rows-1                # We are at the top of the grid
+                i == self.thisgrid_rows-1                # We are at the top of the grid
                 and
                 j % 3 > 0                       # and it is a z- or x-edge
              ):
@@ -316,7 +316,7 @@ class EdgeGrid(object):
         return neighbor_i, neighbor_j
 
     def pop_molecule_row(self, i: int) -> List[List[int]]:
-        if -1 < i < self.rows:
+        if -1 < i < self.thisgrid_rows:
             raise IndexError('You should not be removing molecules from the actual rows of this grid. '
                              'Only shadow rows allowed.')
         row = self.molecules[i].copy()
@@ -324,7 +324,7 @@ class EdgeGrid(object):
         return row
 
     def place_molecule_row(self, i: int, row: List[List[int]]):
-        if 0 < i < self.rows-1:
+        if 0 < i < self.thisgrid_rows-1:
             raise IndexError('You should only add a row to the first or last rows of this grid.')
         for j in range(self.edges_in_row):
             self.molecules[i, j].append(row[j])
