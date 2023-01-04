@@ -9,6 +9,13 @@ __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
+default_filenames = {
+                        'unbinding_time': "tsectPA.dat",        # Fortran: tsec1
+                        # 'leaving_time': "tPAleave.dat",       # Fortran: CDFtPA
+                        'lysis_time':     "lysismat.dat",       # Fortran: lysismat
+                        'total_lyses':    "lenlysisvect.dat",   # Fortran: lenlysismat
+                     }
+
 
 class Const:
     def __init__(self):

@@ -15,23 +15,23 @@ Typical usage example:
     >>> exp.read_file()
     >>> # Access a parameter
     >>> exp.macro_params['pore_size']
-
-    >>> # Read data from disk
-    >>> exp.read_macro_input_data()
     >>> # Access data
-    >>> exp.data.lysis_time[4][18]          # type: ignore
+    >>> exp.data.lysis_time[4][18]
 """
 
-import errno
 import inspect
 import json
 import logging
 import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, AnyStr, Mapping, Tuple
+from typing import Any, List, Mapping, Tuple, Union
 
 import numpy as np
+
+from .constants import default_filenames
+from .datastore import DataStore, Status
+from .util import dict_to_formatted_str
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -70,13 +70,15 @@ class Experiment(object):
     Attributes:
         experiment_code (str): The code number of the experiment.
         os_path (str): The path to the folder containing this experiment's data
-        micro_params (dict): A dictionary of
+        macro_params (DataClass): A dictionary of
 
 
     Raises:
         RuntimeError: An invalid data folder was given.
     """
-    def __init__(self, data_root: AnyStr, experiment_code: str = None):
+    def __init__(self,
+                 data_root: Union[str, bytes, os.PathLike],
+                 experiment_code: str = None):
         # Check if the data folder path is valid
         if not os.path.isdir(data_root):
             raise RuntimeError('Data folder not found.')
@@ -103,7 +105,7 @@ class Experiment(object):
         # Initialize the internal storage as empty
         self.micro_params: Mapping[str, Any] | None = None
         self.macro_params = None
-        self.data = Data()
+        self.data = DataStore(self.os_path, default_filenames)
 
     def __str__(self) -> str:
         """Gives a human-readable, formatted string of the current experimental parameters."""
@@ -130,6 +132,10 @@ class Experiment(object):
         else:
             self.macro_params = MacroParameters()
 
+        for data in self.macro_params.data_required:
+            if Status.INITIALIZED not in self.data.status(data):
+                raise RuntimeError(f"'{data}' not initialized in DataStore.")
+
     def to_dict(self) -> dict:
         """Returns the internally stored data as a dictionary.
 
@@ -137,9 +143,13 @@ class Experiment(object):
         """
         # Initialize a dictionary of the appropriate parameters
         output = {'experiment_code': self.experiment_code,
+                  'data_filenames': None,
                   'micro_params': None,
                   'macro_params': None
                   }
+        # Get the data filenames from the DataStore
+        if self.data is not None:
+            output['data_filenames'] = self.data.to_dict()
         # Convert the Macroscale parameters to a dictionary
         if self.macro_params is not None:
             output["macro_params"] = asdict(self.macro_params)
@@ -172,6 +182,9 @@ class Experiment(object):
         with open(self.os_param_file, 'r') as file:
             # Use the JSON library to read in the parameters as a dictionary
             params = json.load(file)
+            data_filenames = params.pop('data_filenames', None)
+            if data_filenames is not None:
+                self.data = DataStore(self.os_path, data_filenames)
             # Remove the Macroscale parameters from the dictionary (if it exists)
             # and create a new MacroParameters object using its values
             macro_params = params.pop('macro_params', None)
@@ -192,95 +205,21 @@ class Experiment(object):
                 # If there were no parameters in the file, then we leave the object null.
                 self.macro_params = None
 
-    # TODO(bpaynter): Redo with a DataClass
-    def read_macro_input_data(self) -> None:
-        """Reads matrices used by the macroscale model from disk.
 
-        Performs some cleanup on data files if they are in text format:
-
-        * Will convert total_lyses to integer
-        * Will transpose the lysis_time matrix
-        * Will trim the lysis_time matrix to remove excess null (6000) values
-
-        This cleanup should be unnecessary once the whole model (incl microscale) is converted to Python and NumPy.
-
-        Raises:
-            RuntimeError: Macroscale parameters are empty.
-            FileNotFoundError: A matrix data file is not available.
-            NotImplementedError: Support for reading NumPy files needs to be added.
-            AttributeError: A non-supported file type is requested.
-        """
-        # Check if the macroscale parameters are available
-        if self.macro_params is None:
-            raise RuntimeError('Macro Parameters not initialized.')
-        # Get the requested matrices from the parameters
-        for array, filename in self.macro_params.data_files.items():
-            # Check if the requested filename exists
-            if not os.path.isfile(os.path.join(self.os_path, filename)):
-                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), os.path.join(self.os_path, filename))
-            # If the file is stored in text format (with the extension '.dat')
-            # This is the format used by the original Fortran/Matlab code
-            if os.path.splitext(filename)[1] == '.dat':
-                # The total_lyses matrix needs to be converted to integer
-                if array == 'total_lyses':
-                    self.data[array] = np.loadtxt(os.path.join(self.os_path, filename), dtype=int, converters=float)
-                # The lysis_time matrix needs to be transposed
-                elif array == 'lysis_time':
-                    self.data[array] = np.loadtxt(os.path.join(self.os_path, filename)).T
-                # Else just read in the array normally
-                else:
-                    self.data[array] = np.loadtxt(os.path.join(self.os_path, filename))
-            # If the file is stored in NumPy format (with the extension .npy)
-            # This will be the format used by the Python model once complete
-            # TODO(bpaynter): Implement, consistent with the rest of the model
-            elif os.path.splitext(filename)[1] == '.npy':
-                raise NotImplementedError('Support for NumPy files is yet to be implemented.')
-            # Other file types/extensions are not supported (or planned to be) at this time
-            else:
-                raise AttributeError('Non-supported file type.')
-        # The lysis_time matrix is currently stored with a full 500 columns.
-        # The total_lyses matrix contains the number of finite values in each row of the lysis_time matrix
-        # At the end of finite data, the rest of the row is filled with the value 6000 to indicate null or infinite.
-        # Thus, we trim the lysis_time matrix to the length of the longest row of finite data (plus one).
-        self.data.lysis_time = np.delete(self.data.lysis_time, np.s_[self.data.total_lyses.max():], 1)  # type: ignore
-
-    def save_data(self, data: Mapping[AnyStr, np.ndarray], as_text: bool = False) -> None:
-        """Save a selection of NumPy matrices to disk.
-
-        A selection of NumPy arrays is passed in a dictionary (keyed with the name of the matrix/file).
-        Depending on the value of the optional as_text flag, these are stored in separate files
-        as either text (with the extension .dat) or in NumPy format (with the extension .npy).
-
-        Args:
-            data: A mapping of matrix/file names to the NumPy arrays themselves
-            as_text: True if the matrices are to be saved in text format, False if they are to be saved in NumPy format.
-        """
-        # TODO(bpaynter): It needs to be checked whether the text files output by this method can be read by
-        #   the existing Fortran and Matlab code.
-        for name, array in data.items():
-            if as_text:
-                # Save as a text file with the extension .dat
-                np.savetxt(os.path.join(self.os_path, name + '.dat'),
-                           array,   # type: ignore  # Not really sure. Issue with the Typing in NumPy?
-                           newline=os.linesep)
-            else:
-                # Save as a NumPy file with the extension .npy
-                np.save(os.path.join(self.os_path, name))
-
-
-# TODO(bpaynter): Needs to be implemented. This implementation should include:
-#                   * Standard Microscale parameters
-#                   * The inclusion of standard sets of Microscale parameters (i.e., Q2, CaseA-D, etc.)
-#                   * The modification of the Microscale Fortran code to read/write JSON parameters
-#                   * The modification of the MacroParameters class to derive the appropriate parameters
-#                       from the MicroParameters class
-class MicroParameters(dict):
+@dataclass(frozen=True)
+class MicroParameters:
     """This will contain the parameters for the Microscale model.
     This will need to be implemented and the Fortran microscale code modified to work with it.
 
     Once implemented, many Macroscale parameters will need to be redefined so that they derive from the appropriate
     Microscale parameters.
     """
+    # TODO(bpaynter): Needs to be implemented. This implementation should include:
+    #                   * Standard Microscale parameters
+    #                   * The inclusion of standard sets of Microscale parameters (i.e., Q2, CaseA-D, etc.)
+    #                   * The modification of the Microscale Fortran code to read/write JSON parameters
+    #                   * The modification of the MacroParameters class to derive the appropriate parameters
+    #                       from the MicroParameters class
     pass
 
 
@@ -471,8 +410,8 @@ class MacroParameters:
     # Data Parameters
     #####################################
 
-    data_files: dict[str, str] = None
-    """Data file names"""
+    data_required: List[str] = field(init=False)
+    """The data (from the Microscale model) required to run the Macroscale model."""
 
     #####################################
     # Code Parameters
@@ -499,13 +438,13 @@ class MacroParameters:
     def __post_init__(self):
         """This method calculates the dependent parameters once the MacroParameters object is created.
         It is automatically called by the DataClass.__init__()"""
-        if self.data_files is None:
-            object.__setattr__(self, 'data_files', {
-                                                        'unbinding_time': "tsectPA.dat",        # Fortran: tsec1
-                                                        # 'leaving_time': "tPAleave.dat",       # Fortran: CDFtPA
-                                                        'lysis_time':     "lysismat.dat",       # Fortran: lysismat
-                                                        'total_lyses':    "lenlysisvect.dat",   # Fortran: lenlysismat
-                                                    })
+        # These names must be elements of the Experiment's DataStore
+        object.__setattr__(self, 'data_required', [
+                                                    'unbinding_time',           # Fortran: tsec1
+                                                    # 'leaving_time',           # Fortran: CDFtPA
+                                                    'lysis_time',               # Fortran: lysismat
+                                                    'total_lyses',              # Fortran: lenlysismat
+                                                   ])
         # A full row of the fiber grid contains a 'right', 'up', and 'out' edge for each node,
         # except the last node which contains no 'right' edge.
         object.__setattr__(self, 'full_row', 3 * self.cols - 1)
@@ -551,60 +490,4 @@ class MacroParameters:
         return str(default_macro_params)
 
 
-class Data(dict):
-    """Encapsulates a dictionary so that its elements can be accessed as properties.
 
-    e.g.,
-        >>> my_data = Data()
-        >>> my_data['test'] = 'hat'
-        >>> my_data.test                        # type: ignore # Python allows this, but is a little confused
-        'hat'
-    """
-    def __init__(self):
-        """Creates a blank Data object."""
-        # Call the super-constructor
-        super(Data, self).__init__()
-        # This is where the wizardry happens.
-        # We define the classes parameters as the dictionary itself
-        self.__dict__ = self
-
-
-def dict_to_formatted_str(d: Mapping[AnyStr, Any]) -> str:
-    """Converts a dictionary into a formatted, JSON-like string.
-
-    Align keys and values, including the alignment of sub-dicts.
-
-    e.g.,
-        >>> measurements = {'Hat': 'Large', 'Pants': {'Waist': 40, 'Inseam': 38}}
-        >>> dict_to_formatted_str(measurements)
-        Hat   : Large
-        Pants : Waist  : 40
-                Inseam : 38
-
-    Args:
-        d (dict): A dictionary with string-like keys.
-    """
-    # Initialize the output string
-    output = ''
-    # Get the system line separator
-    nl = os.linesep
-    # Determine the longest key
-    key_len = 0
-    for k in d.keys():
-        key_len = max(len(k), key_len)
-    # Add a space to the key length for clearance
-    key_len += 1
-    # Determine the tab space for sub-dictionaries
-    tab = ' ' * (key_len + 2)
-    # Iterate over the dictionary
-    for k, v in d.items():
-        # If the value is a dictionary itself...
-        if isinstance(v, dict):
-            # Then we write the key
-            output += f'{k:<{key_len}}: '
-            # Then call this function recursively on the value, and indent it appropriately.
-            output += tab.join(dict_to_formatted_str(v).splitlines(True))
-        # Otherwise we just print the key and its value.
-        else:
-            output += f'{k:<{key_len}}: {v}' + nl
-    return output

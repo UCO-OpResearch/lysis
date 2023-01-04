@@ -12,6 +12,14 @@ lysis.util.constants module
    :undoc-members:
    :show-inheritance:
 
+lysis.util.datastore module
+---------------------------
+
+.. automodule:: lysis.util.datastore
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 lysis.util.kiss module
 ----------------------
 
@@ -24,6 +32,14 @@ lysis.util.parameters module
 ----------------------------
 
 .. automodule:: lysis.util.parameters
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+lysis.util.util module
+---------------------------
+
+.. automodule:: lysis.util.util
    :members:
    :undoc-members:
    :show-inheritance:
