@@ -330,7 +330,7 @@ class MacroParameters:
     :Units: edges
     :Fortran: num"""
 
-    first_fiber_row: int = 29 - 1
+    empty_rows: int = 29 - 1
     """1st node in vertical direction containing fibers.
     So if first_fiber_row = 10, then rows 0-9 have no fibers, there's one more row of fiber-free planar vertical edges,
     and then the row with index 'first_fiber_row' (e.g. 11th) is a full row of fibers
@@ -459,7 +459,7 @@ class MacroParameters:
         # fibrin-free region -1.
         # The total rows in the fibrin-free region is equal to the (0-based) index of the first fiber row
         # The total edges in this region is one full row of edges for each row
-        object.__setattr__(self, 'last_ghost_edge', self.full_row * self.first_fiber_row - 1)
+        object.__setattr__(self, 'last_ghost_edge', self.full_row * self.empty_rows - 1)
 
         # Equation (2.4) page 25 from Bannish, et. al. 2014
         # https://doi.org/10.1093/imammb/dqs029
@@ -468,7 +468,7 @@ class MacroParameters:
                                                / (12 * self.diffusion_coeff)))
 
         # Total timesteps is total time divided by length of one timestep
-        object.__setattr__(self, 'total_time_steps', self.total_time / self.time_step)
+        object.__setattr__(self, 'total_time_steps', int(self.total_time / self.time_step))
 
         # If no seed was given in the state, set it from the seed
         if self.state[3] is None:

@@ -6,6 +6,15 @@ import numpy as np
 
 from .util import dict_to_formatted_str
 
+__author__ = "Brittany Bannish and Bradley Paynter"
+__copyright__ = "Copyright 2022, Brittany Bannish"
+__credits__ = ["Brittany Bannish", "Bradley Paynter"]
+__license__ = ""
+__version__ = "0.1"
+__maintainer__ = "Bradley Paynter"
+__email__ = "bpaynter@uco.edu"
+__status__ = "Development"
+
 # The following are hacks to deal with loading data from Fortran into Python.
 # These must be manually coded for each file
 # TODO(bpaynter): Eliminate these once the whole system is converted to Python.
