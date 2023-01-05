@@ -132,13 +132,19 @@ class KissRandomGenerator:
         # Unpack the C array and convert to a tuple
         return c_state[0], c_state[1], c_state[2], c_state[3]
 
-    def random(self, size=None, dtype=np.float64, out=None) -> float | np.ndarray:
+    def random(self) -> float:
         """Returns the next double-precision random number from the pseudo-random number stream. This is distributed
         uniformly from zero through one."""
-        # This method will be overwritten by the one from the C library when the class is initialized.
-        if out is not None:
-            for i in out.shape[0]:
-                out[i] = self.random(size=size, dtype=dtype, out=out[i])
+        return self.urcw1()
+
+    def integers(self, top: int, size: int = None) -> int | np.ndarray:
+        if size is None:
+            return int(top*self.urcw1())
+        else:
+            out = np.empty((size,), dtype=int)
+            for i in range(size):
+                out[i] = int(top*self.urcw1())
+            return out
 
     def mscw(self) -> int:
         """Returns a pseudo-random 32-bit unsigned integer (i.e., [0..(2^32)-1]).
