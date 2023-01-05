@@ -207,6 +207,9 @@ write(*,*)' obtained using code macro_Q2_diffuse_into_and_along.f90'
 
     call get_kiss32(state)
 
+!! BRAD 2023-01-05: The result of this neighborhood structure is that, when a molecule is on a boundary,
+!!                  it has a higher probability of reflecting than moving paralell to the boundary.
+!!                  Is this a desired result, or just a result of wanting equal-length neighborhoods?
 
 ! neighborc is a num x 8 array
 ! neighborc(i, k) = j where fiber j is the kth neighbor of fiber i
@@ -592,6 +595,9 @@ neighborc=0
 
             if(mod(count,400000)==0) write(*,*)' t=',t
 
+!! BRAD 2023-01-05: So we only restrict a "forcedunbdbydeg" molecule from moving for this one timestep?
+!!                  It must still wait to bind after that, but it's free to move?
+
             forcedunbdbydeg=0 !every timestep reset vector that records which tPA molecules were on degraded fibers to 0
 
             !at the beginning of each time step, check to see if any of the fibers should be degraded at this time.
@@ -886,6 +892,9 @@ neighborc=0
 
                         else         !for if(bind(j).lt.t... statement. if molecule j canNOT bind this timestep, just have it move
 
+!! BRAD 2023-01-05: Shouldn't need both here, right?
+!!                  If forcedunbdbydeg(j)==1 then we must have just set it and t_wait on this timestep
+
                             if(t_wait(j)>t.and.forcedunbdbydeg(j)==1) then   !adjusted 9/15/17 and 5/10/18 to account for waiting time. if molecule has a waiting time>t AND it's a molecule that was forced to unbind by macro level degradation, restrict its diffusion to be away from or along (not into) the clot
                                 temp_neighborc=0 !set temporary neighbor array to 0
                                 countij=0
@@ -900,6 +909,10 @@ neighborc=0
                                 !write(*,*)'countij=',countij
                                 !write(*,*)'V(1,j) before movement=',V(1,j)
 
+!! BRAD 2023-01-05: In this situation, a molecule has a probability of not moving, even if there is an edge available.
+!!                  This is unlike the normal situation where a molecule MUST move.
+!!                  This results in forcedunbdbydeg molecules having a lower probability of moving (q-q/(countij+1))
+!!                  Is this a desired outcome, or just a result of "making it work"
                                 if(countij.gt.0) then !if there is at least one edge available for diffusion, randomly choose which edge the molecule goes to
                                     r1=urcw1()
                                     newindex=int(r1*(countij+1))  !choose which edge to diffuse to by randomly drawing an integer between 0 and countij. 0 corresponding to staying on same edge, and a nonzero value corresponds to moving to the edge given by the newindex entry of the temp_neighborc array
