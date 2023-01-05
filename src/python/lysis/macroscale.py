@@ -26,6 +26,7 @@ class MacroscaleRun:
         self.rng = np.random.default_rng(seed=abs(exp.macro_params.seed))
 
         self.edge_grid = EdgeGrid(exp)
+        self.neighbors_i, self.neighbors_j = EdgeGrid.generate_neighborhood_structure(exp)
 
         molecule_start = (self.rng.integers(exp.macro_params.empty_rows,
                                             size=exp.macro_params.total_molecules),
@@ -90,12 +91,13 @@ class MacroscaleRun:
                 m.location_i, m.location_j = neighborhood[neighborhood_index]
                 neighborhood = []
 
-    def move(self, m: Molecule, current_time: float):
+    def move(self, m: Molecule, move_chance: float, current_time: float):
         if m.waiting_time > current_time and m.unbound_by_degradation == current_time:
             self.move_to_empty_edge(m, current_time)
         else:
-            destination = self.edge_grid.neighbor(m.location_i, m.location_j, self.rng.integers(8))
-            # self.edge_grid.move_molecule(m.index, (m.location_i, m.location_j), destination)
+            neighbor = int(8 * move_chance / self.exp.macro_params.moving_probability)
+            destination = (self.neighbors_i[m.location_i, m.location_i, neighbor],
+                           self.neighbors_j[m.location_i, m.location_i, neighbor])
             m.location_i, m.location_j = destination
             m.binding_time = self.find_binding_time(current_time)
         if m.location_i == self.exp.macro_params.rows-1 and current_time < m.time_to_reach_back_row:
@@ -163,7 +165,8 @@ class MacroscaleRun:
                     should_bind = (m.binding_time < current_time < self.edge_grid.fiber_status[m.location_i,
                                                                                                m.location_j]
                                    and m.waiting_time < current_time)
-                    should_move = self.rng.random() >= self.exp.macro_params.moving_probability
+                    move_chance = self.rng.random()
+                    should_move = move_chance < self.exp.macro_params.moving_probability
                     if should_move and should_bind:
                         should_bind = (self.rng.random() <= ((current_time - m.binding_time)
                                                              / self.exp.macro_params.time_step))
@@ -171,4 +174,4 @@ class MacroscaleRun:
                     if should_bind:
                         self.bind(m, current_time)
                     elif should_move:
-                        self.move(m, current_time)
+                        self.move(m, move_chance, current_time)
