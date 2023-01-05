@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Tuple
+from typing import Tuple
 
 import numpy as np
 
@@ -50,8 +50,6 @@ class EdgeGrid(object):
     """
     def __init__(self,
                  exp: Experiment,
-                 thisgrid_rows: int | None = None,
-                 thisgrid_starting_row: int = 0,
                  boundary_conditions: Tuple[BoundaryCondition, BoundaryCondition] | None = None,
                  initial_fiber_status: float = float('inf'),
                  ):
@@ -59,93 +57,43 @@ class EdgeGrid(object):
 
         Args:
             exp: The experiment that this EdgeGrid is a part of.
-                This structure passes many of the parameters used to set up the experiment.
-            thisgrid_rows: The number of rows in this EdgeGrid
-                **NOTE**: This does not count duplicated edges used with CONTINUING boundary conditions.
-                That is, if this EdgeGrid is in the middle of a larger grid,
-                there will actually be two more rows in this grid,
-                "Row thisgrid_starting_row-1", which will represent the top row of the grid below, and
-                "Row thisgrid_starting_row + thisgrid_rows", which will represent the bottom row of the grid above.
-            thisgrid_starting_row: The first row in this EdgeGrid (in the larger grid numbering system.
+                 This structure passes many of the parameters used to set up the experiment.
             boundary_conditions: A tuple that maps boundaries from CONST.BOUND to conditions from CONST.BOUND_COND.
             initial_fiber_status: The initial value of the fiber status.
                 This should generally be an infinite degrade time (degrade time > experiment length).
         """
-        # TODO(bpaynter): Redo so that externally the row numbers represent the numbering in the larger grid
-        #                   while still starting at zero internally.
-        #                   That is, if there are 100 rows total, split into 5 grids (0 through 4),
-        #                   of which I am Grid[3], then externally my rows are 60 through 79.
-        #                   Internally I have storage for 22 rows which represent global rows 59 through 80.
-        #   2023-01-03:  Was busy with this but need to finish!
 
         self.total_rows = exp.macro_params.rows
-        """int: The total number of rows in the entire grid (of which this EdgeGrid is either a part or the whole)."""
+        """int: The total number of rows in the grid."""
         self.nodes_in_row = exp.macro_params.cols
         """int: The number of nodes (not edges) in each row of this EdgeGrid."""
-        self.total_empty_rows = exp.macro_params.empty_rows
-        """int: The number of empty (fibrin-free) rows in the entire grid.
-                There are only empty rows in this EdgeGrid if total_empty_rows > thisgrid_starting_row.
-                These will always be the bottom rows of the grid (i.e., "Row 0" through "Row empty_rows-1")"""
-        self.thisgrid_rows = thisgrid_rows if thisgrid_rows is not None else self.total_rows
-        self.thisgrid_starting_row = thisgrid_starting_row
-        self.thisgrid_empty_rows = max(self.total_empty_rows - self.thisgrid_starting_row, 0)
-        """int: Number of empty rows in this EdgeGrid. If they exist they are 
-                "Row thisgrid_starting_row" through "Row max(thisgrid_starting_row, total_empty_rows)-1"
-                If a top and/or bottom "shadow" row exists, it is NOT counted in this number. 
-                This row is always treated as empty because, even if it does have fibrin, 
-                those fibers exist in a different EdgeGrid."""
-        # Sanity check
-        if self.thisgrid_starting_row + self.thisgrid_rows > self.total_rows:
-            raise AttributeError('This EdgeGrid overruns the top of the total grid.')
+        self.empty_rows = exp.macro_params.empty_rows
+        """int: The number of empty (fibrin-free) rows in the grid."""
         # Set the appropriate boundary conditions
         if boundary_conditions is not None:
             self.boundary_conditions = boundary_conditions
-        elif self.thisgrid_rows == self.total_rows:                                 # We are the entire grid
+        else:
             self.boundary_conditions = (CONST.BOUND_COND.REFLECTING, CONST.BOUND_COND.REFLECTING)
-        elif self.thisgrid_starting_row == 0:                                       # We are the bottom EdgeGrid
-            self.boundary_conditions = (CONST.BOUND_COND.CONTINUING, CONST.BOUND_COND.REFLECTING)
-        elif self.thisgrid_rows + self.thisgrid_starting_row == self.total_rows:    # We are the top EdgeGrid
-            self.boundary_conditions = (CONST.BOUND_COND.REFLECTING, CONST.BOUND_COND.CONTINUING)
-        else:                                                                       # We are a middle EdgeGrid
-            self.boundary_conditions = (CONST.BOUND_COND.CONTINUING, CONST.BOUND_COND.CONTINUING)
 
         self.edges_in_row = 3*self.nodes_in_row - 1
-        self.fiber_rows = self.thisgrid_rows - self.thisgrid_empty_rows
-        self._fiber_status = initial_fiber_status * np.ones((self.fiber_rows, self.edges_in_row),
-                                                            dtype=np.double)
-
-        row_shift: Callable[[int], int] = lambda i: i - self.thisgrid_starting_row - self.thisgrid_empty_rows
-        identity: Callable[[int], int] = lambda j: j
-        self.fiber_status = self._ShiftedArrayAccess(self._fiber_status, (row_shift, identity))
+        self.fiber_rows = self.total_rows - self.empty_rows
+        self.fiber_status = initial_fiber_status * np.ones((self.total_rows, self.edges_in_row), dtype=np.double)
         """np.ndarray: The status of the fibers in this EdgeGrid. This is essentially the degrade time of the fiber.
-            If degrade time < current time, the fiber is degraded.
-            e.g., self.fiber_status[60, 25] is the status of the fiber located along edge [60, 25].
-            
-            Supports two-dimensional slicing.
-            
-            Note that the location should be given in reference to the entire grid, not just this EdgeGrid."""
+                    If degrade time < current time, the fiber is degraded.
+                    If degrade time = 0, the edge contains no fiber
+                    e.g., self.fiber_status[60, 25] is the status of the fiber located along edge [60, 25].
 
-        self.molecules = None
-        """List[List[List]]: A structure containing the indices of the molecules currently
+                    Supports two-dimensional slicing."""
+        self.fiber_status[:self.empty_rows] = 0
+
+        self.molecules = np.empty((self.total_rows, self.edges_in_row), dtype=object)
+        """ndarray[List]: An array of lists containing the indices of the molecules currently
             located at each edge of this EdgeGrid. 
             e.g., self.molecules[60, 25] is a list of molecules currently located at edge [60, 25].
              
-            Supports slicing in one dimension only.
-             
-            Note that the location should be given in reference to the entire grid, not just this EdgeGrid."""
-        self._molecules = [[[] for _ in range(self.edges_in_row)] for _ in range(self.thisgrid_rows)]
-        if self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.CONTINUING:
-            self._molecules.append([[] for _ in range(self.edges_in_row)])
-        if self.boundary_conditions[CONST.BOUND.BOTTOM] == CONST.BOUND_COND.CONTINUING:
-            self._molecules.append([[] for _ in range(self.edges_in_row)])
-
-            row_shift: Callable[[int], int] = lambda i: i - self.thisgrid_starting_row + 1
-            identity: Callable[[int], int] = lambda j: j
-            self.molecules = self._ShiftedArrayAccess(self._molecules, (row_shift, identity))
-        else:
-            row_shift: Callable[[int], int] = lambda i: i - self.thisgrid_starting_row
-            identity: Callable[[int], int] = lambda j: j
-            self.molecules = self._ShiftedArrayAccess(self._molecules, (row_shift, identity))
+             Supports two-dimensional slicing."""
+        for i, j in np.ndindex(self.total_rows, self.edges_in_row):
+            self.molecules[i, j] = []
 
     def _is_valid_index(self, i: int, j: int) -> str | None:
         """Checks if [i, j] is a valid index for this EdgeGrid.
@@ -161,18 +109,18 @@ class EdgeGrid(object):
             return (f'Index j={j} out of bounds. '
                     f'This model only has edges [0..{self.edges_in_row - 1}] in each row.')
         # Rows are 0 through self.rows-1
-        if i < 0 or i > self.thisgrid_rows - 1:
-            return f'Index i={i} out of bounds. This model only has rows [0..{self.thisgrid_rows - 1}].'
+        if i < 0 or i > self.total_rows - 1:
+            return f'Index i={i} out of bounds. This model only has rows [0..{self.total_rows - 1}].'
         # If this EdgeGrid is at the top of a larger sliced grid, or is the whole grid itself,
         # then the top row has no y-edges in it.
         if (
-                i == self.thisgrid_rows - 1
+                i == self.total_rows - 1
                 and
                 self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.REFLECTING
                 and
                 j % 3 == 0
            ):
-            return f'y-edges do not exist on the top row of this grid (row {self.thisgrid_rows - 1}). Location ({i}, {j})'
+            return f'y-edges do not exist on the top row of this grid (row {self.total_rows - 1}). Location ({i}, {j})'
         # Everything seems fine, so return None
         return None
 
@@ -293,7 +241,7 @@ class EdgeGrid(object):
         # If this row is the top of one slice (CONTINUING) then this row represents the bottom row of the next slice
         # and should not be processed here
         elif (
-                i == self.thisgrid_rows-1                # We are at the top of the grid
+                i == self.total_rows-1                # We are at the top of the grid
                 and
                 j % 3 > 0                       # and it is a z- or x-edge
              ):
@@ -315,69 +263,20 @@ class EdgeGrid(object):
         # Return the co-ordinates of the requested neighbor.
         return neighbor_i, neighbor_j
 
-    def pop_molecule_row(self, i: int) -> List[List[int]]:
-        if -1 < i < self.thisgrid_rows:
-            raise IndexError('You should not be removing molecules from the actual rows of this grid. '
-                             'Only shadow rows allowed.')
-        row = self.molecules[i].copy()
-        self.molecules[i] = [[] for _ in range(self.edges_in_row)]
-        return row
-
-    def place_molecule_row(self, i: int, row: List[List[int]]):
-        if 0 < i < self.thisgrid_rows-1:
-            raise IndexError('You should only add a row to the first or last rows of this grid.')
-        for j in range(self.edges_in_row):
-            self.molecules[i, j].append(row[j])
-
     def move_molecule(self, m: int, start: Tuple[int, int], end: Tuple[int, int]):
         self.molecules[start].remove(m)
         self.molecules[end].append(m)
 
-
-    class _ShiftedArrayAccess:
-        def __init__(self,
-                     array: List[List[Any]],
-                     shift: Tuple[Callable[[int], int], ...],
-                     ):
-            self.array = array
-            self.shift = shift
-
-        @staticmethod
-        def _shift_key(key: slice | int,
-                       shift_func: Callable[[int], int]
-                       ) -> slice | int:
-            if isinstance(key, slice):
-                start = shift_func(key.start) if key.start is not None else None
-                stop = shift_func(key.stop) if key.stop is not None else None
-                return slice(start, stop, key.step)
-            else:
-                return shift_func(key)
-
-        def __getitem__(self, key: int | slice | Tuple[int | slice, ...]) -> Any:
-            if isinstance(key, Tuple):
-                shifted_keys = tuple([self._shift_key(k, self.shift[idx]) for idx, k in enumerate(key)])
-            else:
-                shifted_keys = (self._shift_key(key, self.shift[0]),)
-            if isinstance(self.array, np.ndarray):
-                return self.array[shifted_keys]
-            else:
-                out = self.array
-                for k in shifted_keys:
-                    out = out[k]
-                return out
-
-        def __setitem__(self, key: int | slice | Tuple[int | slice], value: Any):
-            if isinstance(key, Tuple):
-                shifted_keys = tuple([self._shift_key(k, self.shift[idx]) for idx, k in enumerate(key)])
-            else:
-                shifted_keys = (self._shift_key(key, self.shift[0]),)
-            if isinstance(self.array, np.ndarray):
-                self.array[shifted_keys] = value
-            else:
-                place = self.array
-                for k in shifted_keys[:-1]:
-                    place = place[k]
-                place[shifted_keys[-1]] = value
+    @staticmethod
+    def generate_neighborhood_structure(exp: Experiment):
+        edge_grid = EdgeGrid(exp)
+        neighbor_i = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=int)
+        neighbor_j = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=int)
+        for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
+            n_i, n_j = edge_grid.neighbor(i, j, k)
+            neighbor_i[i, j, k] = n_i
+            neighbor_j[i, j, k] = n_j
+        return neighbor_i, neighbor_j
 
 
 def from_fortran_edge_index(index: int, rows: int, nodes_in_row: int) -> Tuple[int, int]:
@@ -517,3 +416,5 @@ def to_fortran_edge_index(i: int, j: int, rows: int, nodes_in_row: int) -> int:
             raise IndexError(f'No y-edges on the top row (row {rows-1}).')
 
     return index
+
+
