@@ -651,6 +651,12 @@ neighborc=0
                         !else if time to tPA leaving is bigger than current time, keep the molecule bound and continue.
                         !we don't need to change anything in this case
 
+!! BRAD 2023-01-04: The molecule just unbound. Now we check to see if it should be forced to unbind?
+!!                  Are we saying that, some of the molecules that unbound after t seconds of binding time did so willingly
+!!                  but others did so unwillingly.
+!!                  Another way of saying this: these forced-unbound tPA aren't unbinding early,
+!!                  but at the same time they would've anyway
+
                         !BELOW ADDED 9/15/17 to account for forced-unbound tPA to be removed
                         r1=urcw1()
                         if(r1.le.frac_forced) then
@@ -661,6 +667,9 @@ neighborc=0
                         end if !for frac_forced if statement
                     end if
                 end if !end if(V(2,j)==1 statement. The above unbinds tPA with leaving time < current time
+
+!! BRAD 2023-01-04: So if a molecule unbinds in the if statment immediately above,
+!!                  it is eligable to move/rebind in the same timestep?
 
                 if(V(2,j)==0) then   !if the molecule is unbound
                     !first check if it will move or not. if it does not move (i.e. r.le.1-q), check if it can bind.
@@ -715,6 +724,7 @@ neighborc=0
                                     r400=nummicro
                                 end if !for if(r400==nummicro+1) loop
 
+!! BRAD 2023-01-04: Why are we using colr2 again here? What is the connection between the lysis time and the unbinding time?
 
                                 if(r400.le.lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
                                     if(r400==lenlysismat(colr2-1)) then
@@ -758,6 +768,9 @@ neighborc=0
 
                             t_wait(j)=0 !reset waiting time to 0
                             r2=urcw1()
+
+!! BRAD 2023-01-04: r2 > log(r1)/(kon*bs*tstep)+1/2 (Bannish2014 p27)
+
                             if(r2.gt.(t-bind(j))/tstep) then   !if r2 is such that movement happened before binding, move the molecule
                                                            !and calculate the new binding time associated with the new edge
                                 if ((1-q).lt.r.and.r.le.((1-q)+q/8)) then

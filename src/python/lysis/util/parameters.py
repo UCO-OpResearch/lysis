@@ -367,6 +367,13 @@ class MacroParameters:
     # Experimental Parameters
     #####################################
 
+    # TODO(bpaynter): This value should derive from MicroParameters
+    microscale_runs: int = 50000
+    """The number of independent trials run in the microscale model.
+    
+    :Units: trials
+    :Fortran: nummicro"""
+
     total_trials: int = 10
     """The number of independent trials to be run
     
