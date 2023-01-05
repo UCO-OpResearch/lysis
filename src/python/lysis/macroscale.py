@@ -4,7 +4,7 @@ import numpy as np
 
 from tqdm import tqdm
 
-from .util import Experiment
+from .util import Experiment, KissRandomGenerator
 from .edge_grid import EdgeGrid
 from .molecule import Molecule
 
@@ -23,7 +23,8 @@ class MacroscaleRun:
         self.exp = exp
         assert self.exp.macro_params is not None
 
-        self.rng = np.random.default_rng(seed=abs(exp.macro_params.seed))
+        # self.rng = np.random.default_rng(seed=abs(exp.macro_params.seed))
+        self.rng = KissRandomGenerator(seed=abs(exp.macro_params.seed))
 
         self.edge_grid = EdgeGrid(exp)
         self.neighbors_i, self.neighbors_j = EdgeGrid.generate_neighborhood_structure(exp)
