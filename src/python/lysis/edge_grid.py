@@ -113,14 +113,14 @@ class EdgeGrid(object):
             return f'Index i={i} out of bounds. This model only has rows [0..{self.total_rows - 1}].'
         # If this EdgeGrid is at the top of a larger sliced grid, or is the whole grid itself,
         # then the top row has no y-edges in it.
-        if (
-                i == self.total_rows - 1
-                and
-                self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.REFLECTING
-                and
-                j % 3 == 0
-           ):
-            return f'y-edges do not exist on the top row of this grid (row {self.total_rows - 1}). Location ({i}, {j})'
+        # if (
+        #         i == self.total_rows - 1
+        #         and
+        #         self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.REFLECTING
+        #         and
+        #         j % 3 == 0
+        #    ):
+        #     return f'y-edges do not exist on the top row of this grid (row {self.total_rows - 1}). Location ({i}, {j})'
         # Everything seems fine, so return None
         return None
 
