@@ -27,8 +27,6 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, List, Mapping, Tuple, Union
 
-import numpy as np
-
 from .constants import default_filenames
 from .datastore import DataStore, Status
 from .util import dict_to_formatted_str

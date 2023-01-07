@@ -9,7 +9,7 @@ integer,parameter  :: F=121!121 !71 !81  !# of lattice nodes in one column in th
 integer,parameter  :: Ffree=29!29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
-integer,parameter  :: stats=10
+integer,parameter  :: stats= 1 !! BRAD 2023-01-04: 10
 integer,parameter  :: num=(2*N-1)*F+N*(F-1)
 integer,parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
 integer,parameter  :: tf=20*60!15*60 !final time in sec
@@ -164,7 +164,10 @@ integer  :: backrow !defines the first fiber number making up the back row of fi
 double precision, dimension(M) :: mfpt !vector I'll use to save the first passage times of each tPA molecule
 integer, dimension(M) :: yesfpt !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
 
-
+!! BRAD 2023-01-06:
+integer :: total_moves
+integer :: total_binds
+REAL time_begin, time_end
 
 if( isBinary ) then
     !filetype = 'unformatted' !if you compile with gfortran or f95
@@ -484,6 +487,10 @@ neighborc=0
         countmacrounbd=0
         countmicrounbd=0
 
+!! BRAD 2023-01-04:
+        total_binds = 0
+        total_moves = 0
+
         !Initialize vectors to 0
             degrade  =0.0d+00         !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
             t_degrade=0.0d+00         !vector of the degradation times of each edge
@@ -585,7 +592,8 @@ neighborc=0
 
         !Now do the main part of the code - looping over time
 
-
+!! BRAD 2023-01-06:
+        CALL CPU_TIME ( time_begin )
         do
 
             count=count+1
@@ -697,6 +705,9 @@ neighborc=0
                                 t_wait(j)=0 !reset the waiting time to 0
                                 r3=urcw1()
                                 countbind=countbind+1
+
+!! BRAD 2023-01-04:
+                                total_binds = total_binds + 1
 
                                 !put a 1 in entry equal to edge number. each second I'll sum up the number of 1 entries, which
                                 !will tell me the number of independent bindings (not necessarily successful ones) at each second
@@ -828,12 +839,16 @@ neighborc=0
                                                                      !which tPA will bind, minus half a time step so we round
                                 end if !(for diffusion part)
 
+!! BRAD 2023-01-04:
+                                total_moves = total_moves + 1
+
                             else     !for if(r2.gt.(t-bind(j)/tstep) statement. i.e. if r2 is less than or equal to (t-bind(j))/tstep, have the molecule bind
                                 V(2,j)=1  !then the molecule binds
                                 bind(j)=0 !reset the binding time to 0
                                 r3=urcw1()
 
-!! BRAD 2023-01-06: You don't count the number of binds here like you do in the block above. (countbind=countbind+1) Is there a reason?
+!! BRAD 2023-01-04:
+                                total_binds = total_binds + 1
 
                                 !put a 1 in entry equal to edge number. each second I'll sum up the number of 1 entries, which
                                 !will tell me the number of independent bindings (not necessarily successful ones) at each second
@@ -925,6 +940,8 @@ neighborc=0
                                     !write(*,*)'V(1,j) AFTER movement=',V(1,j)
                                     !write(*,*)'end of new loop **************'
                                     !if countij=0 then none of the edges are available for diffusion, molecule is stuck and must stay on current edge, so do nothing
+!! BRAD 2023-01-04:
+                                    total_moves = total_moves + 1
 
                                 end if !end countij.gt.0
 
@@ -978,6 +995,9 @@ neighborc=0
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
                                 end if !(for diffusion part)
+
+!! BRAD 2023-01-04:
+                                total_moves = total_moves + 1
                             endif !end t_wait part
 
                         end if !end bind(j) statement
@@ -1012,23 +1032,30 @@ neighborc=0
             !!bind1V(istat,Nsave)=sum(bind1)
             !!end if
 
-            if(Ninteger>Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
-                write(degunit)    degrade(1:num)
-                write(tunit)  t
-                Nsave=Nsave+10
-                cNsave=cNsave+1
-                Vedgenext(cNsave+1,:) = V(1,:)
-                Vboundnext(cNsave+1,:) = V(2,:)
-                degnext(cNsave+1,:) = degrade(1:num)
-                tsave(cNsave+1) = t
-                !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-                !countbindV(istat,cNsave)=countbind
-                !countindepV(istat,cNsave)=countindep
-                !bind1V(istat,cNsave)=sum(bind1)
-            end if
+!            if(Ninteger>Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
+!                write(degunit)    degrade(1:num)
+!                write(tunit)  t
+!                Nsave=Nsave+10
+!                cNsave=cNsave+1
+!                Vedgenext(cNsave+1,:) = V(1,:)
+!                Vboundnext(cNsave+1,:) = V(2,:)
+!                degnext(cNsave+1,:) = degrade(1:num)
+!                tsave(cNsave+1) = t
+!                !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+!                !countbindV(istat,cNsave)=countbind
+!                !countindepV(istat,cNsave)=countindep
+!                !bind1V(istat,cNsave)=sum(bind1)
+!            end if
 
 
         enddo !for time loop
+
+!! BRAD 2023-01-06:
+        CALL CPU_TIME ( time_end )
+
+        write(*,*)'Processing time: ', time_end - time_begin, ' sec'
+        write(*,*)'Total Binds: ',total_binds
+        write(*,*)'Total Moves: ',total_moves
 
         Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
         front=0
