@@ -1,6 +1,6 @@
 import math
 
-import numpy as np
+import cupy as np
 
 from tqdm import tqdm
 
@@ -139,7 +139,7 @@ class MacroscaleRun:
                                                          neighbor]
         self.location_i[free_to_move] = destination_i
 
-        self.total_moves = np.count_nonzero(free_to_move)
+        self.total_moves += np.count_nonzero(free_to_move)
 
         self.binding_time[free_to_move] = self.find_binding_time(current_time, np.count_nonzero(free_to_move))
 

@@ -1,6 +1,6 @@
 from typing import Tuple
 
-import numpy as np
+import cupy as np
 
 from .util import Const, BoundaryCondition, Experiment
 
@@ -86,14 +86,14 @@ class EdgeGrid(object):
                     Supports two-dimensional slicing."""
         self.fiber_status[:self.empty_rows] = 0
 
-        self.molecules = np.empty((self.total_rows, self.edges_in_row), dtype=object)
+        # self.molecules = np.empty((self.total_rows, self.edges_in_row), dtype=object)
         """ndarray[List]: An array of lists containing the indices of the molecules currently
             located at each edge of this EdgeGrid. 
             e.g., self.molecules[60, 25] is a list of molecules currently located at edge [60, 25].
              
              Supports two-dimensional slicing."""
-        for i, j in np.ndindex(self.total_rows, self.edges_in_row):
-            self.molecules[i, j] = []
+        # for i, j in np.ndindex(self.total_rows, self.edges_in_row):
+        #    self.molecules[i, j] = []
 
     def _is_valid_index(self, i: int, j: int) -> str | None:
         """Checks if [i, j] is a valid index for this EdgeGrid.
@@ -263,9 +263,9 @@ class EdgeGrid(object):
         # Return the co-ordinates of the requested neighbor.
         return neighbor_i, neighbor_j
 
-    def move_molecule(self, m: int, start: Tuple[int, int], end: Tuple[int, int]):
-        self.molecules[start].remove(m)
-        self.molecules[end].append(m)
+    # def move_molecule(self, m: int, start: Tuple[int, int], end: Tuple[int, int]):
+    #     self.molecules[start].remove(m)
+    #     self.molecules[end].append(m)
 
     @staticmethod
     def generate_neighborhood_structure(exp: Experiment):
@@ -416,5 +416,3 @@ def to_fortran_edge_index(i: int, j: int, rows: int, nodes_in_row: int) -> int:
             raise IndexError(f'No y-edges on the top row (row {rows-1}).')
 
     return index
-
-
