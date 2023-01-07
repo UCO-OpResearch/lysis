@@ -9,6 +9,7 @@ __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
+
 @dataclass
 class Molecule:
     index: int = field(default=None, compare=False)
