@@ -1,4 +1,3 @@
-import math
 from functools import partial
 
 import numpy as np
@@ -52,6 +51,7 @@ class MacroscaleRun:
         self.location = edge_lookup((location_i, location_j))
 
         self.m_fiber_status = None
+        self.had_macro_degrade = False
 
         self.bound = np.full(exp.macro_params.total_molecules, False, dtype=np.bool_)
         # self.leaving_time = np.full(exp.macro_params.total_molecules, float('inf'), dtype=np.float_)
@@ -59,13 +59,14 @@ class MacroscaleRun:
         self.binding_time = np.full(exp.macro_params.total_molecules, float('inf'), dtype=np.float_)
         self.unbound_by_degradation = np.full(exp.macro_params.total_molecules, 0, dtype=np.float_)
         self.time_to_reach_back_row = np.full(exp.macro_params.total_molecules, float('inf'), dtype=np.float_)
+        self.xp = np.arange(101)
 
         self.total_macro_unbinds = 0
         self.total_micro_unbinds = 0
         self.total_binds = 0
         self.independent_binds = 0
         self.total_moves = 0
-        self.timesteps_with_binds = 0
+        self.timesteps_with_fiber_changes = 0
 
     def unbind_by_degradation(self, m: np.ndarray, current_time: float):
         count = np.count_nonzero(m)
@@ -78,6 +79,7 @@ class MacroscaleRun:
                                 + self.exp.macro_params.average_bind_time
                                 - self.exp.macro_params.time_step / 2)
         self.binding_time[m] = float('inf')
+        self.had_macro_degrade = True
 
     def unbind_by_time(self, m: np.ndarray, current_time: float):
         count = np.count_nonzero(m)
@@ -97,13 +99,12 @@ class MacroscaleRun:
         count = np.count_nonzero(m)
         if count == 0:
             return
-        self.timesteps_with_binds += 1
         self.bound[m] = True
         self.waiting_time[m] = 0
         self.total_binds += count
 
-        r = self.rng.random(count)
-        self.binding_time[m] = self.find_unbinding_time(r, current_time, count)
+        r = self.rng.random(count) * 100
+        self.binding_time[m] = self.find_unbinding_time(r, current_time)
 
         lysis_time = self.find_lysis_time(r, current_time, count)
         lysis = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
@@ -113,6 +114,9 @@ class MacroscaleRun:
         new_lysis[m] = lysis[m] & (self.m_fiber_status[m] == float('inf'))
         new_lysis_fibers = self.location[new_lysis]
         self.independent_binds += len(np.unique(new_lysis_fibers))
+
+        if np.count_nonzero(self.fiber_status[self.location[m]] > lysis_time) > 0:
+            self.timesteps_with_fiber_changes += 1
 
         self.fiber_status[self.location[m]] = np.fmin(self.fiber_status[self.location[m]],
                                                       lysis_time)
@@ -136,11 +140,12 @@ class MacroscaleRun:
 
     def find_still_stuck(self, m: np.ndarray, move_chance: np.ndarray, current_time: float) -> np.ndarray:
         still_stuck_to_fiber = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
-        still_stuck_to_fiber[m] = self.waiting_time[m] > current_time
-        just_degraded = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
-        just_degraded[still_stuck_to_fiber] = self.unbound_by_degradation[still_stuck_to_fiber] == current_time
-        np.logical_and(still_stuck_to_fiber, just_degraded, out=still_stuck_to_fiber)
-        self.move_to_empty_edge(still_stuck_to_fiber, move_chance, current_time)
+        if self.had_macro_degrade:
+            still_stuck_to_fiber[m] = self.waiting_time[m] > current_time
+            just_degraded = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
+            just_degraded[still_stuck_to_fiber] = self.unbound_by_degradation[still_stuck_to_fiber] == current_time
+            np.logical_and(still_stuck_to_fiber, just_degraded, out=still_stuck_to_fiber)
+            self.move_to_empty_edge(still_stuck_to_fiber, move_chance, current_time)
         return still_stuck_to_fiber
 
     @staticmethod
@@ -169,6 +174,7 @@ class MacroscaleRun:
         self.time_to_reach_back_row[reached_rear] = current_time
 
     def move(self, m: np.ndarray, move_chance: np.ndarray, current_time: float):
+
         still_stuck_to_fiber = self.find_still_stuck(m, move_chance, current_time)
 
         free_to_move = MacroscaleRun.find_free_to_move(m, still_stuck_to_fiber)
@@ -176,6 +182,8 @@ class MacroscaleRun:
         neighbor = self.find_which_neighbor(free_to_move, move_chance)
 
         self.actual_move(free_to_move, neighbor)
+
+        np.logical_and(free_to_move, self.m_fiber_status >= current_time, out=free_to_move)
 
         self.binding_time[free_to_move] = self.find_binding_time(current_time, np.count_nonzero(free_to_move))
 
@@ -217,13 +225,13 @@ class MacroscaleRun:
                 return out
 
 
-    def find_binding_time(self, current_time: float, count: int = 1) -> float:
-        # binding_time_interval = -math.log(self.rng.random()) / (self.exp.macro_params.binding_rate
-        #                                                         * self.exp.macro_params.binding_sites)
-        # return current_time + binding_time_interval - self.exp.macro_params.time_step / 2
-        return current_time + self.binding_time_factory.next(count)
+    def find_binding_time(self, current_time: float, count: int = 1) -> np.ndarray | None:
+        if count > 0:
+            return current_time + self.binding_time_factory.next(count)
+        else:
+            return None
 
-    def find_unbinding_time(self, r: np.ndarray, current_time: float, count: int) -> np.ndarray:
+    def find_unbinding_time(self, r: np.ndarray, current_time: float) -> np.ndarray:
         """Find the experiment time at which the tPA molecule will unbind
 
         If we think of the binding_time matrix as a function f(x) where binding_time[100*x] = f(x)
@@ -242,49 +250,65 @@ class MacroscaleRun:
         if i is an integer such that 100i < 100r < 100(i+1) and
         lambda is such that 100i + lambda = 100r,
         then f(r) ~ (1-lambda)*f(i/100) + lambda*f( (i+1)/100 )"""
-        # TODO(bpaynter): Use np.interp
-        out = np.empty(count, dtype=np.double)
-        for i in np.arange(count):
-            lam = 100 * r[i] - math.floor(100 * r[i])
-            y1 = self.exp.data.unbinding_time[math.floor(100 * r[i])]
-            y2 = self.exp.data.unbinding_time[math.ceil(100 * r[i])]
-            step = (1 - lam) * y1 + lam * y2
-            out[i] = current_time + step - self.exp.macro_params.time_step / 2
-        return out
+        interp = np.interp(r, self.xp, self.exp.data.unbinding_time)
+        return interp + (current_time - self.exp.macro_params.time_step / 2)
 
     def find_lysis_time(self, r: np.ndarray, current_time: float, count: int) -> np.ndarray:
-        lysis_r = self.rng.random(count, dtype=np.double)
-        out = np.full(count, float('inf'), dtype=np.double)
-        for i in np.arange(count):
-            lysis_bin = math.floor(self.exp.macro_params.microscale_runs / 100 * lysis_r[i])
-            if lysis_bin < self.exp.data.total_lyses[math.floor(100 * r[i])] - 2:
-                if lysis_bin == self.exp.data.total_lyses[math.floor(100 * r[i])] - 3:
-                    lysis_step = self.exp.data.lysis_time[math.floor(100 * r[i]), lysis_bin]
-                else:
-                    lam = (self.exp.macro_params.microscale_runs / 100 * lysis_r[i]
-                           - math.floor(self.exp.macro_params.microscale_runs / 100 * lysis_r[i]))
-                    y1 = self.exp.data.lysis_time[math.floor(100 * r[i]), lysis_bin]
-                    y2 = self.exp.data.lysis_time[math.floor(100 * r[i]), lysis_bin + 1]
-                    lysis_step = (1 - lam) * y1 + lam * y2
-                out[i] = current_time + lysis_step - self.exp.macro_params.time_step / 2
-        return out
+        lysis_r = self.rng.random(count, dtype=np.double) * (self.exp.macro_params.microscale_runs / 100)
+        interp = np.full(count, float('inf'), dtype=np.double)
+        r_idx = r.astype(int)
+        total_lyses = self.exp.data.total_lyses[r_idx] - 1
+        lysis_happens = lysis_r < total_lyses
+        interp[~lysis_happens] = float('inf')
+        for i in np.arange(count)[lysis_happens]:
+            interp[i] = np.interp(lysis_r[i],
+                                  np.arange(total_lyses[i]),
+                                  self.exp.data.lysis_time[r_idx[i], :total_lyses[i]])
+        interp = interp + (current_time - self.exp.macro_params.time_step / 2)
+
+        # out = np.full(count, float('inf'), dtype=np.double)
+        # for i in np.arange(count):
+        #     lysis_bin = math.floor(lysis_r[i])
+        #     if lysis_bin < self.exp.data.total_lyses[math.floor(r[i])] - 1:
+        #         if lysis_bin == self.exp.data.total_lyses[math.floor(r[i])] - 2:
+        #             lysis_step = self.exp.data.lysis_time[math.floor(r[i]), lysis_bin]
+        #         else:
+        #             lam = (lysis_r[i]
+        #                    - math.floor(lysis_r[i]))
+        #             y1 = self.exp.data.lysis_time[math.floor(r[i]), lysis_bin]
+        #             y2 = self.exp.data.lysis_time[math.floor(r[i]), lysis_bin + 1]
+        #             lysis_step = (1 - lam) * y1 + lam * y2
+        #         out[i] = current_time + lysis_step - self.exp.macro_params.time_step / 2
+        #         if out[i] > 1000:
+        #             raise RuntimeError("out too high!")
+        # diff = (interp != out) & (out < float('inf'))
+        # if np.any(diff) and np.max(interp[diff] - out[diff]) / np.min(out[diff]) > 0.00001:
+        #     raise RuntimeError(f"Interp error is {np.max(interp[diff] - out[diff]):.3f}/{np.min(out):.3f} "
+        #                        f"= {np.max(interp - out) / np.min(out)*100:.3f}%!")
+        return interp
 
     def find_molecule_fiber_status(self) -> np.ndarray:
         return self.fiber_status[self.location]
+
+    def find_should_bind(self, current_time: float):
+        should_bind = (~self.bound
+                       & (self.binding_time < current_time)
+                       & (self.m_fiber_status > current_time)
+                       & (self.waiting_time < current_time))
+        return should_bind
 
     def run(self):
         for ts in tqdm(np.arange(self.exp.macro_params.total_time_steps)):
             current_time = ts * self.exp.macro_params.time_step
 
             self.m_fiber_status = self.find_molecule_fiber_status()
+            self.had_macro_degrade = False
 
             self.unbind_by_degradation(self.bound & (self.m_fiber_status < current_time), current_time)
             self.unbind_by_time(self.bound & (self.binding_time < current_time), current_time)
 
-            should_bind = (~self.bound
-                           & (self.binding_time < current_time)
-                           & (self.m_fiber_status > current_time)
-                           & (self.waiting_time < current_time))
+            should_bind = self.find_should_bind(current_time)
+
             move_chance = np.ones(self.exp.macro_params.total_molecules, dtype=np.double)
             move_chance[~self.bound] = self.rng.random(np.count_nonzero(~self.bound), dtype=np.double)
             should_move = move_chance < self.exp.macro_params.moving_probability
@@ -298,7 +322,7 @@ class MacroscaleRun:
             self.bind(should_bind, current_time)
             self.move(should_move, move_chance, current_time)
 
-            if ts % 100000 == 100000-1:
+            if ts % 10000 == 10000-1:
                 unlysed_fibers = np.count_nonzero(self.fiber_status > current_time)
 
                 if unlysed_fibers == 0:
@@ -308,8 +332,12 @@ class MacroscaleRun:
                 else:
                     degraded_fiber_percent = 100 - unlysed_fibers / self.exp.macro_params.total_fibers * 100
                     print()
+                    print(f"After {current_time:.2f} sec, {self.exp.macro_params.total_fibers - unlysed_fibers:,} "
+                          f"fibers are degraded.")
                     print(f"After {current_time:.2f} sec, {degraded_fiber_percent:.1f}% of fibers are degraded.")
 
         print(f"Total binds: {self.total_binds:,}")
-        print(f"Timesteps with binds: {self.timesteps_with_binds:,}")
+        print(f"Timesteps with changes to degrade time: {self.timesteps_with_fiber_changes:,}")
         print(f"Total moves: {self.total_moves:,}")
+        print(f"Total macro unbinds: {self.total_macro_unbinds:,}")
+        print(f"Total micro unbinds: {self.total_micro_unbinds:,}")

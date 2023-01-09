@@ -875,22 +875,25 @@ neighborc=0
 
 
                                 !Using the tPA leaving time, find the lysis time by using the lysis time distribution for the given ttPA
-
-                                r4=urcw1()
-                                r400=ceiling(r4*nummicro)+1
+                                                                ! assume colr2-1 == 1
+                                r4=urcw1()                      ! r4 in [0,1)
+                                r400=ceiling(r4*nummicro)+1     ! r400 in {2 .. 501}
 
                                 !if r400=501, redefine it to be the 500th bin, since we don't have 501 entries
                                 if(r400==nummicro+1) then
-                                    r400=nummicro
+                                    r400=nummicro               ! r400 in {2 .. 500}
                                 end if !for if(r400==nummicro+1) loop
 
                                 if(r400.le.lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
-                                    if(r400==lenlysismat(colr2-1)) then
+                                    if(r400==lenlysismat(colr2-1)) then     ! r400 == 23
                                         !percent4 = (CDFlys(r400)-r4)/CDFlys(r400)
-                                        rmicro = lysismat(r400-1,colr2-1)!tseclys(r400)-tseclys(r400)*percent4
-                                    else
-                                        percent4 = r400-1-r4*nummicro
-                                        rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4)
+                                        rmicro = lysismat(r400-1,colr2-1)   ! rmicro = lysismat[23, 1]
+                                    else                                    ! r400 in {2 .. 22}
+                                        percent4 = r400-1-r4*nummicro       ! percent4 i
+                                        rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4) !tseclys(r400)-tseclys(r400)*percent4
+                                                                            ! rmicro in [lysismat[{1..21}, 1] , lysismat[{2..22}, 0]]
+!! BRAD 2023-01-09: What about r400 in (22, 23)?
+
                                     end if
 
                                     if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
