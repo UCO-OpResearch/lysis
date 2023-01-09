@@ -1,6 +1,7 @@
+from functools import partial
 from typing import Tuple
 
-import cupy as np
+import numpy as np
 
 from .util import Const, BoundaryCondition, Experiment
 
@@ -113,14 +114,14 @@ class EdgeGrid(object):
             return f'Index i={i} out of bounds. This model only has rows [0..{self.total_rows - 1}].'
         # If this EdgeGrid is at the top of a larger sliced grid, or is the whole grid itself,
         # then the top row has no y-edges in it.
-        # if (
-        #         i == self.total_rows - 1
-        #         and
-        #         self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.REFLECTING
-        #         and
-        #         j % 3 == 0
-        #    ):
-        #     return f'y-edges do not exist on the top row of this grid (row {self.total_rows - 1}). Location ({i}, {j})'
+        if (
+                i == self.total_rows - 1
+                and
+                self.boundary_conditions[CONST.BOUND.TOP] == CONST.BOUND_COND.REFLECTING
+                and
+                j % 3 == 0
+           ):
+            return f'y-edges do not exist on the top row of this grid (row {self.total_rows - 1}). Location ({i}, {j})'
         # Everything seems fine, so return None
         return None
 
@@ -269,14 +270,37 @@ class EdgeGrid(object):
 
     @staticmethod
     def generate_neighborhood_structure(exp: Experiment):
+        # edge_grid = EdgeGrid(exp)
+        # neighbor_i = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=np.short)
+        # neighbor_j = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=np.short)
+        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
+        #     if i == edge_grid.total_rows-1 and j % 3 == 0:
+        #         neighbor_i[i, j, k] = 0
+        #         neighbor_j[i, j, k] = 0
+        #     else:
+        #         n_i, n_j = edge_grid.neighbor(i, j, k)
+        #         neighbor_i[i, j, k] = n_i
+        #         neighbor_j[i, j, k] = n_j
+        # return neighbor_i, neighbor_j
+
+        # edge_grid = EdgeGrid(exp)
+        # neighbors = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8, 2), dtype=np.short)
+        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
+        #     if i == edge_grid.total_rows - 1 and j % 3 == 0:
+        #         neighbors[i, j, k, :] = [-1, -1]
+        #     else:
+        #         neighbors[i, j, k, :] = edge_grid.neighbor(i, j, k)
+        # return neighbors
+
+        edge_lookup = partial(np.ravel_multi_index, dims=(exp.macro_params.rows, exp.macro_params.full_row))
         edge_grid = EdgeGrid(exp)
-        neighbor_i = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=int)
-        neighbor_j = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=int)
+        neighbors = np.empty((exp.macro_params.rows * exp.macro_params.full_row, 8), dtype=np.ushort)
         for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
-            n_i, n_j = edge_grid.neighbor(i, j, k)
-            neighbor_i[i, j, k] = n_i
-            neighbor_j[i, j, k] = n_j
-        return neighbor_i, neighbor_j
+            if i == edge_grid.total_rows-1 and j % 3 == 0:
+                neighbors[edge_lookup((i, j,)), k] = -1
+            else:
+                neighbors[edge_lookup((i, j,)), k] = edge_lookup(tuple(edge_grid.neighbor(i, j, k)))
+        return neighbors
 
 
 def from_fortran_edge_index(index: int, rows: int, nodes_in_row: int) -> Tuple[int, int]:

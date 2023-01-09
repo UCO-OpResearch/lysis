@@ -265,6 +265,7 @@ class MacroParameters:
     :Units: cm^2/s.
     :Fortran: Diff"""
 
+    # TODO(bpaynter): This value should derive from MicroParameters
     binding_sites: float = 4.27e+2
     """Concentration of binding sites.
      
@@ -328,6 +329,12 @@ class MacroParameters:
     :Units: edges
     :Fortran: num"""
 
+    total_fibers: int = field(init=False)
+    """The total number of fibers in the model
+
+    :Units: fibers
+    :Fortran: None"""
+
     empty_rows: int = 29 - 1
     """1st node in vertical direction containing fibers.
     So if first_fiber_row = 10, then rows 0-9 have no fibers, there's one more row of fiber-free planar vertical edges,
@@ -336,7 +343,7 @@ class MacroParameters:
     :Units: nodes
     :Fortran: Ffree-1"""
 
-    last_ghost_edge: int = field(init=False)
+    last_empty_edge: int = field(init=False)
     """The 1-D index of the last edge without fibrin
     
     This is probably unnecessary when using a 2-D data structure, but is kept for historical reasons.
@@ -457,14 +464,19 @@ class MacroParameters:
         # A full row of 'right' and 'out' edges is two per node, except the last node which has no 'right' edge.
         object.__setattr__(self, 'xz_row', 2 * self.cols - 1)
 
-        # The total number of edges in the grid is a full_row for each, except the last row which has no 'up' edges.
+        # The total number of edges in the grid is a full_row for each,
+        # except the last row which has no 'up' edges.
         object.__setattr__(self, 'total_edges', self.full_row * (self.rows - 1) + self.xz_row)
+
+        # The total number of fibers in the grid is a full_row for each,
+        # except the empty rows which have no fibers, and the last row which has no 'up' edges.
+        object.__setattr__(self, 'total_fibers', self.full_row * (self.rows - self.empty_rows - 1) + self.xz_row)
 
         # The 1-D index of the last edge in the fibrin-free region is the total number of edges in the
         # fibrin-free region -1.
         # The total rows in the fibrin-free region is equal to the (0-based) index of the first fiber row
         # The total edges in this region is one full row of edges for each row
-        object.__setattr__(self, 'last_ghost_edge', self.full_row * self.empty_rows - 1)
+        object.__setattr__(self, 'last_empty_edge', self.full_row * self.empty_rows - 1)
 
         # Equation (2.4) page 25 from Bannish, et. al. 2014
         # https://doi.org/10.1093/imammb/dqs029

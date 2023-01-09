@@ -12,7 +12,7 @@ integer,parameter  :: Ffree=29!29 !3 !13 !1st node in vertical direction contain
 integer,parameter  :: stats= 1 !! BRAD 2023-01-04: 10
 integer,parameter  :: num=(2*N-1)*F+N*(F-1)
 integer,parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
-integer,parameter  :: tf=20*60!15*60 !final time in sec
+integer,parameter  :: tf=10*60!! BRAD 2023-01-06: 20*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
 integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
 integer  :: i, istat
@@ -165,7 +165,7 @@ double precision, dimension(M) :: mfpt !vector I'll use to save the first passag
 integer, dimension(M) :: yesfpt !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
 
 !! BRAD 2023-01-06:
-integer :: total_moves
+integer(8) :: total_moves
 integer :: total_binds
 REAL time_begin, time_end
 
@@ -413,7 +413,7 @@ neighborc=0
 
 
 
-    write(filename2,'(a74)') '../data/' // expCode // '/tPAleavePLG2_tPA01_Q2.dat'
+    write(filename2,'(a74)') 'data/' // expCode // '/tPAleavePLG2_tPA01_Q2.dat'
     open(200,file=filename2)
     do i=1,101
         read(200,*)CDFtPA(i)
@@ -421,7 +421,7 @@ neighborc=0
     close(200)
     write(*,*)'read tPAleavePLG2_tPA01_Q2.dat'
 
-    write(filename3,'(a73)') '../data/' // expCode // '/tsectPAPLG2_tPA01_Q2.dat'
+    write(filename3,'(a73)') 'data/' // expCode // '/tsectPAPLG2_tPA01_Q2.dat'
     open(300,file=filename3)
     do i=1,101
         read(300,*)tsec1(i)
@@ -434,7 +434,7 @@ neighborc=0
 !lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
-    OPEN(unit=1,FILE='../data/' // expCode // '/lysismat_PLG2_tPA01_Q2.dat')
+    OPEN(unit=1,FILE='data/' // expCode // '/lysismat_PLG2_tPA01_Q2.dat')
     do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
        READ(1,*)(lysismat(i,ii),ii=1,100)
     enddo
@@ -442,7 +442,7 @@ neighborc=0
 
 !lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
-    OPEN(unit=2,FILE='../data/' // expCode // '/lenlysisvect_PLG2_tPA01_Q2.dat')
+    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect_PLG2_tPA01_Q2.dat')
     do i=1,100
         READ(2,*)lenlysismat(i)
     end do
@@ -472,6 +472,7 @@ neighborc=0
         Diff= 5.0d-07 !5*10**(-7)           !diffusion coefficient, measured in cm**2/s
         tstep=q*delx**2/(12*Diff)  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
         num_t=tf/tstep            !number of timesteps
+!! BRAD 2023-01-08: Does this need to be a float, or can it be an integer?
         bs = 4.27d+02              !concentration of binding sites in micromolar
         dist=1.0862d+00 !microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
         count=0
@@ -548,13 +549,13 @@ neighborc=0
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-        write(degfile,'(73a)'  ) '../data/' // expCode // '/deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(Nfile,'(75a)' ) '../data/' // expCode // '/Nsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(tfile,'(75a)') '../data/' // expCode // '/tsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(movefile,'(74a)') '../data/' // expCode // '/move_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(lastmovefile,'(78a)') '../data/' // expCode // '/lastmove_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(plotfile,'(74a)') '../data/' // expCode // '/plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(mfptfile,'(74a)') '../data/' // expCode // '/mfpt_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(tfile,'(75a)') 'data/' // expCode // '/tsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(movefile,'(74a)') 'data/' // expCode // '/move_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(plotfile,'(74a)') 'data/' // expCode // '/plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
@@ -1050,6 +1051,8 @@ neighborc=0
 
         enddo !for time loop
 
+!! BRAD 2023-01-08: Once the last fiber has degraded, is there any reason to keep going?
+
 !! BRAD 2023-01-06:
         CALL CPU_TIME ( time_end )
 
@@ -1274,17 +1277,17 @@ neighborc=0
                 end do
             end do  !for jj loop
 
-            write(x1file,'(76a)'  ) '../data/' // expCode // '/X1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(x1unit,file=x1file,form=filetype)
-            write(x2file,'(76a)'  ) '../data/' // expCode // '/X2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(x2unit,file=x2file,form=filetype)
-            write(y1file,'(76a)'  ) '../data/' // expCode // '/Y1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(y1unit,file=y1file,form=filetype)
-            write(y2file,'(76a)'  ) '../data/' // expCode // '/Y2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(y2unit,file=y2file,form=filetype)
-            write(xvfile,'(76a)'  ) '../data/' // expCode // '/Xvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(xvunit,file=xvfile,form=filetype)
-            write(yvfile,'(76a)'  ) '../data/' // expCode // '/Yvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(yvunit,file=yvfile,form=filetype)
 
             write(x1unit) X1plot
@@ -1374,9 +1377,9 @@ neighborc=0
             end do
 
 
-            write(tPAbdfile,'(76a)'  ) '../data/' // expCode // '/tPAbd_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(tPAbdunit,file=tPAbdfile,form=filetype)
-            write(tPAfreefile,'(77a)'  ) '../data/' // expCode // '/tPAfree_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(tPAfreeunit,file=tPAfreefile,form=filetype)
 
             write(tPAbdunit) bdtPA
