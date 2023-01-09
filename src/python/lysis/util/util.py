@@ -47,6 +47,8 @@ def dict_to_formatted_str(d: Mapping[AnyStr, Any]) -> str:
             # Then call this function recursively on the value, and indent it appropriately.
             output += tab.join(dict_to_formatted_str(v).splitlines(True))
         # Otherwise we just print the key and its value.
+        elif isinstance(v, (int, float, complex)):
+            output += f'{k:<{key_len}}: {v:,}' + nl
         else:
             output += f'{k:<{key_len}}: {v}' + nl
     return output

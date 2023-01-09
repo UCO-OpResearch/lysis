@@ -2,7 +2,7 @@ import os
 from enum import Flag, auto, unique
 from typing import Any, AnyStr, List, Union
 
-import cupy as np
+import numpy as np
 
 from .util import dict_to_formatted_str
 

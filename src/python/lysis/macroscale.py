@@ -1,7 +1,7 @@
 import math
+from functools import partial
 
-import cupy as np
-
+import numpy as np
 from tqdm import tqdm
 
 from .util import Experiment
@@ -30,31 +30,42 @@ class MacroscaleRun:
 
         self.binding_time_factory = self._BindingTimeFactory(self.exp, self.rng)
 
+        edge_lookup = partial(np.ravel_multi_index, dims=(exp.macro_params.rows, exp.macro_params.full_row))
+
         # self.edge_grid = EdgeGrid(exp)
-        self.fiber_status = np.full((self.exp.macro_params.rows, self.exp.macro_params.full_row),
-                                    float('inf'), dtype=np.double)
-        self.fiber_status[:self.exp.macro_params.empty_rows] = 0
+        self.fiber_status = np.full(self.exp.macro_params.rows * self.exp.macro_params.full_row,
+                                    float('inf'), dtype=np.float_)
+        for i, j in np.ndindex(self.exp.macro_params.empty_rows, self.exp.macro_params.full_row):
+            self.fiber_status[edge_lookup((i, j))] = 0
+        for j in range(exp.macro_params.cols):
+            self.fiber_status[edge_lookup((self.exp.macro_params.rows-1, 3*j,))] = 0
 
-        self.neighbors_i, self.neighbors_j = EdgeGrid.generate_neighborhood_structure(exp)
+        self.neighbors = EdgeGrid.generate_neighborhood_structure(exp)
 
-        self.location_i = self.rng.integers(exp.macro_params.empty_rows,
-                                            size=exp.macro_params.total_molecules)
-        self.location_j = self.rng.integers(exp.macro_params.full_row,
-                                            size=exp.macro_params.total_molecules)
+        location_i = self.rng.integers(exp.macro_params.empty_rows,
+                                       size=exp.macro_params.total_molecules,
+                                       dtype=np.short)
+        location_j = self.rng.integers(exp.macro_params.full_row,
+                                       size=exp.macro_params.total_molecules,
+                                       dtype=np.short)
+
+        self.location = edge_lookup((location_i, location_j))
+
         self.m_fiber_status = None
 
-        self.bound = np.full(exp.macro_params.total_molecules, False, dtype=bool)
-        # self.leaving_time = np.full(exp.macro_params.total_molecules, float('inf'), dtype=float)
-        self.waiting_time = np.full(exp.macro_params.total_molecules, 0, dtype=float)
-        self.binding_time = np.full(exp.macro_params.total_molecules, float('inf'), dtype=float)
-        self.unbound_by_degradation = np.full(exp.macro_params.total_molecules, 0, dtype=float)
-        self.time_to_reach_back_row = np.full(exp.macro_params.total_molecules, float('inf'), dtype=float)
+        self.bound = np.full(exp.macro_params.total_molecules, False, dtype=np.bool_)
+        # self.leaving_time = np.full(exp.macro_params.total_molecules, float('inf'), dtype=np.float_)
+        self.waiting_time = np.full(exp.macro_params.total_molecules, 0, dtype=np.float_)
+        self.binding_time = np.full(exp.macro_params.total_molecules, float('inf'), dtype=np.float_)
+        self.unbound_by_degradation = np.full(exp.macro_params.total_molecules, 0, dtype=np.float_)
+        self.time_to_reach_back_row = np.full(exp.macro_params.total_molecules, float('inf'), dtype=np.float_)
 
         self.total_macro_unbinds = 0
         self.total_micro_unbinds = 0
         self.total_binds = 0
         self.independent_binds = 0
         self.total_moves = 0
+        self.timesteps_with_binds = 0
 
     def unbind_by_degradation(self, m: np.ndarray, current_time: float):
         count = np.count_nonzero(m)
@@ -73,7 +84,7 @@ class MacroscaleRun:
         if count == 0:
             return None
         self.bound[m] = False
-        forced = np.full(self.exp.macro_params.total_molecules, False)
+        forced = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
         forced[m] = self.rng.random(count) <= self.exp.macro_params.forced_unbind
         self.waiting_time[m & forced] = (current_time
                                          + self.exp.macro_params.average_bind_time
@@ -84,6 +95,9 @@ class MacroscaleRun:
 
     def bind(self, m: np.ndarray, current_time: float):
         count = np.count_nonzero(m)
+        if count == 0:
+            return
+        self.timesteps_with_binds += 1
         self.bound[m] = True
         self.waiting_time[m] = 0
         self.total_binds += count
@@ -92,61 +106,80 @@ class MacroscaleRun:
         self.binding_time[m] = self.find_unbinding_time(r, current_time, count)
 
         lysis_time = self.find_lysis_time(r, current_time, count)
-        lysis = np.full(self.exp.macro_params.total_molecules, False)
+        lysis = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
         lysis[m] = lysis_time < float('inf')
 
-        new_lysis = np.full(self.exp.macro_params.total_molecules, False)
+        new_lysis = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
         new_lysis[m] = lysis[m] & (self.m_fiber_status[m] == float('inf'))
-        new_lysis_fibers = np.concatenate((self.location_i[new_lysis],
-                                           self.location_j[new_lysis])).reshape((2, -1))
-        self.independent_binds += np.unique(new_lysis_fibers, axis=1).shape[1]
+        new_lysis_fibers = self.location[new_lysis]
+        self.independent_binds += len(np.unique(new_lysis_fibers))
 
-        self.fiber_status[self.location_i[lysis],
-                          self.location_j[lysis]] = np.fmin(self.fiber_status[self.location_i[lysis],
-                                                                              self.location_j[lysis]],
-                                                            lysis_time[lysis[m]])
+        self.fiber_status[self.location[m]] = np.fmin(self.fiber_status[self.location[m]],
+                                                      lysis_time)
 
     def move_to_empty_edge(self, m: np.ndarray, move_chance: np.ndarray, current_time: float):
         for n in np.arange(self.exp.macro_params.total_molecules)[m]:
-            neighborhood = [(self.neighbors_i[self.location_i[n], self.location_j[n], k],
-                             self.neighbors_j[self.location_i[n], self.location_j[n], k]) for k in range(8)]
-            neighborhood.append((self.location_i[n], self.location_j[n]))
+            neighborhood = [(self.neighbors[self.location[n], k]) for k in range(8)]
+            # neighborhood.append(self.location[n])
             while len(neighborhood) > 0:
-                neighborhood_index = int(len(neighborhood) * move_chance[n] / self.exp.macro_params.moving_probability)
-                if self.fiber_status[neighborhood[neighborhood_index]] < current_time:
+                neighborhood_index = int((len(neighborhood)+1)
+                                         * move_chance[n]
+                                         / self.exp.macro_params.moving_probability)
+                if neighborhood_index == len(neighborhood):
+                    break
+                elif self.fiber_status[neighborhood[neighborhood_index]] < current_time:
                     neighborhood.pop(neighborhood_index)
                 else:
-                    self.location_i[n], self.location_j[n] = neighborhood[neighborhood_index]
-                    neighborhood = []
+                    self.location[n] = neighborhood[neighborhood_index]
                     self.total_moves += 1
+                    break
 
-    def move(self, m: np.ndarray, move_chance: np.ndarray, current_time: float):
-        still_stuck_to_fiber = np.full(self.exp.macro_params.total_molecules, False)
-        still_stuck_to_fiber[m] = ((self.waiting_time[m] > current_time)
-                                   & (self.unbound_by_degradation[m] == current_time))
+    def find_still_stuck(self, m: np.ndarray, move_chance: np.ndarray, current_time: float) -> np.ndarray:
+        still_stuck_to_fiber = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
+        still_stuck_to_fiber[m] = self.waiting_time[m] > current_time
+        just_degraded = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
+        just_degraded[still_stuck_to_fiber] = self.unbound_by_degradation[still_stuck_to_fiber] == current_time
+        np.logical_and(still_stuck_to_fiber, just_degraded, out=still_stuck_to_fiber)
         self.move_to_empty_edge(still_stuck_to_fiber, move_chance, current_time)
+        return still_stuck_to_fiber
 
+    @staticmethod
+    def find_free_to_move(m: np.ndarray, still_stuck_to_fiber: np.ndarray) -> np.ndarray:
         np.logical_and(m, ~still_stuck_to_fiber, out=still_stuck_to_fiber)
         free_to_move = still_stuck_to_fiber
-        # neighbor = np.empty(np.count_nonzero(free_to_move), dtype=int)
+        return free_to_move
+
+    def find_which_neighbor(self, free_to_move: np.ndarray, move_chance: np.ndarray) -> np.ndarray:
+        # neighbor = np.empty(np.count_nonzero(free_to_move), dtype=np.byte)
         neighbor = move_chance[free_to_move] * (8 / self.exp.macro_params.moving_probability)
         neighbor = neighbor.astype(int)
-        destination_i = self.neighbors_i[self.location_i[free_to_move],
-                                         self.location_j[free_to_move],
-                                         neighbor]
-        self.location_j[free_to_move] = self.neighbors_j[self.location_i[free_to_move],
-                                                         self.location_j[free_to_move],
-                                                         neighbor]
-        self.location_i[free_to_move] = destination_i
+        return neighbor
+
+    def actual_move(self, free_to_move: np.ndarray, neighbor: np.ndarray):
+        self.location[free_to_move] = self.neighbors[self.location[free_to_move], neighbor]
 
         self.total_moves += np.count_nonzero(free_to_move)
 
+    def check_back_row(self, m: np.ndarray, current_time: float):
+        reached_rear = np.full(self.exp.macro_params.total_molecules, False)
+        reached_rear[m] = (self.location[m] > (self.exp.macro_params.rows - 2)*self.exp.macro_params.full_row)
+        first_time = np.full(self.exp.macro_params.total_molecules, False)
+        first_time[reached_rear] = current_time < self.time_to_reach_back_row[reached_rear]
+        np.logical_and(reached_rear, first_time, out=reached_rear)
+        self.time_to_reach_back_row[reached_rear] = current_time
+
+    def move(self, m: np.ndarray, move_chance: np.ndarray, current_time: float):
+        still_stuck_to_fiber = self.find_still_stuck(m, move_chance, current_time)
+
+        free_to_move = MacroscaleRun.find_free_to_move(m, still_stuck_to_fiber)
+
+        neighbor = self.find_which_neighbor(free_to_move, move_chance)
+
+        self.actual_move(free_to_move, neighbor)
+
         self.binding_time[free_to_move] = self.find_binding_time(current_time, np.count_nonzero(free_to_move))
 
-        # reached_rear = np.full(self.exp.macro_params.total_molecules, False)
-        free_to_move[m] = ((self.location_i[m] == self.exp.macro_params.rows-1)
-                           & (current_time < self.time_to_reach_back_row[m]))
-        self.time_to_reach_back_row[free_to_move] = current_time
+        self.check_back_row(m, current_time)
 
     class _BindingTimeFactory:
         def __init__(self, exp: Experiment, rng: np.random.Generator):
@@ -154,10 +187,10 @@ class MacroscaleRun:
             self.exp = exp
             self.rng = rng
             self.pointer = self.period
-            self.list = np.empty((self.period,), dtype=float)
+            self.list = np.empty((self.period,), dtype=np.double)
 
         def fill_list(self):
-            self.rng.random(out=self.list)
+            self.rng.random(dtype=np.double, out=self.list)
             np.log(self.list, out=self.list)
             denominator = self.exp.macro_params.binding_rate * self.exp.macro_params.binding_sites
             np.divide(self.list, denominator, out=self.list)
@@ -172,7 +205,7 @@ class MacroscaleRun:
             if count == 1:
                 return self.list[self.pointer]
             else:
-                out = np.empty(count, dtype=float)
+                out = np.empty(count, dtype=np.double)
                 if count + self.pointer <= self.period:
                     out = self.list[self.pointer:self.pointer+count]
                     self.pointer += count - 1
@@ -210,7 +243,7 @@ class MacroscaleRun:
         lambda is such that 100i + lambda = 100r,
         then f(r) ~ (1-lambda)*f(i/100) + lambda*f( (i+1)/100 )"""
         # TODO(bpaynter): Use np.interp
-        out = np.empty(count, dtype=float)
+        out = np.empty(count, dtype=np.double)
         for i in np.arange(count):
             lam = 100 * r[i] - math.floor(100 * r[i])
             y1 = self.exp.data.unbinding_time[math.floor(100 * r[i])]
@@ -220,8 +253,8 @@ class MacroscaleRun:
         return out
 
     def find_lysis_time(self, r: np.ndarray, current_time: float, count: int) -> np.ndarray:
-        lysis_r = self.rng.random(count)
-        out = np.full(count, float('inf'))
+        lysis_r = self.rng.random(count, dtype=np.double)
+        out = np.full(count, float('inf'), dtype=np.double)
         for i in np.arange(count):
             lysis_bin = math.floor(self.exp.macro_params.microscale_runs / 100 * lysis_r[i])
             if lysis_bin < self.exp.data.total_lyses[math.floor(100 * r[i])] - 2:
@@ -236,11 +269,14 @@ class MacroscaleRun:
                 out[i] = current_time + lysis_step - self.exp.macro_params.time_step / 2
         return out
 
+    def find_molecule_fiber_status(self) -> np.ndarray:
+        return self.fiber_status[self.location]
+
     def run(self):
         for ts in tqdm(np.arange(self.exp.macro_params.total_time_steps)):
             current_time = ts * self.exp.macro_params.time_step
 
-            self.m_fiber_status = self.fiber_status[self.location_i, self.location_j]
+            self.m_fiber_status = self.find_molecule_fiber_status()
 
             self.unbind_by_degradation(self.bound & (self.m_fiber_status < current_time), current_time)
             self.unbind_by_time(self.bound & (self.binding_time < current_time), current_time)
@@ -249,20 +285,31 @@ class MacroscaleRun:
                            & (self.binding_time < current_time)
                            & (self.m_fiber_status > current_time)
                            & (self.waiting_time < current_time))
-            move_chance = np.ones(self.exp.macro_params.total_molecules)
-            move_chance[~self.bound] = self.rng.random(np.count_nonzero(~self.bound))
+            move_chance = np.ones(self.exp.macro_params.total_molecules, dtype=np.double)
+            move_chance[~self.bound] = self.rng.random(np.count_nonzero(~self.bound), dtype=np.double)
             should_move = move_chance < self.exp.macro_params.moving_probability
             conflict = should_bind & should_move
-            threshold = np.full(self.exp.macro_params.total_molecules, -1)
+            threshold = np.full(self.exp.macro_params.total_molecules, -1, dtype=np.double)
             threshold[conflict] = ((current_time - self.binding_time[conflict])
-                                                             / self.exp.macro_params.time_step)
+                                   / self.exp.macro_params.time_step)
             should_bind[conflict] = self.rng.random(np.count_nonzero(conflict)) <= threshold[conflict]
             should_move[conflict] = ~should_bind[conflict]
 
             self.bind(should_bind, current_time)
             self.move(should_move, move_chance, current_time)
 
-        print(f"Total binds: {self.total_binds}")
-        print(f"Total moves: {self.total_moves}")
+            if ts % 100000 == 100000-1:
+                unlysed_fibers = np.count_nonzero(self.fiber_status > current_time)
 
+                if unlysed_fibers == 0:
+                    print()
+                    print(f"All fibers degraded after {current_time:.2f} sec. Terminating")
+                    # break
+                else:
+                    degraded_fiber_percent = 100 - unlysed_fibers / self.exp.macro_params.total_fibers * 100
+                    print()
+                    print(f"After {current_time:.2f} sec, {degraded_fiber_percent:.1f}% of fibers are degraded.")
 
+        print(f"Total binds: {self.total_binds:,}")
+        print(f"Timesteps with binds: {self.timesteps_with_binds:,}")
+        print(f"Total moves: {self.total_moves:,}")
