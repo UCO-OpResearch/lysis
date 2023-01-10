@@ -28,7 +28,7 @@ from datetime import datetime
 from typing import Any, List, Mapping, Tuple, Union
 
 from .constants import default_filenames
-from .datastore import DataStore, Status
+from .datastore import DataStore, DataStatus
 from .util import dict_to_formatted_str
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -131,7 +131,7 @@ class Experiment(object):
             self.macro_params = MacroParameters()
 
         for data in self.macro_params.data_required:
-            if Status.INITIALIZED not in self.data.status(data):
+            if DataStatus.INITIALIZED not in self.data.status(data):
                 raise RuntimeError(f"'{data}' not initialized in DataStore.")
 
     def to_dict(self) -> dict:
@@ -444,6 +444,16 @@ class MacroParameters:
     Theoretically, with this set to "True", both sets of code will produce the exact same output.
     This will impact performance negatively.
 
+    :Units: None
+    :Fortran: None"""
+
+    processing_library: str = 'cupy'
+    """Which library the macroscale model should use for processing. 
+    Options include
+    
+    * 'numpy'
+    * 'cupy'
+    
     :Units: None
     :Fortran: None"""
 
