@@ -2,6 +2,7 @@ import os
 from enum import Flag, auto, unique
 from typing import Any, AnyStr, List, Union
 
+import numpy as cp
 import numpy as np
 
 from .util import dict_to_formatted_str
@@ -79,7 +80,7 @@ class DataStore:
             self._data[key] = value
             self._set_status(key, Status.LOADED)
 
-    def __getattr__(self, key: AnyStr) -> np.ndarray:
+    def __getattr__(self, key: AnyStr) -> cp.ndarray:
         if key in self._data:
             return self._data[key]
         elif Status.INITIALIZED not in self.status(key):
@@ -151,7 +152,7 @@ class DataStore:
             raise RuntimeError(f'{key} already saved to disk as {self._filenames[key]}. '
                                f'This module should NOT be used for modifying existing data on disk.')
         elif Status.LOADED in self.status(key):
-            self._data[key] = np.append(self._data[key], value, axis)
+            self._data[key] = cp.append(self._data[key], value, axis)
         else:
             self.__setattr__(key, value)
 
@@ -169,7 +170,7 @@ class DataStore:
             # This is the format used by the original Fortran/Matlab code
             if os.path.splitext(filename)[1] == '.dat':
                 data = np.loadtxt(os.path.join(self._path, self._filenames[key]), **args)
-                self._data[key] = post_load(data)
+                self._data[key] = cp.array(post_load(data))
                 self._set_status(key, Status.LOADED)
             # If the file is stored in NumPy format (with the extension .npy)
             # This will be the format used by the Python model once complete
@@ -194,9 +195,9 @@ class DataStore:
             filename = self._filenames[key]
             if os.path.splitext(filename)[1] == '.dat':
                 # Save as a text file with the extension .dat
-                np.savetxt(os.path.join(self._path, filename),
+                cp.savetxt(os.path.join(self._path, filename),
                            self._data[key],
                            newline=os.linesep)
             else:
                 # Save as a NumPy file with the extension .npy
-                np.save(os.path.join(self._path, filename))
+                np.save(os.path.join(self._path, filename), cp.asnumpy(self._data[key]))
