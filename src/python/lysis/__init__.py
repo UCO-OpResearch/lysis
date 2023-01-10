@@ -1,3 +1,4 @@
 from .edge_grid import *
 from .molecule import *
-from .macroscale import *
+from .np_macroscale import *
+from .cp_macroscale import *

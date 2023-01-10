@@ -2,10 +2,11 @@ import os
 from enum import Flag, auto, unique
 from typing import Any, AnyStr, List, Union
 
-import numpy as cp
+import cupy as cp
 import numpy as np
 
 from .util import dict_to_formatted_str
+
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -38,7 +39,7 @@ _data_post_load = {
 
 
 @unique
-class Status(Flag):
+class DataStatus(Flag):
     NONE = 0
     INITIALIZED = auto()
     LOADED = auto()
@@ -69,49 +70,63 @@ class DataStore:
     def __setattr__(self, key: AnyStr, value: Any):
         if key[0] == '_':
             raise RuntimeError(f"Don't touch my private members! ({key})")
-        elif Status.INITIALIZED not in self.status(key):
+        elif key[:3] == "cp_" and DataStatus.INITIALIZED not in self.status(key[3:]):
             raise RuntimeError(f'{key} not initialized. Use .new() first')
-        elif Status.SAVED in self.status(key):
+        elif key[:3] != "cp_" and DataStatus.INITIALIZED not in self.status(key):
+            raise RuntimeError(f'{key} not initialized. Use .new() first')
+        elif DataStatus.SAVED in self.status(key):
             raise RuntimeError(f'{key} already exists (as {self._filenames[key]}). '
                                f'This module should NOT be used for modifying existing data on disk.')
-        elif Status.LOADED in self.status(key):
+        elif DataStatus.LOADED in self.status(key):
             raise RuntimeError(f'{key} already has data in memory. Use .delete(), .overwrite(), or .append() instead.')
+        elif key[:3] != "cp_" and cp.get_array_module(value) == 'cupy':
+            raise RuntimeError(f"Use the prefix 'cp_' for all CuPy objects.")
         else:
             self._data[key] = value
-            self._set_status(key, Status.LOADED)
+            self._set_status(key, DataStatus.LOADED)
 
-    def __getattr__(self, key: AnyStr) -> cp.ndarray:
+    def __getattr__(self, key: AnyStr) -> np.ndarray | cp.ndarray:
         if key in self._data:
             return self._data[key]
-        elif Status.INITIALIZED not in self.status(key):
+        elif key[:3] == "cp_" and DataStatus.INITIALIZED not in self.status(key[3:]):
+            raise RuntimeError(f'{key} not initialized.')
+        elif key[:3] != "cp_" and DataStatus.INITIALIZED not in self.status(key):
             raise RuntimeError(f'{key} not initialized.')
         else:
             self.load_from_disk(key)
             return self._data[key]
 
-    def status(self, key: AnyStr) -> Status:
+    def status(self, key: AnyStr) -> DataStatus:
         if key in self._status:
             return self._status[key]
-        if key not in self._filenames:
-            return Status.NONE
+        if key[:3] == "cp_":
+            if key[3:] not in self._filenames:
+                return DataStatus.NONE
+            else:
+                status = DataStatus.INITIALIZED
+                filename = self._filenames[key[3:]]
         else:
-            status = Status.INITIALIZED
-            if key in self._data:
-                status = status | Status.LOADED
-            if os.path.isfile(os.path.join(self._path, self._filenames[key])):
-                status = status | Status.SAVED
-            self._status[key] = status
-            return status
+            if key not in self._filenames:
+                return DataStatus.NONE
+            else:
+                status = DataStatus.INITIALIZED
+                filename = self._filenames[key]
+        if key in self._data:
+            status = status | DataStatus.LOADED
+        if os.path.isfile(os.path.join(self._path, filename)):
+            status = status | DataStatus.SAVED
+        self._status[key] = status
+        return status
 
-    def _set_status(self, key: AnyStr, status: Status):
+    def _set_status(self, key: AnyStr, status: DataStatus):
         current_status = self.status(key)
-        if current_status == Status.NONE:
+        if current_status == DataStatus.NONE:
             raise RuntimeError(f"This shouldn't happen. Don't try to set the status without at least a filename set.")
         self._status[key] = current_status | status
 
-    def _unset_status(self, key: AnyStr, status: Status):
+    def _unset_status(self, key: AnyStr, status: DataStatus):
         current_status = self.status(key)
-        if current_status == Status.NONE:
+        if current_status == DataStatus.NONE:
             raise RuntimeError(f"This shouldn't happen. Don't try to set the status without at least a filename set.")
         self._status[key] = current_status & ~status
 
@@ -120,84 +135,134 @@ class DataStore:
             raise RuntimeError(f"Don't touch my private members! ('{key}')")
         if key in self._internal_names:
             raise RuntimeError(f"'{key}' overrides the name of an internal attribute.")
-        if Status.INITIALIZED in self.status(key):
+        elif key[:3] == "cp_":
+            if DataStatus.INITIALIZED not in self.status(key[3:]):
+                raise RuntimeError(f"'{key}' is already initialized with file '{self._filenames[key[3:]]}'.")
+            else:
+                self._filenames[key[3:]] = filename
+                self._set_status(key[3:], DataStatus.INITIALIZED)
+        elif DataStatus.INITIALIZED not in self.status(key):
             raise RuntimeError(f"'{key}' is already initialized with file '{self._filenames[key]}'.")
         else:
             self._filenames[key] = filename
-            self._set_status(key, Status.INITIALIZED)
+            self._set_status(key, DataStatus.INITIALIZED)
 
     def delete(self, key: AnyStr):
-        if Status.SAVED in self.status(key):
+        if DataStatus.SAVED in self.status(key):
             raise RuntimeError(f"'{key}' already saved to disk as '{self._filenames[key]}'. '"
+                               f"This module should NOT be used for modifying existing data on disk.")
+        elif key[:3] == "cp_" and DataStatus.SAVED in self.status(key[3:]):
+            raise RuntimeError(f"'{key}' already saved to disk as '{self._filenames[key[3:]]}'. '"
                                f"This module should NOT be used for modifying existing data on disk.")
         elif key in self._data:
             self._data.pop(key)
-            self._unset_status(key, Status.LOADED)
+            self._unset_status(key, DataStatus.LOADED)
         else:
             pass
 
     def overwrite(self, key: AnyStr, value: Any):
-        if Status.SAVED in self.status(key):
+        if DataStatus.SAVED in self.status(key):
             raise RuntimeError(f"'{key}' already saved to disk as '{self._filenames[key]}'. "
                                f"This module should NOT be used for modifying existing data on disk.")
+        elif key[:3] == "cp_" and DataStatus.SAVED in self.status(key[3:]):
+            raise RuntimeError(f"'{key}' already saved to disk as '{self._filenames[key[3:]]}'. '"
+                               f"This module should NOT be used for modifying existing data on disk.")
+        elif key[:3] != "cp_" and cp.get_array_module(value) == 'cupy':
+            raise RuntimeError(f"Use the prefix 'cp_' for all CuPy objects.")
         elif key in self._data:
             self._data[key] = value
         else:
             self.__setattr__(key, value)
 
     def append(self, key: AnyStr, value: Any, axis: int | None = None):
-        if Status.INITIALIZED not in self.status(key):
-            raise RuntimeError(f'{key} not initialized.')
-        elif Status.SAVED in self.status(key):
-            raise RuntimeError(f'{key} already saved to disk as {self._filenames[key]}. '
-                               f'This module should NOT be used for modifying existing data on disk.')
-        elif Status.LOADED in self.status(key):
-            self._data[key] = cp.append(self._data[key], value, axis)
+        if key[:3] == "cp_":
+            if DataStatus.INITIALIZED not in self.status(key[3:]):
+                raise RuntimeError(f'{key} not initialized.')
+            elif DataStatus.SAVED in self.status(key[3:]):
+                raise RuntimeError(f"'{key}' already saved to disk as '{self._filenames[key[3:]]}'. '"
+                                   f"This module should NOT be used for modifying existing data on disk.")
+            elif DataStatus.LOADED in self.status(key):
+                self._data[key] = cp.append(self._data[key], cp.asarray(value), axis)
+        elif key[:3] != "cp_":
+            if DataStatus.INITIALIZED not in self.status(key):
+                raise RuntimeError(f'{key} not initialized.')
+            elif DataStatus.SAVED in self.status(key):
+                raise RuntimeError(f'{key} already saved to disk as {self._filenames[key]}. '
+                                   f'This module should NOT be used for modifying existing data on disk.')
+            elif DataStatus.LOADED in self.status(key):
+                self._data[key] = np.append(self._data[key], cp.asnumpy(value), axis)
         else:
             self.__setattr__(key, value)
 
     def load_from_disk(self, key: AnyStr):
-        if Status.INITIALIZED not in self.status(key):
-            raise RuntimeError(f'{key} not initialized.')
-        elif Status.SAVED not in self.status(key):
-            raise RuntimeError(f'No file for {key} found on disk. '
-                               f'({os.path.join(self._path, self._filenames[key])})')
-        else:
-            filename = self._filenames[key]
-            args = _data_load_args.get(filename, {})
-            post_load = _data_post_load.get(filename, lambda x: x)
-            # If the file is stored in text format (with the extension '.dat')
-            # This is the format used by the original Fortran/Matlab code
-            if os.path.splitext(filename)[1] == '.dat':
-                data = np.loadtxt(os.path.join(self._path, self._filenames[key]), **args)
-                self._data[key] = cp.array(post_load(data))
-                self._set_status(key, Status.LOADED)
-            # If the file is stored in NumPy format (with the extension .npy)
-            # This will be the format used by the Python model once complete
-            # TODO(bpaynter): Implement, consistent with the rest of the model
-            elif os.path.splitext(filename)[1] == '.npy':
-                raise NotImplementedError('Support for NumPy files is yet to be implemented.')
-            # Other file types/extensions are not supported (or planned to be) at this time
+        filename = None
+        xp = None
+        if key[:3] == "cp_":
+            if DataStatus.INITIALIZED not in self.status(key[3:]):
+                raise RuntimeError(f'{key} not initialized.')
+            elif DataStatus.SAVED not in self.status(key[3:]):
+                raise RuntimeError(f'No file for {key} found on disk. '
+                                   f'({os.path.join(self._path, self._filenames[key[3:]])})')
             else:
-                raise AttributeError('Non-supported file type.')
+                filename = self._filenames[key[3:]]
+                xp = cp
+        elif key[:3] != "cp_":
+            if DataStatus.INITIALIZED not in self.status(key):
+                raise RuntimeError(f'{key} not initialized.')
+            elif DataStatus.SAVED not in self.status(key):
+                raise RuntimeError(f'No file for {key} found on disk. '
+                                   f'({os.path.join(self._path, self._filenames[key])})')
+            else:
+                filename = self._filenames[key]
+                xp = np
+        args = _data_load_args.get(filename, {})
+        post_load = _data_post_load.get(filename, lambda x: x)
+        # If the file is stored in text format (with the extension '.dat')
+        # This is the format used by the original Fortran/Matlab code
+        if os.path.splitext(filename)[1] == '.dat':
+            data = np.loadtxt(os.path.join(self._path, filename), **args)
+            self._data[key] = xp.array(post_load(data))
+            self._set_status(key, DataStatus.LOADED)
+        # If the file is stored in NumPy format (with the extension .npy)
+        # This will be the format used by the Python model once complete
+        # TODO(bpaynter): Implement, consistent with the rest of the model
+        elif os.path.splitext(filename)[1] == '.npy':
+            raise NotImplementedError('Support for NumPy files is yet to be implemented.')
+        # Other file types/extensions are not supported (or planned to be) at this time
+        else:
+            raise AttributeError('Non-supported file type.')
 
     def save_to_disk(self, key: AnyStr):
         # TODO(bpaynter): It needs to be checked whether the text files output by this method can be read by
         #   the existing Fortran and Matlab code.
-        if Status.INITIALIZED not in self.status(key):
-            raise RuntimeError(f'{key} not initialized.')
-        elif Status.LOADED not in self.status(key):
-            raise RuntimeError(f'No data for {key}.')
-        elif Status.SAVED in self.status(key):
-            raise RuntimeError(f'{key} already saved to disk as {self._filenames[key]}. '
-                               f'This module should NOT be used for modifying existing data on disk.')
-        else:
-            filename = self._filenames[key]
-            if os.path.splitext(filename)[1] == '.dat':
-                # Save as a text file with the extension .dat
-                cp.savetxt(os.path.join(self._path, filename),
-                           self._data[key],
-                           newline=os.linesep)
+        filename = None
+        xp = None
+        if key[:3] == "cp_":
+            if DataStatus.INITIALIZED not in self.status(key[3:]):
+                raise RuntimeError(f'{key} not initialized.')
+            elif DataStatus.SAVED in self.status(key[3:]):
+                raise RuntimeError(f'No file for {key} found on disk. '
+                                   f'({os.path.join(self._path, self._filenames[key[3:]])})')
             else:
-                # Save as a NumPy file with the extension .npy
-                np.save(os.path.join(self._path, filename), cp.asnumpy(self._data[key]))
+                filename = self._filenames[key[3:]]
+                xp = cp
+        elif key[:3] != "cp_":
+            if DataStatus.INITIALIZED not in self.status(key):
+                raise RuntimeError(f'{key} not initialized.')
+            elif DataStatus.SAVED in self.status(key):
+                raise RuntimeError(f'No file for {key} found on disk. '
+                                   f'({os.path.join(self._path, self._filenames[key])})')
+            else:
+                filename = self._filenames[key]
+                xp = np
+        if DataStatus.LOADED not in self.status(key):
+            raise RuntimeError(f'No data for {key}.')
+
+        if os.path.splitext(filename)[1] == '.dat':
+            # Save as a text file with the extension .dat
+            np.savetxt(os.path.join(self._path, filename),
+                       cp.asnumpy(self._data[key]),
+                       newline=os.linesep)
+        else:
+            # Save as a NumPy file with the extension .npy
+            np.save(os.path.join(self._path, filename), cp.asnumpy(self._data[key]))
