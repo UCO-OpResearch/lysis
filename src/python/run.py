@@ -5,8 +5,8 @@ import lysis
 
 
 e = lysis.util.Experiment(r'../../data', experiment_code='2022-12-27-1100')
-p = {'total_time': 20}
-e.initialize_macro_param()
+p = {'total_time': 1}
+e.initialize_macro_param(p)
 macro = lysis.MacroscaleRun(e)
 os.makedirs(os.path.join(e.os_path, "macro_pstats"), exist_ok=True)
 if os.path.isfile(os.path.join(e.os_path, "macro_pstats", "macro_pstats.sts")):
