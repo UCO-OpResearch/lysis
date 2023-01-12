@@ -1,6 +1,6 @@
 import os
 from enum import Flag, auto, unique
-from typing import Any, AnyStr, List, Union
+from typing import Any, AnyStr, List, Mapping, Union
 
 import cupy as cp
 import numpy as np
@@ -51,7 +51,7 @@ class DataStore:
 
     def __init__(self,
                  path: Union[str, bytes, os.PathLike],
-                 filenames: dict[AnyStr, AnyStr] = None
+                 filenames: Mapping[AnyStr, AnyStr] = None
                  ):
         object.__setattr__(self, '_status', {})
         object.__setattr__(self, '_path', path)
@@ -61,7 +61,7 @@ class DataStore:
             object.__setattr__(self, '_filenames', {})
         object.__setattr__(self, '_data', {})
 
-    def to_dict(self) -> dict[AnyStr, AnyStr]:
+    def to_dict(self) -> Mapping[AnyStr, AnyStr]:
         return self._filenames
 
     def __str__(self):

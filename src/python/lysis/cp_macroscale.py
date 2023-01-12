@@ -1,7 +1,10 @@
+# "C:\Program Files\NVIDIA Corporation\Nsight Systems 2022.4.2\target-windows-x64\nsys.exe" profile c:\Users\bradp\miniconda3\envs\lysis\python.exe cp_run.py
+
 from functools import partial
 
 import cupy as cp
 import numpy as np
+import nvtx
 from tqdm import tqdm
 
 from .util import Experiment
@@ -19,6 +22,7 @@ __status__ = "Development"
 
 class CudaMacroscaleRun:
     def __init__(self, exp: Experiment):
+        # cp.cuda.nvtx.RangePush("Initialization")
         self.exp = exp
         assert self.exp.macro_params is not None
 
@@ -69,6 +73,9 @@ class CudaMacroscaleRun:
         self.total_moves = 0
         self.timesteps_with_fiber_changes = 0
 
+        # cp.cuda.nvtx.RangePop()
+        # cp.cuda.nvtx.Mark("Initialization Complete.")
+
     def unbind_by_degradation(self, m: cp.ndarray, current_time: float):
         count = int(cp.count_nonzero(m))
         if count == 0:
@@ -96,6 +103,7 @@ class CudaMacroscaleRun:
         self.total_micro_unbinds += int(cp.count_nonzero(m & (forced <= self.exp.macro_params.forced_unbind)))
         self.binding_time[m & ~forced] = self.find_binding_time(current_time, int(cp.count_nonzero(m & ~forced)))
 
+    @nvtx.annotate("Bind", color="purple")
     def bind(self, m: cp.ndarray, current_time: float):
         count = int(cp.count_nonzero(m))
         if count == 0:
@@ -281,6 +289,7 @@ class CudaMacroscaleRun:
 
     def run(self):
         for ts in tqdm(cp.arange(self.exp.macro_params.total_time_steps)):
+            # cp.cuda.nvtx.RangePush(f"Iteration {ts:,}")
             current_time = ts * self.exp.macro_params.time_step
 
             self.m_fiber_status = self.find_molecule_fiber_status()
@@ -317,6 +326,8 @@ class CudaMacroscaleRun:
                     print(f"After {current_time:.2f} sec, {self.exp.macro_params.total_fibers - unlysed_fibers:,} "
                           f"fibers are degraded.")
                     print(f"After {current_time:.2f} sec, {degraded_fiber_percent:.1f}% of fibers are degraded.")
+
+            # cp.cuda.nvtx.RangePop()
 
         print(f"Total binds: {self.total_binds:,}")
         print(f"Timesteps with changes to degrade time: {self.timesteps_with_fiber_changes:,}")

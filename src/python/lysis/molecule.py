@@ -13,8 +13,7 @@ __status__ = "Development"
 @dataclass
 class Molecule:
     index: int = field(default=None, compare=False)
-    location_i: int = field(default=None, compare=False)
-    location_j: int = field(default=None, compare=False)
+    location: int = field(default=None, compare=False)
     bound: bool = field(default=False, compare=False)
     leaving_time: float = field(default=float('inf'), compare=False)
     waiting_time: float = field(default=0, compare=False)
