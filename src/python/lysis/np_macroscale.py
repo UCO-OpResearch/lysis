@@ -93,7 +93,9 @@ class MacroscaleRun:
                                          - self.exp.macro_params.time_step / 2)
         self.binding_time[m & forced] = float('inf')
         self.total_micro_unbinds += np.count_nonzero(m & (forced <= self.exp.macro_params.forced_unbind))
-        self.binding_time[m & ~forced] = self.find_binding_time(current_time, np.count_nonzero(m & ~forced))
+        number_of_binds = np.count_nonzero(m & ~forced)
+        if number_of_binds > 0:
+            self.binding_time[m & ~forced] = current_time + self.binding_time_factory.next(number_of_binds)
 
     def bind(self, m: np.ndarray, current_time: float):
         count = np.count_nonzero(m)
@@ -138,7 +140,7 @@ class MacroscaleRun:
                     self.total_moves += 1
                     break
 
-    def find_still_stuck(self, m: np.ndarray, move_chance: np.ndarray, current_time: float) -> np.ndarray:
+    def move(self, m: np.ndarray, move_chance: np.ndarray, current_time: float):
         still_stuck_to_fiber = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
         if self.had_macro_degrade:
             still_stuck_to_fiber[m] = self.waiting_time[m] > current_time
@@ -146,48 +148,29 @@ class MacroscaleRun:
             just_degraded[still_stuck_to_fiber] = self.unbound_by_degradation[still_stuck_to_fiber] == current_time
             np.logical_and(still_stuck_to_fiber, just_degraded, out=still_stuck_to_fiber)
             self.move_to_empty_edge(still_stuck_to_fiber, move_chance, current_time)
-        return still_stuck_to_fiber
 
-    @staticmethod
-    def find_free_to_move(m: np.ndarray, still_stuck_to_fiber: np.ndarray) -> np.ndarray:
         np.logical_and(m, ~still_stuck_to_fiber, out=still_stuck_to_fiber)
         free_to_move = still_stuck_to_fiber
-        return free_to_move
 
-    def find_which_neighbor(self, free_to_move: np.ndarray, move_chance: np.ndarray) -> np.ndarray:
-        # neighbor = np.empty(np.count_nonzero(free_to_move), dtype=np.byte)
         neighbor = move_chance[free_to_move] * (8 / self.exp.macro_params.moving_probability)
         neighbor = neighbor.astype(int)
-        return neighbor
 
-    def actual_move(self, free_to_move: np.ndarray, neighbor: np.ndarray):
         self.location[free_to_move] = self.neighbors[self.location[free_to_move], neighbor]
-
         self.total_moves += np.count_nonzero(free_to_move)
 
-    def check_back_row(self, m: np.ndarray, current_time: float):
+        np.logical_and(free_to_move, self.m_fiber_status >= current_time, out=free_to_move)
+
+        number_to_move = np.count_nonzero(free_to_move)
+        if number_to_move > 0:
+            self.binding_time[free_to_move] = current_time + self.binding_time_factory.next(number_to_move)
+
         reached_rear = np.full(self.exp.macro_params.total_molecules, False)
-        reached_rear[m] = (self.location[m] > (self.exp.macro_params.rows - 2)*self.exp.macro_params.full_row)
+        reached_rear[m] = (self.location[m] > (self.exp.macro_params.rows - 2) * self.exp.macro_params.full_row)
         first_time = np.full(self.exp.macro_params.total_molecules, False)
         first_time[reached_rear] = current_time < self.time_to_reach_back_row[reached_rear]
         np.logical_and(reached_rear, first_time, out=reached_rear)
         self.time_to_reach_back_row[reached_rear] = current_time
 
-    def move(self, m: np.ndarray, move_chance: np.ndarray, current_time: float):
-
-        still_stuck_to_fiber = self.find_still_stuck(m, move_chance, current_time)
-
-        free_to_move = MacroscaleRun.find_free_to_move(m, still_stuck_to_fiber)
-
-        neighbor = self.find_which_neighbor(free_to_move, move_chance)
-
-        self.actual_move(free_to_move, neighbor)
-
-        np.logical_and(free_to_move, self.m_fiber_status >= current_time, out=free_to_move)
-
-        self.binding_time[free_to_move] = self.find_binding_time(current_time, np.count_nonzero(free_to_move))
-
-        self.check_back_row(m, current_time)
 
     class _BindingTimeFactory:
         def __init__(self, exp: Experiment, rng: np.random.Generator):
@@ -224,12 +207,6 @@ class MacroscaleRun:
                     self.pointer += count - self.period - 1
                 return out
 
-
-    def find_binding_time(self, current_time: float, count: int = 1) -> np.ndarray | None:
-        if count > 0:
-            return current_time + self.binding_time_factory.next(count)
-        else:
-            return None
 
     def find_unbinding_time(self, r: np.ndarray, current_time: float) -> np.ndarray:
         """Find the experiment time at which the tPA molecule will unbind
@@ -268,27 +245,20 @@ class MacroscaleRun:
 
         return interp
 
-    def find_molecule_fiber_status(self) -> np.ndarray:
-        return self.fiber_status[self.location]
-
-    def find_should_bind(self, current_time: float):
-        should_bind = (~self.bound
-                       & (self.binding_time < current_time)
-                       & (self.m_fiber_status > current_time)
-                       & (self.waiting_time < current_time))
-        return should_bind
-
     def run(self):
         for ts in tqdm(np.arange(self.exp.macro_params.total_time_steps)):
             current_time = ts * self.exp.macro_params.time_step
 
-            self.m_fiber_status = self.find_molecule_fiber_status()
+            self.m_fiber_status = self.fiber_status[self.location]
             self.had_macro_degrade = False
 
             self.unbind_by_degradation(self.bound & (self.m_fiber_status < current_time), current_time)
             self.unbind_by_time(self.bound & (self.binding_time < current_time), current_time)
 
-            should_bind = self.find_should_bind(current_time)
+            should_bind = (~self.bound
+                           & (self.binding_time < current_time)
+                           & (self.m_fiber_status > current_time)
+                           & (self.waiting_time < current_time))
 
             move_chance = np.ones(self.exp.macro_params.total_molecules, dtype=np.double)
             move_chance[~self.bound] = self.rng.random(np.count_nonzero(~self.bound), dtype=np.double)
