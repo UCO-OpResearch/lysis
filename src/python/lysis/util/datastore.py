@@ -3,7 +3,12 @@ from enum import Flag, auto, unique
 from typing import Any, AnyStr, List, Mapping, Union
 
 # TODO(bpaynter): Split into separate cp_datastore
-import cupy as cp
+cupy = True
+try:
+    import cupy as cp
+except ImportError:
+    cupy = False
+    
 import numpy as np
 
 from .util import dict_to_formatted_str
@@ -86,7 +91,7 @@ class DataStore:
             self._data[key] = value
             self._set_status(key, DataStatus.LOADED)
 
-    def __getattr__(self, key: AnyStr) -> np.ndarray | cp.ndarray:
+    def __getattr__(self, key: AnyStr) -> np.ndarray:
         if key in self._data:
             return self._data[key]
         elif key[:3] == "cp_" and DataStatus.INITIALIZED not in self.status(key[3:]):
