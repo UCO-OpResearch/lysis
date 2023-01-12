@@ -2,6 +2,7 @@ import os
 from enum import Flag, auto, unique
 from typing import Any, AnyStr, List, Mapping, Union
 
+# TODO(bpaynter): Split into separate cp_datastore
 import cupy as cp
 import numpy as np
 

@@ -213,6 +213,7 @@ write(*,*)' obtained using code macro_Q2_diffuse_into_and_along.f90'
 !! BRAD 2023-01-05: The result of this neighborhood structure is that, when a molecule is on a boundary,
 !!                  it has a higher probability of reflecting than moving paralell to the boundary.
 !!                  Is this a desired result, or just a result of wanting equal-length neighborhoods?
+!! BRITT:           Desired scheme
 
 ! neighborc is a num x 8 array
 ! neighborc(i, k) = j where fiber j is the kth neighbor of fiber i
@@ -473,6 +474,7 @@ neighborc=0
         tstep=q*delx**2/(12*Diff)  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
         num_t=tf/tstep            !number of timesteps
 !! BRAD 2023-01-08: Does this need to be a float, or can it be an integer?
+!! BRITT:           Has been an integer for years and will probably stay that way
         bs = 4.27d+02              !concentration of binding sites in micromolar
         dist=1.0862d+00 !microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
         count=0
@@ -503,6 +505,9 @@ neighborc=0
             totmove = 0
             time2plot = 0
             bind = 0.0d+00             !vector of the binding times for each tPA
+
+!! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
+            forcedunbdbydeg=0
 
             degrade(1:enoFB) = -1.0  !set the undegradable fibers' degradation status to -1
 
@@ -536,9 +541,9 @@ neighborc=0
 
         !use the random numbers to decide where we start the tPAs
         do i=1,M
-            if (0.le.rvect(i).and.rvect(i).le.init_state(1)) V(1,i)=1 !init_entry(i)=1
+            if (0<=rvect(i).and.rvect(i)<=init_state(1)) V(1,i)=1 !init_entry(i)=1
             do j=1,enoFB
-                if (init_state(j).lt.rvect(i).and.rvect(i).le.init_state(j+1)) then
+                if (init_state(j)<rvect(i).and.rvect(i)<=init_state(j+1)) then
                     !init_entry(i)=j+1
                     V(1,i)=j+1
                 end if
@@ -606,13 +611,14 @@ neighborc=0
 
 !! BRAD 2023-01-05: So we only restrict a "forcedunbdbydeg" molecule from moving for this one timestep?
 !!                  It must still wait to bind after that, but it's free to move?
+!! BRITT:           It was not supposed to be this way. We fixed it 2023-01-12
 
-            forcedunbdbydeg=0 !every timestep reset vector that records which tPA molecules were on degraded fibers to 0
+            ! forcedunbdbydeg=0 !every timestep reset vector that records which tPA molecules were on degraded fibers to 0
 
             !at the beginning of each time step, check to see if any of the fibers should be degraded at this time.
             !Degrade fiber before moving and binding/unbinding tPA:
             do i=enoFB+1,num
-                if(t_degrade(i).lt.t.and.t_degrade(i).gt.0.and.degrade(i).eq.0) then
+                if(t_degrade(i)<t.and.t_degrade(i)>0.and.degrade(i)==0) then
                 !i.e. if degradation time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
                     degrade(i)=-t
                     !write(*,*)'time=',t
@@ -656,7 +662,7 @@ neighborc=0
 
             do j=1,M
                 if(V(2,j)==1) then   !if the molecule is bound
-                    if(t_leave(j).le.t) then
+                    if(t_leave(j)<=t) then
                         !if the time to tPA leaving is smaller than current time, have the molecule unbind
                         V(2,j)=0
 
@@ -672,9 +678,12 @@ neighborc=0
 !!                  Another way of saying this: these forced-unbound tPA aren't unbinding early,
 !!                  but at the same time they would've anyway
 
+!! BRITT:           Of those tPA that unbound on this timestep, some fraction are still stuck to a small piece of fiber.
+!!                  They can move through the clot freely, but can't bind to anything else yet.
+
                         !BELOW ADDED 9/15/17 to account for forced-unbound tPA to be removed
                         r1=urcw1()
-                        if(r1.le.frac_forced) then
+                        if(r1<=frac_forced) then
                         !if the random number is less than the fraction of time tPA is forced to unbind, consider tPA "forced" to unbind, and temporarily remove it from the simulation by assigning it a waiting time
                             t_wait(j)=t+avgwait-tstep/2 !waiting time is current time plus average wait time minus half a timestep so we round to nearest timestep
                             bind(j)=0
@@ -684,22 +693,30 @@ neighborc=0
                 end if !end if(V(2,j)==1 statement. The above unbinds tPA with leaving time < current time
 
 !! BRAD 2023-01-04: So if a molecule unbinds in the if statment immediately above,
-!!                  it is eligable to move/rebind in the same timestep?
+!!                  it is eligible to move/rebind in the same timestep?
+!! BRITT:           This is deliberate. Unbinding takes no time so you can still move/bind in the same timestep
 
                 if(V(2,j)==0) then   !if the molecule is unbound
-                    !first check if it will move or not. if it does not move (i.e. r.le.1-q), check if it can bind.
+
+!! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
+                    if (t_wait(j)>=t.and.forcedunbdbydeg(j)==1) then
+                        forcedunbdbydeg(j)=0
+                    end if
+
+
+                    !first check if it will move or not. if it does not move (i.e. r<=1-q), check if it can bind.
                     !if it can bind, bind it, if not leave it unbound at the same location. if it does move, check if it can bind.
                     !if it can't bind, move it. if it can bind, pick a random number and see if r>(t-bind(j))/tstep.
                     !if it is bigger, move it. if it isn't bigger, bind it.
                     r=urcw1()
                     z=V(1,j)
 
-                    if (r.le.(1-q)) then   !i.e. if we stay on current edge
+                    if (r<=(1-q)) then   !i.e. if we stay on current edge
                         !check if molecule j can bind. ADJUSTED 9/15/17 to account for waiting time
-                        if(bind(j).lt.t.and.bind(j).gt.0.and.degrade(V(1,j)).eq.0) then
+                        if(bind(j)<t.and.bind(j)>0.and.degrade(V(1,j))==0) then
                         !i.e. if binding time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
                         !check if the molecule has a waiting time. if it does, check if the current time is later than the waiting time
-                            if(t_wait(j).le.t) then
+                            if(t_wait(j)<=t) then
                                 !i.e., if the waiting time is t or less, then the molecule can bind so we proceed as normal
                                 V(2,j)=1  !then the molecule binds
                                 bind(j)=0 !reset the binding time to 0
@@ -717,7 +734,7 @@ neighborc=0
                                 !find the time that tPA will unbind:
                                 colr2=0
                                 do i=1,101
-                                    if(CDFtPA(i).ge.r3)then
+                                    if(CDFtPA(i)>=r3)then
                                         colr2 = i    !find the first place on CDF that's bigger than r3
                                         exit
                                     end if
@@ -744,7 +761,7 @@ neighborc=0
 
 !! BRAD 2023-01-04: Why are we using colr2 again here? What is the connection between the lysis time and the unbinding time?
 
-                                if(r400.le.lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
+                                if(r400<=lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
                                     if(r400==lenlysismat(colr2-1)) then
                                         !percent4 = (CDFlys(r400)-r4)/CDFlys(r400)
                                         rmicro = lysismat(r400-1,colr2-1)!tseclys(r400)-tseclys(r400)*percent4
@@ -763,7 +780,7 @@ neighborc=0
                                                                                                 !that's what will happen first
                                     end if
 
-                                end if !for if(r400.le.lenlysismat) loop
+                                end if !for if(r400<=lenlysismat) loop
 
 
 
@@ -778,62 +795,64 @@ neighborc=0
 
                     else              !for if(r.le(1-q) statement. if r>1-q, i.e. if molecule j has the possibility to move
                         !check if molecule j can bind. adjusted 9/15/17 to account for waiting time
-                        if(bind(j).lt.t.and.bind(j).gt.0.and.degrade(V(1,j)).eq.0.and.t_wait(j).le.t) then
+                        if(bind(j)<t.and.bind(j)>0.and.degrade(V(1,j))==0.and.t_wait(j)<t) then
                         !i.e. if binding time is smaller than t AND bigger than 0  AND the edge hasn't already been degraded AND the waiting time is less than the current time.
                         !then the molecule could bind. To determine whether it binds or moves, draw a random number, r2.
-                        !if r2.gt.(t-bind(j))/tstep, then movement happened before binding, so move the molecule rather than bind it
-                        !don't need an if statement here to distinguish between macroscale forced unbinding (by degradation) and microscale forced unbinding, because it's implicit in the "if(bind(j).gt.0)" statement. tPA molecules that were forced to unbind by macro level degradation have bind(j)=0.
+                        !if r2>(t-bind(j))/tstep, then movement happened before binding, so move the molecule rather than bind it
+                        !don't need an if statement here to distinguish between macroscale forced unbinding (by degradation) and microscale forced unbinding, because it's implicit in the "if(bind(j)>0)" statement. tPA molecules that were forced to unbind by macro level degradation have bind(j)=0.
 
                             t_wait(j)=0 !reset waiting time to 0
                             r2=urcw1()
 
 !! BRAD 2023-01-04: r2 > log(r1)/(kon*bs*tstep)+1/2 (Bannish2014 p27)
-
-                            if(r2.gt.(t-bind(j))/tstep) then   !if r2 is such that movement happened before binding, move the molecule
+!! BRITT:           Since bind < t, (t-bind)/t_step is the part of the interval AFTER the binding time.
+!!                  r2 is the moving time (in the interval) so 
+                            
+                            if(r2>(t-bind(j))/tstep) then   !if r2 is such that movement happened before binding, move the molecule
                                                            !and calculate the new binding time associated with the new edge
-                                if ((1-q).lt.r.and.r.le.((1-q)+q/8)) then
+                                if ((1-q)<r.and.r<=((1-q)+q/8)) then
                                     V(1,j) = neighborc(1,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+q/8).lt.r.and.r.le.((1-q)+2*q/8)) then
+                                elseif (((1-q)+q/8)<r.and.r<=((1-q)+2*q/8)) then
                                     V(1,j) = neighborc(2,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+2*q/8).lt.r.and.r.le.((1-q)+3*q/8)) then
+                                elseif (((1-q)+2*q/8)<r.and.r<=((1-q)+3*q/8)) then
                                     V(1,j) = neighborc(3,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+3*q/8).lt.r.and.r.le.((1-q)+4*q/8)) then
+                                elseif (((1-q)+3*q/8)<r.and.r<=((1-q)+4*q/8)) then
                                     V(1,j) = neighborc(4,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+4*q/8).lt.r.and.r.le.((1-q)+5*q/8)) then
+                                elseif (((1-q)+4*q/8)<r.and.r<=((1-q)+5*q/8)) then
                                     V(1,j) = neighborc(5,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+5*q/8).lt.r.and.r.le.((1-q)+6*q/8)) then
+                                elseif (((1-q)+5*q/8)<r.and.r<=((1-q)+6*q/8)) then
                                     V(1,j) = neighborc(6,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+6*q/8).lt.r.and.r.le.((1-q)+7*q/8)) then
+                                elseif (((1-q)+6*q/8)<r.and.r<=((1-q)+7*q/8)) then
                                     V(1,j) = neighborc(7,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+7*q/8).lt.r.and.r.le.((1-q)+8*q/8)) then
+                                elseif (((1-q)+7*q/8)<r.and.r<=((1-q)+8*q/8)) then
                                     V(1,j) = neighborc(8,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
@@ -843,7 +862,7 @@ neighborc=0
 !! BRAD 2023-01-04:
                                 total_moves = total_moves + 1
 
-                            else     !for if(r2.gt.(t-bind(j)/tstep) statement. i.e. if r2 is less than or equal to (t-bind(j))/tstep, have the molecule bind
+                            else     !for if(r2>(t-bind(j)/tstep) statement. i.e. if r2 is less than or equal to (t-bind(j))/tstep, have the molecule bind
                                 V(2,j)=1  !then the molecule binds
                                 bind(j)=0 !reset the binding time to 0
                                 r3=urcw1()
@@ -858,7 +877,7 @@ neighborc=0
                                 !find the time that tPA will unbind:
                                 colr2=0
                                 do i=1,101
-                                    if(CDFtPA(i).ge.r3)then
+                                    if(CDFtPA(i)>=r3)then
                                         colr2 = i    !find the first place on CDF that's bigger than r3
                                         exit
                                     end if
@@ -884,7 +903,7 @@ neighborc=0
                                     r400=nummicro               ! r400 in {2 .. 500}
                                 end if !for if(r400==nummicro+1) loop
 
-                                if(r400.le.lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
+                                if(r400<=lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
                                     if(r400==lenlysismat(colr2-1)) then     ! r400 == 23
                                         !percent4 = (CDFlys(r400)-r4)/CDFlys(r400)
                                         rmicro = lysismat(r400-1,colr2-1)   ! rmicro = lysismat[23, 1]
@@ -893,6 +912,7 @@ neighborc=0
                                         rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4) !tseclys(r400)-tseclys(r400)*percent4
                                                                             ! rmicro in [lysismat[{1..21}, 1] , lysismat[{2..22}, 0]]
 !! BRAD 2023-01-09: What about r400 in (22, 23)?
+!! BRITT            Can interpolate as well, but still map [23, 24) to f(23)                                        
 
                                     end if
 
@@ -906,15 +926,16 @@ neighborc=0
                                                                                                       !that's what will happen first
                                     end if
 
-                                end if !for if(r400.le.lenlysismat) loop
+                                end if !for if(r400<=lenlysismat) loop
 
                             end if  !end r2 statement
 
 
-                        else         !for if(bind(j).lt.t... statement. if molecule j canNOT bind this timestep, just have it move
+                        else         !for if(bind(j)<t... statement. if molecule j canNOT bind this timestep, just have it move
 
 !! BRAD 2023-01-05: Shouldn't need both here, right?
 !!                  If forcedunbdbydeg(j)==1 then we must have just set it and t_wait on this timestep
+!! BRITT:           (Now that we fixed it) t_wait(j)>t is unnecessary
 
                             if(t_wait(j)>t.and.forcedunbdbydeg(j)==1) then   !adjusted 9/15/17 and 5/10/18 to account for waiting time. if molecule has a waiting time>t AND it's a molecule that was forced to unbind by macro level degradation, restrict its diffusion to be away from or along (not into) the clot
                                 temp_neighborc=0 !set temporary neighbor array to 0
@@ -934,7 +955,8 @@ neighborc=0
 !!                  This is unlike the normal situation where a molecule MUST move.
 !!                  This results in forcedunbdbydeg molecules having a lower probability of moving (q-q/(countij+1))
 !!                  Is this a desired outcome, or just a result of "making it work"
-                                if(countij.gt.0) then !if there is at least one edge available for diffusion, randomly choose which edge the molecule goes to
+!! BRITT:           This is desired. It moves slower because it is stuck to a BIG piece.    
+                                if(countij>0) then !if there is at least one edge available for diffusion, randomly choose which edge the molecule goes to
                                     r1=urcw1()
                                     newindex=int(r1*(countij+1))  !choose which edge to diffuse to by randomly drawing an integer between 0 and countij. 0 corresponding to staying on same edge, and a nonzero value corresponds to moving to the edge given by the newindex entry of the temp_neighborc array
                                     !write(*,*)'r1=',r1
@@ -947,53 +969,53 @@ neighborc=0
 !! BRAD 2023-01-04:
                                     total_moves = total_moves + 1
 
-                                end if !end countij.gt.0
+                                end if !end countij>0
 
                             else   ! for t_wait(j)>t... if statement. if there's no waiting time, or the waiting time is less than the current time, or the molecule was forced to unbind on the microscale (so is on a "small" FDP that can diffuse through the clot), the molecule can move as normal
 
-                                if ((1-q).lt.r.and.r.le.((1-q)+q/8)) then
+                                if ((1-q)<r.and.r<=((1-q)+q/8)) then
                                     V(1,j) = neighborc(1,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+q/8).lt.r.and.r.le.((1-q)+2*q/8)) then
+                                elseif (((1-q)+q/8)<r.and.r<=((1-q)+2*q/8)) then
                                     V(1,j) = neighborc(2,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+2*q/8).lt.r.and.r.le.((1-q)+3*q/8)) then
+                                elseif (((1-q)+2*q/8)<r.and.r<=((1-q)+3*q/8)) then
                                     V(1,j) = neighborc(3,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+3*q/8).lt.r.and.r.le.((1-q)+4*q/8)) then
+                                elseif (((1-q)+3*q/8)<r.and.r<=((1-q)+4*q/8)) then
                                     V(1,j) = neighborc(4,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+4*q/8).lt.r.and.r.le.((1-q)+5*q/8)) then
+                                elseif (((1-q)+4*q/8)<r.and.r<=((1-q)+5*q/8)) then
                                     V(1,j) = neighborc(5,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+5*q/8).lt.r.and.r.le.((1-q)+6*q/8)) then
+                                elseif (((1-q)+5*q/8)<r.and.r<=((1-q)+6*q/8)) then
                                     V(1,j) = neighborc(6,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+6*q/8).lt.r.and.r.le.((1-q)+7*q/8)) then
+                                elseif (((1-q)+6*q/8)<r.and.r<=((1-q)+7*q/8)) then
                                     V(1,j) = neighborc(7,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+7*q/8).lt.r.and.r.le.((1-q)+8*q/8)) then
+                                elseif (((1-q)+7*q/8)<r.and.r<=((1-q)+8*q/8)) then
                                     V(1,j) = neighborc(8,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
@@ -1055,6 +1077,7 @@ neighborc=0
         enddo !for time loop
 
 !! BRAD 2023-01-08: Once the last fiber has degraded, is there any reason to keep going?
+!! BRITT:           No.
 
 !! BRAD 2023-01-06:
         CALL CPU_TIME ( time_end )
