@@ -74,7 +74,7 @@ class MacroscaleRun:
             return None
         self.bound[m] = False
         self.unbound_by_degradation[m] = current_time
-        self.total_macro_unbinds += 1
+        self.total_macro_unbinds += count
         self.waiting_time[m] = (current_time
                                 + self.exp.macro_params.average_bind_time
                                 - self.exp.macro_params.time_step / 2)
@@ -92,10 +92,10 @@ class MacroscaleRun:
                                          + self.exp.macro_params.average_bind_time
                                          - self.exp.macro_params.time_step / 2)
         self.binding_time[m & forced] = float('inf')
-        self.total_micro_unbinds += np.count_nonzero(m & (forced <= self.exp.macro_params.forced_unbind))
-        number_of_binds = np.count_nonzero(m & ~forced)
-        if number_of_binds > 0:
-            self.binding_time[m & ~forced] = current_time + self.binding_time_factory.next(number_of_binds)
+        self.total_micro_unbinds += np.count_nonzero(forced)
+        unbinding_times_needed = np.count_nonzero(m & ~forced)
+        if unbinding_times_needed > 0:
+            self.binding_time[m & ~forced] = current_time + self.binding_time_factory.next(unbinding_times_needed)
 
     def bind(self, m: np.ndarray, current_time: float):
         count = np.count_nonzero(m)
@@ -267,7 +267,7 @@ class MacroscaleRun:
             threshold = np.full(self.exp.macro_params.total_molecules, -1, dtype=np.double)
             threshold[conflict] = ((current_time - self.binding_time[conflict])
                                    / self.exp.macro_params.time_step)
-            should_bind[conflict] = self.rng.random(np.count_nonzero(conflict)) <= threshold[conflict]
+            should_bind[conflict] = self.rng.random(np.count_nonzero(conflict)) > threshold[conflict]
             should_move[conflict] = ~should_bind[conflict]
 
             self.bind(should_bind, current_time)
