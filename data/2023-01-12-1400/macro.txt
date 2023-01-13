@@ -27,11 +27,11 @@
   t=   273.915266666667     
   t=   410.872900000000     
   t=   547.830533333333     
- Processing time:    2511.28832700000       sec
- Total Binds:       558326
- Total Moves:             9577435705
+ Processing time:    2,511.28832700000       sec
+ Total Binds:       558,326
+ Total Moves:             9,577,435,705
  nplt=           2
  r4=  8.901912985560786E-002
- countmacrounbd=      218514
- countmicrounbd=       30318
+ countmacrounbd=      218,514
+ countmicrounbd=       30,318
  Nsavevect=           0

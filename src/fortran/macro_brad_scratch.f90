@@ -2,7 +2,7 @@ program macrolysis
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15) :: expCode = '2023-01-12-1400'
+character(15) :: expCode = '2022-12-27-1100'
 
 integer,parameter  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
 integer,parameter  :: F=121!121 !71 !81  !# of lattice nodes in one column in the vertical direction
@@ -12,7 +12,7 @@ integer,parameter  :: Ffree=29!29 !3 !13 !1st node in vertical direction contain
 integer,parameter  :: stats= 1 !! BRAD 2023-01-04: 10
 integer,parameter  :: num=(2*N-1)*F+N*(F-1)
 integer,parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
-integer,parameter  :: tf=10*60!! BRAD 2023-01-06: 20*60!15*60 !final time in sec
+integer,parameter  :: tf=15*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
 integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
 integer  :: i, istat
@@ -165,9 +165,15 @@ double precision, dimension(M) :: mfpt !vector I'll use to save the first passag
 integer, dimension(M) :: yesfpt !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
 
 !! BRAD 2023-01-06:
-integer(8) :: total_moves
+integer(8) :: total_regular_moves
+integer(8) :: total_restricted_moves
 integer :: total_binds
+integer :: degraded_fibers
+integer :: reached_back_row
 REAL time_begin, time_end
+real rounded_time
+real degraded_percent
+real reached_back_row_percent
 
 if( isBinary ) then
     !filetype = 'unformatted' !if you compile with gfortran or f95
@@ -414,28 +420,28 @@ neighborc=0
 
 
 
-    write(filename2,'(a74)') 'data/' // expCode // '/tPAleavePLG2_tPA01_Q2.dat'
+    write(filename2,'(a74)') 'data/' // expCode // '/tPAleave.dat'
     open(200,file=filename2)
     do i=1,101
         read(200,*)CDFtPA(i)
     end do
     close(200)
-    write(*,*)'read tPAleavePLG2_tPA01_Q2.dat'
+    write(*,*)'read tPAleave.dat'
 
-    write(filename3,'(a73)') 'data/' // expCode // '/tsectPAPLG2_tPA01_Q2.dat'
+    write(filename3,'(a73)') 'data/' // expCode // '/tsectPA.dat'
     open(300,file=filename3)
     do i=1,101
         read(300,*)tsec1(i)
     end do
     close(300)
-    write(*,*)'read tsectPAPLG2_tPA01_Q2.dat'
+    write(*,*)'read tsectPA.dat'
 
 
 
 !lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
-    OPEN(unit=1,FILE='data/' // expCode // '/lysismat_PLG2_tPA01_Q2.dat')
+    OPEN(unit=1,FILE='data/' // expCode // '/lysismat.dat')
     do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
        READ(1,*)(lysismat(i,ii),ii=1,100)
     enddo
@@ -443,7 +449,7 @@ neighborc=0
 
 !lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
-    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect_PLG2_tPA01_Q2.dat')
+    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect.dat')
     do i=1,100
         READ(2,*)lenlysismat(i)
     end do
@@ -492,7 +498,10 @@ neighborc=0
 
 !! BRAD 2023-01-04:
         total_binds = 0
-        total_moves = 0
+        total_regular_moves = 0
+        total_restricted_moves = 0
+        degraded_fibers = 0
+        reached_back_row = 0
 
         !Initialize vectors to 0
             degrade  =0.0d+00         !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
@@ -554,13 +563,13 @@ neighborc=0
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(tfile,'(75a)') 'data/' // expCode // '/tsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(movefile,'(74a)') 'data/' // expCode // '/move_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(plotfile,'(74a)') 'data/' // expCode // '/plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!        write(tfile,'(75a)') 'data/' // expCode // '/tsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!        write(movefile,'(74a)') 'data/' // expCode // '/move_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!        write(plotfile,'(74a)') 'data/' // expCode // '/plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
@@ -568,13 +577,13 @@ neighborc=0
         !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        open(degunit,file=degfile,form=filetype)
-        open(Nunit,file=Nfile,form=filetype)
-        open(tunit,file=tfile,form=filetype)
-        open(moveunit,file=movefile,form=filetype)
-        open(lastmoveunit,file=lastmovefile,form=filetype)
-        open(plotunit,file=plotfile,form=filetype)
-        open(mfptunit,file=mfptfile,form=filetype)
+!        open(degunit,file=degfile,form=filetype)
+!        open(Nunit,file=Nfile,form=filetype)
+!        open(tunit,file=tfile,form=filetype)
+!        open(moveunit,file=movefile,form=filetype)
+!        open(lastmoveunit,file=lastmovefile,form=filetype)
+!        open(plotunit,file=plotfile,form=filetype)
+!        open(mfptunit,file=mfptfile,form=filetype)
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !open(degnextunit,file=degnextfile,form=filetype)
         !open(Venextunit,file=Venextfile,form=filetype)
@@ -583,8 +592,8 @@ neighborc=0
         !open(cindunit,file=cindfile,form=filetype)
         !open(bind1unit,file=bind1file,form=filetype)
 
-        write(degunit) degrade(:)
-        write(tunit) t
+!        write(degunit) degrade(:)
+!        write(tunit) t
 
         write(*,*)' save as deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
 
@@ -607,7 +616,12 @@ neighborc=0
             if(t>tf) exit  !only do the big "do" loop while t<tf
 
 
-            if(mod(count,400000)==0) write(*,*)' t=',t
+            if(mod(count,100000)==0) then
+                rounded_time = real(t)
+                degraded_percent = real(degraded_fibers)/(num-enoFB)*100
+                reached_back_row_percent = real(reached_back_row)/M*100
+                write(*,'(A,F7.2,A,I5,A,F5.1,A,I5,A,F5.1,A)')'After ',rounded_time,' sec, ',degraded_fibers,' fibers are degraded (',degraded_percent,'% of total) and ',reached_back_row,' molecules have reached the back row (',reached_back_row_percent,'% of total).'
+            end if
 
 !! BRAD 2023-01-05: So we only restrict a "forcedunbdbydeg" molecule from moving for this one timestep?
 !!                  It must still wait to bind after that, but it's free to move?
@@ -621,6 +635,8 @@ neighborc=0
                 if(t_degrade(i)<t.and.t_degrade(i)>0.and.degrade(i)==0) then
                 !i.e. if degradation time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
                     degrade(i)=-t
+!! BRAD 2023-01-13:
+                    degraded_fibers = degraded_fibers + 1
                     !write(*,*)'time=',t
                     !write(*,*)'edge that degraded=',i
 
@@ -699,7 +715,7 @@ neighborc=0
                 if(V(2,j)==0) then   !if the molecule is unbound
 
 !! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
-                    if (t_wait(j)>=t.and.forcedunbdbydeg(j)==1) then
+                    if (t_wait(j)<=t.and.forcedunbdbydeg(j)==1) then
                         forcedunbdbydeg(j)=0
                     end if
 
@@ -859,8 +875,8 @@ neighborc=0
                                                                      !which tPA will bind, minus half a time step so we round
                                 end if !(for diffusion part)
 
-!! BRAD 2023-01-04:
-                                total_moves = total_moves + 1
+!! BRAD 2023-01-13:
+                                total_regular_moves = total_regular_moves + 1
 
                             else     !for if(r2>(t-bind(j)/tstep) statement. i.e. if r2 is less than or equal to (t-bind(j))/tstep, have the molecule bind
                                 V(2,j)=1  !then the molecule binds
@@ -967,9 +983,12 @@ neighborc=0
                                     !write(*,*)'end of new loop **************'
                                     !if countij=0 then none of the edges are available for diffusion, molecule is stuck and must stay on current edge, so do nothing
 !! BRAD 2023-01-04:
-                                    total_moves = total_moves + 1
+!                                    total_moves = total_moves + 1
 
                                 end if !end countij>0
+                                
+!! BRAD 2023-01-13:
+                                total_restricted_moves = total_restricted_moves + 1
 
                             else   ! for t_wait(j)>t... if statement. if there's no waiting time, or the waiting time is less than the current time, or the molecule was forced to unbind on the microscale (so is on a "small" FDP that can diffuse through the clot), the molecule can move as normal
 
@@ -1023,7 +1042,7 @@ neighborc=0
                                 end if !(for diffusion part)
 
 !! BRAD 2023-01-04:
-                                total_moves = total_moves + 1
+                                total_regular_moves = total_regular_moves + 1
                             endif !end t_wait part
 
                         end if !end bind(j) statement
@@ -1034,6 +1053,9 @@ neighborc=0
                 !for the first run only, at the end of each step, check to see if the molecule hit a fiber in the back row
                 if(istat==1) then
                     if (V(1,j)>=backrow.and.yesfpt(j)==0) then !if the molecule is on the back row and it hasn't made it there before
+!! BRAD 2023-01-13:
+                        reached_back_row = reached_back_row + 1
+                        
                         mfpt(j)=t
                         yesfpt(j)=1 !set entry to 1 so we don't track this molecule any more
                     end if !end if(V(1,j)>=backrow....) loop
@@ -1067,10 +1089,10 @@ neighborc=0
 !                Vboundnext(cNsave+1,:) = V(2,:)
 !                degnext(cNsave+1,:) = degrade(1:num)
 !                tsave(cNsave+1) = t
-!                !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-!                !countbindV(istat,cNsave)=countbind
-!                !countindepV(istat,cNsave)=countindep
-!                !bind1V(istat,cNsave)=sum(bind1)
+                !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+                !countbindV(istat,cNsave)=countbind
+                !countindepV(istat,cNsave)=countindep
+                !bind1V(istat,cNsave)=sum(bind1)
 !            end if
 
 
@@ -1084,7 +1106,9 @@ neighborc=0
 
         write(*,*)'Processing time: ', time_end - time_begin, ' sec'
         write(*,*)'Total Binds: ',total_binds
-        write(*,*)'Total Moves: ',total_moves
+        write(*,*)'Total Regular Moves: ',total_regular_moves
+        write(*,*)'Total Restricted Moves: ',total_restricted_moves
+        write(*,*)'Molecules that reached back row: ',reached_back_row
 
         Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
         front=0
@@ -1181,8 +1205,8 @@ neighborc=0
 
         !In order to plot this and finish the calculations in Matlab, I need to save plotstuff2, lastmove, and move
 
-        write(moveunit) move(:,:)
-        write(plotunit) plotstuff2(:,:)
+!        write(moveunit) move(:,:)
+!        write(plotunit) plotstuff2(:,:)
 
         if(istat==1)then  !choose how many runs you want to save to make a movie
             !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
@@ -1303,25 +1327,25 @@ neighborc=0
                 end do
             end do  !for jj loop
 
-            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-            open(x1unit,file=x1file,form=filetype)
-            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-            open(x2unit,file=x2file,form=filetype)
-            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-            open(y1unit,file=y1file,form=filetype)
-            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-            open(y2unit,file=y2file,form=filetype)
-            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-            open(xvunit,file=xvfile,form=filetype)
-            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-            open(yvunit,file=yvfile,form=filetype)
+!            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!            open(x1unit,file=x1file,form=filetype)
+!            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!            open(x2unit,file=x2file,form=filetype)
+!            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!            open(y1unit,file=y1file,form=filetype)
+!            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!            open(y2unit,file=y2file,form=filetype)
+!            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!            open(xvunit,file=xvfile,form=filetype)
+!            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!            open(yvunit,file=yvfile,form=filetype)
 
-            write(x1unit) X1plot
-            write(x2unit) X2plot
-            write(y1unit) Y1plot
-            write(y2unit) Y2plot
-            write(xvunit) Xvplot
-            write(yvunit) Yvplot
+!            write(x1unit) X1plot
+!            write(x2unit) X2plot
+!            write(y1unit) Y1plot
+!            write(y2unit) Y2plot
+!            write(xvunit) Xvplot
+!            write(yvunit) Yvplot
 
             !!Now do location and boundedness of tPA
             do i=1,F
@@ -1403,13 +1427,13 @@ neighborc=0
             end do
 
 
-            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-            open(tPAbdunit,file=tPAbdfile,form=filetype)
-            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-            open(tPAfreeunit,file=tPAfreefile,form=filetype)
+!            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!            open(tPAbdunit,file=tPAbdfile,form=filetype)
+!            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+!            open(tPAfreeunit,file=tPAfreefile,form=filetype)
 
-            write(tPAbdunit) bdtPA
-            write(tPAfreeunit) freetPA
+!            write(tPAbdunit) bdtPA
+!            write(tPAfreeunit) freetPA
 
 
             !now save different timestep so I can make a matlab movie
@@ -1496,12 +1520,12 @@ neighborc=0
                         end do
                     end do  !for jj loop
 
-                    write(x1unit) X1plot
-                    write(x2unit) X2plot
-                    write(y1unit) Y1plot
-                    write(y2unit) Y2plot
-                    write(xvunit) Xvplot
-                    write(yvunit) Yvplot
+!                    write(x1unit) X1plot
+!                    write(x2unit) X2plot
+!                    write(y1unit) Y1plot
+!                    write(y2unit) Y2plot
+!                    write(xvunit) Xvplot
+!                    write(yvunit) Yvplot
 
                     !!Now do location and boundedness of tPA
                     do i=1,F
@@ -1582,20 +1606,20 @@ neighborc=0
                         end do
                     end do
 
-                    write(tPAbdunit) bdtPA
-                    write(tPAfreeunit) freetPA
+!                    write(tPAbdunit) bdtPA
+!                    write(tPAfreeunit) freetPA
 
                 end if !for if mod(imod,60) loop
             end do !for imod loop
 
-            close(x1unit)
-            close(x2unit)
-            close(y1unit)
-            close(y2unit)
-            close(xvunit)
-            close(yvunit)
-            close(tPAbdunit)
-            close(tPAfreeunit)
+!            close(x1unit)
+!            close(x2unit)
+!            close(y1unit)
+!            close(y2unit)
+!            close(xvunit)
+!            close(yvunit)
+!            close(tPAbdunit)
+!            close(tPAfreeunit)
 
 
             !!!!! END ADDED STUFF FOR MOVIE
@@ -1610,28 +1634,28 @@ neighborc=0
 
 write(*,*)'Nsavevect=',Nsavevect(:)
 
-!!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-!write(cbindunit) countbindV
-!write(cindunit) countindepV
-!write(bind1unit) bind1V
-write(Nunit) Nsavevect(:)
-write(lastmoveunit) lastmove(:,:)
-write(mfptunit) mfpt(:)
+    !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+    !write(cbindunit) countbindV
+    !write(cindunit) countindepV
+    !write(bind1unit) bind1V
+!    write(Nunit) Nsavevect(:)
+!    write(lastmoveunit) lastmove(:,:)
+!    write(mfptunit) mfpt(:)
 
-close(degunit)
-close(Nunit)
-close(tunit)
-close(moveunit)
-close(lastmoveunit)
-close(plotunit)
-close(mfptunit)
-!!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-!close(degnextunit)
-!close(Venextunit)
-!close(Vbdnextunit)
-!close(cbindunit)
-!close(cindunit)
-!close(bind1unit)
+!    close(degunit)
+!    close(Nunit)
+!    close(tunit)
+!    close(moveunit)
+!    close(lastmoveunit)
+!    close(plotunit)
+!    close(mfptunit)
+    !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+    !close(degnextunit)
+    !close(Venextunit)
+    !close(Vbdnextunit)
+    !close(cbindunit)
+    !close(cindunit)
+    !close(bind1unit)
 
 CONTAINS
 

@@ -22,21 +22,15 @@ __status__ = "Development"
 
 class CudaMacroscaleRun:
     def __init__(self, exp: Experiment):
-        # cp.cuda.nvtx.RangePush("Initialization")
         self.exp = exp
         assert self.exp.macro_params is not None
 
-        # try:
-        #     self.rng = KissRandomGenerator(seed=abs(exp.macro_params.seed))
-        # except OSError:
-        #     print("KISS Random Generator Error. Using NumPy instead.")
         self.rng = cp.random.default_rng(seed=abs(exp.macro_params.seed))
 
         self.binding_time_factory = self._BindingTimeFactory(self.exp, self.rng)
 
         edge_lookup = partial(np.ravel_multi_index, dims=(exp.macro_params.rows, exp.macro_params.full_row))
 
-        # self.edge_grid = EdgeGrid(exp)
         self.fiber_status = cp.full(self.exp.macro_params.rows * self.exp.macro_params.full_row,
                                     float('inf'), dtype=cp.float_)
         for i, j in np.ndindex(self.exp.macro_params.empty_rows, self.exp.macro_params.full_row):
@@ -62,7 +56,7 @@ class CudaMacroscaleRun:
         # self.leaving_time = cp.full(exp.macro_params.total_molecules, float('inf'), dtype=cp.float_)
         self.waiting_time = cp.full(exp.macro_params.total_molecules, 0, dtype=cp.float_)
         self.binding_time = cp.full(exp.macro_params.total_molecules, float('inf'), dtype=cp.float_)
-        self.unbound_by_degradation = cp.full(exp.macro_params.total_molecules, 0, dtype=cp.float_)
+        self.unbound_by_degradation = cp.full(exp.macro_params.total_molecules, 0, dtype=cp.bool_)
         self.time_to_reach_back_row = cp.full(exp.macro_params.total_molecules, float('inf'), dtype=cp.float_)
         self.xp = cp.arange(101)
 
@@ -73,9 +67,7 @@ class CudaMacroscaleRun:
         self.total_moves = 0
         self.timesteps_with_fiber_changes = 0
 
-        # cp.cuda.nvtx.RangePop()
-        # cp.cuda.nvtx.Mark("Initialization Complete.")
-
+    @nvtx.annotate("Unbind by degradation", color="blue")
     def unbind_by_degradation(self, m: cp.ndarray, current_time: float):
         count = int(cp.count_nonzero(m))
         if count == 0:
@@ -89,6 +81,7 @@ class CudaMacroscaleRun:
         self.binding_time[m] = float('inf')
         self.had_macro_degrade = True
 
+    @nvtx.annotate("Unbind by time", color="blue")
     def unbind_by_time(self, m: cp.ndarray, current_time: float):
         count = int(cp.count_nonzero(m))
         if count == 0:
@@ -103,7 +96,7 @@ class CudaMacroscaleRun:
         self.total_micro_unbinds += int(cp.count_nonzero(m & (forced <= self.exp.macro_params.forced_unbind)))
         self.binding_time[m & ~forced] = self.find_binding_time(current_time, int(cp.count_nonzero(m & ~forced)))
 
-    @nvtx.annotate("Bind", color="purple")
+    @nvtx.annotate("Bind", color="red")
     def bind(self, m: cp.ndarray, current_time: float):
         count = int(cp.count_nonzero(m))
         if count == 0:
@@ -130,6 +123,7 @@ class CudaMacroscaleRun:
         self.fiber_status[self.location[m]] = cp.fmin(self.fiber_status[self.location[m]],
                                                       lysis_time)
 
+    @nvtx.annotate("Move to empty edge", color="yellow")
     def move_to_empty_edge(self, m: cp.ndarray, move_chance: cp.ndarray, current_time: float):
         for n in cp.arange(self.exp.macro_params.total_molecules)[m]:
             neighborhood = [(self.neighbors[self.location[n], k]) for k in range(8)]
@@ -147,6 +141,7 @@ class CudaMacroscaleRun:
                     self.total_moves += 1
                     break
 
+    @nvtx.annotate("Find still stuck", color="yellow")
     def find_still_stuck(self, m: cp.ndarray, move_chance: cp.ndarray, current_time: float) -> cp.ndarray:
         still_stuck_to_fiber = cp.full(self.exp.macro_params.total_molecules, False, dtype=cp.bool_)
         if self.had_macro_degrade:
@@ -158,10 +153,12 @@ class CudaMacroscaleRun:
         return still_stuck_to_fiber
 
     @staticmethod
+    @nvtx.annotate("Find still free to move", color="yellow")
     def find_free_to_move(m: cp.ndarray, still_stuck_to_fiber: cp.ndarray) -> cp.ndarray:
         cp.logical_and(m, ~still_stuck_to_fiber, out=still_stuck_to_fiber)
         free_to_move = still_stuck_to_fiber
         return free_to_move
+
 
     def find_which_neighbor(self, free_to_move: cp.ndarray, move_chance: cp.ndarray) -> cp.ndarray:
         # neighbor = cp.empty(int(cp.count_nonzero(free_to_move)), dtype=cp.byte)
