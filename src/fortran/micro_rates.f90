@@ -1,7 +1,7 @@
 program micromodel
 
 implicit none
-character(15) :: expCode = '2023-01-12-1400'
+character(15) :: expCode = '2023-01-13-1200'
 !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
 !!!! Lines 19-25 allow you to set the various dissociation constants, binding rates, and the concentration of free PLG
 !!!! This code treats degradation and exposure in the gillespie algorithm, rather than separately with 
@@ -316,7 +316,7 @@ double precision :: uf, urcw1
  if(nodes==5) then
      radius=0.02875      !radius of fiber, in microns, with diameter 57.5 nm
      !!!Read in LatQ1 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='data/' // expCode // '/LatQ1.dat')
+     OPEN(unit=1,FILE='data/' // expCode // '/Lat.dat')
      do i=1,nodes**2
         READ(1,*)(Lat(i,ii),ii=1,nodes**2)
      enddo
@@ -324,7 +324,7 @@ double precision :: uf, urcw1
  elseif(nodes==7) then
      radius=0.03635        !radius of fiber, in microns, with diameter 72.7 nm
      !!!Read in LatQ2 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='data/' // expCode // '/LatQ2.dat')
+     OPEN(unit=1,FILE='data/' // expCode // '/Lat.dat')
      do i=1,nodes**2
      READ(1,*)(Lat(i,ii),ii=1,nodes**2)
      enddo
@@ -332,7 +332,7 @@ double precision :: uf, urcw1
  elseif(nodes==8) then
      radius=0.04065        !radius of fiber, in microns, with diameter 81.3 nm
      !!!Read in LatQ3 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='data/' // expCode // '/LatQ3.dat')
+     OPEN(unit=1,FILE='data/' // expCode // '/Lat.dat')
      do i=1,nodes**2
         READ(1,*)(Lat(i,ii),ii=1,nodes**2)
      enddo
@@ -433,7 +433,7 @@ write(*,*)'runs=',runs
 
 !below starts the big loop where we do 50000 independent simulations ("do stats=1,runs")
 do stats = 1,runs
-  if(MODULO(stats,1000)==1) then
+  if(MODULO(stats,1000)==0) then
     write(*,*)' stats=',stats
   endif
   Nsave=0
@@ -449,22 +449,22 @@ do stats = 1,runs
   endif
 
   if(stats==1) then
-    write(lysfile,'(58a)'  ) 'data/' // expCode // '/lysisPLG2_tPA01_Q2.dat'
-    write(tPAfile,'(61a)'  ) 'data/' // expCode // '/tPA_timePLG2_tPA01_Q2.dat'
-    write(PLifile,'(56a)' ) 'data/' // expCode // '/PLiPLG2_tPA01_Q2.dat'
-    write(endfile,'(64a)' ) 'data/' // expCode // '/lyscompletePLG2_tPA01_Q2.dat'
-    write(plgfile,'(56a)' ) 'data/' // expCode // '/PLGPLG2_tPA01_Q2.dat'
-    write(ctfile,'(58a)' ) 'data/' // expCode // '/countPLG2_tPA01_Q2.dat'
+    write(lysfile,'(58a)'  ) 'data/' // expCode // '/lysis.dat'
+    write(tPAfile,'(61a)'  ) 'data/' // expCode // '/tPA_time.dat'
+    write(PLifile,'(56a)' ) 'data/' // expCode // '/PLi.dat'
+    write(endfile,'(64a)' ) 'data/' // expCode // '/lyscomplete.dat'
+    write(plgfile,'(56a)' ) 'data/' // expCode // '/PLG.dat'
+    write(ctfile,'(58a)' ) 'data/' // expCode // '/count.dat'
     !write(plgbdfile,'(27a)') 'data/' // expCode // '/PLGunbindPLG2_tPA01_Q2.dat'
     !write(plgunbdfile,'(29a)') 'data/' // expCode // '/PLGbindPLG2_tPA01_Q2.dat'
-    write(plitimefile,'(63a)') 'data/' // expCode // '/PLitimePLG2_tPA01_Q2.dat'
-    write(tPAPLifile,'(63a)') 'data/' // expCode // '/tPAPLiunbdPLG2_tPA01_Q2.dat'
+    write(plitimefile,'(63a)') 'data/' // expCode // '/PLitime.dat'
+    write(tPAPLifile,'(63a)') 'data/' // expCode // '/tPAPLiunbd.dat'
     !write(sfile,'(28a)' ) 'data/' // expCode // '/statetPAPLG2_tPA01_Q2.dat'
     !write(profile,'(23a)' ) 'data/' // expCode // '/ersavePLG2_tPA01_Q2.dat'
     !write(t2file,'(23a)' ) 'data/' // expCode // '/tsavePLG2_tPA01_Q2.dat'
-    write(tPAunbdfile,'(61a)') 'data/' // expCode // '/tPAunbindPLG2_tPA01_Q2.dat'
-    write(s2file,'(67a)' ) 'data/' // expCode // '/lasttPAPLG2_tPA01_Q2.dat'
-    write(fpfile,'(77a)') 'data/' // expCode // '/firstPLiPLG2_tPA01_Q2.dat'
+    write(tPAunbdfile,'(61a)') 'data/' // expCode // '/tPAunbind.dat'
+    write(s2file,'(67a)' ) 'data/' // expCode // '/lasttPA.dat'
+    write(fpfile,'(77a)') 'data/' // expCode // '/firstPLi.dat'
     open(lysunit,file=lysfile,form=filetype)
     open(tPAunit,file=tPAfile,form=filetype)
     open(PLiunit,file=PLifile,form=filetype)
