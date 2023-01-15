@@ -385,7 +385,7 @@ class MacroParameters:
     :Units: trials
     :Fortran: stats"""
 
-    total_time: int = 15 * 60
+    total_time: int = 20 * 60
     """Total running time for model.
      
     :Units: seconds
