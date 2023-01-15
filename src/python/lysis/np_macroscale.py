@@ -56,6 +56,9 @@ class MacroscaleRun:
         self.reached_back_row = np.full(exp.macro_params.total_molecules, False, dtype=np.bool_)
         self.xp = np.arange(101)
 
+        self.tracker = np.empty(exp.macro_params.total_time_steps, dtype=int)
+        self.to_track = 348
+
         self.total_macro_unbinds = 0
         self.total_micro_unbinds = 0
         self.total_binds = 0
@@ -64,6 +67,10 @@ class MacroscaleRun:
         self.total_restricted_moves = 0
         self.timesteps_with_fiber_changes = 0
         self.number_reached_back_row = 0
+
+        self.move_to_empty_edge_count = 0
+        self.check_neighbor_empty_count = 0
+        self.stay_put_count = 0
 
     def unbind_by_degradation(self, m: np.ndarray, current_time: float):
         count = np.count_nonzero(m)
@@ -121,9 +128,10 @@ class MacroscaleRun:
                                                       lysis_time)
 
     def get_neighbors(self, m: np.ndarray, count: int):
-        return np.append(self.neighbors[self.location[m]],
-                         self.location[m].reshape(count, 1),
-                         axis=1)
+        return self.neighbors[self.location[m]]
+        # return np.append(self.neighbors[self.location[m]],
+        #                  self.location[m].reshape(count, 1),
+        #                  axis=1)
 
     def select_neighbor(self, count: int, potential_neighbors: int):
         # neighborhood_index = np.full(self.exp.macro_params.total_molecules, 0, dtype=int)
@@ -138,14 +146,16 @@ class MacroscaleRun:
                              neighborhoods: np.ndarray,
                              neighborhood_index: np.ndarray,
                              current_time: float):
-        valid_neighbors_short = np.full(count, False, dtype=np.bool_)
+        valid_neighbors = np.full(count, False, dtype=np.bool_)
 
-        valid_neighbors_short[need_neighbors] = (
+        valid_neighbors[need_neighbors] = (
                 self.fiber_status[neighborhoods[need_neighbors,
                                                 neighborhood_index[need_neighbors]]] < current_time
         )
 
-        return valid_neighbors_short
+        self.check_neighbor_empty_count += 1
+
+        return valid_neighbors
 
     def reset_neighbors(self,
                         neighborhoods: np.ndarray,
@@ -153,7 +163,7 @@ class MacroscaleRun:
                         neighborhood_index: np.ndarray,
                         potential_neighbors: int):
         neighborhoods[need_neighbors,
-                      neighborhood_index[need_neighbors]] = neighborhoods[need_neighbors, potential_neighbors]
+                      neighborhood_index[need_neighbors]] = neighborhoods[need_neighbors, potential_neighbors-1]
 
         return neighborhoods
 
@@ -167,25 +177,29 @@ class MacroscaleRun:
         neighborhoods = self.get_neighbors(m, count)
 
         need_neighbors = np.full(count, True, dtype=np.bool_)
-        valid_neighbors = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
+        destinations = self.location[m]
         potential_neighbors = 9
 
         while np.count_nonzero(need_neighbors) > 0:
-            if potential_neighbors == 0:
+            if potential_neighbors <= 0:
                 raise RuntimeError(f"No valid neighbors!")
 
             neighborhood_index = self.select_neighbor(count, potential_neighbors)
+            stay_put = neighborhood_index == potential_neighbors-1
+            self.stay_put_count += np.count_nonzero(need_neighbors & stay_put)
+            need_neighbors = need_neighbors & ~stay_put
 
-            valid_neighbors_short = self.check_neighbor_empty(count,
-                                                              need_neighbors,
-                                                              neighborhoods,
-                                                              neighborhood_index,
-                                                              current_time)
+            if np.count_nonzero(need_neighbors) == 0:
+                break
 
-            valid_neighbors[m] = valid_neighbors_short
+            valid_neighbors = self.check_neighbor_empty(count,
+                                                        need_neighbors,
+                                                        neighborhoods,
+                                                        neighborhood_index,
+                                                        current_time)
 
-            self.location[valid_neighbors] = neighborhoods[valid_neighbors_short,
-                                                           neighborhood_index[valid_neighbors_short]]
+            destinations[valid_neighbors] = neighborhoods[valid_neighbors,
+                                                          neighborhood_index[valid_neighbors]]
 
             potential_neighbors -= 1
 
@@ -194,27 +208,37 @@ class MacroscaleRun:
                                                  neighborhood_index,
                                                  potential_neighbors)
 
-            need_neighbors = need_neighbors & ~valid_neighbors_short
+            need_neighbors = need_neighbors & ~valid_neighbors
+
+        self.location[m] = destinations
+
+        self.move_to_empty_edge_count += 1
+
+    def move_to_empty_edge2(self, m: np.ndarray, current_time: float):
+        count = np.count_nonzero(m)
+        if count == 0:
+            return
+
+        self.total_restricted_moves += count
+
+        neighborhoods = self.get_neighbors(m, count)
+        valid_neighbors = self.fiber_status[neighborhoods] < current_time
+        valid_neighborhood_index = np.argsort(~valid_neighbors, axis=1)
+        valid_neighborhoods = np.take_along_axis(neighborhoods, valid_neighborhood_index, axis=1)
+        valid_neighborhoods = np.append(self.location[m].reshape(count, 1),
+                                        valid_neighborhoods,
+                                        axis=1)
+        num_valid_neighbors = np.count_nonzero(valid_neighbors, axis=1)
+        neighbor = self.rng.random(count) * (num_valid_neighbors + 1)
+        neighbor = neighbor.astype(int, copy=False)
+
+        self.stay_put_count += np.count_nonzero(neighbor == 0)
+
+        self.location[m] = valid_neighborhoods[np.full(count, True), neighbor]
 
         if np.count_nonzero(self.fiber_status[self.location[m]] >= current_time):
-            raise RuntimeError(f"We moved to a non-empty edge!")
+            raise RuntimeError(f"A restricted molecule was moved to a fiber edge.")
 
-        # for n in np.arange(self.exp.macro_params.total_molecules)[m]:
-        #     # print(f"Time: {current_time:.2f}; Molecule: {n:,}")
-        #     neighborhood = list(range(8))
-        #     while len(neighborhood) > 0:
-        #         neighborhood_index = int((len(neighborhood)+1)
-        #                                  * move_chance[n]
-        #                                  / self.exp.macro_params.moving_probability)
-        #         if neighborhood_index == len(neighborhood):
-        #             break
-        #         neighbor = self.neighbors[self.location[n], neighborhood[neighborhood_index]]
-        #         if self.fiber_status[neighbor] < current_time:
-        #             neighborhood.pop(neighborhood_index)
-        #         else:
-        #             self.location[n] = neighborhood[neighborhood_index]
-        #             self.total_moves += 1
-        #             break
 
     def find_still_stuck(self, m: np.ndarray, current_time: float):
         # still_stuck_to_fiber = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
@@ -245,25 +269,25 @@ class MacroscaleRun:
             self.binding_time[free_to_move] = current_time + self.binding_time_factory.next(move_to_fiber)
 
     def find_reached_rear(self, m: np.ndarray, current_time: float):
-        reached_rear = np.full(self.exp.macro_params.total_molecules, False)
-        reached_rear[m] = (self.location[m] > (self.exp.macro_params.rows - 2) * self.exp.macro_params.full_row)
-        # first_time = np.full(self.exp.macro_params.total_molecules, False)
-        first_time = current_time < self.time_to_reach_back_row
-        reached_rear = np.logical_and(reached_rear, first_time, out=reached_rear)
-        self.time_to_reach_back_row[reached_rear] = current_time
-        self.number_reached_back_row += np.count_nonzero(reached_rear)
+        # reached_rear = np.full(self.exp.macro_params.total_molecules, False)
+        # reached_rear[m] = (self.location[m] > (self.exp.macro_params.rows - 1) * self.exp.macro_params.full_row - 1)
+        # # first_time = np.full(self.exp.macro_params.total_molecules, False)
+        # first_time = current_time < self.time_to_reach_back_row
+        # reached_rear = np.logical_and(reached_rear, first_time, out=reached_rear)
+        # self.time_to_reach_back_row[reached_rear] = current_time
+        # self.number_reached_back_row += np.count_nonzero(reached_rear)
 
-        # if self.reached_back_row == self.exp.macro_params.total_molecules:
-        #     return
-        # first_time = (~self.reached_back_row
-        #               & self.location > (self.exp.macro_params.rows - 2) * self.exp.macro_params.full_row)
-        # self.time_to_reach_back_row[first_time] = current_time
-        # self.reached_back_row[first_time] = True
-        # self.number_reached_back_row += np.count_nonzero(first_time)
+        if self.number_reached_back_row >= self.exp.macro_params.total_molecules:
+            return
+        first_time = (~self.reached_back_row
+                      & (self.location > (self.exp.macro_params.rows - 1) * self.exp.macro_params.full_row - 1))
+        self.time_to_reach_back_row[first_time] = current_time
+        self.reached_back_row[first_time] = True
+        self.number_reached_back_row += np.count_nonzero(first_time)
 
     def move(self, m: np.ndarray, current_time: float):
         still_stuck_to_fiber = self.find_still_stuck(m, current_time)
-        self.move_to_empty_edge(still_stuck_to_fiber, current_time)
+        self.move_to_empty_edge2(still_stuck_to_fiber, current_time)
 
         still_stuck_to_fiber = np.logical_and(m, ~still_stuck_to_fiber, out=still_stuck_to_fiber)
         free_to_move = still_stuck_to_fiber
@@ -350,6 +374,8 @@ class MacroscaleRun:
         for ts in tqdm(np.arange(self.exp.macro_params.total_time_steps)):
             current_time = ts * self.exp.macro_params.time_step
 
+            self.tracker[ts] = self.location[self.to_track]
+
             self.m_fiber_status = self.fiber_status[self.location]
 
             self.unbind_by_degradation(self.bound & (self.m_fiber_status < current_time), current_time)
@@ -382,12 +408,14 @@ class MacroscaleRun:
                     # break
                 else:
                     unlysed_fiber_percent = 100 - unlysed_fibers / self.exp.macro_params.total_fibers * 100
-                    reached_back_row_percent = self.number_reached_back_row / self.exp.macro_params.total_molecules * 100
+                    reached_back_row_percent = (self.number_reached_back_row
+                                                / self.exp.macro_params.total_molecules
+                                                * 100)
                     print()
                     print(f"After {current_time:.2f} sec, {self.exp.macro_params.total_fibers - unlysed_fibers:,} "
                           f"fibers are degraded ({unlysed_fiber_percent:.1f}% of total) and "
                           f"{self.number_reached_back_row:,} molecules have reached the back row "
-                          f"({reached_back_row_percent:.2f}% of total).")
+                          f"({reached_back_row_percent:.1f}% of total).")
 
         print(f"Total binds: {self.total_binds:,}")
         print(f"Timesteps with changes to degrade time: {self.timesteps_with_fiber_changes:,}")
@@ -396,3 +424,7 @@ class MacroscaleRun:
         print(f"Total macro unbinds: {self.total_macro_unbinds:,}")
         print(f"Total micro unbinds: {self.total_micro_unbinds:,}")
         print(f"Molecules which reached the back row: {self.number_reached_back_row:,}")
+
+        print(f"Ran 'move_to_empty_edge' {self.move_to_empty_edge_count:,} times.")
+        print(f"Ran 'check_neighbor_empty' {self.check_neighbor_empty_count:,} times.")
+        print(f"Macro-unbound molecules were forced to stay put {self.stay_put_count:,} times.")
