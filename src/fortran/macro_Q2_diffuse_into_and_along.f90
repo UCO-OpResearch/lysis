@@ -1,5 +1,11 @@
 program macrolysis
 
+!! BRAD 2023-01-15: This code has been modified in the following ways:
+!!                  - Data folder is relative to git repository root
+!!                  - Data is stored in subfolders based on expCode
+!!
+!!                  Note that the "restricted move" bug has NOT been fixed in this code!
+
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
 character(15) :: expCode = '2022-12-20-1600'
@@ -207,10 +213,6 @@ write(*,*)' obtained using code macro_Q2_diffuse_into_and_along.f90'
 
     call get_kiss32(state)
 
-!! BRAD 2023-01-05: The result of this neighborhood structure is that, when a molecule is on a boundary,
-!!                  it has a higher probability of reflecting than moving paralell to the boundary.
-!!                  Is this a desired result, or just a result of wanting equal-length neighborhoods?
-
 ! neighborc is a num x 8 array
 ! neighborc(i, k) = j where fiber j is the kth neighbor of fiber i
 ! Note that fibers may occur more than once in a row due to boundary conditions
@@ -410,7 +412,7 @@ neighborc=0
 
 
 
-    write(filename2,'(a74)') '../data/' // expCode // '/tPAleavePLG2_tPA01_Q2.dat'
+    write(filename2,'(a74)') 'data/' // expCode // '/tPAleavePLG2_tPA01_Q2.dat'
     open(200,file=filename2)
     do i=1,101
         read(200,*)CDFtPA(i)
@@ -418,7 +420,7 @@ neighborc=0
     close(200)
     write(*,*)'read tPAleavePLG2_tPA01_Q2.dat'
 
-    write(filename3,'(a73)') '../data/' // expCode // '/tsectPAPLG2_tPA01_Q2.dat'
+    write(filename3,'(a73)') 'data/' // expCode // '/tsectPAPLG2_tPA01_Q2.dat'
     open(300,file=filename3)
     do i=1,101
         read(300,*)tsec1(i)
@@ -431,7 +433,7 @@ neighborc=0
 !lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
-    OPEN(unit=1,FILE='../data/' // expCode // '/lysismat_PLG2_tPA01_Q2.dat')
+    OPEN(unit=1,FILE='data/' // expCode // '/lysismat_PLG2_tPA01_Q2.dat')
     do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
        READ(1,*)(lysismat(i,ii),ii=1,100)
     enddo
@@ -439,7 +441,7 @@ neighborc=0
 
 !lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
-    OPEN(unit=2,FILE='../data/' // expCode // '/lenlysisvect_PLG2_tPA01_Q2.dat')
+    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect_PLG2_tPA01_Q2.dat')
     do i=1,100
         READ(2,*)lenlysismat(i)
     end do
@@ -541,13 +543,13 @@ neighborc=0
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-        write(degfile,'(73a)'  ) '../data/' // expCode // '/deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(Nfile,'(75a)' ) '../data/' // expCode // '/Nsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(tfile,'(75a)') '../data/' // expCode // '/tsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(movefile,'(74a)') '../data/' // expCode // '/move_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(lastmovefile,'(78a)') '../data/' // expCode // '/lastmove_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(plotfile,'(74a)') '../data/' // expCode // '/plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(mfptfile,'(74a)') '../data/' // expCode // '/mfpt_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(tfile,'(75a)') 'data/' // expCode // '/tsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(movefile,'(74a)') 'data/' // expCode // '/move_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(plotfile,'(74a)') 'data/' // expCode // '/plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
@@ -593,10 +595,7 @@ neighborc=0
             if(t>tf) exit  !only do the big "do" loop while t<tf
 
 
-            if(mod(count,400000)==0) write(*,*)' t=',t
-
-!! BRAD 2023-01-05: So we only restrict a "forcedunbdbydeg" molecule from moving for this one timestep?
-!!                  It must still wait to bind after that, but it's free to move?
+            if(mod(count,100000)==0) write(*,*)' t=',t
 
             forcedunbdbydeg=0 !every timestep reset vector that records which tPA molecules were on degraded fibers to 0
 
@@ -656,13 +655,6 @@ neighborc=0
                         bind(j)=t-log(r1)/(kon*bs)-tstep/2   !subtract half a time step so that we round to nearest timestep
                         !else if time to tPA leaving is bigger than current time, keep the molecule bound and continue.
                         !we don't need to change anything in this case
-
-!! BRAD 2023-01-04: The molecule just unbound. Now we check to see if it should be forced to unbind?
-!!                  Are we saying that, some of the molecules that unbound after t seconds of binding time did so willingly
-!!                  but others did so unwillingly.
-!!                  Another way of saying this: these forced-unbound tPA aren't unbinding early,
-!!                  but at the same time they would've anyway
-
                         !BELOW ADDED 9/15/17 to account for forced-unbound tPA to be removed
                         r1=urcw1()
                         if(r1.le.frac_forced) then
@@ -673,9 +665,6 @@ neighborc=0
                         end if !for frac_forced if statement
                     end if
                 end if !end if(V(2,j)==1 statement. The above unbinds tPA with leaving time < current time
-
-!! BRAD 2023-01-04: So if a molecule unbinds in the if statment immediately above,
-!!                  it is eligable to move/rebind in the same timestep?
 
                 if(V(2,j)==0) then   !if the molecule is unbound
                     !first check if it will move or not. if it does not move (i.e. r.le.1-q), check if it can bind.
@@ -730,7 +719,6 @@ neighborc=0
                                     r400=nummicro
                                 end if !for if(r400==nummicro+1) loop
 
-!! BRAD 2023-01-04: Why are we using colr2 again here? What is the connection between the lysis time and the unbinding time?
 
                                 if(r400.le.lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
                                     if(r400==lenlysismat(colr2-1)) then
@@ -775,7 +763,6 @@ neighborc=0
                             t_wait(j)=0 !reset waiting time to 0
                             r2=urcw1()
 
-!! BRAD 2023-01-04: r2 > log(r1)/(kon*bs*tstep)+1/2 (Bannish2014 p27)
 
                             if(r2.gt.(t-bind(j))/tstep) then   !if r2 is such that movement happened before binding, move the molecule
                                                            !and calculate the new binding time associated with the new edge
@@ -833,7 +820,6 @@ neighborc=0
                                 bind(j)=0 !reset the binding time to 0
                                 r3=urcw1()
 
-!! BRAD 2023-01-06: You don't count the number of binds here like you do in the block above. (countbind=countbind+1) Is there a reason?
 
                                 !put a 1 in entry equal to edge number. each second I'll sum up the number of 1 entries, which
                                 !will tell me the number of independent bindings (not necessarily successful ones) at each second
@@ -894,9 +880,6 @@ neighborc=0
 
                         else         !for if(bind(j).lt.t... statement. if molecule j canNOT bind this timestep, just have it move
 
-!! BRAD 2023-01-05: Shouldn't need both here, right?
-!!                  If forcedunbdbydeg(j)==1 then we must have just set it and t_wait on this timestep
-
                             if(t_wait(j)>t.and.forcedunbdbydeg(j)==1) then   !adjusted 9/15/17 and 5/10/18 to account for waiting time. if molecule has a waiting time>t AND it's a molecule that was forced to unbind by macro level degradation, restrict its diffusion to be away from or along (not into) the clot
                                 temp_neighborc=0 !set temporary neighbor array to 0
                                 countij=0
@@ -911,10 +894,6 @@ neighborc=0
                                 !write(*,*)'countij=',countij
                                 !write(*,*)'V(1,j) before movement=',V(1,j)
 
-!! BRAD 2023-01-05: In this situation, a molecule has a probability of not moving, even if there is an edge available.
-!!                  This is unlike the normal situation where a molecule MUST move.
-!!                  This results in forcedunbdbydeg molecules having a lower probability of moving (q-q/(countij+1))
-!!                  Is this a desired outcome, or just a result of "making it work"
                                 if(countij.gt.0) then !if there is at least one edge available for diffusion, randomly choose which edge the molecule goes to
                                     r1=urcw1()
                                     newindex=int(r1*(countij+1))  !choose which edge to diffuse to by randomly drawing an integer between 0 and countij. 0 corresponding to staying on same edge, and a nonzero value corresponds to moving to the edge given by the newindex entry of the temp_neighborc array
@@ -1247,17 +1226,17 @@ neighborc=0
                 end do
             end do  !for jj loop
 
-            write(x1file,'(76a)'  ) '../data/' // expCode // '/X1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(x1unit,file=x1file,form=filetype)
-            write(x2file,'(76a)'  ) '../data/' // expCode // '/X2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(x2unit,file=x2file,form=filetype)
-            write(y1file,'(76a)'  ) '../data/' // expCode // '/Y1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(y1unit,file=y1file,form=filetype)
-            write(y2file,'(76a)'  ) '../data/' // expCode // '/Y2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(y2unit,file=y2file,form=filetype)
-            write(xvfile,'(76a)'  ) '../data/' // expCode // '/Xvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(xvunit,file=xvfile,form=filetype)
-            write(yvfile,'(76a)'  ) '../data/' // expCode // '/Yvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(yvunit,file=yvfile,form=filetype)
 
             write(x1unit) X1plot
@@ -1347,9 +1326,9 @@ neighborc=0
             end do
 
 
-            write(tPAbdfile,'(76a)'  ) '../data/' // expCode // '/tPAbd_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(tPAbdunit,file=tPAbdfile,form=filetype)
-            write(tPAfreefile,'(77a)'  ) '../data/' // expCode // '/tPAfree_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
             open(tPAfreeunit,file=tPAfreefile,form=filetype)
 
             write(tPAbdunit) bdtPA
