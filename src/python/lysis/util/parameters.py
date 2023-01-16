@@ -11,7 +11,7 @@ Typical usage example:
     >>> exp.initialize_macro_param(param)
     >>> exp.to_file()
     >>> # Load an existing experiment
-    >>> exp = Experiment('path/to/data', '2022-12-27-1100')
+    >>> exp = Experiment('path/to/data', '2022_12_27_1100')
     >>> exp.read_file()
     >>> # Access a parameter
     >>> exp.macro_params['pore_size']
@@ -91,7 +91,7 @@ class Experiment(object):
                                                  str(now.day),
                                                  '_',
                                                  str(now.hour),
-                                                 str(now.day)
+                                                 str(now.minute)
                                                  ])
         else:
             self.experiment_code = experiment_code
@@ -439,15 +439,16 @@ class MacroParameters:
     :Units: None
     :Fortran: None"""
 
-    duplicate_fortran: bool = True
+    duplicate_fortran: bool = False
     """Whether the Python code should follow the Fortran code step-by-step.
     Theoretically, with this set to "True", both sets of code will produce the exact same output.
     This will impact performance negatively.
+    This currently does nothing.
 
     :Units: None
     :Fortran: None"""
 
-    processing_library: str = 'cupy'
+    processing_library: str = 'numpy'
     """Which library the macroscale model should use for processing. 
     Options include
     
