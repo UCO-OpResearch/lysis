@@ -3,12 +3,16 @@ program macrolysis
 !! BRAD 2023-01-15: This code has been modified in the following ways:
 !!                  - Data folder is relative to git repository root
 !!                  - Data is stored in subfolders based on expCode
+!!                  - Data file codes are now set globally from the (in/out)FileCode variables
 !!
 !!                  Note that the "restricted move" bug has NOT been fixed in this code!
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15) :: expCode = '2022-12-20-1600'
+character(15) :: expCode = '2022-12-20-1700'
+character(17)  :: inFileCode = 'PLG2_tPA01_Q2.dat'
+character(40)   :: outFileCode = '_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+
 
 integer,parameter  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
 integer,parameter  :: F=121!121 !71 !81  !# of lattice nodes in one column in the vertical direction
@@ -412,28 +416,28 @@ neighborc=0
 
 
 
-    write(filename2,'(a74)') 'data/' // expCode // '/tPAleavePLG2_tPA01_Q2.dat'
+    write(filename2,'(a74)') 'data/' // expCode // '/tPAleave' // inFileCode
     open(200,file=filename2)
     do i=1,101
         read(200,*)CDFtPA(i)
     end do
     close(200)
-    write(*,*)'read tPAleavePLG2_tPA01_Q2.dat'
+    write(*,*)'read tPAleave' // inFileCode
 
-    write(filename3,'(a73)') 'data/' // expCode // '/tsectPAPLG2_tPA01_Q2.dat'
+    write(filename3,'(a73)') 'data/' // expCode // '/tsectPA' // inFileCode
     open(300,file=filename3)
     do i=1,101
         read(300,*)tsec1(i)
     end do
     close(300)
-    write(*,*)'read tsectPAPLG2_tPA01_Q2.dat'
+    write(*,*)'read tsectPA' // inFileCode
 
 
 
 !lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
-    OPEN(unit=1,FILE='data/' // expCode // '/lysismat_PLG2_tPA01_Q2.dat')
+    OPEN(unit=1,FILE='data/' // expCode // '/lysismat' // inFileCode)
     do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
        READ(1,*)(lysismat(i,ii),ii=1,100)
     enddo
@@ -441,7 +445,7 @@ neighborc=0
 
 !lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
-    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect_PLG2_tPA01_Q2.dat')
+    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect' // inFileCode)
     do i=1,100
         READ(2,*)lenlysismat(i)
     end do
@@ -543,13 +547,13 @@ neighborc=0
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(tfile,'(75a)') 'data/' // expCode // '/tsave_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(movefile,'(74a)') 'data/' // expCode // '/move_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(plotfile,'(74a)') 'data/' // expCode // '/plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg' // outFileCode
+        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave' // outFileCode
+        write(tfile,'(75a)') 'data/' // expCode // '/tsave' // outFileCode
+        write(movefile,'(74a)') 'data/' // expCode // '/move' // outFileCode
+        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove' // outFileCode
+        write(plotfile,'(74a)') 'data/' // expCode // '/plot' // outFileCode
+        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt' // outFileCode
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
@@ -575,7 +579,7 @@ neighborc=0
         write(degunit) degrade(:)
         write(tunit) t
 
-        write(*,*)' save as deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        write(*,*)' save as deg',outFileCode
 
 
         Vedgenext(1,:)=V(1,:)
@@ -1226,17 +1230,17 @@ neighborc=0
                 end do
             end do  !for jj loop
 
-            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot' // outFileCode
             open(x1unit,file=x1file,form=filetype)
-            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot' // outFileCode
             open(x2unit,file=x2file,form=filetype)
-            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot' // outFileCode
             open(y1unit,file=y1file,form=filetype)
-            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot' // outFileCode
             open(y2unit,file=y2file,form=filetype)
-            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot' // outFileCode
             open(xvunit,file=xvfile,form=filetype)
-            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot' // outFileCode
             open(yvunit,file=yvfile,form=filetype)
 
             write(x1unit) X1plot
@@ -1326,9 +1330,9 @@ neighborc=0
             end do
 
 
-            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd' // outFileCode
             open(tPAbdunit,file=tPAbdfile,form=filetype)
-            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree' // outFileCode
             open(tPAfreeunit,file=tPAfreefile,form=filetype)
 
             write(tPAbdunit) bdtPA
