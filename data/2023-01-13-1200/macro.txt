@@ -58,15 +58,15 @@ After 1095.66 sec, 25761 fibers are degraded (100.0% of total) and 41503 molecul
 After 1129.90 sec, 25761 fibers are degraded (100.0% of total) and 41885 molecules have reached the back row ( 97.2% of total).
 After 1164.14 sec, 25761 fibers are degraded (100.0% of total) and 42196 molecules have reached the back row ( 98.0% of total).
 After 1198.38 sec, 25761 fibers are degraded (100.0% of total) and 42415 molecules have reached the back row ( 98.5% of total).
- Processing time:    6110.19158700000       sec
- Total Binds:       922700
- Total Regular Moves:            15447259465
- Total Restricted Moves:             7155794094
- Molecules that reached back row:        42433
+ Processing time:    6,110.19158700000       sec
+ Total Binds:       922,700
+ Total Regular Moves:            15,447,259,465
+ Total Restricted Moves:             7,155,794,094
+ Molecules that reached back row:        42,433
  nplt=         122
  r4=  0.470957994348782     
- countmacrounbd=      440660
- countmicrounbd=       41076
+ countmacrounbd=      440,660
+ countmicrounbd=       41,076
   run number=           2
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
