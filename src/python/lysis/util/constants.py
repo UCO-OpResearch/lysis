@@ -10,12 +10,11 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 default_filenames = {
-                        'unbinding_time': "tsectPA.dat",        # Fortran: tsec1
-                        # 'leaving_time': "tPAleave.dat",       # Fortran: CDFtPA
-                        'lysis_time':     "lysismat.dat",       # Fortran: lysismat
-                        'total_lyses':    "lenlysisvect.dat",   # Fortran: lenlysismat
-                        'degradation_state':    "deg.dat",      # Fortran: degnext
-                        ''
+                        'unbinding_time':       "tsectPA.dat",          # Fortran: tsec1
+                        # 'leaving_time':       "tPAleave.dat",         # Fortran: CDFtPA
+                        'lysis_time':           "lysismat.dat",         # Fortran: lysismat
+                        'total_lyses':          "lenlysisvect.dat",     # Fortran: lenlysismat
+                        'degradation_state':    "deg.dat",              # Fortran: degnext
                      }
 
 

@@ -28,14 +28,16 @@ class MacroscaleRun:
 
         self.binding_time_factory = self._BindingTimeFactory(self.exp, self.rng)
 
-        edge_lookup = partial(np.ravel_multi_index, dims=(exp.macro_params.rows, exp.macro_params.full_row))
+        self.edge_lookup = partial(np.ravel_multi_index, dims=(exp.macro_params.rows, exp.macro_params.full_row))
 
         self.fiber_status = np.full(self.exp.macro_params.rows * self.exp.macro_params.full_row,
                                     float('inf'), dtype=np.float_)
+        self.real_fiber = np.full(self.exp.macro_params.rows * self.exp.macro_params.full_row, True, dtype=np.bool_)
         for i, j in np.ndindex(self.exp.macro_params.empty_rows, self.exp.macro_params.full_row):
-            self.fiber_status[edge_lookup((i, j))] = 0
+            self.real_fiber[self.edge_lookup((i, j))] = False
         for j in range(exp.macro_params.cols):
-            self.fiber_status[edge_lookup((self.exp.macro_params.rows-1, 3*j,))] = 0
+            self.real_fiber[self.edge_lookup((self.exp.macro_params.rows-1, 3*j,))] = False
+        self.fiber_status[~self.real_fiber] = 0
 
         self.logger.debug(f"Precalculating neighbors.")
         self.neighbors = EdgeGrid.generate_neighborhood_structure(exp)
@@ -48,7 +50,7 @@ class MacroscaleRun:
                                        size=exp.macro_params.total_molecules,
                                        dtype=np.short)
 
-        self.location = edge_lookup((location_i, location_j))
+        self.location = self.edge_lookup((location_i, location_j))
 
         self.m_fiber_status = None
 
@@ -71,7 +73,8 @@ class MacroscaleRun:
 
         self.current_save_interval = 0
 
-        self.data.saved_degradation_state = np.empty(())
+        self.exp.data.degradation_state = np.empty((self.exp.macro_params.number_of_saves,
+                                                    self.exp.macro_params.total_fibers), dtype=np.float_)
 
         self.logger.debug(f"Initialization complete.")
 
@@ -137,7 +140,6 @@ class MacroscaleRun:
         self.binding_time[forced] = float('inf')
         num_forced = np.count_nonzero(forced)
         self.total_micro_unbinds += num_forced
-        #
         if num_forced < count:
             self.binding_time[m & ~forced] = current_time + self.binding_time_factory.next(count - num_forced)
 
@@ -178,7 +180,8 @@ class MacroscaleRun:
                                   self.exp.data.lysis_time[unbinding_time_bin[i], :total_lyses[i]])
         return interp + (current_time - self.exp.macro_params.time_step / 2)
 
-    def bind(self, m: np.ndarray, current_time: float):
+    def bind(self, m: np.ndarray, ts: int):
+        current_time = ts * self.exp.macro_params.time_step
         count = np.count_nonzero(m)
         if count == 0:
             return
@@ -192,9 +195,6 @@ class MacroscaleRun:
 
         lysis_time = self.find_lysis_time(unbinding_time_bin, current_time, count)
         locations = self.location[m]
-        if np.count_nonzero(self.fiber_status[locations] > lysis_time) > 0:
-            self.timesteps_with_fiber_changes += 1
-
         self.fiber_status[locations] = np.fmin(self.fiber_status[locations],
                                                lysis_time)
 
@@ -252,9 +252,20 @@ class MacroscaleRun:
             self.reached_back_row = self.reached_back_row | first_time
             self.number_reached_back_row += np.count_nonzero(first_time)
 
+    def save_data(self, current_time):
+        self.logger.info(f"Saving data at time {current_time:.2f} sec.")
+        self.exp.data.degradation_state[self.current_save_interval] = self.fiber_status[self.real_fiber]
+        self.current_save_interval += 1
+
+    def record_data_to_disk(self):
+        self.logger.info(f"Saving data to disk.")
+        self.exp.data.save_to_disk('degradation_state')
+
     def run(self):
         for ts in tqdm(np.arange(self.exp.macro_params.total_time_steps), mininterval=2):
             current_time = ts * self.exp.macro_params.time_step
+            if current_time >= self.exp.macro_params.save_interval * self.current_save_interval:
+                self.save_data(current_time)
 
             self.m_fiber_status = self.fiber_status[self.location]
 
@@ -277,7 +288,7 @@ class MacroscaleRun:
             should_bind[conflict] = self.rng.random(np.count_nonzero(conflict)) <= threshold
             should_move[conflict] = ~should_bind[conflict]
 
-            self.bind(should_bind, current_time)
+            self.bind(should_bind, ts)
             self.move(should_move, current_time)
 
             if ts % 100000 == 100000-1:
@@ -296,6 +307,9 @@ class MacroscaleRun:
                                      f"fibers are degraded ({unlysed_fiber_percent:.1f}% of total) and "
                                      f"{self.number_reached_back_row:,} molecules have reached the back row "
                                      f"({reached_back_row_percent:.1f}% of total).")
+
+        self.save_data(self.exp.macro_params.total_time)
+        self.record_data_to_disk()
 
         self.logger.info(f"Total binds: {self.total_binds:,}")
         self.logger.info(f"Timesteps with changes to degrade time: {self.timesteps_with_fiber_changes:,}")
