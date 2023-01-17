@@ -16,7 +16,7 @@ def run(e: lysis.util.Experiment, timestamp: AnyStr):
     else:
         logger = logging.getLogger(__name__)
     logger.info(f"Initialized Experiment '{e.experiment_code}'")
-    p = {'total_time': 20}
+    p = {'total_time': 200}
     e.initialize_macro_param()
     logger.debug(f"With parameters {os.linesep}{e}")
     macro = lysis.MacroscaleRun(e)

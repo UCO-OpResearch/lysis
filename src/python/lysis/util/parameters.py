@@ -123,7 +123,7 @@ class Experiment(object):
         else:
             self.macro_params = MacroParameters()
 
-        for data in self.macro_params.data_required:
+        for data in self.macro_params.input_data:
             if DataStatus.INITIALIZED not in self.data.status(data):
                 raise RuntimeError(f"'{data}' not initialized in DataStore.")
 
@@ -259,7 +259,7 @@ class MacroParameters:
     :Fortran: Diff"""
 
     # TODO(bpaynter): This value should derive from MicroParameters
-    binding_sites: float = 4.27e+2
+    binding_sites: int = 427
     """Concentration of binding sites.
      
     :Units: micromolar
@@ -415,8 +415,11 @@ class MacroParameters:
     # Data Parameters
     #####################################
 
-    data_required: List[str] = field(init=False)
+    input_data: List[str] = field(init=False)
     """The data (from the Microscale model) required to run the Macroscale model."""
+
+    output_data: List[str] = field(init=False)
+    """The data output by the Macroscale model."""
 
     save_interval: int = 10
     """How often to record data from the model.
@@ -467,12 +470,16 @@ class MacroParameters:
         """This method calculates the dependent parameters once the MacroParameters object is created.
         It is automatically called by the DataClass.__init__()"""
         # These names must be elements of the Experiment's DataStore
-        object.__setattr__(self, 'data_required', [
+        object.__setattr__(self, 'input_data', [
                                                     'unbinding_time',           # Fortran: tsec1
                                                     # 'leaving_time',           # Fortran: CDFtPA
                                                     'lysis_time',               # Fortran: lysismat
                                                     'total_lyses',              # Fortran: lenlysismat
                                                    ])
+        # These names must be elements of the Experiment's DataStore
+        object.__setattr__(self, 'output_data', [
+                                                    'degradation_state',        # Fortran: degnext
+                                                ])
         # A full row of the fiber grid contains a 'right', 'up', and 'out' edge for each node,
         # except the last node which contains no 'right' edge.
         object.__setattr__(self, 'full_row', 3 * self.cols - 1)

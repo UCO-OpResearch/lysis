@@ -233,7 +233,8 @@ class DataStore:
         # This will be the format used by the Python model once complete
         # TODO(bpaynter): Implement, consistent with the rest of the model
         elif os.path.splitext(filename)[1] == '.npy':
-            raise NotImplementedError('Support for NumPy files is yet to be implemented.')
+            data = np.load(os.path.join(self._path, filename), **args)
+            self._data[key] = xp.array(post_load(data))
         # Other file types/extensions are not supported (or planned to be) at this time
         else:
             raise AttributeError('Non-supported file type.')
@@ -242,33 +243,34 @@ class DataStore:
         # TODO(bpaynter): It needs to be checked whether the text files output by this method can be read by
         #   the existing Fortran and Matlab code.
         filename = None
-        xp = None
+        presave = lambda x: x
         if key[:3] == "cp_":
             if DataStatus.INITIALIZED not in self.status(key[3:]):
                 raise RuntimeError(f'{key} not initialized.')
             elif DataStatus.SAVED in self.status(key[3:]):
                 raise RuntimeError(f'No file for {key} found on disk. '
                                    f'({os.path.join(self._path, self._filenames[key[3:]])})')
+            elif DataStatus.LOADED not in self.status(key):
+                raise RuntimeError(f'No data for {key[3:]}.')
             else:
                 filename = self._filenames[key[3:]]
-                xp = cp
+                presave = cp.asnumpy
         elif key[:3] != "cp_":
             if DataStatus.INITIALIZED not in self.status(key):
                 raise RuntimeError(f'{key} not initialized.')
             elif DataStatus.SAVED in self.status(key):
                 raise RuntimeError(f'No file for {key} found on disk. '
                                    f'({os.path.join(self._path, self._filenames[key])})')
+            elif DataStatus.LOADED not in self.status(key):
+                raise RuntimeError(f'No data for {key}.')
             else:
                 filename = self._filenames[key]
-                xp = np
-        if DataStatus.LOADED not in self.status(key):
-            raise RuntimeError(f'No data for {key}.')
 
         if os.path.splitext(filename)[1] == '.dat':
             # Save as a text file with the extension .dat
             np.savetxt(os.path.join(self._path, filename),
-                       cp.asnumpy(self._data[key]),
+                       presave(self._data[key]),
                        newline=os.linesep)
         else:
             # Save as a NumPy file with the extension .npy
-            np.save(os.path.join(self._path, filename), cp.asnumpy(self._data[key]))
+            np.save(os.path.join(self._path, filename), presave(self._data[key]))
