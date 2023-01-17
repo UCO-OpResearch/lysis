@@ -14,6 +14,8 @@ default_filenames = {
                         # 'leaving_time': "tPAleave.dat",       # Fortran: CDFtPA
                         'lysis_time':     "lysismat.dat",       # Fortran: lysismat
                         'total_lyses':    "lenlysisvect.dat",   # Fortran: lenlysismat
+                        'degradation_state':    "deg.dat",      # Fortran: degnext
+                        ''
                      }
 
 

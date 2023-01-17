@@ -1,3 +1,4 @@
+import logging
 from functools import partial
 
 import numpy as np
@@ -21,6 +22,8 @@ class MacroscaleRun:
         self.exp = exp
         assert self.exp.macro_params is not None
 
+        self.logger = logging.getLogger(__name__)
+        self.logger.debug(f"Initializing MacroscaleRun")
         self.rng = np.random.default_rng(seed=abs(exp.macro_params.seed))
 
         self.binding_time_factory = self._BindingTimeFactory(self.exp, self.rng)
@@ -34,8 +37,10 @@ class MacroscaleRun:
         for j in range(exp.macro_params.cols):
             self.fiber_status[edge_lookup((self.exp.macro_params.rows-1, 3*j,))] = 0
 
+        self.logger.debug(f"Precalculating neighbors.")
         self.neighbors = EdgeGrid.generate_neighborhood_structure(exp)
 
+        self.logger.info(f"Placing molecules on empty edges.")
         location_i = self.rng.integers(exp.macro_params.empty_rows,
                                        size=exp.macro_params.total_molecules,
                                        dtype=np.short)
@@ -63,6 +68,12 @@ class MacroscaleRun:
         self.total_restricted_moves = 0
         self.timesteps_with_fiber_changes = 0
         self.number_reached_back_row = 0
+
+        self.current_save_interval = 0
+
+        self.data.saved_degradation_state = np.empty(())
+
+        self.logger.debug(f"Initialization complete.")
 
 
     class _BindingTimeFactory:
@@ -242,7 +253,7 @@ class MacroscaleRun:
             self.number_reached_back_row += np.count_nonzero(first_time)
 
     def run(self):
-        for ts in tqdm(np.arange(self.exp.macro_params.total_time_steps)):
+        for ts in tqdm(np.arange(self.exp.macro_params.total_time_steps), mininterval=2):
             current_time = ts * self.exp.macro_params.time_step
 
             self.m_fiber_status = self.fiber_status[self.location]
@@ -273,24 +284,23 @@ class MacroscaleRun:
                 unlysed_fibers = np.count_nonzero(self.fiber_status > current_time)
 
                 if unlysed_fibers == 0:
-                    print()
-                    print(f"All fibers degraded after {current_time:.2f} sec. Terminating")
+                    self.logger.info(f"All fibers degraded after {current_time:.2f} sec. Terminating")
                     # break
                 else:
                     unlysed_fiber_percent = 100 - unlysed_fibers / self.exp.macro_params.total_fibers * 100
                     reached_back_row_percent = (self.number_reached_back_row
                                                 / self.exp.macro_params.total_molecules
                                                 * 100)
-                    print()
-                    print(f"After {current_time:.2f} sec, {self.exp.macro_params.total_fibers - unlysed_fibers:,} "
-                          f"fibers are degraded ({unlysed_fiber_percent:.1f}% of total) and "
-                          f"{self.number_reached_back_row:,} molecules have reached the back row "
-                          f"({reached_back_row_percent:.1f}% of total).")
+                    self.logger.info(f"After {current_time:.2f} sec, "
+                                     f"{self.exp.macro_params.total_fibers - unlysed_fibers:,} "
+                                     f"fibers are degraded ({unlysed_fiber_percent:.1f}% of total) and "
+                                     f"{self.number_reached_back_row:,} molecules have reached the back row "
+                                     f"({reached_back_row_percent:.1f}% of total).")
 
-        print(f"Total binds: {self.total_binds:,}")
-        print(f"Timesteps with changes to degrade time: {self.timesteps_with_fiber_changes:,}")
-        print(f"Total regular moves: {self.total_regular_moves:,}")
-        print(f"Total restricted moves: {self.total_restricted_moves:,}")
-        print(f"Total macro unbinds: {self.total_macro_unbinds:,}")
-        print(f"Total micro unbinds: {self.total_micro_unbinds:,}")
-        print(f"Molecules which reached the back row: {self.number_reached_back_row:,}")
+        self.logger.info(f"Total binds: {self.total_binds:,}")
+        self.logger.info(f"Timesteps with changes to degrade time: {self.timesteps_with_fiber_changes:,}")
+        self.logger.info(f"Total regular moves: {self.total_regular_moves:,}")
+        self.logger.info(f"Total restricted moves: {self.total_restricted_moves:,}")
+        self.logger.info(f"Total macro unbinds: {self.total_macro_unbinds:,}")
+        self.logger.info(f"Total micro unbinds: {self.total_micro_unbinds:,}")
+        self.logger.info(f"Molecules which reached the back row: {self.number_reached_back_row:,}")

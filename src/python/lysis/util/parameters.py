@@ -83,16 +83,7 @@ class Experiment(object):
         self.os_data_root = data_root
         # If no experiment code was given, create a new one from the current date and time.
         if experiment_code is None:
-            now = datetime.now()
-            self.experiment_code = str.join('', [str(now.year),
-                                                 '_',
-                                                 str(now.month),
-                                                 '_',
-                                                 str(now.day),
-                                                 '_',
-                                                 str(now.hour),
-                                                 str(now.minute)
-                                                 ])
+            self.experiment_code = datetime.now().strftime("%Y-%m-%d-%H%M")
         else:
             self.experiment_code = experiment_code
 
@@ -100,6 +91,8 @@ class Experiment(object):
         self.os_path = os.path.join(data_root, str(self.experiment_code))
         self.os_param_file = os.path.join(self.os_path, 'params.json')
 
+        # TODO(bpaynter): Check if the parameters are already stored.
+        #                 Don't allow parameters to be changed once stored.
         # Initialize the internal storage as empty
         self.micro_params: Mapping[str, Any] | None = None
         self.macro_params = None
@@ -299,13 +292,13 @@ class MacroParameters:
     # Model Parameters
     #####################################
 
-    rows: int = 93
+    cols: int = 93
     """The number of lattice nodes in each (horizontal) row
     
     :Units: nodes
     :Fortran: N"""
 
-    cols: int = 121
+    rows: int = 121
     """The number of lattice nodes in each (vertical) column
     
     :Units: nodes
@@ -425,6 +418,18 @@ class MacroParameters:
     data_required: List[str] = field(init=False)
     """The data (from the Microscale model) required to run the Macroscale model."""
 
+    save_interval: int = 10
+    """How often to record data from the model.
+    
+    :Units: sec
+    :Fortran: None"""
+
+    number_of_saves: int = field(init=False)
+    """The number of times data will be saved from the model.
+    
+    :Units: None
+    :Fortran: nplt"""
+
     #####################################
     # Code Parameters
     #####################################
@@ -501,6 +506,9 @@ class MacroParameters:
         # If no seed was given in the state, set it from the seed
         if self.state[3] is None:
             object.__setattr__(self, 'state', self.state[:3] + (self.seed,))
+
+        # Total saves is one for the start of each 'save_interval' plus one at the end of the run.
+        object.__setattr__(self, 'number_of_saves', int(self.total_time / self.save_interval) + 1)
 
     def __str__(self) -> str:
         """Returns a human-readable, JSON-like string of all parameters."""
