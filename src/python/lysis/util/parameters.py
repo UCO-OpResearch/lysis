@@ -65,7 +65,8 @@ class Experiment(object):
             This will be the name of the folder containing the data specific to
             this experiment.
             This should be a date and time in 'YYYY-MM-DD-hhmm' format
-            If no code is given, one will be generated from the current date and time.
+            If no code is given, one will be generated from the current date
+            and time.
 
     Attributes:
         experiment_code (str): The code number of the experiment.
