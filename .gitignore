@@ -8,3 +8,4 @@ bin
 octave-workspace
 __pycache__
 fort.*
+*.sublime-project

@@ -24,7 +24,12 @@ def run(e: lysis.util.Experiment, timestamp: AnyStr):
 
     filename = "macro_pstats_" + timestamp + ".sts"
 
-    cProfile.runctx("macro.run()", globals(), locals(), filename=os.path.join(e.os_path, "macro_pstats", filename))
+    cProfile.runctx("macro.run()", 
+                    globals(), 
+                    locals(), 
+                    filename=os.path.join(e.os_path, 
+                                          "macro_pstats", 
+                                          filename))
 
     logger.info(f"cProfile stats saved as {filename}.")
 
@@ -36,7 +41,10 @@ def main():
     logfile = os.path.join(e.os_path, "log", "lysis-py-" + timestamp + ".log")
     logging.basicConfig(filename=logfile, level=logging.DEBUG)
 
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - '
+                                  '%(name)s - '
+                                  '%(levelname)s - '
+                                  '%(message)s')
     logger = logging.getLogger("lysis")
     logger.setLevel(logging.DEBUG)
 
