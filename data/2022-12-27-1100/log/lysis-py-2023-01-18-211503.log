@@ -1,0 +1,80 @@
+INFO:lysis:Initialized Experiment '2022-12-27-1100'
+DEBUG:lysis:With parameters 
+experiment_code : 2022-12-27-1100
+data_filenames  : unbinding_time    : tsectPA.dat
+                  lysis_time        : lysismat.dat
+                  total_lyses       : lenlysisvect.dat
+                  degradation_state : deg.dat
+micro_params    : None
+macro_params    : binding_rate       : 0.1
+                  pore_size          : 0.00010135
+                  diffusion_coeff    : 5e-07
+                  binding_sites      : 427
+                  forced_unbind      : 0.0852
+                  average_bind_time  : 27.8
+                  grid_node_distance : 1.0862
+                  cols               : 9
+                  rows               : 12
+                  full_row           : 26
+                  xz_row             : 17
+                  total_edges        : 303
+                  total_fibers       : 225
+                  empty_rows         : 3
+                  last_empty_edge    : 77
+                  total_molecules    : 430
+                  moving_probability : 0.2
+                  microscale_runs    : 50,000
+                  total_trials       : 10
+                  total_time         : 200
+                  time_step          : 0.0003423940833333333
+                  total_time_steps   : 584,122
+                  seed               : -2,137,354,075
+                  state              : (129281, 362436069, 123456789, -2137354075)
+                  input_data         : ['unbinding_time', 'lysis_time', 'total_lyses']
+                  output_data        : ['degradation_state']
+                  save_interval      : 10
+                  number_of_saves    : 21
+                  macro_version      : diffuse_into_and_along
+                  log_lvl            : 30
+                  duplicate_fortran  : 1
+                  processing_library : numpy
+
+DEBUG:lysis.np_macroscale:Initializing MacroscaleRun
+DEBUG:lysis.np_macroscale:Precalculating neighbors.
+INFO:lysis.np_macroscale:Placing molecules on empty edges.
+DEBUG:lysis.np_macroscale:Initialization complete.
+INFO:lysis.np_macroscale:Saving data at time 0.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 10.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 20.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 30.00 sec.
+INFO:lysis.np_macroscale:After 34.24 sec, 9 fibers are degraded (4.0% of total) and 52 molecules have reached the back row 12.1% of total).
+INFO:lysis.np_macroscale:Saving data at time 40.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 50.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 60.00 sec.
+INFO:lysis.np_macroscale:After 68.48 sec, 41 fibers are degraded (18.2% of total) and 74 molecules have reached the back row 17.2% of total).
+INFO:lysis.np_macroscale:Saving data at time 70.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 80.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 90.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 100.00 sec.
+INFO:lysis.np_macroscale:After 102.72 sec, 65 fibers are degraded (28.9% of total) and 96 molecules have reached the back row 22.3% of total).
+INFO:lysis.np_macroscale:Saving data at time 110.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 120.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 130.00 sec.
+INFO:lysis.np_macroscale:After 136.96 sec, 93 fibers are degraded (41.3% of total) and 132 molecules have reached the back row 30.7% of total).
+INFO:lysis.np_macroscale:Saving data at time 140.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 150.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 160.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 170.00 sec.
+INFO:lysis.np_macroscale:After 171.20 sec, 120 fibers are degraded (53.3% of total) and 163 molecules have reached the back row 37.9% of total).
+INFO:lysis.np_macroscale:Saving data at time 180.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 190.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 200.00 sec.
+INFO:lysis.np_macroscale:Saving data to disk.
+INFO:lysis.np_macroscale:Total binds: 3,400
+INFO:lysis.np_macroscale:Timesteps with changes to degrade time: 0
+INFO:lysis.np_macroscale:Total regular moves: 2,932,156
+INFO:lysis.np_macroscale:Total restricted moves: 13,866,757
+INFO:lysis.np_macroscale:Total macro unbinds: 920
+INFO:lysis.np_macroscale:Total micro unbinds: 181
+INFO:lysis.np_macroscale:Molecules which reached the back row: 232
+INFO:lysis:cProfile stats saved as macro_pstats_2023-01-18-211503.sts.

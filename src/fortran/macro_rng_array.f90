@@ -13,17 +13,19 @@ program macrolysis
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15) :: expCode = '2023-01-13-1200'
+character(15) :: expCode = '2023-01-18-1600'
+character(4)  :: inFileCode = '.dat'
+character(6)   :: outFileCode = '.f.dat'
 
-integer,parameter  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
-integer,parameter  :: F=121!121 !71 !81  !# of lattice nodes in one column in the vertical direction
-integer,parameter  :: Ffree=29!29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
+integer,parameter  :: N=9!93  !# of lattice nodes in one row in the horizontal direction
+integer,parameter  :: F=12!121 !71 !81  !# of lattice nodes in one column in the vertical direction
+integer,parameter  :: Ffree=4!29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
-integer,parameter  :: stats= 10 !! BRAD 2023-01-04: 10
+integer,parameter  :: stats= 1 !! BRAD 2023-01-04: 10
 integer,parameter  :: num=(2*N-1)*F+N*(F-1)
-integer,parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
-integer,parameter  :: tf=20*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
+integer,parameter  :: M=430 !43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
+integer,parameter  :: tf=10*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
 integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
 integer  :: i, istat
@@ -186,16 +188,19 @@ real rounded_time
 real degraded_percent
 real reached_back_row_percent
 
-integer,parameter  ::  BINDING_TIME_WHEN_DEGRADING = 0
-integer,parameter  ::  BINDING_TIME_WHEN_MOVING = 1
-integer,parameter  ::  MICRO_UNBIND = 2
-integer,parameter  ::  MOVE = 3
-integer,parameter  ::  UNBINDING_TIME = 4
-integer,parameter  ::  LYSIS_TIME = 5
-integer,parameter  ::  CONFLICT_RESOLUTION = 6
-integer,parameter  ::  RESTRICTED_MOVE = 7
+integer :: brad_i, brad_j
+double precision, dimension(M) :: brad_rvect
 
-double precision, dimension(M,8) :: random_numbers
+integer,parameter  ::  RNG_BINDING_TIME_WHEN_DEGRADING = 0
+integer,parameter  ::  RNG_BINDING_TIME_WHEN_MOVING = 1
+integer,parameter  ::  RNG_MICRO_UNBIND = 2
+integer,parameter  ::  RNG_MOVE = 3
+integer,parameter  ::  RNG_UNBINDING_TIME = 4
+integer,parameter  ::  RNG_LYSIS_TIME = 5
+integer,parameter  ::  RNG_CONFLICT_RESOLUTION = 6
+integer,parameter  ::  RNG_RESTRICTED_MOVE = 7
+
+double precision, dimension(8, M) :: random_numbers
 
 if( isBinary ) then
     !filetype = 'unformatted' !if you compile with gfortran or f95
@@ -211,7 +216,7 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_Q2_diffuse_into_and_along.f90'
+write(*,*)' obtained using code macro_rng_array.f90'
 
 !!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
     kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
@@ -442,7 +447,7 @@ neighborc=0
 
 
 
-    write(filename2,'(a74)') 'data/' // expCode // '/tPAleave.dat'
+    write(filename2,'(a74)') 'data/' // expCode // '/tPAleave' // inFileCode
     open(200,file=filename2)
     do i=1,101
         read(200,*)CDFtPA(i)
@@ -450,7 +455,7 @@ neighborc=0
     close(200)
     write(*,*)'read tPAleave.dat'
 
-    write(filename3,'(a73)') 'data/' // expCode // '/tsectPA.dat'
+    write(filename3,'(a73)') 'data/' // expCode // '/tsectPA' // inFileCode
     open(300,file=filename3)
     do i=1,101
         read(300,*)tsec1(i)
@@ -463,7 +468,7 @@ neighborc=0
 !lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
-    OPEN(unit=1,FILE='data/' // expCode // '/lysismat.dat')
+    OPEN(unit=1,FILE='data/' // expCode // '/lysismat' // inFileCode)
     do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
        READ(1,*)(lysismat(i,ii),ii=1,100)
     enddo
@@ -471,7 +476,7 @@ neighborc=0
 
 !lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
-    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect.dat')
+    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect' // inFileCode)
     do i=1,100
         READ(2,*)lenlysismat(i)
     end do
@@ -587,13 +592,13 @@ neighborc=0
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg.dat'
-        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave.dat'
-        write(tfile,'(75a)') 'data/' // expCode // '/tsave.dat'
-        write(movefile,'(74a)') 'data/' // expCode // '/move.dat'
-        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove.dat'
-        write(plotfile,'(74a)') 'data/' // expCode // '/plot.dat'
-        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt.dat'
+        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg' // outFileCode
+        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave' // outFileCode
+        write(tfile,'(75a)') 'data/' // expCode // '/tsave' // outFileCode
+        write(movefile,'(74a)') 'data/' // expCode // '/move' // outFileCode
+        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove' // outFileCode
+        write(plotfile,'(74a)') 'data/' // expCode // '/plot' // outFileCode
+        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt' // outFileCode
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
@@ -601,13 +606,13 @@ neighborc=0
         !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-!        open(degunit,file=degfile,form=filetype)
-!        open(Nunit,file=Nfile,form=filetype)
-!        open(tunit,file=tfile,form=filetype)
-!        open(moveunit,file=movefile,form=filetype)
-!        open(lastmoveunit,file=lastmovefile,form=filetype)
-!        open(plotunit,file=plotfile,form=filetype)
-!        open(mfptunit,file=mfptfile,form=filetype)
+        open(degunit,file=degfile,form=filetype)
+        open(Nunit,file=Nfile,form=filetype)
+        open(tunit,file=tfile,form=filetype)
+        open(moveunit,file=movefile,form=filetype)
+        open(lastmoveunit,file=lastmovefile,form=filetype)
+        open(plotunit,file=plotfile,form=filetype)
+        open(mfptunit,file=mfptfile,form=filetype)
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !open(degnextunit,file=degnextfile,form=filetype)
         !open(Venextunit,file=Venextfile,form=filetype)
@@ -616,10 +621,10 @@ neighborc=0
         !open(cindunit,file=cindfile,form=filetype)
         !open(bind1unit,file=bind1file,form=filetype)
 
-!        write(degunit) degrade(:)
-!        write(tunit) t
+        write(degunit) degrade(:)
+        write(tunit) t
 
-        write(*,*)' save as deg.dat'
+        write(*,*)' save as deg' // outFileCode
 
 
         Vedgenext(1,:)=V(1,:)
@@ -641,9 +646,8 @@ neighborc=0
 
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
             do brad_i=1,8
-                do brad_j=1,M
-                    random_numbers(brad_i, brad_j) = urcw1()
-                end do
+                call vurcw1(brad_rvect, M)
+                random_numbers(brad_i, :) = brad_rvect
             end do
 
 !! BRAD 2023-01-10:
@@ -716,7 +720,7 @@ neighborc=0
 
                         !also find the new binding time for this molecule !FOLLOWING ADDED 4/18/2011:
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                        r1 = random_numbers(1+BINDING_TIME_WHEN_DEGRADING, j)
+                        r1 = random_numbers(1+RNG_BINDING_TIME_WHEN_DEGRADING, j)
 !!                        r1=urcw1()
 
                         bind(j)=t-log(r1)/(kon*bs)-tstep/2   !subtract half a time step so that we round to nearest timestep
@@ -734,7 +738,7 @@ neighborc=0
 
                         !BELOW ADDED 9/15/17 to account for forced-unbound tPA to be removed
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                        r1 = random_numbers(1+MICRO_UNBIND, j)
+                        r1 = random_numbers(1+RNG_MICRO_UNBIND, j)
 !!                        r1=urcw1()
                         if(r1<=frac_forced) then
                         !if the random number is less than the fraction of time tPA is forced to unbind, consider tPA "forced" to unbind, and temporarily remove it from the simulation by assigning it a waiting time
@@ -762,7 +766,7 @@ neighborc=0
                     !if it can't bind, move it. if it can bind, pick a random number and see if r>(t-bind(j))/tstep.
                     !if it is bigger, move it. if it isn't bigger, bind it.
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                        r = random_numbers(1+MOVE, j)
+                        r = random_numbers(1+RNG_MOVE, j)
 !!                    r=urcw1()
                     z=V(1,j)
 
@@ -777,7 +781,7 @@ neighborc=0
                                 bind(j)=0 !reset the binding time to 0
                                 t_wait(j)=0 !reset the waiting time to 0
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                                r3 = random_numbers(1+UNBINDING_TIME, j)
+                                r3 = random_numbers(1+RNG_UNBINDING_TIME, j)
 !!                                r3=urcw1()
                                 countbind=countbind+1
 
@@ -808,7 +812,7 @@ neighborc=0
 
 
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                                r4 = random_numbers(1+LYSIS_TIME, j)
+                                r4 = random_numbers(1+RNG_LYSIS_TIME, j)
 !!                                r4=urcw1()
                                 r400=ceiling(r4*nummicro)+1
 
@@ -862,7 +866,7 @@ neighborc=0
 
                             t_wait(j)=0 !reset waiting time to 0
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                            r2 = random_numbers(1+CONFLICT_RESOLUTION, j)
+                            r2 = random_numbers(1+RNG_CONFLICT_RESOLUTION, j)
 !!                            r2=urcw1()
 
 !! BRAD 2023-01-04: r2 > log(r1)/(kon*bs*tstep)+1/2 (Bannish2014 p27)
@@ -871,7 +875,7 @@ neighborc=0
                             
                             if(r2>(t-bind(j))/tstep) then   !if r2 is such that movement happened before binding, move the molecule
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                                r1 = random_numbers(1+MOVE, j)
+                                r1 = random_numbers(1+RNG_MOVE, j)
                                                            !and calculate the new binding time associated with the new edge
                                 if ((1-q)<r.and.r<=((1-q)+q/8)) then
                                     V(1,j) = neighborc(1,z)
@@ -921,7 +925,7 @@ neighborc=0
                                 V(2,j)=1  !then the molecule binds
                                 bind(j)=0 !reset the binding time to 0
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                                r3 = random_numbers(1+UNBINDING_TIME, j)
+                                r3 = random_numbers(1+RNG_UNBINDING_TIME, j)
 !!                                r3=urcw1()
 
 !! BRAD 2023-01-04:
@@ -953,7 +957,7 @@ neighborc=0
                                 !Using the tPA leaving time, find the lysis time by using the lysis time distribution for the given ttPA
                                                                 ! assume colr2-1 == 1
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                                r4 = random_numbers(1+LYSIS_TIME, j)
+                                r4 = random_numbers(1+RNG_LYSIS_TIME, j)
 !!                                r4=urcw1()                      ! r4 in [0,1)
                                 r400=ceiling(r4*nummicro)+1     ! r400 in {2 .. 501}
 
@@ -1017,7 +1021,7 @@ neighborc=0
 !! BRITT:           This is desired. It moves slower because it is stuck to a BIG piece.    
                                 if(countij>0) then !if there is at least one edge available for diffusion, randomly choose which edge the molecule goes to
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                                    r1 = random_numbers(1+RESTRICTED_MOVE, j)
+                                    r1 = random_numbers(1+RNG_RESTRICTED_MOVE, j)
 !!                                    r1=urcw1()
                                     newindex=int(r1*(countij+1))  !choose which edge to diffuse to by randomly drawing an integer between 0 and countij. 0 corresponding to staying on same edge, and a nonzero value corresponds to moving to the edge given by the newindex entry of the temp_neighborc array
                                     !write(*,*)'r1=',r1
@@ -1037,7 +1041,7 @@ neighborc=0
 
                             else   ! for t_wait(j)>t... if statement. if there's no waiting time, or the waiting time is less than the current time, or the molecule was forced to unbind on the microscale (so is on a "small" FDP that can diffuse through the clot), the molecule can move as normal
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                                r1 = random_numbers(1+MOVE, j)
+                                r1 = random_numbers(1+RNG_MOVE, j)
 
                                 if ((1-q)<r.and.r<=((1-q)+q/8)) then
                                     V(1,j) = neighborc(1,z)
@@ -1244,8 +1248,8 @@ neighborc=0
 
         !In order to plot this and finish the calculations in Matlab, I need to save plotstuff2, lastmove, and move
 
-!        write(moveunit) move(:,:)
-!        write(plotunit) plotstuff2(:,:)
+        write(moveunit) move(:,:)
+        write(plotunit) plotstuff2(:,:)
 
         if(istat==1)then  !choose how many runs you want to save to make a movie
             !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
@@ -1366,25 +1370,25 @@ neighborc=0
                 end do
             end do  !for jj loop
 
-            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot.dat'
+            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot' // outFileCode
             open(x1unit,file=x1file,form=filetype)
-            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot.dat'
+            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot' // outFileCode
             open(x2unit,file=x2file,form=filetype)
-            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot.dat'
+            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot' // outFileCode
             open(y1unit,file=y1file,form=filetype)
-            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot.dat'
+            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot' // outFileCode
             open(y2unit,file=y2file,form=filetype)
-            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot.dat'
+            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot' // outFileCode
             open(xvunit,file=xvfile,form=filetype)
-            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot.dat'
+            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot' // outFileCode
             open(yvunit,file=yvfile,form=filetype)
 
-!            write(x1unit) X1plot
-!            write(x2unit) X2plot
-!            write(y1unit) Y1plot
-!            write(y2unit) Y2plot
-!            write(xvunit) Xvplot
-!            write(yvunit) Yvplot
+            write(x1unit) X1plot
+            write(x2unit) X2plot
+            write(y1unit) Y1plot
+            write(y2unit) Y2plot
+            write(xvunit) Xvplot
+            write(yvunit) Yvplot
 
             !!Now do location and boundedness of tPA
             do i=1,F
@@ -1466,13 +1470,13 @@ neighborc=0
             end do
 
 
-            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd.dat'
+            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd' // outFileCode
             open(tPAbdunit,file=tPAbdfile,form=filetype)
-            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree.dat'
+            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree' // outFileCode
             open(tPAfreeunit,file=tPAfreefile,form=filetype)
 
-!            write(tPAbdunit) bdtPA
-!            write(tPAfreeunit) freetPA
+            write(tPAbdunit) bdtPA
+            write(tPAfreeunit) freetPA
 
 
             !now save different timestep so I can make a matlab movie
@@ -1559,12 +1563,12 @@ neighborc=0
                         end do
                     end do  !for jj loop
 
-!                    write(x1unit) X1plot
-!                    write(x2unit) X2plot
-!                    write(y1unit) Y1plot
-!                    write(y2unit) Y2plot
-!                    write(xvunit) Xvplot
-!                    write(yvunit) Yvplot
+                    write(x1unit) X1plot
+                    write(x2unit) X2plot
+                    write(y1unit) Y1plot
+                    write(y2unit) Y2plot
+                    write(xvunit) Xvplot
+                    write(yvunit) Yvplot
 
                     !!Now do location and boundedness of tPA
                     do i=1,F
@@ -1645,20 +1649,20 @@ neighborc=0
                         end do
                     end do
 
-!                    write(tPAbdunit) bdtPA
-!                    write(tPAfreeunit) freetPA
+                    write(tPAbdunit) bdtPA
+                    write(tPAfreeunit) freetPA
 
                 end if !for if mod(imod,60) loop
             end do !for imod loop
 
-!            close(x1unit)
-!            close(x2unit)
-!            close(y1unit)
-!            close(y2unit)
-!            close(xvunit)
-!            close(yvunit)
-!            close(tPAbdunit)
-!            close(tPAfreeunit)
+            close(x1unit)
+            close(x2unit)
+            close(y1unit)
+            close(y2unit)
+            close(xvunit)
+            close(yvunit)
+            close(tPAbdunit)
+            close(tPAfreeunit)
 
 
             !!!!! END ADDED STUFF FOR MOVIE
