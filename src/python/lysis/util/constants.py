@@ -38,6 +38,18 @@ class Neighbors:
 
 
 @unique
+class RandomDraw(IntEnum):
+    BINDING_TIME_WHEN_DEGRADING = 0
+    BINDING_TIME_WHEN_MOVING = 1
+    MICRO_UNBIND = 2
+    MOVE = 3
+    UNBINDING_TIME = 4
+    LYSIS_TIME = 5
+    CONFLICT_RESOLUTION = 6
+    RESTRICTED_MOVE = 7
+
+
+@unique
 class BoundaryDirection(IntEnum):
     TOP = 0
     BOTTOM = 1

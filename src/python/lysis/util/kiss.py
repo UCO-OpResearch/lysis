@@ -61,6 +61,11 @@ class KissRandomGenerator:
         # It returns a double-precision (64-bit) float (equivalent to Python float)
         self.urcw1.restype = ctypes.c_double
 
+        self.vurcw1 = my_kiss.vurcw1_
+        self.vurcw1.argtypes = [np.ctypeslib.ndpointer(np.float_,
+                                                       flags="C_CONTIGUOUS"),
+                                ctypes.c_int]
+
         # Import the random seed function
         self.mscw = my_kiss.mscw_
         # It returns an unsigned 32-bit integer
@@ -143,9 +148,8 @@ class KissRandomGenerator:
         if size is None:
             return self.urcw1()
         else:
-            out = np.empty((size,), dtype=int)
-            for i in range(size):
-                out[i] = self.urcw1()
+            out = np.empty(size, dtype=float)
+            self.vurcw1(out, size)
             return out
 
     def integers(
