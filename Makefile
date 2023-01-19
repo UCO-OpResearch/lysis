@@ -53,7 +53,7 @@ C_SRC_DIR = ./src/c
 CPP_SRC_DIR = ./src/cpp
 FORT_SRC_DIR = ./src/fortran
 FORT_MICRO = micro_rates.f90
-FORT_MACRO = macro_brad_scratch.f90
+FORT_MACRO = macro_rng_array.f90
 #FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
 C_HEADERS = $(C_SRC_DIR)/all.h \
@@ -102,10 +102,10 @@ $(BUILD_DIR)/cpp_macro_Q2: $(CPP_SRC_DIR)/macro_Q2.cpp $(BUILD_DIR)/kiss.o
 	g++ -std=c++11 -o $(BUILD_DIR)/cpp_macro_Q2 $(CPP_SRC_DIR)/macro_Q2.cpp $(BUILD_DIR)/kiss.o
 
 $(LIB_DIR)/kiss.so: $(C_SRC_DIR)/kiss.c
-	gcc -fPIC -shared -o $(LIB_DIR)/kiss.so $(C_SRC_DIR)/kiss.c
+	gcc -fPIC -std=c99 -shared -o $(LIB_DIR)/kiss.so $(C_SRC_DIR)/kiss.c
 
 $(BUILD_DIR)/kiss.o: $(C_SRC_DIR)/kiss.c
-	gcc -c $(C_SRC_DIR)/kiss.c -o $(BUILD_DIR)/kiss.o
+	gcc -c -std=c99 $(C_SRC_DIR)/kiss.c -o $(BUILD_DIR)/kiss.o
 
 c-macro: $(C_HEADERS) $(C_SOURCE) # This line sets what files make looks at to determine if it needs to recompile.
 	mpicc -O3 -lm -std=c11 -o $(BUILD_DIR)/c_macro ${C_SOURCE}
