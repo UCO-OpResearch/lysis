@@ -10,7 +10,9 @@ program macrolysis
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15) :: expCode = '2023-01-13-1200'
+character(15) :: expCode = '2023-01-18-1700'
+character(4)  :: inFileCode = '.dat'
+character(12)   :: outFileCode = '.f-array.dat'
 
 integer,parameter  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
 integer,parameter  :: F=121!121 !71 !81  !# of lattice nodes in one column in the vertical direction
@@ -92,9 +94,9 @@ character(80) :: tfile
 
 !stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
 !is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
-external :: mscw, kiss32, urcw1
 integer :: kiss32, mscw, seed, state(4), old_state(4), ui
 double precision :: uf, urcw1
+external :: mscw, kiss32, urcw1
 
 double precision, dimension(M)         :: rvect
 double precision, dimension(tf+1,num) :: degnext
@@ -182,6 +184,16 @@ REAL time_begin, time_end
 real rounded_time
 real degraded_percent
 real reached_back_row_percent
+double precision :: last_degrade_time
+
+integer :: t_degrade_unit = 102
+character(80) :: t_degrade_file
+integer :: m_location_unit = 103
+character(80) :: m_location_file
+integer :: m_bound_unit = 104
+character(80) :: m_bound_file
+
+!! BRAD END
 
 if( isBinary ) then
     !filetype = 'unformatted' !if you compile with gfortran or f95
@@ -197,7 +209,7 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_Q2_diffuse_into_and_along.f90'
+write(*,*)' obtained using code macro_brad_scratch.f90'
 
 !!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
     kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
@@ -428,7 +440,7 @@ neighborc=0
 
 
 
-    write(filename2,'(a74)') 'data/' // expCode // '/tPAleave.dat'
+    write(filename2,'(a74)') 'data/' // expCode // '/tPAleave' // inFileCode
     open(200,file=filename2)
     do i=1,101
         read(200,*)CDFtPA(i)
@@ -436,7 +448,7 @@ neighborc=0
     close(200)
     write(*,*)'read tPAleave.dat'
 
-    write(filename3,'(a73)') 'data/' // expCode // '/tsectPA.dat'
+    write(filename3,'(a73)') 'data/' // expCode // '/tsectPA' // inFileCode
     open(300,file=filename3)
     do i=1,101
         read(300,*)tsec1(i)
@@ -449,7 +461,7 @@ neighborc=0
 !lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
-    OPEN(unit=1,FILE='data/' // expCode // '/lysismat.dat')
+    OPEN(unit=1,FILE='data/' // expCode // '/lysismat' // inFileCode)
     do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
        READ(1,*)(lysismat(i,ii),ii=1,100)
     enddo
@@ -457,7 +469,7 @@ neighborc=0
 
 !lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
-    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect.dat')
+    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect' // inFileCode)
     do i=1,100
         READ(2,*)lenlysismat(i)
     end do
@@ -510,6 +522,7 @@ neighborc=0
         total_restricted_moves = 0
         degraded_fibers = 0
         reached_back_row = 0
+        last_degrade_time = 0
         yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
         mfpt=0
 
@@ -573,13 +586,19 @@ neighborc=0
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg.dat'
-        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave.dat'
-        write(tfile,'(75a)') 'data/' // expCode // '/tsave.dat'
-        write(movefile,'(74a)') 'data/' // expCode // '/move.dat'
-        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove.dat'
-        write(plotfile,'(74a)') 'data/' // expCode // '/plot.dat'
-        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt.dat'
+        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg' // outFileCode
+        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave' // outFileCode
+        write(tfile,'(75a)') 'data/' // expCode // '/tsave' // outFileCode
+        write(movefile,'(74a)') 'data/' // expCode // '/move' // outFileCode
+        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove' // outFileCode
+        write(plotfile,'(74a)') 'data/' // expCode // '/plot' // outFileCode
+        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt' // outFileCode
+        
+!! BRAD 2023-01-21:
+        write(t_degrade_file,'(75a)' ) 'data/' // expCode // '/f_deg_time' // outFileCode
+        write(m_location_file,'(75a)' ) 'data/' // expCode // '/m_loc' // outFileCode
+        write(m_bound_file,'(75a)' ) 'data/' // expCode // '/m_bound' // outFileCode
+                
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
@@ -587,13 +606,20 @@ neighborc=0
         !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-!        open(degunit,file=degfile,form=filetype)
-!        open(Nunit,file=Nfile,form=filetype)
-!        open(tunit,file=tfile,form=filetype)
-!        open(moveunit,file=movefile,form=filetype)
-!        open(lastmoveunit,file=lastmovefile,form=filetype)
-!        open(plotunit,file=plotfile,form=filetype)
-!        open(mfptunit,file=mfptfile,form=filetype)
+        open(degunit,file=degfile,form=filetype)
+        open(Nunit,file=Nfile,form=filetype)
+        open(tunit,file=tfile,form=filetype)
+        open(moveunit,file=movefile,form=filetype)
+        open(lastmoveunit,file=lastmovefile,form=filetype)
+        open(plotunit,file=plotfile,form=filetype)
+        open(mfptunit,file=mfptfile,form=filetype)
+
+!! BRAD 2023-01-21:
+        open(t_degrade_unit,file=t_degrade_file,form=filetype)
+        open(m_location_unit,file=m_location_file,form=filetype)
+        open(m_bound_unit,file=m_bound_file,form=filetype)
+
+
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !open(degnextunit,file=degnextfile,form=filetype)
         !open(Venextunit,file=Venextfile,form=filetype)
@@ -602,10 +628,15 @@ neighborc=0
         !open(cindunit,file=cindfile,form=filetype)
         !open(bind1unit,file=bind1file,form=filetype)
 
-!        write(degunit) degrade(:)
-!        write(tunit) t
+        write(degunit) degrade(:)
+        write(tunit) t
+        
+!! BRAD 2023-01-21:
+        write(t_degrade_unit) t_degrade(:)
+        write(m_location_unit) V(1,:)
+        write(m_bound_unit) V(2,:)
 
-        write(*,*)' save as deg.dat'
+        write(*,*)' save as deg' // outFileCode
 
 
         Vedgenext(1,:)=V(1,:)
@@ -625,7 +656,7 @@ neighborc=0
             t = count*tstep
             if(t>tf) exit  !only do the big "do" loop while t<tf
 
-
+!! BRAD 2023-01-10:
             if(mod(count,100000)==0) then
                 rounded_time = real(t)
                 degraded_percent = real(degraded_fibers)/(num-enoFB)*100
@@ -647,6 +678,8 @@ neighborc=0
                     degrade(i)=-t
 !! BRAD 2023-01-13:
                     degraded_fibers = degraded_fibers + 1
+                    last_degrade_time = t
+
                     !write(*,*)'time=',t
                     !write(*,*)'edge that degraded=',i
 
@@ -1093,6 +1126,12 @@ neighborc=0
             if(Ninteger>Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
                 write(degunit)    degrade(1:num)
                 write(tunit)  t
+                
+!! BRAD 2023-01-21:
+                write(t_degrade_unit) t_degrade(:)
+                write(m_location_unit) V(1,:)
+                write(m_bound_unit) V(2,:)
+
                 Nsave=Nsave+10
                 cNsave=cNsave+1
                 Vedgenext(cNsave+1,:) = V(1,:)
@@ -1119,6 +1158,7 @@ neighborc=0
         write(*,*)'Total Regular Moves: ',total_regular_moves
         write(*,*)'Total Restricted Moves: ',total_restricted_moves
         write(*,*)'Molecules that reached back row: ',reached_back_row
+        write(*,*)'Last fiber degraded at: ',last_degrade_time,' sec'
 
         Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
         front=0
@@ -1215,8 +1255,8 @@ neighborc=0
 
         !In order to plot this and finish the calculations in Matlab, I need to save plotstuff2, lastmove, and move
 
-!        write(moveunit) move(:,:)
-!        write(plotunit) plotstuff2(:,:)
+        write(moveunit) move(:,:)
+        write(plotunit) plotstuff2(:,:)
 
         if(istat==1)then  !choose how many runs you want to save to make a movie
             !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
@@ -1337,25 +1377,25 @@ neighborc=0
                 end do
             end do  !for jj loop
 
-            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot.dat'
+            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot' // outFileCode
             open(x1unit,file=x1file,form=filetype)
-            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot.dat'
+            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot' // outFileCode
             open(x2unit,file=x2file,form=filetype)
-            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot.dat'
+            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot' // outFileCode
             open(y1unit,file=y1file,form=filetype)
-            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot.dat'
+            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot' // outFileCode
             open(y2unit,file=y2file,form=filetype)
-            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot.dat'
+            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot' // outFileCode
             open(xvunit,file=xvfile,form=filetype)
-            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot.dat'
+            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot' // outFileCode
             open(yvunit,file=yvfile,form=filetype)
 
-!            write(x1unit) X1plot
-!            write(x2unit) X2plot
-!            write(y1unit) Y1plot
-!            write(y2unit) Y2plot
-!            write(xvunit) Xvplot
-!            write(yvunit) Yvplot
+            write(x1unit) X1plot
+            write(x2unit) X2plot
+            write(y1unit) Y1plot
+            write(y2unit) Y2plot
+            write(xvunit) Xvplot
+            write(yvunit) Yvplot
 
             !!Now do location and boundedness of tPA
             do i=1,F
@@ -1437,13 +1477,13 @@ neighborc=0
             end do
 
 
-            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd.dat'
+            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd' // outFileCode
             open(tPAbdunit,file=tPAbdfile,form=filetype)
-            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree.dat'
+            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree' // outFileCode
             open(tPAfreeunit,file=tPAfreefile,form=filetype)
 
-!            write(tPAbdunit) bdtPA
-!            write(tPAfreeunit) freetPA
+            write(tPAbdunit) bdtPA
+            write(tPAfreeunit) freetPA
 
 
             !now save different timestep so I can make a matlab movie
@@ -1530,12 +1570,12 @@ neighborc=0
                         end do
                     end do  !for jj loop
 
-!                    write(x1unit) X1plot
-!                    write(x2unit) X2plot
-!                    write(y1unit) Y1plot
-!                    write(y2unit) Y2plot
-!                    write(xvunit) Xvplot
-!                    write(yvunit) Yvplot
+                    write(x1unit) X1plot
+                    write(x2unit) X2plot
+                    write(y1unit) Y1plot
+                    write(y2unit) Y2plot
+                    write(xvunit) Xvplot
+                    write(yvunit) Yvplot
 
                     !!Now do location and boundedness of tPA
                     do i=1,F
@@ -1616,20 +1656,20 @@ neighborc=0
                         end do
                     end do
 
-!                    write(tPAbdunit) bdtPA
-!                    write(tPAfreeunit) freetPA
+                    write(tPAbdunit) bdtPA
+                    write(tPAfreeunit) freetPA
 
                 end if !for if mod(imod,60) loop
             end do !for imod loop
 
-!            close(x1unit)
-!            close(x2unit)
-!            close(y1unit)
-!            close(y2unit)
-!            close(xvunit)
-!            close(yvunit)
-!            close(tPAbdunit)
-!            close(tPAfreeunit)
+            close(x1unit)
+            close(x2unit)
+            close(y1unit)
+            close(y2unit)
+            close(xvunit)
+            close(yvunit)
+            close(tPAbdunit)
+            close(tPAfreeunit)
 
 
             !!!!! END ADDED STUFF FOR MOVIE
@@ -1659,6 +1699,12 @@ write(*,*)'Nsavevect=',Nsavevect(:)
     close(lastmoveunit)
     close(plotunit)
     close(mfptunit)
+    
+!! BRAD 2023-01-21:
+        close(t_degrade_unit)
+        close(m_location_unit)
+        close(m_bound_unit)
+
     !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     !close(degnextunit)
     !close(Venextunit)
