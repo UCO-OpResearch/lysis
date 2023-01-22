@@ -13,18 +13,18 @@ program macrolysis
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15) :: expCode = '2023-01-18-1600'
+character(15) :: expCode = '2023-01-18-1700'
 character(4)  :: inFileCode = '.dat'
-character(6)   :: outFileCode = '.f.dat'
+character(12)   :: outFileCode = '.f-array.dat'
 
-integer,parameter  :: N=9!93  !# of lattice nodes in one row in the horizontal direction
-integer,parameter  :: F=12!121 !71 !81  !# of lattice nodes in one column in the vertical direction
-integer,parameter  :: Ffree=4!29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
+integer,parameter  :: N=9  !# of lattice nodes in one row in the horizontal direction
+integer,parameter  :: F=12 !71 !81  !# of lattice nodes in one column in the vertical direction
+integer,parameter  :: Ffree=4 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
 integer,parameter  :: stats= 1 !! BRAD 2023-01-04: 10
 integer,parameter  :: num=(2*N-1)*F+N*(F-1)
-integer,parameter  :: M=430 !43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
+integer,parameter  :: M=430 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
 integer,parameter  :: tf=10*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
 integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
@@ -97,9 +97,9 @@ character(80) :: tfile
 
 !stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
 !is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
-external :: mscw, kiss32, urcw1
 integer :: kiss32, mscw, seed, state(4), old_state(4), ui
 double precision :: uf, urcw1
+external :: mscw, kiss32, urcw1
 
 double precision, dimension(M)         :: rvect
 double precision, dimension(tf+1,num) :: degnext
@@ -187,9 +187,11 @@ REAL time_begin, time_end
 real rounded_time
 real degraded_percent
 real reached_back_row_percent
+double precision :: last_degrade_time
 
 integer :: brad_i, brad_j
 double precision, dimension(M) :: brad_rvect
+external :: c_vurcw1
 
 integer,parameter  ::  RNG_BINDING_TIME_WHEN_DEGRADING = 0
 integer,parameter  ::  RNG_BINDING_TIME_WHEN_MOVING = 1
@@ -201,6 +203,17 @@ integer,parameter  ::  RNG_CONFLICT_RESOLUTION = 6
 integer,parameter  ::  RNG_RESTRICTED_MOVE = 7
 
 double precision, dimension(8, M) :: random_numbers
+integer :: random_file_unit = 101
+character(80) :: random_file
+
+integer :: t_degrade_unit = 102
+character(80) :: t_degrade_file
+integer :: m_location_unit = 103
+character(80) :: m_location_file
+integer :: m_bound_unit = 104
+character(80) :: m_bound_file
+
+!! BRAD END
 
 if( isBinary ) then
     !filetype = 'unformatted' !if you compile with gfortran or f95
@@ -232,7 +245,8 @@ write(*,*)' obtained using code macro_rng_array.f90'
 
     !seed = mscw()
     !seed= 1884637428
-    seed = -2137354075
+    !seed = -2137354075
+    seed = 578439769
     write(*,*)' seed=',seed
 
     state(1) = 129281
@@ -529,6 +543,7 @@ neighborc=0
         total_restricted_moves = 0
         degraded_fibers = 0
         reached_back_row = 0
+        last_degrade_time = 0
         yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
         mfpt=0
 
@@ -538,6 +553,7 @@ neighborc=0
             t_leave  =0.0d+00         !vector of the tPA leaving times for each molecule
             t_wait   =0.0d+00          !vector of the tPA waiting times for each molecule
             degnext  =0
+            
             Vedgenext = 0
             Vboundnext = 0
             totmove = 0
@@ -574,9 +590,9 @@ neighborc=0
             init_state(ii) = dble(ii) / dble(enoFB) !make a vector that's the length of one row of lattice and scale so
                                                                !that prob. of being on any edge is equal
         enddo
-
-        call vurcw1(rvect,M)
-
+        
+        call vurcw1(rvect, M)
+        
         !use the random numbers to decide where we start the tPAs
         do i=1,M
             if (0<=rvect(i).and.rvect(i)<=init_state(1)) V(1,i)=1 !init_entry(i)=1
@@ -599,6 +615,12 @@ neighborc=0
         write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove' // outFileCode
         write(plotfile,'(74a)') 'data/' // expCode // '/plot' // outFileCode
         write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt' // outFileCode
+        
+!! BRAD 2023-01-21:
+        write(t_degrade_file,'(75a)' ) 'data/' // expCode // '/f_deg_time' // outFileCode
+        write(m_location_file,'(75a)' ) 'data/' // expCode // '/m_loc' // outFileCode
+        write(m_bound_file,'(75a)' ) 'data/' // expCode // '/m_bound' // outFileCode
+                
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
@@ -613,6 +635,13 @@ neighborc=0
         open(lastmoveunit,file=lastmovefile,form=filetype)
         open(plotunit,file=plotfile,form=filetype)
         open(mfptunit,file=mfptfile,form=filetype)
+
+!! BRAD 2023-01-21:
+        open(t_degrade_unit,file=t_degrade_file,form=filetype)
+        open(m_location_unit,file=m_location_file,form=filetype)
+        open(m_bound_unit,file=m_bound_file,form=filetype)
+
+
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !open(degnextunit,file=degnextfile,form=filetype)
         !open(Venextunit,file=Venextfile,form=filetype)
@@ -623,6 +652,12 @@ neighborc=0
 
         write(degunit) degrade(:)
         write(tunit) t
+        
+!! BRAD 2023-01-21:
+        write(t_degrade_unit) t_degrade(:)
+        write(m_location_unit) V(1,:)
+        write(m_bound_unit) V(2,:)
+
 
         write(*,*)' save as deg' // outFileCode
 
@@ -646,9 +681,18 @@ neighborc=0
 
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
             do brad_i=1,8
+                brad_rvect = 0
                 call vurcw1(brad_rvect, M)
                 random_numbers(brad_i, :) = brad_rvect
             end do
+            !write(*,*) random_numbers(:, 342)
+            
+            if(count==1) then
+                write(random_file,'(78a)') 'data/' // expCode // '/random' // outFileCode
+                open(random_file_unit,file=random_file,form=filetype)
+                write(random_file_unit)random_numbers
+                close(random_file_unit)
+            end if
 
 !! BRAD 2023-01-10:
             if(mod(count,100000)==0) then
@@ -673,6 +717,8 @@ neighborc=0
                     degrade(i)=-t
 !! BRAD 2023-01-13:
                     degraded_fibers = degraded_fibers + 1
+                    last_degrade_time = t
+
                     !write(*,*)'time=',t
                     !write(*,*)'edge that degraded=',i
 
@@ -1126,6 +1172,12 @@ neighborc=0
             if(Ninteger>Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
                 write(degunit)    degrade(1:num)
                 write(tunit)  t
+                
+!! BRAD 2023-01-21:
+                write(t_degrade_unit) t_degrade(:)
+                write(m_location_unit) V(1,:)
+                write(m_bound_unit) V(2,:)
+
                 Nsave=Nsave+10
                 cNsave=cNsave+1
                 Vedgenext(cNsave+1,:) = V(1,:)
@@ -1152,6 +1204,7 @@ neighborc=0
         write(*,*)'Total Regular Moves: ',total_regular_moves
         write(*,*)'Total Restricted Moves: ',total_restricted_moves
         write(*,*)'Molecules that reached back row: ',reached_back_row
+        write(*,*)'Last fiber degraded at: ',last_degrade_time,' sec'
 
         Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
         front=0
@@ -1692,6 +1745,12 @@ write(*,*)'Nsavevect=',Nsavevect(:)
     close(lastmoveunit)
     close(plotunit)
     close(mfptunit)
+    
+!! BRAD 2023-01-21:
+        close(t_degrade_unit)
+        close(m_location_unit)
+        close(m_bound_unit)
+
     !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     !close(degnextunit)
     !close(Venextunit)

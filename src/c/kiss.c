@@ -196,9 +196,9 @@ urcw1_(void)
 }
 
 void
-vurcw1_(double rvect[], int n)
+c_vurcw1_(double rvect[], int *n)
 {
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < *n; i++)
     {
         rvect[i] = urcw1_();
     }
