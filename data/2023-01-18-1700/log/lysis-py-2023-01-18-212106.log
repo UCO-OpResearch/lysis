@@ -1,0 +1,132 @@
+INFO:lysis:Initialized Experiment '2023-01-18-1600'
+DEBUG:lysis:With parameters 
+experiment_code : 2023-01-18-1600
+data_filenames  : unbinding_time    : tsectPA.dat
+                  lysis_time        : lysismat.dat
+                  total_lyses       : lenlysisvect.dat
+                  degradation_state : deg.dat
+micro_params    : None
+macro_params    : binding_rate       : 0.1
+                  pore_size          : 0.00010135
+                  diffusion_coeff    : 5e-07
+                  binding_sites      : 427
+                  forced_unbind      : 0.0852
+                  average_bind_time  : 27.8
+                  grid_node_distance : 1.0862
+                  cols               : 9
+                  rows               : 12
+                  full_row           : 26
+                  xz_row             : 17
+                  total_edges        : 303
+                  total_fibers       : 225
+                  empty_rows         : 3
+                  last_empty_edge    : 77
+                  total_molecules    : 430
+                  moving_probability : 0.2
+                  microscale_runs    : 50,000
+                  total_trials       : 10
+                  total_time         : 600
+                  time_step          : 0.0003423940833333333
+                  total_time_steps   : 1,752,366
+                  seed               : -2,137,354,075
+                  state              : (129281, 362436069, 123456789, -2137354075)
+                  input_data         : ['unbinding_time', 'lysis_time', 'total_lyses']
+                  output_data        : ['degradation_state']
+                  save_interval      : 10
+                  number_of_saves    : 61
+                  macro_version      : diffuse_into_and_along
+                  log_lvl            : 30
+                  duplicate_fortran  : 1
+                  processing_library : numpy
+
+DEBUG:lysis.np_macroscale:Initializing MacroscaleRun
+DEBUG:lysis.np_macroscale:Precalculating neighbors.
+INFO:lysis.np_macroscale:Placing molecules on empty edges.
+DEBUG:lysis.np_macroscale:Initialization complete.
+INFO:lysis.np_macroscale:Saving data at time 0.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 10.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 20.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 30.00 sec.
+INFO:lysis.np_macroscale:After 34.24 sec, 9 fibers are degraded (4.0% of total) and 52 molecules have reached the back row 12.1% of total).
+INFO:lysis.np_macroscale:Saving data at time 40.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 50.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 60.00 sec.
+INFO:lysis.np_macroscale:After 68.48 sec, 41 fibers are degraded (18.2% of total) and 74 molecules have reached the back row 17.2% of total).
+INFO:lysis.np_macroscale:Saving data at time 70.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 80.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 90.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 100.00 sec.
+INFO:lysis.np_macroscale:After 102.72 sec, 65 fibers are degraded (28.9% of total) and 96 molecules have reached the back row 22.3% of total).
+INFO:lysis.np_macroscale:Saving data at time 110.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 120.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 130.00 sec.
+INFO:lysis.np_macroscale:After 136.96 sec, 93 fibers are degraded (41.3% of total) and 132 molecules have reached the back row 30.7% of total).
+INFO:lysis.np_macroscale:Saving data at time 140.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 150.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 160.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 170.00 sec.
+INFO:lysis.np_macroscale:After 171.20 sec, 120 fibers are degraded (53.3% of total) and 163 molecules have reached the back row 37.9% of total).
+INFO:lysis.np_macroscale:Saving data at time 180.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 190.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 200.00 sec.
+INFO:lysis.np_macroscale:After 205.44 sec, 156 fibers are degraded (69.3% of total) and 258 molecules have reached the back row 60.0% of total).
+INFO:lysis.np_macroscale:Saving data at time 210.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 220.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 230.00 sec.
+INFO:lysis.np_macroscale:After 239.68 sec, 171 fibers are degraded (76.0% of total) and 349 molecules have reached the back row 81.2% of total).
+INFO:lysis.np_macroscale:Saving data at time 240.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 250.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 260.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 270.00 sec.
+INFO:lysis.np_macroscale:After 273.91 sec, 189 fibers are degraded (84.0% of total) and 413 molecules have reached the back row 96.0% of total).
+INFO:lysis.np_macroscale:Saving data at time 280.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 290.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 300.00 sec.
+INFO:lysis.np_macroscale:After 308.15 sec, 206 fibers are degraded (91.6% of total) and 425 molecules have reached the back row 98.8% of total).
+INFO:lysis.np_macroscale:Saving data at time 310.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 320.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 330.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 340.00 sec.
+INFO:lysis.np_macroscale:After 342.39 sec, 218 fibers are degraded (96.9% of total) and 429 molecules have reached the back row 99.8% of total).
+INFO:lysis.np_macroscale:Saving data at time 350.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 360.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 370.00 sec.
+INFO:lysis.np_macroscale:After 376.63 sec, 224 fibers are degraded (99.6% of total) and 430 molecules have reached the back row 100.0% of total).
+INFO:lysis.np_macroscale:Saving data at time 380.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 390.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 400.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 410.00 sec.
+INFO:lysis.np_macroscale:All fibers degraded after 410.87 sec. Terminating
+INFO:lysis.np_macroscale:Saving data at time 420.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 430.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 440.00 sec.
+INFO:lysis.np_macroscale:All fibers degraded after 445.11 sec. Terminating
+INFO:lysis.np_macroscale:Saving data at time 450.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 460.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 470.00 sec.
+INFO:lysis.np_macroscale:All fibers degraded after 479.35 sec. Terminating
+INFO:lysis.np_macroscale:Saving data at time 480.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 490.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 500.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 510.00 sec.
+INFO:lysis.np_macroscale:All fibers degraded after 513.59 sec. Terminating
+INFO:lysis.np_macroscale:Saving data at time 520.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 530.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 540.00 sec.
+INFO:lysis.np_macroscale:All fibers degraded after 547.83 sec. Terminating
+INFO:lysis.np_macroscale:Saving data at time 550.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 560.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 570.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 580.00 sec.
+INFO:lysis.np_macroscale:All fibers degraded after 582.07 sec. Terminating
+INFO:lysis.np_macroscale:Saving data at time 590.00 sec.
+INFO:lysis.np_macroscale:Saving data at time 600.00 sec.
+INFO:lysis.np_macroscale:Saving data to disk.
+INFO:lysis.np_macroscale:Total binds: 5,937
+INFO:lysis.np_macroscale:Timesteps with changes to degrade time: 0
+INFO:lysis.np_macroscale:Total regular moves: 58,259,997
+INFO:lysis.np_macroscale:Total restricted moves: 37,572,510
+INFO:lysis.np_macroscale:Total macro unbinds: 2,314
+INFO:lysis.np_macroscale:Total micro unbinds: 295
+INFO:lysis.np_macroscale:Molecules which reached the back row: 430
+INFO:lysis:cProfile stats saved as macro_pstats_2023-01-18-212106.sts.

@@ -14,18 +14,18 @@ program macrolysis
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
 character(15) :: expCode = '2023-01-18-1700'
-character(4)  :: inFileCode = '.dat'
-character(12)   :: outFileCode = '.f-array.dat'
+character(40)  :: inFileCode = '.dat'
+character(40)   :: outFileCode = '.f-array.dat'
 
 integer,parameter  :: N=9  !# of lattice nodes in one row in the horizontal direction
 integer,parameter  :: F=12 !71 !81  !# of lattice nodes in one column in the vertical direction
 integer,parameter  :: Ffree=4 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
-integer,parameter  :: stats= 1 !! BRAD 2023-01-04: 10
+integer,parameter  :: stats= 100 !! BRAD 2023-01-04: 10
 integer,parameter  :: num=(2*N-1)*F+N*(F-1)
 integer,parameter  :: M=430 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
-integer,parameter  :: tf=10*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
+integer,parameter  :: tf=6*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
 integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
 integer  :: i, istat
@@ -188,12 +188,13 @@ real rounded_time
 real degraded_percent
 real reached_back_row_percent
 double precision :: last_degrade_time
+real :: temp_len_lysis_mat
 
 integer :: brad_i, brad_j
 double precision, dimension(M) :: brad_rvect
 external :: c_vurcw1
 
-integer,parameter  ::  RNG_BINDING_TIME_WHEN_DEGRADING = 0
+integer,parameter  ::  RNG_BINDING_TIME_WHEN_UNBINDING = 0
 integer,parameter  ::  RNG_BINDING_TIME_WHEN_MOVING = 1
 integer,parameter  ::  RNG_MICRO_UNBIND = 2
 integer,parameter  ::  RNG_MOVE = 3
@@ -212,6 +213,7 @@ integer :: m_location_unit = 103
 character(80) :: m_location_file
 integer :: m_bound_unit = 104
 character(80) :: m_bound_file
+!integer :: m_bind_time_unit = 105
 
 !! BRAD END
 
@@ -229,7 +231,7 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_rng_array.f90'
+write(*,*)' obtained using code macro_rng_array.f90 on data ',expCode
 
 !!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
     kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
@@ -245,8 +247,8 @@ write(*,*)' obtained using code macro_rng_array.f90'
 
     !seed = mscw()
     !seed= 1884637428
-    !seed = -2137354075
-    seed = 578439769
+    seed = -2137354075
+    !seed = 578439769
     write(*,*)' seed=',seed
 
     state(1) = 129281
@@ -461,16 +463,14 @@ neighborc=0
 
 
 
-    write(filename2,'(a74)') 'data/' // expCode // '/tPAleave' // inFileCode
-    open(200,file=filename2)
+    open(200,file=ADJUSTL('data/' // expCode // '/tPAleave' // inFileCode))
     do i=1,101
         read(200,*)CDFtPA(i)
     end do
     close(200)
     write(*,*)'read tPAleave.dat'
 
-    write(filename3,'(a73)') 'data/' // expCode // '/tsectPA' // inFileCode
-    open(300,file=filename3)
+    open(300,file=ADJUSTL('data/' // expCode // '/tsectPA' // inFileCode))
     do i=1,101
         read(300,*)tsec1(i)
     end do
@@ -482,20 +482,20 @@ neighborc=0
 !lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
-    OPEN(unit=1,FILE='data/' // expCode // '/lysismat' // inFileCode)
+    OPEN(unit=201,FILE=ADJUSTL('data/' // expCode // '/lysismat' // inFileCode))
     do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
-       READ(1,*)(lysismat(i,ii),ii=1,100)
+       READ(201,*)(lysismat(i,ii),ii=1,100)
     enddo
-    close(1)
+    close(201)
 
 !lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
-    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect' // inFileCode)
+    OPEN(unit=202,FILE=ADJUSTL('data/' // expCode // '/lenlysisvect' // inFileCode))
     do i=1,100
-        READ(2,*)lenlysismat(i)
+        READ(202,*)temp_len_lysis_mat
+        lenlysismat(i) = INT(temp_len_lysis_mat)
     end do
-    close(2)
-  
+    close(202)
 
     lastmove=0
 
@@ -591,7 +591,7 @@ neighborc=0
                                                                !that prob. of being on any edge is equal
         enddo
         
-        call vurcw1(rvect, M)
+        call c_vurcw1(rvect, M)
         
         !use the random numbers to decide where we start the tPAs
         do i=1,M
@@ -608,18 +608,6 @@ neighborc=0
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg' // outFileCode
-        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave' // outFileCode
-        write(tfile,'(75a)') 'data/' // expCode // '/tsave' // outFileCode
-        write(movefile,'(74a)') 'data/' // expCode // '/move' // outFileCode
-        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove' // outFileCode
-        write(plotfile,'(74a)') 'data/' // expCode // '/plot' // outFileCode
-        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt' // outFileCode
-        
-!! BRAD 2023-01-21:
-        write(t_degrade_file,'(75a)' ) 'data/' // expCode // '/f_deg_time' // outFileCode
-        write(m_location_file,'(75a)' ) 'data/' // expCode // '/m_loc' // outFileCode
-        write(m_bound_file,'(75a)' ) 'data/' // expCode // '/m_bound' // outFileCode
                 
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
@@ -628,19 +616,19 @@ neighborc=0
         !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        open(degunit,file=degfile,form=filetype)
-        open(Nunit,file=Nfile,form=filetype)
-        open(tunit,file=tfile,form=filetype)
-        open(moveunit,file=movefile,form=filetype)
-        open(lastmoveunit,file=lastmovefile,form=filetype)
-        open(plotunit,file=plotfile,form=filetype)
-        open(mfptunit,file=mfptfile,form=filetype)
+        open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
+        open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
+        open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
+        open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
+        open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
+        open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
+        open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
 
 !! BRAD 2023-01-21:
-        open(t_degrade_unit,file=t_degrade_file,form=filetype)
-        open(m_location_unit,file=m_location_file,form=filetype)
-        open(m_bound_unit,file=m_bound_file,form=filetype)
-
+        open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
+        open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
+        open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
+!        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
 
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !open(degnextunit,file=degnextfile,form=filetype)
@@ -681,25 +669,30 @@ neighborc=0
 
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
             do brad_i=1,8
-                brad_rvect = 0
-                call vurcw1(brad_rvect, M)
+                !brad_rvect = 0
+                call c_vurcw1(brad_rvect, M)
+                !do brad_j=1,M
                 random_numbers(brad_i, :) = brad_rvect
+                !end do
             end do
             !write(*,*) random_numbers(:, 342)
             
-            if(count==1) then
-                write(random_file,'(78a)') 'data/' // expCode // '/random' // outFileCode
-                open(random_file_unit,file=random_file,form=filetype)
-                write(random_file_unit)random_numbers
-                close(random_file_unit)
-            end if
+!            if(count<=100) then
+!                write(random_file,'(A,I0.3,A)') 'data/' // expCode // '/random', count, outFileCode
+!                open(random_file_unit,file=random_file,form=filetype)
+!                write(random_file_unit)random_numbers
+!                close(random_file_unit)
+!            end if
 
 !! BRAD 2023-01-10:
             if(mod(count,100000)==0) then
                 rounded_time = real(t)
                 degraded_percent = real(degraded_fibers)/(num-enoFB)*100
                 reached_back_row_percent = real(reached_back_row)/M*100
-                write(*,'(A,F7.2,A,I5,A,F5.1,A,I5,A,F5.1,A)')'After ',rounded_time,' sec, ',degraded_fibers,' fibers are degraded (',degraded_percent,'% of total) and ',reached_back_row,' molecules have reached the back row (',reached_back_row_percent,'% of total).'
+                write(*,'(A,F7.2,A,I5,A,F5.1,A,I5,A,F5.1,A)')'After ',rounded_time,' sec, ',&
+                degraded_fibers,' fibers are degraded (',degraded_percent,'% of total) and ',&
+                reached_back_row,' molecules have reached the back row (',&
+                reached_back_row_percent,'% of total).'
             end if
 
 
@@ -766,12 +759,14 @@ neighborc=0
 
                         !also find the new binding time for this molecule !FOLLOWING ADDED 4/18/2011:
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                        r1 = random_numbers(1+RNG_BINDING_TIME_WHEN_DEGRADING, j)
+                        r1 = random_numbers(1+RNG_BINDING_TIME_WHEN_UNBINDING, j)
 !!                        r1=urcw1()
 
                         bind(j)=t-log(r1)/(kon*bs)-tstep/2   !subtract half a time step so that we round to nearest timestep
                         !else if time to tPA leaving is bigger than current time, keep the molecule bound and continue.
                         !we don't need to change anything in this case
+!! BRAD 2023-01-22:
+!                        write(m_bind_time_unit)r1, t, bind(j)
 
 !! BRAD 2023-01-04: The molecule just unbound. Now we check to see if it should be forced to unbind?
 !!                  Are we saying that, some of the molecules that unbound after t seconds of binding time did so willingly
@@ -847,8 +842,8 @@ neighborc=0
                                     end if
                                 enddo
 
-                                if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
-
+                                if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should ',&
+                                    'not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
                                 percent2 = (CDFtPA(colr2)-r3)/(CDFtPA(colr2)-CDFtPA(colr2-1))
                                 ttPA = (tsec1(colr2)-(tsec1(colr2)-tsec1(colr2-1))*percent2)
                                 !end if
@@ -921,7 +916,7 @@ neighborc=0
                             
                             if(r2>(t-bind(j))/tstep) then   !if r2 is such that movement happened before binding, move the molecule
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                                r1 = random_numbers(1+RNG_MOVE, j)
+                                r1 = random_numbers(1+RNG_BINDING_TIME_WHEN_MOVING, j)
                                                            !and calculate the new binding time associated with the new edge
                                 if ((1-q)<r.and.r<=((1-q)+q/8)) then
                                     V(1,j) = neighborc(1,z)
@@ -963,6 +958,8 @@ neighborc=0
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
                                 end if !(for diffusion part)
+!! BRAD 2023-01-22:
+!                                write(m_bind_time_unit)r1, t, bind(j)
 
 !! BRAD 2023-01-13:
                                 total_regular_moves = total_regular_moves + 1
@@ -990,7 +987,8 @@ neighborc=0
                                     end if
                                 enddo
 
-                                if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
+                                if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should ',&
+                                    'not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
 
                                 percent2 = (CDFtPA(colr2)-r3)/(CDFtPA(colr2)-CDFtPA(colr2-1))
                                 ttPA = (tsec1(colr2)-(tsec1(colr2)-tsec1(colr2-1))*percent2)
@@ -1087,7 +1085,7 @@ neighborc=0
 
                             else   ! for t_wait(j)>t... if statement. if there's no waiting time, or the waiting time is less than the current time, or the molecule was forced to unbind on the microscale (so is on a "small" FDP that can diffuse through the clot), the molecule can move as normal
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                                r1 = random_numbers(1+RNG_MOVE, j)
+                                r1 = random_numbers(1+RNG_BINDING_TIME_WHEN_MOVING, j)
 
                                 if ((1-q)<r.and.r<=((1-q)+q/8)) then
                                     V(1,j) = neighborc(1,z)
@@ -1129,6 +1127,8 @@ neighborc=0
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
                                 end if !(for diffusion part)
+!! BRAD 2023-01-22:
+!                                write(m_bind_time_unit)r1, t, bind(j)
 
 !! BRAD 2023-01-04:
                                 total_regular_moves = total_regular_moves + 1
@@ -1371,11 +1371,13 @@ neighborc=0
                     do j=1,N-1
                         if(intact2(jj)==2*(j-1)+2+(3*N-1)*(iplt-1)) then    !if we have a horizontal edge
                             yplace=endpts(1,intact2(jj))/N+1  !find the y value at which the horizontal edge occurs
-                            x2=nint((real(endpts(2,intact2(jj)))/real(N)-floor(real(endpts(2,intact2(jj)))/real(N)))*N)
+                            x2=nint((real(endpts(2,intact2(jj)))/real(N)&
+                                     -floor(real(endpts(2,intact2(jj)))/real(N)))*N)
                             if(x2==0) x2=N      !if it says the RHS endpoint is 0, force it to actually be N (because otherwise
                                                 !is says we should plot from N-1 to 0)
                             counth=counth+1
-                            X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+                            X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)&
+                                                   -floor(real(endpts(1,intact2(jj)))/real(N)))*N)
                             X1plot(2,counth)=x2
                             Y1plot(1,counth)=yplace
                             Y1plot(2,counth)=yplace
@@ -1386,7 +1388,8 @@ neighborc=0
                 do j=Ffree,F-1
                     do k=1,N
                         if(intact2(jj)==(3*N-1)*(j-1)+2*N+(k-1)) then   !if we have a vertical (planar) edge
-                            xplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+                            xplace=nint((real(endpts(1,intact2(jj)))/real(N)&
+                                         -floor(real(endpts(1,intact2(jj)))/real(N)))*N)
                                                                         !find the x value at which the vertical edge occurs
                             y1=endpts(1,intact2(jj))/N+1  !find the bottom endpoint of the vertical edge
                             y2=endpts(2,intact2(jj))/N+1
@@ -1408,7 +1411,8 @@ neighborc=0
                     do j=1,N
                         if(intact2(jj)==(3*N-1)*(i-1)+1+2*(j-1)) then  !if we have a vertical edge
                             yvplace=(endpts(1,intact2(jj))/N)+1  !find the y value at which the vertical edge occurs
-                            xvplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+                            xvplace=nint((real(endpts(1,intact2(jj)))/real(N)&
+                                          -floor(real(endpts(1,intact2(jj)))/real(N)))*N)
                                                                               !find the x value at which the vertical edge occurs
 
                             if(xvplace==0) then
@@ -1423,18 +1427,12 @@ neighborc=0
                 end do
             end do  !for jj loop
 
-            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot' // outFileCode
-            open(x1unit,file=x1file,form=filetype)
-            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot' // outFileCode
-            open(x2unit,file=x2file,form=filetype)
-            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot' // outFileCode
-            open(y1unit,file=y1file,form=filetype)
-            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot' // outFileCode
-            open(y2unit,file=y2file,form=filetype)
-            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot' // outFileCode
-            open(xvunit,file=xvfile,form=filetype)
-            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot' // outFileCode
-            open(yvunit,file=yvfile,form=filetype)
+            open(x1unit,file=ADJUSTL('data/' // expCode // '/X1plot' // outFileCode),form=filetype)
+            open(x2unit,file=ADJUSTL('data/' // expCode // '/X2plot' // outFileCode),form=filetype)
+            open(y1unit,file=ADJUSTL('data/' // expCode // '/Y1plot' // outFileCode),form=filetype)
+            open(y2unit,file=ADJUSTL('data/' // expCode // '/Y2plot' // outFileCode),form=filetype)
+            open(xvunit,file=ADJUSTL('data/' // expCode // '/Xvplot' // outFileCode),form=filetype)
+            open(yvunit,file=ADJUSTL('data/' // expCode // '/Yvplot' // outFileCode),form=filetype)
 
             write(x1unit) X1plot
             write(x2unit) X2plot
@@ -1450,7 +1448,8 @@ neighborc=0
                     do jplt=1,M
                         if(Vedgenext(1,jplt)==2*(j-1)+2+(3*N-1)*(i-1)) then
                             Vedgeplace=(endpts(1,Vedgenext(1,jplt))/N)+1
-                            Vx=nint((real(endpts(2,Vedgenext(1,jplt)))/real(N)-floor(real(endpts(2,Vedgenext(1,jplt)))/real(N)))*N)
+                            Vx=nint((real(endpts(2,Vedgenext(1,jplt)))/real(N)&
+                                     -floor(real(endpts(2,Vedgenext(1,jplt)))/real(N)))*N)
                             if(Vx==0) then
                                 Vx=N
                             end if
@@ -1474,7 +1473,8 @@ neighborc=0
                     !vertical (planar) edges
                     do kplt=1,M
                         if(Vedgenext(1,kplt)==(3*N-1)*(j-1)+2*N+(k-1)) then
-                            xVedgeplace=nint((real(endpts(1,Vedgenext(1,kplt)))/real(N)-floor(real(endpts(1,Vedgenext(1,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
+                            xVedgeplace=nint((real(endpts(1,Vedgenext(1,kplt)))/real(N)&
+                                              -floor(real(endpts(1,Vedgenext(1,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
                             Vy1=endpts(1,Vedgenext(1,kplt))/N+1  !find the bottom endpoint of the vertical edge
                             if(xVedgeplace==0) then
                                 xVedgeplace=N
@@ -1523,10 +1523,8 @@ neighborc=0
             end do
 
 
-            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd' // outFileCode
-            open(tPAbdunit,file=tPAbdfile,form=filetype)
-            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree' // outFileCode
-            open(tPAfreeunit,file=tPAfreefile,form=filetype)
+            open(tPAbdunit,file=ADJUSTL('data/' // expCode // '/tPAbd' // outFileCode),form=filetype)
+            open(tPAfreeunit,file=ADJUSTL('data/' // expCode // '/tPAfree' // outFileCode),form=filetype)
 
             write(tPAbdunit) bdtPA
             write(tPAfreeunit) freetPA
@@ -1565,11 +1563,13 @@ neighborc=0
                             do j=1,N-1
                                 if(intact2(jj)==2*(j-1)+2+(3*N-1)*(iplt-1)) then    !if we have a horizontal edge
                                     yplace=endpts(1,intact2(jj))/N+1  !find the y value at which the horizontal edge occurs
-                                    x2=nint((real(endpts(2,intact2(jj)))/real(N)-floor(real(endpts(2,intact2(jj)))/real(N)))*N)
+                                    x2=nint((real(endpts(2,intact2(jj)))/real(N)&
+                                            -floor(real(endpts(2,intact2(jj)))/real(N)))*N)
                                     if(x2==0) x2=N    !if it says the RHS endpoint is 0, force it to actually be N (because otherwise
                                                    !is says we should plot from N-1 to 0)
                                     counth=counth+1
-                                    X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+                                    X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)&
+                                                           -floor(real(endpts(1,intact2(jj)))/real(N)))*N)
                                     X1plot(2,counth)=x2
                                     Y1plot(1,counth)=yplace
                                     Y1plot(2,counth)=yplace
@@ -1580,7 +1580,8 @@ neighborc=0
                         do j=Ffree,F-1
                             do k=1,N
                                 if(intact2(jj)==(3*N-1)*(j-1)+2*N+(k-1)) then   !if we have a vertical (planar) edge
-                                    xplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+                                    xplace=nint((real(endpts(1,intact2(jj)))/real(N)&
+                                                 -floor(real(endpts(1,intact2(jj)))/real(N)))*N)
                                                                                     !find the x value at which the vertical edge occurs
                                     y1=endpts(1,intact2(jj))/N+1  !find the bottom endpoint of the vertical edge
                                     y2=endpts(2,intact2(jj))/N+1
@@ -1602,7 +1603,8 @@ neighborc=0
                             do j=1,N
                                 if(intact2(jj)==(3*N-1)*(i-1)+1+2*(j-1)) then  !if we have a vertical edge
                                     yvplace=(endpts(1,intact2(jj))/N)+1  !find the y value at which the vertical edge occurs
-                                    xvplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+                                    xvplace=nint((real(endpts(1,intact2(jj)))/real(N)&
+                                                  -floor(real(endpts(1,intact2(jj)))/real(N)))*N)
                                                                                           !find the x value at which the vertical edge occurs
                                     if(xvplace==0) then
                                         xvplace=N
@@ -1630,7 +1632,8 @@ neighborc=0
                             do jplt=1,M
                                 if(Vedgenext(imod,jplt)==2*(j-1)+2+(3*N-1)*(i-1)) then
                                     Vedgeplace=(endpts(1,Vedgenext(imod,jplt))/N)+1
-                                    Vx=nint((real(endpts(2,Vedgenext(imod,jplt)))/real(N)-floor(real(endpts(2,Vedgenext(imod,jplt)))/real(N)))*N)
+                                    Vx=nint((real(endpts(2,Vedgenext(imod,jplt)))/real(N)&
+                                             -floor(real(endpts(2,Vedgenext(imod,jplt)))/real(N)))*N)
                                     if(Vx==0) then
                                         Vx=N
                                     end if
@@ -1654,7 +1657,8 @@ neighborc=0
                             !vertical (planar) edges
                             do kplt=1,M
                                 if(Vedgenext(imod,kplt)==(3*N-1)*(j-1)+2*N+(k-1)) then
-                                    xVedgeplace=nint((real(endpts(1,Vedgenext(imod,kplt)))/real(N)-floor(real(endpts(1,Vedgenext(imod,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
+                                    xVedgeplace=nint((real(endpts(1,Vedgenext(imod,kplt)))/real(N)&
+                                                      -floor(real(endpts(1,Vedgenext(imod,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
                                     Vy1=endpts(1,Vedgenext(imod,kplt))/N+1  !find the bottom endpoint of the vertical edge
                                     if(xVedgeplace==0) then
                                         xVedgeplace=N
@@ -1750,6 +1754,7 @@ write(*,*)'Nsavevect=',Nsavevect(:)
         close(t_degrade_unit)
         close(m_location_unit)
         close(m_bound_unit)
+!        close(m_bind_time_unit)
 
     !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     !close(degnextunit)

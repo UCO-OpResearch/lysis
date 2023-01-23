@@ -1,0 +1,28 @@
+  filetype=
+ binary                                                                         
+  
+  N=          93
+  F=         121
+  Ffree=          29
+  num=       33545
+  M=       43074
+  obtained using code macro_brad_scratch.f90
+ fraction of time tPA is forced to unbind  8.520000000000000E-002
+  seed= -2137354075
+ read tPAleave.dat
+ read tsectPA.dat
+ enoFB=        7784
+  run number=           1
+  q=  0.200000000000000     
+  delx=  1.013500000000000E-004
+  tstep=  3.423940833333333E-004
+  tf=        1200
+  num_t=   3504733.45893584     
+  kon=  0.100000000000000     
+  bs=   427.000000000000     
+  avgwait=   27.8000000000000     
+  frac_forced=  8.520000000000000E-002
+  save as deg.f-normal.dat                           
+After   34.24 sec,   469 fibers are degraded (  1.8% of total) and   107 molecules have reached the back row (  0.2% of total).
+After   68.48 sec,  1344 fibers are degraded (  5.2% of total) and   348 molecules have reached the back row (  0.8% of total).
+After  102.72 sec,  2251 fibers are degraded (  8.7% of total) and   547 molecules have reached the back row (  1.3% of total).
