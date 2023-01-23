@@ -47,13 +47,19 @@ MKDIR=mkdir
 CP=cp
 CCADMIN=CCadmin
 
+GFORT = gfortran -mcmodel=medium -fbacktrace
+IFORT = ifort -r8 -mcmodel medium -traceback
+FORT = $(IFORT)
+C = gcc
+CPP = g++
+
 BUILD_DIR = ./bin
 LIB_DIR = ./lib
 C_SRC_DIR = ./src/c
 CPP_SRC_DIR = ./src/cpp
 FORT_SRC_DIR = ./src/fortran
 FORT_MICRO = micro_rates.f90
-FORT_MACRO = macro_rng_array.f90
+FORT_MACRO = macro_brad_scratch.f90
 #FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
 C_HEADERS = $(C_SRC_DIR)/all.h \
@@ -88,24 +94,35 @@ fort-micro: $(BUILD_DIR)/micro_rates
 
 fort-macro: $(BUILD_DIR)/macro
 
+f-macro-normal: $(BUILD_DIR)/macro-normal
+
+f-macro-array: $(BUILD_DIR)/macro-array
+
 shared: $(LIB_DIR)/kiss.so
 
 $(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(BUILD_DIR)/kiss.o
-	ifort -r8 -mcmodel medium $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
 
 $(BUILD_DIR)/macro: $(FORT_SRC_DIR)/$(FORT_MACRO) $(BUILD_DIR)/kiss.o
-	ifort -r8 -mcmodel medium $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/$(FORT_MACRO) -o $(BUILD_DIR)/macro
-
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/$(FORT_MACRO) -o $(BUILD_DIR)/macro
+    
+$(BUILD_DIR)/macro-normal: $(FORT_SRC_DIR)/macro_brad_scratch.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_brad_scratch.f90 -o $(BUILD_DIR)/macro-normal
+    
+$(BUILD_DIR)/macro-array: $(FORT_SRC_DIR)/macro_rng_array.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_rng_array.f90 -o $(BUILD_DIR)/macro-array
+    
 cpp: $(BUILD_DIR)/cpp_macro_Q2
 
 $(BUILD_DIR)/cpp_macro_Q2: $(CPP_SRC_DIR)/macro_Q2.cpp $(BUILD_DIR)/kiss.o
-	g++ -std=c++11 -o $(BUILD_DIR)/cpp_macro_Q2 $(CPP_SRC_DIR)/macro_Q2.cpp $(BUILD_DIR)/kiss.o
+	$(CPP) -std=c++11 -o $(BUILD_DIR)/cpp_macro_Q2 $(CPP_SRC_DIR)/macro_Q2.cpp $(BUILD_DIR)/kiss.o
 
 $(LIB_DIR)/kiss.so: $(C_SRC_DIR)/kiss.c
-	gcc -fPIC -std=c99 -shared -o $(LIB_DIR)/kiss.so $(C_SRC_DIR)/kiss.c
+	$(C) -fPIC -std=c99 -shared -o $(LIB_DIR)/kiss.so $(C_SRC_DIR)/kiss.c
 
 $(BUILD_DIR)/kiss.o: $(C_SRC_DIR)/kiss.c
-	gcc -c -std=c99 $(C_SRC_DIR)/kiss.c -o $(BUILD_DIR)/kiss.o
+	$(C) -c $(C_SRC_DIR)/kiss.c -o $(BUILD_DIR)/kiss.o
+#	gcc -c -std=c99 $(C_SRC_DIR)/kiss.c -o $(BUILD_DIR)/kiss.o
 
 c-macro: $(C_HEADERS) $(C_SOURCE) # This line sets what files make looks at to determine if it needs to recompile.
 	mpicc -O3 -lm -std=c11 -o $(BUILD_DIR)/c_macro ${C_SOURCE}
