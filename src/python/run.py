@@ -16,13 +16,14 @@ def run(e: lysis.util.Experiment, timestamp: AnyStr):
     else:
         logger = logging.getLogger(__name__)
     logger.info(f"Initialized Experiment '{e.experiment_code}'")
-    p = {"rows": 12,
-         "cols": 9,
-         "empty_rows": 3,
-         "total_molecules": 430,
-         "total_time": 10*60,
-         "duplicate_fortran": True
-         }
+    p = {
+        "rows": 12,
+        "cols": 9,
+        "empty_rows": 3,
+        "total_molecules": 430,
+        "total_time": 10 * 60,
+        "duplicate_fortran": False,
+    }
     e.initialize_macro_param(p)
     logger.debug(f"With parameters {os.linesep}{e}")
     for file in e.macro_params.output_data:

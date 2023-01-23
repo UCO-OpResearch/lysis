@@ -1,4 +1,5 @@
 import logging
+import os
 from functools import partial
 
 import numpy as np
@@ -122,6 +123,7 @@ class MacroscaleRun:
         self.total_restricted_moves = 0
         self.timesteps_with_fiber_changes = 0
         self.number_reached_back_row = 0
+        self.last_degrade_time = float("inf")
 
         self.current_save_interval = 0
 
@@ -129,6 +131,10 @@ class MacroscaleRun:
             (self.exp.macro_params.number_of_saves, self.exp.macro_params.total_fibers),
             dtype=np.float_,
         )
+
+        # self.bind_info_file = open(
+        #     os.path.join(self.exp.os_path, "m_bind_t.p-array.dat"), "w"
+        # )
 
         self.logger.debug(f"Initialization complete.")
 
@@ -235,6 +241,13 @@ class MacroscaleRun:
                         m & ~forced
                     ]
                 )
+                # c = np.empty((3 * (count - num_forced),), dtype=np.float_)
+                # c[0::3] = self.random_numbers[RandomDraw.BINDING_TIME_WHEN_UNBINDING][
+                #     m & ~forced
+                # ]
+                # c[1::3] = current_time
+                # c[2::3] = self.binding_time[m & ~forced]
+                # self.bind_info_file.write(np.array2string(c)[1:-1] + os.linesep)
             else:
                 self.binding_time[
                     m & ~forced
@@ -367,6 +380,13 @@ class MacroscaleRun:
                         move_to_fiber
                     ]
                 )
+                # c = np.empty((3 * num_move_to_fiber,), dtype=np.float_)
+                # c[0::3] = self.random_numbers[RandomDraw.BINDING_TIME_WHEN_MOVING][
+                #     move_to_fiber
+                # ]
+                # c[1::3] = current_time
+                # c[2::3] = self.binding_time[move_to_fiber]
+                # self.bind_info_file.write(np.array2string(c)[1:-1] + os.linesep)
             else:
                 self.binding_time[
                     move_to_fiber
@@ -390,7 +410,7 @@ class MacroscaleRun:
             self.number_reached_back_row += np.count_nonzero(first_time)
 
     def save_data(self, current_time):
-        self.logger.info(f"Saving data at time {current_time:.2f} sec.")
+        # self.logger.info(f"Saving data at time {current_time:.2f} sec.")
         self.exp.data.degradation_state[self.current_save_interval] = self.fiber_status[
             self.real_fiber
         ]
@@ -470,6 +490,7 @@ class MacroscaleRun:
                     self.logger.info(
                         f"All fibers degraded after {current_time:.2f} sec. Terminating"
                     )
+                    self.last_degrade_time = np.max(self.fiber_status)
                     # break
                 else:
                     unlysed_fiber_percent = (
@@ -503,3 +524,4 @@ class MacroscaleRun:
         self.logger.info(
             f"Molecules which reached the back row: {self.number_reached_back_row:,}"
         )
+        self.logger.info(f"Last fiber degraded at: {self.last_degrade_time:2f} sec")
