@@ -39,7 +39,7 @@ class Neighbors:
 
 @unique
 class RandomDraw(IntEnum):
-    BINDING_TIME_WHEN_DEGRADING = 0
+    BINDING_TIME_WHEN_UNBINDING = 0
     BINDING_TIME_WHEN_MOVING = 1
     MICRO_UNBIND = 2
     MOVE = 3
