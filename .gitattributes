@@ -3,3 +3,11 @@ data/2022-12-20-1600/deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat filter=lfs diff
 data/2023-01-12-1400/deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat filter=lfs diff=lfs merge=lfs -text
 data/2023-01-13-1200/deg.dat filter=lfs diff=lfs merge=lfs -text
 data/2022-12-20-1700/deg_tPA425_PLG2_tPA01_into_and_along_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-18-1600/deg.f-normal.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-18-1600/deg.f-array.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-18-1600/f_deg_time.f-normal.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-18-1600/f_deg_time.f-array.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-18-1600/m_loc.f-normal.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-18-1600/m_loc.f-array.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-18-1600/m_bound.f-normal.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-18-1600/m_bound.f-array.dat filter=lfs diff=lfs merge=lfs -text

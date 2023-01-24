@@ -23,3 +23,176 @@
   avgwait=   27.8000000000000     
   frac_forced=  8.520000000000000E-002
   save as deg.f-array.dat                            
+After   34.24 sec,   463 fibers are degraded (  1.8% of total) and   108 molecules have reached the back row (  0.3% of total).
+After   68.48 sec,  1309 fibers are degraded (  5.1% of total) and   311 molecules have reached the back row (  0.7% of total).
+After  102.72 sec,  2177 fibers are degraded (  8.5% of total) and   525 molecules have reached the back row (  1.2% of total).
+After  136.96 sec,  3206 fibers are degraded ( 12.4% of total) and   774 molecules have reached the back row (  1.8% of total).
+After  171.20 sec,  4281 fibers are degraded ( 16.6% of total) and  1036 molecules have reached the back row (  2.4% of total).
+After  205.44 sec,  5382 fibers are degraded ( 20.9% of total) and  1279 molecules have reached the back row (  3.0% of total).
+After  239.68 sec,  6677 fibers are degraded ( 25.9% of total) and  1613 molecules have reached the back row (  3.7% of total).
+After  273.92 sec,  7930 fibers are degraded ( 30.8% of total) and  1953 molecules have reached the back row (  4.5% of total).
+After  308.15 sec,  9254 fibers are degraded ( 35.9% of total) and  2298 molecules have reached the back row (  5.3% of total).
+After  342.39 sec, 10553 fibers are degraded ( 41.0% of total) and  2656 molecules have reached the back row (  6.2% of total).
+After  376.63 sec, 11868 fibers are degraded ( 46.1% of total) and  3054 molecules have reached the back row (  7.1% of total).
+After  410.87 sec, 13194 fibers are degraded ( 51.2% of total) and  3450 molecules have reached the back row (  8.0% of total).
+After  445.11 sec, 14515 fibers are degraded ( 56.3% of total) and  3877 molecules have reached the back row (  9.0% of total).
+After  479.35 sec, 15819 fibers are degraded ( 61.4% of total) and  4311 molecules have reached the back row ( 10.0% of total).
+After  513.59 sec, 16994 fibers are degraded ( 66.0% of total) and  4780 molecules have reached the back row ( 11.1% of total).
+After  547.83 sec, 18192 fibers are degraded ( 70.6% of total) and  5269 molecules have reached the back row ( 12.2% of total).
+After  582.07 sec, 19380 fibers are degraded ( 75.2% of total) and  5774 molecules have reached the back row ( 13.4% of total).
+After  616.31 sec, 20513 fibers are degraded ( 79.6% of total) and  6304 molecules have reached the back row ( 14.6% of total).
+After  650.55 sec, 21589 fibers are degraded ( 83.8% of total) and  7003 molecules have reached the back row ( 16.3% of total).
+After  684.79 sec, 22637 fibers are degraded ( 87.9% of total) and  8280 molecules have reached the back row ( 19.2% of total).
+After  719.03 sec, 23606 fibers are degraded ( 91.6% of total) and 10993 molecules have reached the back row ( 25.5% of total).
+After  753.27 sec, 24479 fibers are degraded ( 95.0% of total) and 15333 molecules have reached the back row ( 35.6% of total).
+After  787.51 sec, 25157 fibers are degraded ( 97.7% of total) and 21003 molecules have reached the back row ( 48.8% of total).
+After  821.75 sec, 25561 fibers are degraded ( 99.2% of total) and 27073 molecules have reached the back row ( 62.9% of total).
+After  855.99 sec, 25732 fibers are degraded ( 99.9% of total) and 32013 molecules have reached the back row ( 74.3% of total).
+After  890.22 sec, 25761 fibers are degraded (100.0% of total) and 34954 molecules have reached the back row ( 81.1% of total).
+After  924.46 sec, 25761 fibers are degraded (100.0% of total) and 36997 molecules have reached the back row ( 85.9% of total).
+After  958.70 sec, 25761 fibers are degraded (100.0% of total) and 38464 molecules have reached the back row ( 89.3% of total).
+After  992.94 sec, 25761 fibers are degraded (100.0% of total) and 39553 molecules have reached the back row ( 91.8% of total).
+After 1027.18 sec, 25761 fibers are degraded (100.0% of total) and 40425 molecules have reached the back row ( 93.9% of total).
+After 1061.42 sec, 25761 fibers are degraded (100.0% of total) and 41064 molecules have reached the back row ( 95.3% of total).
+After 1095.66 sec, 25761 fibers are degraded (100.0% of total) and 41559 molecules have reached the back row ( 96.5% of total).
+After 1129.90 sec, 25761 fibers are degraded (100.0% of total) and 41950 molecules have reached the back row ( 97.4% of total).
+After 1164.14 sec, 25761 fibers are degraded (100.0% of total) and 42247 molecules have reached the back row ( 98.1% of total).
+After 1198.38 sec, 25761 fibers are degraded (100.0% of total) and 42452 molecules have reached the back row ( 98.6% of total).
+ Processing time:    39624.8114730000       sec
+ Total Binds:       918537
+ Total Regular Moves:            15516109008
+ Total Restricted Moves:             7120840503
+ Molecules that reached back row:        42466
+ Last fiber degraded at:    886.758218967000       sec
+ nplt=         122
+ r4=  0.506985416605808     
+ countmacrounbd=      438508
+ countmicrounbd=       41332
+  run number=           2
+  q=  0.200000000000000     
+  delx=  1.013500000000000E-004
+  tstep=  3.423940833333333E-004
+  tf=        1200
+  num_t=   3504733.45893584     
+  kon=  0.100000000000000     
+  bs=   427.000000000000     
+  avgwait=   27.8000000000000     
+  frac_forced=  8.520000000000000E-002
+  save as deg.f-array.dat                            
+After   34.24 sec,   477 fibers are degraded (  1.9% of total) and   104 molecules have reached the back row (  0.2% of total).
+After   68.48 sec,  1317 fibers are degraded (  5.1% of total) and   334 molecules have reached the back row (  0.8% of total).
+After  102.72 sec,  2235 fibers are degraded (  8.7% of total) and   513 molecules have reached the back row (  1.2% of total).
+After  136.96 sec,  3184 fibers are degraded ( 12.4% of total) and   741 molecules have reached the back row (  1.7% of total).
+After  171.20 sec,  4337 fibers are degraded ( 16.8% of total) and  1025 molecules have reached the back row (  2.4% of total).
+After  205.44 sec,  5482 fibers are degraded ( 21.3% of total) and  1289 molecules have reached the back row (  3.0% of total).
+After  239.68 sec,  6661 fibers are degraded ( 25.9% of total) and  1602 molecules have reached the back row (  3.7% of total).
+After  273.92 sec,  7883 fibers are degraded ( 30.6% of total) and  1937 molecules have reached the back row (  4.5% of total).
+After  308.15 sec,  9157 fibers are degraded ( 35.5% of total) and  2285 molecules have reached the back row (  5.3% of total).
+After  342.39 sec, 10483 fibers are degraded ( 40.7% of total) and  2633 molecules have reached the back row (  6.1% of total).
+After  376.63 sec, 11771 fibers are degraded ( 45.7% of total) and  2977 molecules have reached the back row (  6.9% of total).
+After  410.87 sec, 13014 fibers are degraded ( 50.5% of total) and  3376 molecules have reached the back row (  7.8% of total).
+After  445.11 sec, 14288 fibers are degraded ( 55.5% of total) and  3787 molecules have reached the back row (  8.8% of total).
+After  479.35 sec, 15565 fibers are degraded ( 60.4% of total) and  4192 molecules have reached the back row (  9.7% of total).
+After  513.59 sec, 16837 fibers are degraded ( 65.4% of total) and  4633 molecules have reached the back row ( 10.8% of total).
+After  547.83 sec, 18030 fibers are degraded ( 70.0% of total) and  5096 molecules have reached the back row ( 11.8% of total).
+After  582.07 sec, 19220 fibers are degraded ( 74.6% of total) and  5573 molecules have reached the back row ( 12.9% of total).
+After  616.31 sec, 20312 fibers are degraded ( 78.8% of total) and  6073 molecules have reached the back row ( 14.1% of total).
+After  650.55 sec, 21391 fibers are degraded ( 83.0% of total) and  6616 molecules have reached the back row ( 15.4% of total).
+After  684.79 sec, 22416 fibers are degraded ( 87.0% of total) and  7624 molecules have reached the back row ( 17.7% of total).
+After  719.03 sec, 23372 fibers are degraded ( 90.7% of total) and  9698 molecules have reached the back row ( 22.5% of total).
+After  753.27 sec, 24279 fibers are degraded ( 94.2% of total) and 13503 molecules have reached the back row ( 31.3% of total).
+After  787.51 sec, 24993 fibers are degraded ( 97.0% of total) and 18925 molecules have reached the back row ( 43.9% of total).
+After  821.75 sec, 25479 fibers are degraded ( 98.9% of total) and 24957 molecules have reached the back row ( 57.9% of total).
+After  855.99 sec, 25707 fibers are degraded ( 99.8% of total) and 30791 molecules have reached the back row ( 71.5% of total).
+After  890.22 sec, 25761 fibers are degraded (100.0% of total) and 34212 molecules have reached the back row ( 79.4% of total).
+After  924.46 sec, 25761 fibers are degraded (100.0% of total) and 36455 molecules have reached the back row ( 84.6% of total).
+After  958.70 sec, 25761 fibers are degraded (100.0% of total) and 38058 molecules have reached the back row ( 88.4% of total).
+After  992.94 sec, 25761 fibers are degraded (100.0% of total) and 39277 molecules have reached the back row ( 91.2% of total).
+After 1027.18 sec, 25761 fibers are degraded (100.0% of total) and 40243 molecules have reached the back row ( 93.4% of total).
+After 1061.42 sec, 25761 fibers are degraded (100.0% of total) and 40951 molecules have reached the back row ( 95.1% of total).
+After 1095.66 sec, 25761 fibers are degraded (100.0% of total) and 41502 molecules have reached the back row ( 96.4% of total).
+After 1129.90 sec, 25761 fibers are degraded (100.0% of total) and 41889 molecules have reached the back row ( 97.2% of total).
+After 1164.14 sec, 25761 fibers are degraded (100.0% of total) and 42167 molecules have reached the back row ( 97.9% of total).
+After 1198.38 sec, 25761 fibers are degraded (100.0% of total) and 42380 molecules have reached the back row ( 98.4% of total).
+ Processing time:    39558.9184390000       sec
+ Total Binds:       922022
+ Total Regular Moves:            15443841138
+ Total Restricted Moves:             7184001712
+ Molecules that reached back row:        42389
+ Last fiber degraded at:    886.313106658666       sec
+ nplt=         122
+ r4=  0.588128392578965     
+ countmacrounbd=      442408
+ countmicrounbd=       41122
+  run number=           3
+  q=  0.200000000000000     
+  delx=  1.013500000000000E-004
+  tstep=  3.423940833333333E-004
+  tf=        1200
+  num_t=   3504733.45893584     
+  kon=  0.100000000000000     
+  bs=   427.000000000000     
+  avgwait=   27.8000000000000     
+  frac_forced=  8.520000000000000E-002
+  save as deg.f-array.dat                            
+After   34.24 sec,   454 fibers are degraded (  1.8% of total) and    94 molecules have reached the back row (  0.2% of total).
+After   68.48 sec,  1349 fibers are degraded (  5.2% of total) and   328 molecules have reached the back row (  0.8% of total).
+After  102.72 sec,  2225 fibers are degraded (  8.6% of total) and   555 molecules have reached the back row (  1.3% of total).
+After  136.96 sec,  3214 fibers are degraded ( 12.5% of total) and   799 molecules have reached the back row (  1.9% of total).
+After  171.20 sec,  4313 fibers are degraded ( 16.7% of total) and  1073 molecules have reached the back row (  2.5% of total).
+After  205.44 sec,  5427 fibers are degraded ( 21.1% of total) and  1368 molecules have reached the back row (  3.2% of total).
+After  239.68 sec,  6645 fibers are degraded ( 25.8% of total) and  1678 molecules have reached the back row (  3.9% of total).
+After  273.92 sec,  7828 fibers are degraded ( 30.4% of total) and  2031 molecules have reached the back row (  4.7% of total).
+After  308.15 sec,  9120 fibers are degraded ( 35.4% of total) and  2376 molecules have reached the back row (  5.5% of total).
+After  342.39 sec, 10403 fibers are degraded ( 40.4% of total) and  2711 molecules have reached the back row (  6.3% of total).
+After  376.63 sec, 11686 fibers are degraded ( 45.4% of total) and  3093 molecules have reached the back row (  7.2% of total).
+After  410.87 sec, 13015 fibers are degraded ( 50.5% of total) and  3517 molecules have reached the back row (  8.2% of total).
+After  445.11 sec, 14308 fibers are degraded ( 55.5% of total) and  3930 molecules have reached the back row (  9.1% of total).
+After  479.35 sec, 15663 fibers are degraded ( 60.8% of total) and  4334 molecules have reached the back row ( 10.1% of total).
+After  513.59 sec, 16899 fibers are degraded ( 65.6% of total) and  4829 molecules have reached the back row ( 11.2% of total).
+After  547.83 sec, 18123 fibers are degraded ( 70.4% of total) and  5286 molecules have reached the back row ( 12.3% of total).
+After  582.07 sec, 19276 fibers are degraded ( 74.8% of total) and  5776 molecules have reached the back row ( 13.4% of total).
+After  616.31 sec, 20430 fibers are degraded ( 79.3% of total) and  6296 molecules have reached the back row ( 14.6% of total).
+After  650.55 sec, 21547 fibers are degraded ( 83.6% of total) and  7009 molecules have reached the back row ( 16.3% of total).
+After  684.79 sec, 22620 fibers are degraded ( 87.8% of total) and  8316 molecules have reached the back row ( 19.3% of total).
+After  719.03 sec, 23553 fibers are degraded ( 91.4% of total) and 10924 molecules have reached the back row ( 25.4% of total).
+After  753.27 sec, 24432 fibers are degraded ( 94.8% of total) and 15144 molecules have reached the back row ( 35.2% of total).
+After  787.51 sec, 25148 fibers are degraded ( 97.6% of total) and 20570 molecules have reached the back row ( 47.8% of total).
+After  821.75 sec, 25590 fibers are degraded ( 99.3% of total) and 26571 molecules have reached the back row ( 61.7% of total).
+After  855.99 sec, 25750 fibers are degraded (100.0% of total) and 31966 molecules have reached the back row ( 74.2% of total).
+After  890.22 sec, 25761 fibers are degraded (100.0% of total) and 34782 molecules have reached the back row ( 80.7% of total).
+After  924.46 sec, 25761 fibers are degraded (100.0% of total) and 36766 molecules have reached the back row ( 85.4% of total).
+After  958.70 sec, 25761 fibers are degraded (100.0% of total) and 38375 molecules have reached the back row ( 89.1% of total).
+After  992.94 sec, 25761 fibers are degraded (100.0% of total) and 39571 molecules have reached the back row ( 91.9% of total).
+After 1027.18 sec, 25761 fibers are degraded (100.0% of total) and 40425 molecules have reached the back row ( 93.9% of total).
+After 1061.42 sec, 25761 fibers are degraded (100.0% of total) and 41089 molecules have reached the back row ( 95.4% of total).
+After 1095.66 sec, 25761 fibers are degraded (100.0% of total) and 41600 molecules have reached the back row ( 96.6% of total).
+After 1129.90 sec, 25761 fibers are degraded (100.0% of total) and 41991 molecules have reached the back row ( 97.5% of total).
+After 1164.14 sec, 25761 fibers are degraded (100.0% of total) and 42266 molecules have reached the back row ( 98.1% of total).
+After 1198.38 sec, 25761 fibers are degraded (100.0% of total) and 42454 molecules have reached the back row ( 98.6% of total).
+ Processing time:    39541.8247550000       sec
+ Total Binds:       919169
+ Total Regular Moves:            15500838908
+ Total Restricted Moves:             7107683402
+ Molecules that reached back row:        42459
+ Last fiber degraded at:    872.196540996916       sec
+ nplt=         122
+ r4=  0.856871884331349     
+ countmacrounbd=      437704
+ countmicrounbd=       41093
+  run number=           4
+  q=  0.200000000000000     
+  delx=  1.013500000000000E-004
+  tstep=  3.423940833333333E-004
+  tf=        1200
+  num_t=   3504733.45893584     
+  kon=  0.100000000000000     
+  bs=   427.000000000000     
+  avgwait=   27.8000000000000     
+  frac_forced=  8.520000000000000E-002
+  save as deg.f-array.dat                            
+After   34.24 sec,   461 fibers are degraded (  1.8% of total) and   107 molecules have reached the back row (  0.2% of total).
+After   68.48 sec,  1315 fibers are degraded (  5.1% of total) and   305 molecules have reached the back row (  0.7% of total).
+After  102.72 sec,  2221 fibers are degraded (  8.6% of total) and   522 molecules have reached the back row (  1.2% of total).
+After  136.96 sec,  3225 fibers are degraded ( 12.5% of total) and   767 molecules have reached the back row (  1.8% of total).
+After  171.20 sec,  4307 fibers are degraded ( 16.7% of total) and  1043 molecules have reached the back row (  2.4% of total).
