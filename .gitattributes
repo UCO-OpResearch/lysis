@@ -11,3 +11,15 @@ data/2023-01-18-1600/m_loc.f-normal.dat filter=lfs diff=lfs merge=lfs -text
 data/2023-01-18-1600/m_loc.f-array.dat filter=lfs diff=lfs merge=lfs -text
 data/2023-01-18-1600/m_bound.f-normal.dat filter=lfs diff=lfs merge=lfs -text
 data/2023-01-18-1600/m_bound.f-array.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0200/deg_PLG2_tPA01_along_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0200/deg_PLG2_tPA01_always_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0200/deg_PLG2_tPA01_into_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0200/deg_PLG2_tPA01_into_and_along_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0100/deg_PLG2_tPA01_Kd00020036_always_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0100/deg_PLG2_tPA01_Kd00020036_along_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0100/deg_PLG2_tPA01_Kd00020036_into_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0100/deg_PLG2_tPA01_Kd00020036_into_and_along_Q2 filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0000/deg_PLG2_tPA01_Kd0236_always_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0000/deg_PLG2_tPA01_Kd0236_along_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0000/deg_PLG2_tPA01_Kd0236_into_Q2.dat filter=lfs diff=lfs merge=lfs -text
+data/2023-01-24-0000/deg_PLG2_tPA01_Kd0236_into_and_along_Q2.dat filter=lfs diff=lfs merge=lfs -text
