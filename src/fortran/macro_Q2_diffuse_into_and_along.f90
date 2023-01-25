@@ -9,9 +9,9 @@ program macrolysis
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15) :: expCode = '2022-12-20-1700'
-character(17)  :: inFileCode = 'PLG2_tPA01_Q2.dat'
-character(40)   :: outFileCode = '_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+character(15) :: expCode = '2023-01-24-0000'
+character(40)  :: inFileCode = '_PLG2_tPA01_Kd0236_Q2.dat'
+character(40)   :: outFileCode = '_PLG2_tPA01_Kd0236_into_and_along_Q2.dat'
 
 
 integer,parameter  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
@@ -22,9 +22,15 @@ integer,parameter  :: Ffree=29!29 !3 !13 !1st node in vertical direction contain
 integer,parameter  :: stats=10
 integer,parameter  :: num=(2*N-1)*F+N*(F-1)
 integer,parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
-integer,parameter  :: tf=20*60!15*60 !final time in sec
+integer,parameter  :: tf=15*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
 integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
+integer,parameter  :: seed=-1273671783
+!!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
+double precision, parameter :: kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: frac_forced =0.0054 !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
+
 integer  :: i, istat
 integer  :: j, ij, newindex
 integer  :: k
@@ -44,9 +50,9 @@ double precision     :: Diff
 double precision     :: tstep
 double precision     :: num_t
 double precision     :: dist
-double precision     :: kon
-double precision     :: frac_forced
-double precision     :: avgwait
+! double precision     :: kon
+! double precision     :: frac_forced
+! double precision     :: avgwait
 double precision     :: bs
 double precision     :: t_bind
 double precision     :: percent2, percent4
@@ -95,7 +101,7 @@ character(80) :: tfile
 !stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
 !is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
 external :: mscw, kiss32, urcw1
-integer :: kiss32, mscw, seed, state(4), old_state(4), ui
+integer :: kiss32, mscw, state(4), old_state(4), ui
 double precision :: uf, urcw1
 
 double precision, dimension(M)         :: rvect
@@ -191,13 +197,7 @@ write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
 write(*,*)' obtained using code macro_Q2_diffuse_into_and_along.f90'
-
-!!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
-    kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-    frac_forced =0.0852 !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-    avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
-
-    write(*,*)'fraction of time tPA is forced to unbind',frac_forced
+write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 ! Initialize the Random Number Generator
 
@@ -206,7 +206,7 @@ write(*,*)' obtained using code macro_Q2_diffuse_into_and_along.f90'
 
     !seed = mscw()
     !seed= 1884637428
-    seed = -2137354075
+!    seed = -2137354075
     write(*,*)' seed=',seed
 
     state(1) = 129281
@@ -416,41 +416,39 @@ neighborc=0
 
 
 
-    write(filename2,'(a74)') 'data/' // expCode // '/tPAleave' // inFileCode
-    open(200,file=filename2)
+    open(200,file=ADJUSTL('data/' // expCode // '/tPAleave' // inFileCode))
     do i=1,101
         read(200,*)CDFtPA(i)
     end do
     close(200)
-    write(*,*)'read tPAleave' // inFileCode
+    write(*,*)'read tPAleave.dat'
 
-    write(filename3,'(a73)') 'data/' // expCode // '/tsectPA' // inFileCode
-    open(300,file=filename3)
+    open(300,file=ADJUSTL('data/' // expCode // '/tsectPA' // inFileCode))
     do i=1,101
         read(300,*)tsec1(i)
     end do
     close(300)
-    write(*,*)'read tsectPA' // inFileCode
+    write(*,*)'read tsectPA.dat'
 
 
 
 !lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
-    OPEN(unit=1,FILE='data/' // expCode // '/lysismat' // inFileCode)
+    OPEN(unit=201,FILE=ADJUSTL('data/' // expCode // '/lysismat' // inFileCode))
     do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
-       READ(1,*)(lysismat(i,ii),ii=1,100)
+       READ(201,*)(lysismat(i,ii),ii=1,100)
     enddo
-    close(1)
+    close(201)
 
 !lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
-    OPEN(unit=2,FILE='data/' // expCode // '/lenlysisvect' // inFileCode)
+    OPEN(unit=202,FILE=ADJUSTL('data/' // expCode // '/lenlysisvect' // inFileCode))
     do i=1,100
-        READ(2,*)lenlysismat(i)
+        READ(202,*)lenlysismat(i)
     end do
-    close(2)
-  
+    close(202)
+
 
     lastmove=0
 
