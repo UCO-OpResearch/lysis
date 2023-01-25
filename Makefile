@@ -41,6 +41,10 @@
 #
 # NOCDDL
 
+define newline
+
+
+endef
 
 # Environment 
 MKDIR=mkdir
@@ -59,7 +63,7 @@ C_SRC_DIR = ./src/c
 CPP_SRC_DIR = ./src/cpp
 FORT_SRC_DIR = ./src/fortran
 FORT_MICRO = micro_rates.f90
-FORT_MACRO = macro_brad_scratch.f90
+FORT_MACRO = macro_Q2_diffuse_into_and_along macro_Q2_diffuse_into macro_Q2_diffuse_along macro_Q2_always_rebind
 #FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
 C_HEADERS = $(C_SRC_DIR)/all.h \
@@ -92,7 +96,7 @@ c: c-macro
 
 fort-micro: $(BUILD_DIR)/micro_rates
 
-fort-macro: $(BUILD_DIR)/macro
+fort-macro: $(foreach file,$(FORT_MACRO),$(BUILD_DIR)/$(file))
 
 f-macro-normal: $(BUILD_DIR)/macro-normal
 
@@ -103,8 +107,17 @@ shared: $(LIB_DIR)/kiss.so
 $(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
 
-$(BUILD_DIR)/macro: $(FORT_SRC_DIR)/$(FORT_MACRO) $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/$(FORT_MACRO) -o $(BUILD_DIR)/macro
+$(BUILD_DIR)/macro_Q2_diffuse_into_and_along: $(FORT_SRC_DIR)/macro_Q2_diffuse_into_and_along.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into_and_along.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into_and_along
+    
+$(BUILD_DIR)/macro_Q2_diffuse_into: $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into
+    
+$(BUILD_DIR)/macro_Q2_diffuse_along: $(FORT_SRC_DIR)/macro_Q2_diffuse_along.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_along.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_along
+    
+$(BUILD_DIR)/macro_Q2_always_rebind: $(FORT_SRC_DIR)/macro_Q2_always_rebind.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_always_rebind.f90 -o $(BUILD_DIR)/macro_Q2_always_rebind
     
 $(BUILD_DIR)/macro-normal: $(FORT_SRC_DIR)/macro_brad_scratch.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_brad_scratch.f90 -o $(BUILD_DIR)/macro-normal

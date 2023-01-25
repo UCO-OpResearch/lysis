@@ -1,7 +1,18 @@
 program macrolysis
 
+!! BRAD 2023-01-24: This code has been modified in the following ways:
+!!                  - Data folder is relative to git repository root
+!!                  - Data is stored in subfolders based on expCode
+!!                  - Data file codes are now set globally from the (in/out)FileCode variables
+!!
+
 !Runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. This code allows tPA that is forced to unbind by plasmin-mediated degradation of fibrin to immediately rebind. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time, so it's like a combination of macro_Q2.f90 and macro_Q2_mfpt.f90.
 implicit none
+
+!! BRAD 2023-01-24:
+character(15) :: expCode = '2023-01-24-0000'
+character(40)  :: inFileCode = '_PLG2_tPA01_Kd0236_Q2.dat'
+character(40)   :: outFileCode = '_PLG2_tPA01_Kd0236_always_Q2.dat'
 
 integer,parameter  :: N=93  !# of lattice nodes in one row in the horizontal direction
 integer,parameter  :: F=121 !71 !81  !# of lattice nodes in one column in the vertical direction
@@ -14,6 +25,12 @@ integer,parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [
 integer,parameter  :: tf=15*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
 integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
+integer,parameter  :: seed=-1273671783
+!!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
+double precision, parameter :: kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: frac_forced =0.0054 !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
+
 integer  :: i, istat
 integer  :: j
 integer  :: k
@@ -33,7 +50,7 @@ double precision     :: Diff
 double precision     :: tstep
 double precision     :: num_t
 double precision     :: dist
-double precision     :: kon
+! double precision     :: kon
 double precision     :: bs
 double precision     :: t_bind
 double precision     :: percent2, percent4
@@ -80,7 +97,7 @@ character(80) :: tfile
 !stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
 !is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
 external :: mscw, kiss32, urcw1
-integer :: kiss32, mscw, seed, state(4), old_state(4), ui
+integer :: kiss32, mscw, state(4), old_state(4), ui
 double precision :: uf, urcw1
 
 double precision, dimension(M)         :: rvect
@@ -176,15 +193,13 @@ write(*,*)' num=',num
 write(*,*)' M=',M
 write(*,*)' obtained using code macro_Q2_always_rebind.f90'
 
-kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-
 
 
         ui = kiss32()
 
 	uf = urcw1()
 
-	seed = mscw()
+!	seed = mscw()
     !seed= 669985532
         write(*,*)' seed=',seed
 
@@ -385,41 +400,39 @@ enddo
 
 
 
-  write(filename2,'(a54)')'tPAleavePLG2_tPA01_Q2.dat'
-  open(200,file=filename2)
-  do i=1,101
-     read(200,*)CDFtPA(i)
-  end do
-  close(200)
-  write(*,*)'read tPAleavePLG2_tPA01_Q2.dat'
+    open(200,file=ADJUSTL('data/' // expCode // '/tPAleave' // inFileCode))
+    do i=1,101
+        read(200,*)CDFtPA(i)
+    end do
+    close(200)
+    write(*,*)'read tPAleave.dat'
 
-  write(filename3,'(a53)')'tsectPAPLG2_tPA01_Q2.dat'
-  open(300,file=filename3)
-  do i=1,101
-     read(300,*)tsec1(i)
-  end do
-  close(300)
-  write(*,*)'read tsectPAPLG2_tPA01_Q2.dat'
+    open(300,file=ADJUSTL('data/' // expCode // '/tsectPA' // inFileCode))
+    do i=1,101
+        read(300,*)tsec1(i)
+    end do
+    close(300)
+    write(*,*)'read tsectPA.dat'
 
 
 
 !lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
-    OPEN(unit=1,FILE='lysismat_PLG2_tPA01_Q2.dat')
+    OPEN(unit=201,FILE=ADJUSTL('data/' // expCode // '/lysismat' // inFileCode))
     do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
-       READ(1,*)(lysismat(i,ii),ii=1,100)
+       READ(201,*)(lysismat(i,ii),ii=1,100)
     enddo
-    close(1)
+    close(201)
 
 !lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
-    OPEN(unit=2,FILE='lenlysisvect_PLG2_tPA01_Q2.dat')
+    OPEN(unit=202,FILE=ADJUSTL('data/' // expCode // '/lenlysisvect' // inFileCode))
     do i=1,100
-        READ(2,*)lenlysismat(i)
+        READ(202,*)lenlysismat(i)
     end do
-    close(2)
-  
+    close(202)
+
 
   lastmove=0
 
@@ -511,14 +524,14 @@ enddo
 !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-write(degfile,'(73a)'  ) 'deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-write(Nfile,'(75a)' ) 'Nsave_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-write(tfile,'(75a)') 'tsave_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-write(movefile,'(74a)') 'move_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-write(lastmovefile,'(78a)') 'lastmove_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-write(plotfile,'(74a)') 'plot_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-write(mfptfile,'(74a)') 'mfpt_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-!!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+write(degfile,'(73a)'  ) 'data/' // expCode // '/deg' // outFileCode
+        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave' // outFileCode
+        write(tfile,'(75a)') 'data/' // expCode // '/tsave' // outFileCode
+        write(movefile,'(74a)') 'data/' // expCode // '/move' // outFileCode
+        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove' // outFileCode
+        write(plotfile,'(74a)') 'data/' // expCode // '/plot' // outFileCode
+        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt' // outFileCode
+        !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
 !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
 !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
 !write(Vbdnextfile,'(57a)') 'Vbdnext_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
@@ -1122,18 +1135,18 @@ write(*,*)'r4=',r4
       end do
     end do  !for jj loop
 
-write(x1file,'(76a)'  ) 'X1plot_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-open(x1unit,file=x1file,form=filetype)
-write(x2file,'(76a)'  ) 'X2plot_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-open(x2unit,file=x2file,form=filetype)
-write(y1file,'(76a)'  ) 'Y1plot_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-open(y1unit,file=y1file,form=filetype)
-write(y2file,'(76a)'  ) 'Y2plot_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-open(y2unit,file=y2file,form=filetype)
-write(xvfile,'(76a)'  ) 'Xvplot_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-open(xvunit,file=xvfile,form=filetype)
-write(yvfile,'(76a)'  ) 'Yvplot_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-open(yvunit,file=yvfile,form=filetype)
+            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot' // outFileCode
+            open(x1unit,file=x1file,form=filetype)
+            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot' // outFileCode
+            open(x2unit,file=x2file,form=filetype)
+            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot' // outFileCode
+            open(y1unit,file=y1file,form=filetype)
+            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot' // outFileCode
+            open(y2unit,file=y2file,form=filetype)
+            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot' // outFileCode
+            open(xvunit,file=xvfile,form=filetype)
+            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot' // outFileCode
+            open(yvunit,file=yvfile,form=filetype)
 
 write(x1unit) X1plot
 write(x2unit) X2plot
@@ -1222,10 +1235,10 @@ write(yvunit) Yvplot
      end do
 
 
-write(tPAbdfile,'(66a)'  ) 'tPAbd_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-open(tPAbdunit,file=tPAbdfile,form=filetype)
-write(tPAfreefile,'(67a)'  ) 'tPAfree_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
-open(tPAfreeunit,file=tPAfreefile,form=filetype)
+            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd' // outFileCode
+            open(tPAbdunit,file=tPAbdfile,form=filetype)
+            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree' // outFileCode
+            open(tPAfreeunit,file=tPAfreefile,form=filetype)
 
 write(tPAbdunit) bdtPA
 write(tPAfreeunit) freetPA

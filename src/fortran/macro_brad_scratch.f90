@@ -25,6 +25,12 @@ integer,parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [
 integer,parameter  :: tf=20*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
 integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
+integer,parameter  :: seed=-1273671783
+!!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
+double precision, parameter :: kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: frac_forced =0.0852 !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
+
 integer  :: i, istat
 integer  :: j, ij, newindex
 integer  :: k
@@ -44,9 +50,9 @@ double precision     :: Diff
 double precision     :: tstep
 double precision     :: num_t
 double precision     :: dist
-double precision     :: kon
-double precision     :: frac_forced
-double precision     :: avgwait
+!double precision     :: kon
+!double precision     :: frac_forced
+!double precision     :: avgwait
 double precision     :: bs
 double precision     :: t_bind
 double precision     :: percent2, percent4
@@ -94,7 +100,7 @@ character(80) :: tfile
 
 !stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
 !is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
-integer :: kiss32, mscw, seed, state(4), old_state(4), ui
+integer :: kiss32, mscw, state(4), old_state(4), ui
 double precision :: uf, urcw1
 external :: mscw, kiss32, urcw1
 
@@ -227,7 +233,7 @@ write(*,*)' obtained using code macro_brad_scratch.f90 on data ',expCode
 
     !seed = mscw()
     !seed= 1884637428
-    seed = -2137354075
+    !seed = -2137354075
     !seed = 5784279
     write(*,*)' seed=',seed
 
