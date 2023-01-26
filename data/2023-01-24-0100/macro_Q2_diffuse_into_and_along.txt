@@ -22,7 +22,7 @@
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
   frac_forced=  0.514300000000000     
-  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2
+  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2.dat      
   t=   34.2394083333333     
   t=   68.4788166666667     
   t=   102.718225000000     
@@ -63,7 +63,7 @@
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
   frac_forced=  0.514300000000000     
-  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2
+  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2.dat      
   t=   34.2394083333333     
   t=   68.4788166666667     
   t=   102.718225000000     
@@ -104,7 +104,7 @@
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
   frac_forced=  0.514300000000000     
-  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2
+  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2.dat      
   t=   34.2394083333333     
   t=   68.4788166666667     
   t=   102.718225000000     
@@ -145,7 +145,7 @@
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
   frac_forced=  0.514300000000000     
-  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2
+  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2.dat      
   t=   34.2394083333333     
   t=   68.4788166666667     
   t=   102.718225000000     
@@ -186,7 +186,7 @@
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
   frac_forced=  0.514300000000000     
-  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2
+  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2.dat      
   t=   34.2394083333333     
   t=   68.4788166666667     
   t=   102.718225000000     
@@ -227,7 +227,7 @@
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
   frac_forced=  0.514300000000000     
-  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2
+  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2.dat      
   t=   34.2394083333333     
   t=   68.4788166666667     
   t=   102.718225000000     
@@ -268,7 +268,7 @@
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
   frac_forced=  0.514300000000000     
-  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2
+  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2.dat      
   t=   34.2394083333333     
   t=   68.4788166666667     
   t=   102.718225000000     
@@ -309,7 +309,7 @@
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
   frac_forced=  0.514300000000000     
-  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2
+  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2.dat      
   t=   34.2394083333333     
   t=   68.4788166666667     
   t=   102.718225000000     
@@ -350,7 +350,7 @@
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
   frac_forced=  0.514300000000000     
-  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2
+  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2.dat      
   t=   34.2394083333333     
   t=   68.4788166666667     
   t=   102.718225000000     
@@ -391,7 +391,7 @@
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
   frac_forced=  0.514300000000000     
-  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2
+  save as deg_PLG2_tPA01_Kd00020036_into_and_along_Q2.dat      
   t=   34.2394083333333     
   t=   68.4788166666667     
   t=   102.718225000000     

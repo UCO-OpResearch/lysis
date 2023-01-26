@@ -10,9 +10,9 @@ program macrolysis
 implicit none
 
 !! BRAD 2023-01-24:
-character(15) :: expCode = '2023-01-24-0000'
-character(40)  :: inFileCode = '_PLG2_tPA01_Kd0236_Q2.dat'
-character(40)   :: outFileCode = '_PLG2_tPA01_Kd0236_always_Q2.dat'
+character(15) :: expCode = '2023-01-24-0200'
+character(50)  :: inFileCode = '_PLG2_tPA01_Q2.dat'
+character(50)   :: outFileCode = '_PLG2_tPA01_always_Q2.dat'
 
 integer,parameter  :: N=93  !# of lattice nodes in one row in the horizontal direction
 integer,parameter  :: F=121 !71 !81  !# of lattice nodes in one column in the vertical direction
@@ -28,7 +28,7 @@ integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000,
 integer,parameter  :: seed=-1273671783
 !!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
 double precision, parameter :: kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-double precision, parameter :: frac_forced =0.0054 !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: frac_forced =0.0852    !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
 double precision, parameter :: avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
 
 integer  :: i, istat
@@ -192,6 +192,7 @@ write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
 write(*,*)' obtained using code macro_Q2_always_rebind.f90'
+write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 
 
@@ -492,7 +493,6 @@ write(*,*)' num_t=', num_t
 write(*,*)' kon=',kon
 write(*,*)' bs=',bs
 
-
 !Initial distribution and boundedness of tPA molecules
 
 !V is matrix of edge loaction and state of boundedness for each tPA. first column is edge 
@@ -556,7 +556,7 @@ open(mfptunit,file=mfptfile,form=filetype)
 write(degunit) degrade(:)
 write(tunit) t
 
-write(*,*)' save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat'
+write(*,*)' save as deg',outFileCode
 
 
 Vedgenext(1,:)=V(1,:)

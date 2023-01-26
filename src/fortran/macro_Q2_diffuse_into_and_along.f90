@@ -9,9 +9,9 @@ program macrolysis
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15) :: expCode = '2023-01-24-0000'
-character(40)  :: inFileCode = '_PLG2_tPA01_Kd0236_Q2.dat'
-character(40)   :: outFileCode = '_PLG2_tPA01_Kd0236_into_and_along_Q2.dat'
+character(15) :: expCode = '2023-01-24-0200'
+character(50)  :: inFileCode = '_PLG2_tPA01_Q2.dat'
+character(50)   :: outFileCode = '_PLG2_tPA01_into_and_along_Q2.dat'
 
 
 integer,parameter  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
@@ -28,7 +28,7 @@ integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000,
 integer,parameter  :: seed=-1273671783
 !!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
 double precision, parameter :: kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-double precision, parameter :: frac_forced =0.0054 !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: frac_forced =0.0852    !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
 double precision, parameter :: avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
 
 integer  :: i, istat

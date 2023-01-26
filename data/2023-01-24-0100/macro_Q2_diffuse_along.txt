@@ -21,7 +21,7 @@
   kon=  0.100000000000000     
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
-  save as deg_tPA425_PLG2_tPA01_along_Q2.dat
+  save as deg_PLG2_tPA01_Kd00020036_along_Q2.dat               
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -41,7 +41,7 @@
   kon=  0.100000000000000     
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
-  save as deg_tPA425_PLG2_tPA01_along_Q2.dat
+  save as deg_PLG2_tPA01_Kd00020036_along_Q2.dat               
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -61,7 +61,7 @@
   kon=  0.100000000000000     
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
-  save as deg_tPA425_PLG2_tPA01_along_Q2.dat
+  save as deg_PLG2_tPA01_Kd00020036_along_Q2.dat               
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -81,7 +81,7 @@
   kon=  0.100000000000000     
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
-  save as deg_tPA425_PLG2_tPA01_along_Q2.dat
+  save as deg_PLG2_tPA01_Kd00020036_along_Q2.dat               
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -101,7 +101,7 @@
   kon=  0.100000000000000     
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
-  save as deg_tPA425_PLG2_tPA01_along_Q2.dat
+  save as deg_PLG2_tPA01_Kd00020036_along_Q2.dat               
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -121,7 +121,7 @@
   kon=  0.100000000000000     
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
-  save as deg_tPA425_PLG2_tPA01_along_Q2.dat
+  save as deg_PLG2_tPA01_Kd00020036_along_Q2.dat               
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -141,7 +141,7 @@
   kon=  0.100000000000000     
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
-  save as deg_tPA425_PLG2_tPA01_along_Q2.dat
+  save as deg_PLG2_tPA01_Kd00020036_along_Q2.dat               
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -161,7 +161,7 @@
   kon=  0.100000000000000     
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
-  save as deg_tPA425_PLG2_tPA01_along_Q2.dat
+  save as deg_PLG2_tPA01_Kd00020036_along_Q2.dat               
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -181,7 +181,7 @@
   kon=  0.100000000000000     
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
-  save as deg_tPA425_PLG2_tPA01_along_Q2.dat
+  save as deg_PLG2_tPA01_Kd00020036_along_Q2.dat               
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -201,7 +201,7 @@
   kon=  0.100000000000000     
   bs=   427.000000000000     
   avgwait=   27.8000000000000     
-  save as deg_tPA425_PLG2_tPA01_along_Q2.dat
+  save as deg_PLG2_tPA01_Kd00020036_along_Q2.dat               
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     

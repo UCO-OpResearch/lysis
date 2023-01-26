@@ -5,6 +5,7 @@
   num=       33545
   M=       43074
   obtained using code macro_Q2_always_rebind.f90
+ fraction of time tPA is forced to unbind  8.520000000000000E-002
   seed= -1273671783
  read tPAleave.dat
  read tsectPA.dat
@@ -17,7 +18,7 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat
+  save as deg_PLG2_tPA01_always_Q2.dat                         
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -34,7 +35,7 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat
+  save as deg_PLG2_tPA01_always_Q2.dat                         
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -51,7 +52,7 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat
+  save as deg_PLG2_tPA01_always_Q2.dat                         
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -68,7 +69,7 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat
+  save as deg_PLG2_tPA01_always_Q2.dat                         
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -85,7 +86,7 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat
+  save as deg_PLG2_tPA01_always_Q2.dat                         
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -102,7 +103,7 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat
+  save as deg_PLG2_tPA01_always_Q2.dat                         
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -119,7 +120,7 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat
+  save as deg_PLG2_tPA01_always_Q2.dat                         
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -136,7 +137,7 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat
+  save as deg_PLG2_tPA01_always_Q2.dat                         
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -153,7 +154,7 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat
+  save as deg_PLG2_tPA01_always_Q2.dat                         
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -170,7 +171,7 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  save as deg_tPA425_PLG2_tPA01_always_rebind_Q2.dat
+  save as deg_PLG2_tPA01_always_Q2.dat                         
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
