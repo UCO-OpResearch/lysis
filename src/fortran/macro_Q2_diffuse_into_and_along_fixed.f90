@@ -5,13 +5,13 @@ program macrolysis
 !!                  - Data is stored in subfolders based on expCode
 !!                  - Data file codes are now set globally from the (in/out)FileCode variables
 !!
-!!                  Note that the "restricted move" bug has NOT been fixed in this code!
+!!                  Note that the "restricted move" bug HAS been fixed in this code!
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15) :: expCode = '2023-01-24-0200'
-character(50)  :: inFileCode = '_PLG2_tPA01_Q2.dat'
-character(50)   :: outFileCode = '_PLG2_tPA01_into_and_along_Q2.dat'
+character(15) :: expCode = '2023-01-24-0100'
+character(50)  :: inFileCode = '_PLG2_tPA01_Kd00020036_Q2.dat'
+character(60)   :: outFileCode = '_PLG2_tPA01_Kd00020036_into_and_along_fixed_Q2.dat'
 
 
 integer,parameter  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
@@ -28,7 +28,7 @@ integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000,
 integer,parameter  :: seed=-1273671783
 !!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
 double precision, parameter :: kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-double precision, parameter :: frac_forced =0.0852    !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: frac_forced =0.5143  !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
 double precision, parameter :: avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
 
 integer  :: i, istat
@@ -196,7 +196,7 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_Q2_diffuse_into_and_along.f90'
+write(*,*)' obtained using code macro_Q2_diffuse_into_and_along_fixed.f90'
 write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 ! Initialize the Random Number Generator
@@ -500,6 +500,9 @@ neighborc=0
             time2plot = 0
             bind = 0.0d+00             !vector of the binding times for each tPA
 
+!! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
+            forcedunbdbydeg=0
+            
             degrade(1:enoFB) = -1.0  !set the undegradable fibers' degradation status to -1
 
 
@@ -545,13 +548,6 @@ neighborc=0
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-        write(degfile,'(73a)'  ) 'data/' // expCode // '/deg' // outFileCode
-        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave' // outFileCode
-        write(tfile,'(75a)') 'data/' // expCode // '/tsave' // outFileCode
-        write(movefile,'(74a)') 'data/' // expCode // '/move' // outFileCode
-        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove' // outFileCode
-        write(plotfile,'(74a)') 'data/' // expCode // '/plot' // outFileCode
-        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt' // outFileCode
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
@@ -559,13 +555,13 @@ neighborc=0
         !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        open(degunit,file=degfile,form=filetype)
-        open(Nunit,file=Nfile,form=filetype)
-        open(tunit,file=tfile,form=filetype)
-        open(moveunit,file=movefile,form=filetype)
-        open(lastmoveunit,file=lastmovefile,form=filetype)
-        open(plotunit,file=plotfile,form=filetype)
-        open(mfptunit,file=mfptfile,form=filetype)
+        open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
+        open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
+        open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
+        open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
+        open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
+        open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
+        open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !open(degnextunit,file=degnextfile,form=filetype)
         !open(Venextunit,file=Venextfile,form=filetype)
@@ -599,7 +595,11 @@ neighborc=0
 
             if(mod(count,100000)==0) write(*,*)' t=',t
 
-            forcedunbdbydeg=0 !every timestep reset vector that records which tPA molecules were on degraded fibers to 0
+!! BRAD 2023-01-05: So we only restrict a "forcedunbdbydeg" molecule from moving for this one timestep?
+!!                  It must still wait to bind after that, but it's free to move?
+!! BRITT:           It was not supposed to be this way. We fixed it 2023-01-12
+
+            !            forcedunbdbydeg=0 !every timestep reset vector that records which tPA molecules were on degraded fibers to 0
 
             !at the beginning of each time step, check to see if any of the fibers should be degraded at this time.
             !Degrade fiber before moving and binding/unbinding tPA:
@@ -669,6 +669,13 @@ neighborc=0
                 end if !end if(V(2,j)==1 statement. The above unbinds tPA with leaving time < current time
 
                 if(V(2,j)==0) then   !if the molecule is unbound
+                
+!! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
+                    if (t_wait(j)<=t.and.forcedunbdbydeg(j)==1) then
+                        forcedunbdbydeg(j)=0
+                    end if
+                    
+                    
                     !first check if it will move or not. if it does not move (i.e. r.le.1-q), check if it can bind.
                     !if it can bind, bind it, if not leave it unbound at the same location. if it does move, check if it can bind.
                     !if it can't bind, move it. if it can bind, pick a random number and see if r>(t-bind(j))/tstep.
@@ -1228,18 +1235,12 @@ neighborc=0
                 end do
             end do  !for jj loop
 
-            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot' // outFileCode
-            open(x1unit,file=x1file,form=filetype)
-            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot' // outFileCode
-            open(x2unit,file=x2file,form=filetype)
-            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot' // outFileCode
-            open(y1unit,file=y1file,form=filetype)
-            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot' // outFileCode
-            open(y2unit,file=y2file,form=filetype)
-            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot' // outFileCode
-            open(xvunit,file=xvfile,form=filetype)
-            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot' // outFileCode
-            open(yvunit,file=yvfile,form=filetype)
+            open(x1unit,file=ADJUSTL('data/' // expCode // '/X1plot' // outFileCode),form=filetype)
+            open(x2unit,file=ADJUSTL('data/' // expCode // '/X2plot' // outFileCode),form=filetype)
+            open(y1unit,file=ADJUSTL('data/' // expCode // '/Y1plot' // outFileCode),form=filetype)
+            open(y2unit,file=ADJUSTL('data/' // expCode // '/Y2plot' // outFileCode),form=filetype)
+            open(xvunit,file=ADJUSTL('data/' // expCode // '/Xvplot' // outFileCode),form=filetype)
+            open(yvunit,file=ADJUSTL('data/' // expCode // '/Yvplot' // outFileCode),form=filetype)
 
             write(x1unit) X1plot
             write(x2unit) X2plot
@@ -1328,10 +1329,8 @@ neighborc=0
             end do
 
 
-            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd' // outFileCode
-            open(tPAbdunit,file=tPAbdfile,form=filetype)
-            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree' // outFileCode
-            open(tPAfreeunit,file=tPAfreefile,form=filetype)
+            open(tPAbdunit,file=ADJUSTL('data/' // expCode // '/tPAbd' // outFileCode),form=filetype)
+            open(tPAfreeunit,file=ADJUSTL('data/' // expCode // '/tPAfree' // outFileCode),form=filetype)
 
             write(tPAbdunit) bdtPA
             write(tPAfreeunit) freetPA
