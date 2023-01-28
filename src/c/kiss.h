@@ -92,6 +92,6 @@ double
 urcw1_(void);
 
 void
-vurcw1_double rvect[], int n);
+c_vurcw1_double rvect[], int n);
 
 #endif

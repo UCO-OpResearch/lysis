@@ -4,32 +4,45 @@ program macrolysis
 !!                  - Data folder is relative to git repository root
 !!                  - Data is stored in subfolders based on expCode
 !!                  - Data file codes are now set globally from the (in/out)FileCode variables
+!!                  - Parameters have been moved to the top of the file
 !!
 !!                  Note that the "restricted move" bug HAS been fixed in this code!
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
 character(15) :: expCode = '2023-01-24-0100'
-character(50)  :: inFileCode = '_PLG2_tPA01_Kd00020036_Q2.dat'
+character(60)  :: inFileCode = '_PLG2_tPA01_Kd00020036_Q2.dat'
 character(60)   :: outFileCode = '_PLG2_tPA01_Kd00020036_into_and_along_fixed_Q2.dat'
 
 
-integer,parameter  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
-integer,parameter  :: F=121!121 !71 !81  !# of lattice nodes in one column in the vertical direction
-integer,parameter  :: Ffree=29!29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
+integer, parameter  :: N=93  !# of lattice nodes in one row in the horizontal direction
+integer, parameter  :: F=121 !71 !81  !# of lattice nodes in one column in the vertical direction
+integer, parameter  :: Ffree=29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
-integer,parameter  :: stats=10
-integer,parameter  :: num=(2*N-1)*F+N*(F-1)
-integer,parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
-integer,parameter  :: tf=15*60!15*60 !final time in sec
-integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
+integer, parameter  :: stats=10
+integer, parameter  :: num=(2*N-1)*F+N*(F-1)
+integer, parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
+integer, parameter  :: tf=15*60!15*60 !final time in sec
+integer, parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
+integer, parameter  :: backrow=num-(2*N-1)+1 !defines the first fiber number in the back row of the clot. To calculate mean first passage time, I will record the first time that each tPA molecule diffuses to a fiber with edge number backrow or greater
+
+
 integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
-integer,parameter  :: seed=-1273671783
 !!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
 double precision, parameter :: kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-double precision, parameter :: frac_forced =0.5143  !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-double precision, parameter :: avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
+double precision, parameter :: frac_forced =0.5143    !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: avgwait = 277.8!1/0.036 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value the absence of PLG
+double precision, parameter :: q=0.2d+00      !0.2             !q is the probability of moving. Make sure it is small enough that we've converged
+double precision, parameter :: delx= 1.0135d-04 !10**(-4)             !pore size (distance between nodes), measured in centimeters
+double precision, parameter :: Diff= 5.0d-07 !5*10**(-7)           !diffusion coefficient, measured in cm**2/s
+double precision, parameter :: bs = 4.27d+02              !concentration of binding sites in micromolar
+double precision, parameter :: dist=1.0862d+00 !microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
+
+double precision, parameter :: tstep=q*delx**2/(12*Diff)  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
+double precision, parameter :: num_t=tf/tstep            !number of timesteps
+
+integer  :: seed=-854989241!-2137354075!-1273671783
 
 integer  :: i, istat
 integer  :: j, ij, newindex
@@ -44,16 +57,6 @@ integer  :: colr2, colr4
 integer  :: z
 integer  :: numPLi
 double precision     :: t
-double precision     :: q
-double precision     :: delx
-double precision     :: Diff
-double precision     :: tstep
-double precision     :: num_t
-double precision     :: dist
-! double precision     :: kon
-! double precision     :: frac_forced
-! double precision     :: avgwait
-double precision     :: bs
 double precision     :: t_bind
 double precision     :: percent2, percent4
 double precision     :: rmicro, ttPA
@@ -176,7 +179,6 @@ integer :: countbind, countindep
 integer, dimension(stats,tf)  :: countbindV, countindepV, bind1V
 integer, dimension(num) :: bind1
 integer, dimension(M) :: forcedunbdbydeg
-integer  :: backrow !defines the first fiber number making up the back row of fibers.
 double precision, dimension(M) :: mfpt !vector I'll use to save the first passage times of each tPA molecule
 integer, dimension(M) :: yesfpt !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
 
@@ -457,7 +459,6 @@ neighborc=0
 
     write(*,*)'enoFB=',enoFB
 
-    backrow=num-(2*N-1)+1 !defines the first fiber number in the back row of the clot. To calculate mean first passage time, I will record the first time that each tPA molecule diffuses to a fiber with edge number backrow or greater
 
 !initialize variables for MFPT calculation out here b/c we only do this on the first run
     yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
@@ -468,13 +469,6 @@ neighborc=0
 
         write(*,*)' run number=',istat
 
-        q=0.2d+00      !0.2             !q is the probability of moving. Make sure it is small enough that we've converged
-        delx= 1.0135d-04 !10**(-4)             !pore size (distance between nodes), measured in centimeters
-        Diff= 5.0d-07 !5*10**(-7)           !diffusion coefficient, measured in cm**2/s
-        tstep=q*delx**2/(12*Diff)  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
-        num_t=tf/tstep            !number of timesteps
-        bs = 4.27d+02              !concentration of binding sites in micromolar
-        dist=1.0862d+00 !microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
         count=0
         t=0
         count2=0
