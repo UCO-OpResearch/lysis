@@ -4,39 +4,52 @@ program macrolysis
 !!                  - Data folder is relative to git repository root
 !!                  - Data is stored in subfolders based on expCode
 !!                  - Data file codes are now set globally from the (in/out)FileCode variables
+!!                  - Parameters have been moved to the top of the file
 !!
 
 !This code is exactly "macro_Q2_forcedtPArebind.f90", just renamed more helpfully. This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
 
 !! BRAD 2023-01-24:
-character(15) :: expCode = '2023-01-24-0200'
-character(50)  :: inFileCode = '_PLG2_tPA01_Q2.dat'
-character(50)   :: outFileCode = '_PLG2_tPA01_into_Q2.dat'
+character(15) :: expCode = '2023-01-24-0100'
+character(60)  :: inFileCode = '_PLG2_tPA01_Kd00020036_Q2.dat'
+character(60)   :: outFileCode = '_PLG2_tPA01_Kd00020036_into_Q2.dat'
 
-integer,parameter  :: N=93  !# of lattice nodes in one row in the horizontal direction
-integer,parameter  :: F=121 !71 !81  !# of lattice nodes in one column in the vertical direction
-integer,parameter  :: Ffree=29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
+integer, parameter  :: N=93  !# of lattice nodes in one row in the horizontal direction
+integer, parameter  :: F=121 !71 !81  !# of lattice nodes in one column in the vertical direction
+integer, parameter  :: Ffree=29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
-integer,parameter  :: stats=10
-integer,parameter  :: num=(2*N-1)*F+N*(F-1)
-integer,parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
-integer,parameter  :: tf=15*60!15*60 !final time in sec
-integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
-integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
-integer,parameter  :: seed=-1273671783
+integer, parameter  :: stats=10
+integer, parameter  :: num=(2*N-1)*F+N*(F-1)
+integer, parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
+integer, parameter  :: tf=15*60!15*60 !final time in sec
+integer, parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
+integer, parameter  :: backrow=num-(2*N-1)+1 !defines the first fiber number in the back row of the clot. To calculate mean first passage time, I will record the first time that each tPA molecule diffuses to a fiber with edge number backrow or greater
+
+
+integer, parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
 !!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
 double precision, parameter :: kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-double precision, parameter :: frac_forced =0.0852    !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-double precision, parameter :: avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
+double precision, parameter :: frac_forced =0.5143    !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision, parameter :: avgwait = 277.8!1/0.036 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value the absence of PLG
+double precision, parameter :: q=0.2d+00      !0.2             !q is the probability of moving. Make sure it is small enough that we've converged
+double precision, parameter :: delx= 1.0135d-04 !10**(-4)             !pore size (distance between nodes), measured in centimeters
+double precision, parameter :: Diff= 5.0d-07 !5*10**(-7)           !diffusion coefficient, measured in cm**2/s
+double precision, parameter :: bs = 4.27d+02              !concentration of binding sites in micromolar
+double precision, parameter :: dist=1.0862d+00 !microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
+
+double precision, parameter :: tstep=q*delx**2/(12*Diff)  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
+double precision, parameter :: num_t=tf/tstep            !number of timesteps
+
+integer  :: seed=-850336215!-2135977853!-1273671783
 
 integer  :: i, istat
-integer  :: j
+integer  :: j, ij, newindex
 integer  :: k
 integer  :: ii 
 integer  :: Nsave, Ninteger, nplt, cNsave
-integer  :: count
+integer  :: count, countij
 integer  :: count2, countc, countcolr4 
 integer  :: count66 
 integer  :: Ntot2
@@ -44,16 +57,6 @@ integer  :: colr2, colr4
 integer  :: z
 integer  :: numPLi
 double precision     :: t
-double precision     :: q
-double precision     :: delx
-double precision     :: Diff
-double precision     :: tstep
-double precision     :: num_t
-double precision     :: dist
-! double precision     :: kon
-! double precision     :: frac_forced
-! double precision     :: avgwait
-double precision     :: bs
 double precision     :: t_bind
 double precision     :: percent2, percent4
 double precision     :: rmicro, ttPA
@@ -174,7 +177,6 @@ character(80)  :: bind1file
 integer :: countbind, countindep
 integer, dimension(stats,tf)  :: countbindV, countindepV, bind1V
 integer, dimension(num) :: bind1
-integer  :: backrow !defines the first fiber number making up the back row of fibers.
 double precision, dimension(M) :: mfpt !vector I'll use to save the first passage times of each tPA molecule
 integer, dimension(M) :: yesfpt !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
 
@@ -443,7 +445,6 @@ enddo
 
 write(*,*)'enoFB=',enoFB
 
-backrow=num-(2*N-1)+1 !defines the first fiber number in the back row of the clot. To calculate mean first passage time, I will record the first time that each tPA molecule diffuses to a fiber with edge number backrow or greater
 
 !initialize variables for MFPT calculation out here b/c we only do this on the first run
 yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
@@ -454,13 +455,6 @@ do istat=1,stats
 
         write(*,*)' run number=',istat
 
-q=0.2d+00      !0.2             !q is the probability of moving. Make sure it is small enough that we've converged
-delx= 1.0135d-04 !10**(-4)             !pore size (distance between nodes), measured in centimeters
-Diff= 5.0d-07 !5*10**(-7)           !diffusion coefficient, measured in cm**2/s
-tstep=q*delx**2/(12*Diff)  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
-num_t=tf/tstep            !number of timesteps
-bs = 4.27d+02              !concentration of binding sites in micromolar
-dist=1.0862d+00 !microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
 count=0
 t=0
 count2=0
@@ -531,34 +525,27 @@ enddo
 !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-write(degfile,'(73a)'  ) 'data/' // expCode // '/deg' // outFileCode
-        write(Nfile,'(75a)' ) 'data/' // expCode // '/Nsave' // outFileCode
-        write(tfile,'(75a)') 'data/' // expCode // '/tsave' // outFileCode
-        write(movefile,'(74a)') 'data/' // expCode // '/move' // outFileCode
-        write(lastmovefile,'(78a)') 'data/' // expCode // '/lastmove' // outFileCode
-        write(plotfile,'(74a)') 'data/' // expCode // '/plot' // outFileCode
-        write(mfptfile,'(74a)') 'data/' // expCode // '/mfpt' // outFileCode
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-!write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_Q2.dat'
-!write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_Q2.dat'
-!write(Vbdnextfile,'(57a)') 'Vbdnext_tPA425_PLG2_tPA01_into_Q2.dat'
-!write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_Q2.dat'
-!write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_Q2.dat'
-!write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_Q2.dat'
-open(degunit,file=degfile,form=filetype)
-open(Nunit,file=Nfile,form=filetype)
-open(tunit,file=tfile,form=filetype)
-open(moveunit,file=movefile,form=filetype)
-open(lastmoveunit,file=lastmovefile,form=filetype)
-open(plotunit,file=plotfile,form=filetype)
-open(mfptunit,file=mfptfile,form=filetype)
-!!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-!open(degnextunit,file=degnextfile,form=filetype)
-!open(Venextunit,file=Venextfile,form=filetype)
-!open(Vbdnextunit,file=Vbdnextfile,form=filetype)
-!open(cbindunit,file=cbindfile,form=filetype)
-!open(cindunit,file=cindfile,form=filetype)
-!open(bind1unit,file=bind1file,form=filetype)
+        !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(Vbdnextfile,'(57a)') 'Vbdnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
+        open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
+        open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
+        open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
+        open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
+        open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
+        open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
+        !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+        !open(degnextunit,file=degnextfile,form=filetype)
+        !open(Venextunit,file=Venextfile,form=filetype)
+        !open(Vbdnextunit,file=Vbdnextfile,form=filetype)
+        !open(cbindunit,file=cbindfile,form=filetype)
+        !open(cindunit,file=cindfile,form=filetype)
+        !open(bind1unit,file=bind1file,form=filetype)
 
 write(degunit) degrade(:)
 write(tunit) t
@@ -1174,18 +1161,12 @@ write(*,*)'r4=',r4
       end do
     end do  !for jj loop
 
-            write(x1file,'(76a)'  ) 'data/' // expCode // '/X1plot' // outFileCode
-            open(x1unit,file=x1file,form=filetype)
-            write(x2file,'(76a)'  ) 'data/' // expCode // '/X2plot' // outFileCode
-            open(x2unit,file=x2file,form=filetype)
-            write(y1file,'(76a)'  ) 'data/' // expCode // '/Y1plot' // outFileCode
-            open(y1unit,file=y1file,form=filetype)
-            write(y2file,'(76a)'  ) 'data/' // expCode // '/Y2plot' // outFileCode
-            open(y2unit,file=y2file,form=filetype)
-            write(xvfile,'(76a)'  ) 'data/' // expCode // '/Xvplot' // outFileCode
-            open(xvunit,file=xvfile,form=filetype)
-            write(yvfile,'(76a)'  ) 'data/' // expCode // '/Yvplot' // outFileCode
-            open(yvunit,file=yvfile,form=filetype)
+            open(x1unit,file=ADJUSTL('data/' // expCode // '/X1plot' // outFileCode),form=filetype)
+            open(x2unit,file=ADJUSTL('data/' // expCode // '/X2plot' // outFileCode),form=filetype)
+            open(y1unit,file=ADJUSTL('data/' // expCode // '/Y1plot' // outFileCode),form=filetype)
+            open(y2unit,file=ADJUSTL('data/' // expCode // '/Y2plot' // outFileCode),form=filetype)
+            open(xvunit,file=ADJUSTL('data/' // expCode // '/Xvplot' // outFileCode),form=filetype)
+            open(yvunit,file=ADJUSTL('data/' // expCode // '/Yvplot' // outFileCode),form=filetype)
 
 write(x1unit) X1plot
 write(x2unit) X2plot
@@ -1274,10 +1255,8 @@ write(yvunit) Yvplot
      end do
 
 
-            write(tPAbdfile,'(76a)'  ) 'data/' // expCode // '/tPAbd' // outFileCode
-            open(tPAbdunit,file=tPAbdfile,form=filetype)
-            write(tPAfreefile,'(77a)'  ) 'data/' // expCode // '/tPAfree' // outFileCode
-            open(tPAfreeunit,file=tPAfreefile,form=filetype)
+            open(tPAbdunit,file=ADJUSTL('data/' // expCode // '/tPAbd' // outFileCode),form=filetype)
+            open(tPAfreeunit,file=ADJUSTL('data/' // expCode // '/tPAfree' // outFileCode),form=filetype)
 
 write(tPAbdunit) bdtPA
 write(tPAfreeunit) freetPA
