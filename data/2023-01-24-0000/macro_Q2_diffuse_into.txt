@@ -8,7 +8,7 @@
   M=       43074
   obtained using code macro_Q2_diffuse_into.f90
  fraction of time tPA is forced to unbind  5.400000000000000E-003
-  seed= -1273671783
+  seed= -1213352577
  read tPAleave.dat
  read tsectPA.dat
  enoFB=        7784
@@ -20,9 +20,9 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  avgwait=   27.8000000000000     
+  avgwait=   2.78000000000000     
   frac_forced=  5.400000000000000E-003
-  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                    
+  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                              
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -30,9 +30,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.671963082263096     
- countmacrounbd=      186448
- countmicrounbd=       16276
+ r4=  0.854904917005415     
+ countmacrounbd=      376417
+ countmicrounbd=       22612
   run number=           2
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -41,9 +41,9 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  avgwait=   27.8000000000000     
+  avgwait=   2.78000000000000     
   frac_forced=  5.400000000000000E-003
-  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                    
+  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                              
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -51,9 +51,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.882802837988844     
- countmacrounbd=      186606
- countmicrounbd=       16246
+ r4=  0.238167442756943     
+ countmacrounbd=      376961
+ countmicrounbd=       22692
   run number=           3
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -62,9 +62,9 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  avgwait=   27.8000000000000     
+  avgwait=   2.78000000000000     
   frac_forced=  5.400000000000000E-003
-  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                    
+  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                              
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -72,9 +72,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.821722022313084     
- countmacrounbd=      187052
- countmicrounbd=       16432
+ r4=  0.693557428067187     
+ countmacrounbd=      376146
+ countmicrounbd=       22774
   run number=           4
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -83,9 +83,9 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  avgwait=   27.8000000000000     
+  avgwait=   2.78000000000000     
   frac_forced=  5.400000000000000E-003
-  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                    
+  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                              
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -93,9 +93,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.256068828012704     
- countmacrounbd=      186850
- countmicrounbd=       16314
+ r4=  1.511328557465211E-002
+ countmacrounbd=      378112
+ countmicrounbd=       22687
   run number=           5
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -104,9 +104,9 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  avgwait=   27.8000000000000     
+  avgwait=   2.78000000000000     
   frac_forced=  5.400000000000000E-003
-  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                    
+  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                              
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -114,9 +114,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.558935982946017     
- countmacrounbd=      186470
- countmicrounbd=       16348
+ r4=  0.824504368201233     
+ countmacrounbd=      376741
+ countmicrounbd=       22705
   run number=           6
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -125,9 +125,9 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  avgwait=   27.8000000000000     
+  avgwait=   2.78000000000000     
   frac_forced=  5.400000000000000E-003
-  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                    
+  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                              
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -135,9 +135,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  6.255059692253916E-002
- countmacrounbd=      187112
- countmicrounbd=       16501
+ r4=  0.316755813674674     
+ countmacrounbd=      376824
+ countmicrounbd=       22746
   run number=           7
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -146,9 +146,9 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  avgwait=   27.8000000000000     
+  avgwait=   2.78000000000000     
   frac_forced=  5.400000000000000E-003
-  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                    
+  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                              
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -156,9 +156,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.117601825849138     
- countmacrounbd=      186504
- countmicrounbd=       16194
+ r4=  0.913885567444484     
+ countmacrounbd=      376977
+ countmicrounbd=       22764
   run number=           8
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -167,9 +167,9 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  avgwait=   27.8000000000000     
+  avgwait=   2.78000000000000     
   frac_forced=  5.400000000000000E-003
-  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                    
+  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                              
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -177,9 +177,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.434548644617538     
- countmacrounbd=      186812
- countmicrounbd=       16364
+ r4=  0.660609247400153     
+ countmacrounbd=      377772
+ countmicrounbd=       22978
   run number=           9
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -188,9 +188,9 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  avgwait=   27.8000000000000     
+  avgwait=   2.78000000000000     
   frac_forced=  5.400000000000000E-003
-  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                    
+  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                              
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -198,9 +198,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.166195445352354     
- countmacrounbd=      187168
- countmicrounbd=       16677
+ r4=  0.810868419259600     
+ countmacrounbd=      376229
+ countmicrounbd=       22829
   run number=          10
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -209,9 +209,9 @@
   num_t=   2628550.09420188     
   kon=  0.100000000000000     
   bs=   427.000000000000     
-  avgwait=   27.8000000000000     
+  avgwait=   2.78000000000000     
   frac_forced=  5.400000000000000E-003
-  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                    
+  save as deg_PLG2_tPA01_Kd0236_into_Q2.dat                              
   t=   136.957633333333     
   t=   273.915266666667     
   t=   410.872900000000     
@@ -219,8 +219,8 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.116648017397711     
- countmacrounbd=      186442
- countmicrounbd=       16479
+ r4=  0.100571107620983     
+ countmacrounbd=      377145
+ countmicrounbd=       22832
  Nsavevect=          90          90          90          90          90
           90          90          90          90          90

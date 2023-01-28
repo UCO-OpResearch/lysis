@@ -203,6 +203,7 @@ class Experiment(object):
                     # If that key is not needed, then toss it
                     if key not in sig.parameters:
                         macro_params.pop(key)
+                macro_params['state'] = tuple(macro_params['state'])
                 # Now unpack whatever is left in the dict and pass it to the
                 # constructor
                 self.macro_params = MacroParameters(**macro_params)

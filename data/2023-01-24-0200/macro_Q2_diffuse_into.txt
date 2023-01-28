@@ -8,7 +8,7 @@
   M=       43074
   obtained using code macro_Q2_diffuse_into.f90
  fraction of time tPA is forced to unbind  8.520000000000000E-002
-  seed= -1273671783
+  seed= -2135977853
  read tPAleave.dat
  read tsectPA.dat
  enoFB=        7784
@@ -30,9 +30,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.939613276054441     
- countmacrounbd=      220690
- countmicrounbd=       30506
+ r4=  0.169231014947080     
+ countmacrounbd=      218437
+ countmicrounbd=       30336
   run number=           2
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -51,9 +51,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.132008587974624     
- countmacrounbd=      218255
- countmicrounbd=       30333
+ r4=  0.957754967413341     
+ countmacrounbd=      219620
+ countmicrounbd=       30495
   run number=           3
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -72,9 +72,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  1.928441741367690E-002
- countmacrounbd=      217701
- countmicrounbd=       30350
+ r4=  0.521109893245943     
+ countmacrounbd=      218402
+ countmicrounbd=       30078
   run number=           4
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -93,9 +93,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.396521644411220     
- countmacrounbd=      218298
- countmicrounbd=       30403
+ r4=  0.918271220950478     
+ countmacrounbd=      218672
+ countmicrounbd=       30169
   run number=           5
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -114,9 +114,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.372156995504581     
- countmacrounbd=      218983
- countmicrounbd=       30088
+ r4=  0.948031904258571     
+ countmacrounbd=      218163
+ countmicrounbd=       30615
   run number=           6
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -135,9 +135,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.287958936071130     
- countmacrounbd=      217864
- countmicrounbd=       29794
+ r4=  0.696189579336192     
+ countmacrounbd=      217589
+ countmicrounbd=       30062
   run number=           7
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -156,9 +156,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.720934833173718     
- countmacrounbd=      218669
- countmicrounbd=       29905
+ r4=  0.219052800321558     
+ countmacrounbd=      218583
+ countmicrounbd=       30218
   run number=           8
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -177,9 +177,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.254744628065988     
- countmacrounbd=      219626
- countmicrounbd=       30510
+ r4=  0.633786273631582     
+ countmacrounbd=      217988
+ countmicrounbd=       30113
   run number=           9
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -198,9 +198,9 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  9.866850336425399E-002
- countmacrounbd=      218568
- countmicrounbd=       30655
+ r4=  1.195557523766788E-002
+ countmacrounbd=      218823
+ countmicrounbd=       30268
   run number=          10
   q=  0.200000000000000     
   delx=  1.013500000000000E-004
@@ -219,8 +219,8 @@
   t=   684.788166666667     
   t=   821.745800000000     
  nplt=          92
- r4=  0.784731199012138     
- countmacrounbd=      218745
- countmicrounbd=       30127
+ r4=  0.216405415105722     
+ countmacrounbd=      219055
+ countmicrounbd=       30306
  Nsavevect=          90          90          90          90          90
           90          90          90          90          90
