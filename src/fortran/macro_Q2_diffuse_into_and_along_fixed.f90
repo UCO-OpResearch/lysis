@@ -10,39 +10,42 @@ program macrolysis
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15) :: expCode = '2023-01-24-0100'
-character(60)  :: inFileCode = '_PLG2_tPA01_Kd00020036_Q2.dat'
-character(60)   :: outFileCode = '_PLG2_tPA01_Kd00020036_into_and_along_fixed_Q2.dat'
+character(15)   :: expCode
+character(80)   :: inFileCode
+character(80)   :: outFileCode
 
-
-integer, parameter  :: N=93  !# of lattice nodes in one row in the horizontal direction
-integer, parameter  :: F=121 !71 !81  !# of lattice nodes in one column in the vertical direction
-integer, parameter  :: Ffree=29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
+integer  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
+integer  :: F=121!121 !71 !81  !# of lattice nodes in one column in the vertical direction
+integer  :: Ffree=29!29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
-integer, parameter  :: stats=10
-integer, parameter  :: num=(2*N-1)*F+N*(F-1)
-integer, parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
-integer, parameter  :: tf=15*60!15*60 !final time in sec
-integer, parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
-integer, parameter  :: backrow=num-(2*N-1)+1 !defines the first fiber number in the back row of the clot. To calculate mean first passage time, I will record the first time that each tPA molecule diffuses to a fiber with edge number backrow or greater
+integer  :: stats= 10 !! BRAD 2023-01-04: 10
+integer  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
+integer  :: tf=20*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
 
-
-integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
+integer  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
 !!!CHANGES MADE FOR FORCED UNBINDING/DIFFUSION/REBINDING:
-double precision, parameter :: kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-double precision, parameter :: frac_forced =0.5143    !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
-double precision, parameter :: avgwait = 277.8!1/0.036 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value the absence of PLG
-double precision, parameter :: q=0.2d+00      !0.2             !q is the probability of moving. Make sure it is small enough that we've converged
-double precision, parameter :: delx= 1.0135d-04 !10**(-4)             !pore size (distance between nodes), measured in centimeters
-double precision, parameter :: Diff= 5.0d-07 !5*10**(-7)           !diffusion coefficient, measured in cm**2/s
-double precision, parameter :: bs = 4.27d+02              !concentration of binding sites in micromolar
-double precision, parameter :: dist=1.0862d+00 !microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
+double precision :: kon = 0.1 !0.1 !tPA binding rate. units of inverse (micromolar*sec). MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision :: frac_forced =0.0852 !0.5143!0.0054!0.0852 !fraction of times tPA was forced to unbind in microscale model. MAKE SURE THIS MATCHES MICROSCALE RUN VALUE!!!!
+double precision :: avgwait = 27.8 !2.78 !27.8 !measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
 
-double precision, parameter :: tstep=q*delx**2/(12*Diff)  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
-double precision, parameter :: num_t=tf/tstep            !number of timesteps
+double precision :: q=0.2d+00      !0.2             !q is the probability of moving. Make sure it is small enough that we've converged
+double precision :: delx= 1.0135d-04 !10**(-4)             !pore size (distance between nodes), measured in centimeters
+double precision :: Diff= 5.0d-07 !5*10**(-7)           !diffusion coefficient, measured in cm**2/s
+!! BRAD 2023-01-08: Does this need to be a float, or can it be an integer?
+!! BRITT:           Has been an integer for years and will probably stay that way
+integer          :: bs = 427              !concentration of binding sites in micromolar
+double precision :: dist=1.0862d+00 !microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
 
-integer  :: seed=-854989241!-2137354075!-1273671783
+integer  :: seed=-2137354075
+
+
+integer  :: num
+integer  :: enoFB !the last edge number without fibrin
+integer  :: backrow !defines the first fiber number in the back row of the clot. To calculate mean first passage time, I will record the first time that each tPA molecule diffuses to a fiber with edge number backrow or greater
+double precision :: tstep  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
+double precision :: num_t            !number of timesteps
+
 
 integer  :: i, istat
 integer  :: j, ij, newindex
@@ -57,6 +60,7 @@ integer  :: colr2, colr4
 integer  :: z
 integer  :: numPLi
 double precision     :: t
+
 double precision     :: t_bind
 double precision     :: percent2, percent4
 double precision     :: rmicro, ttPA
@@ -71,25 +75,25 @@ character(95) :: filename4
 character(80) :: filename6
 
 
-integer*1, dimension(num,num)  :: closeneigh
-integer, dimension(2,num)    :: endpts
-integer, dimension(8,num)    :: neighborc
+integer*1, dimension(:, :), allocatable  :: closeneigh
+integer, dimension(:,:), allocatable    :: endpts
+integer, dimension(:,:), allocatable    :: neighborc
 integer, dimension(8)      :: temp_neighborc
-integer, dimension(2,M)   :: V
-double precision, dimension(enoFB)      :: init_state
+integer, dimension(:,:), allocatable   :: V
+double precision, dimension(:), allocatable      :: init_state
 double precision, dimension(2)         :: p
 double precision, dimension(2)         :: pfit
 double precision, dimension(101)       :: CDFtPA, CDFlys
 double precision, dimension(101)       :: tsec1, tseclys
-double precision, dimension(num)      :: degrade
-double precision, dimension(num)      :: t_degrade
-double precision, dimension(M)        :: t_leave
-double precision, dimension(M)        :: t_wait
-double precision, dimension(M)        :: bind
-integer, dimension(stats)             :: Nsavevect 
+double precision, dimension(:), allocatable      :: degrade
+double precision, dimension(:), allocatable     :: t_degrade
+double precision, dimension(:), allocatable        :: t_leave
+double precision, dimension(:), allocatable        :: t_wait
+double precision, dimension(:), allocatable        :: bind
+integer, dimension(:), allocatable             :: Nsavevect 
 integer                              :: name1, name2
 
-logical       :: isBinary =  .True.      ! flag for binary output
+logical       :: isBinary = .True.      ! flag for binary output
 integer       :: degunit = 20
 integer       :: Vunit = 21
 integer       :: V2unit = 22
@@ -103,30 +107,30 @@ character(80) :: tfile
 
 !stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
 !is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
-external :: mscw, kiss32, urcw1
 integer :: kiss32, mscw, state(4), old_state(4), ui
 double precision :: uf, urcw1
+external :: mscw, kiss32, urcw1
 
-double precision, dimension(M)         :: rvect
-double precision, dimension(tf+1,num) :: degnext
-integer, dimension(tf+1,M) :: Vedgenext
-integer, dimension(tf+1,M) :: Vboundnext
-integer, dimension(F-1)  :: ind
-double precision, dimension(F-1)  :: place
-double precision, dimension(num)  :: degold
-double precision, dimension(tf+1) :: tsave
+double precision, dimension(:), allocatable         :: rvect
+double precision, dimension(:,:), allocatable :: degnext
+integer, dimension(:,:), allocatable :: Vedgenext
+integer, dimension(:,:), allocatable :: Vboundnext
+integer, dimension(:), allocatable  :: ind
+double precision, dimension(:), allocatable  :: place
+double precision, dimension(:), allocatable  :: degold
+double precision, dimension(:), allocatable :: tsave
 integer  :: zero1
-integer, dimension(tf,N)  :: front
-integer, dimension(N)  :: firstdeg
-integer, dimension(N)  :: deglast
-integer, dimension(N,stats)  :: lastmove
+integer, dimension(:,:), allocatable  :: front
+integer, dimension(:), allocatable  :: firstdeg
+integer, dimension(:), allocatable  :: deglast
+integer, dimension(:,:), allocatable  :: lastmove
 integer  :: fdeg
 integer  :: first0
-integer, dimension(N,N)  :: move
+integer, dimension(:,:), allocatable  :: move
 integer  :: temp
 integer  :: lasti
-integer, dimension(N,N)  :: plotstuff, totmove,time2plot
-double precision, dimension(N,N)  :: plotstuff2
+integer, dimension(:,:), allocatable  :: plotstuff, totmove,time2plot
+double precision, dimension(:,:), allocatable  :: plotstuff2
 integer       :: moveunit = 25
 integer       :: lastmoveunit = 26
 integer       :: plotunit = 27
@@ -142,15 +146,15 @@ character(80) :: Venextfile
 character(80) :: Vbdnextfile
 character(80) :: mfptfile
 
-integer, dimension(num)  :: intact2
+integer, dimension(:), allocatable  :: intact2
 integer  :: countintact2, lenintact2, counth, countv, countpv, countmacrounbd, countmicrounbd
 integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
 integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx 
-integer, dimension(2,F*(N-1))  :: X1plot, Y1plot
-integer, dimension(2,N*(F-1))  :: X2plot, Y2plot
-integer, dimension(N*F)  :: Xvplot, Yvplot
-double precision, dimension(2,M)  :: bdtPA, freetPA
-double precision, dimension(nummicro,100) :: lysismat !(100,100) if only did 10,000 micro runs, (500,100) if did 50,000
+integer, dimension(:,:), allocatable  :: X1plot, Y1plot
+integer, dimension(:,:), allocatable  :: X2plot, Y2plot
+integer, dimension(:), allocatable  :: Xvplot, Yvplot
+double precision, dimension(:,:), allocatable  :: bdtPA, freetPA
+double precision, dimension(:,:), allocatable :: lysismat !(100,100) if only did 10,000 micro runs, (500,100) if did 50,000
 integer, dimension(100)  :: lenlysismat
 integer  :: r400
 integer  :: x1unit = 31
@@ -176,12 +180,232 @@ character(80)  :: cbindfile
 character(80)  :: cindfile
 character(80)  :: bind1file
 integer :: countbind, countindep
-integer, dimension(stats,tf)  :: countbindV, countindepV, bind1V
-integer, dimension(num) :: bind1
-integer, dimension(M) :: forcedunbdbydeg
-double precision, dimension(M) :: mfpt !vector I'll use to save the first passage times of each tPA molecule
-integer, dimension(M) :: yesfpt !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
+integer, dimension(:,:), allocatable  :: countbindV, countindepV, bind1V
+integer, dimension(:), allocatable :: bind1
+integer, dimension(:), allocatable :: forcedunbdbydeg
+double precision, dimension(:), allocatable :: mfpt !vector I'll use to save the first passage times of each tPA molecule
+integer, dimension(:), allocatable :: yesfpt !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
 
+!! BRAD 2023-01-06:
+integer(8) :: total_regular_moves
+integer(8) :: total_restricted_moves
+integer :: total_binds
+integer :: degraded_fibers
+integer :: reached_back_row
+real :: time_begin, time_end
+real :: rounded_time
+real :: degraded_percent
+real :: reached_back_row_percent
+double precision :: last_degrade_time
+real :: temp_len_lysis_mat
+
+integer :: t_degrade_unit = 102
+character(80) :: t_degrade_file
+integer :: m_location_unit = 103
+character(80) :: m_location_file
+integer :: m_bound_unit = 104
+character(80) :: m_bound_file
+!integer :: m_bind_time_unit = 105
+
+integer :: cmd_count, param_i, param_len, param_val_len, cmd_status, io_status
+character(80) :: param, param_value
+
+cmd_count = command_argument_count ()
+write (*,*) 'number of command arguments = ', cmd_count
+
+param_i = 0
+do while (param_i<cmd_count)
+    param_i = param_i+1
+    call get_command_argument (param_i, param, param_len, cmd_status)
+    if (cmd_status .ne. 0) then
+        write (*,*) ' get_command_argument failed: status = ', cmd_status, ' arg = ', param_i
+        stop
+    end if
+    write (*,*) 'command arg ', param_i, ' = ', param (1:param_len)
+    param_i = param_i+1
+    call get_command_argument (param_i, param_value, param_val_len, cmd_status)
+    if (cmd_status .ne. 0) then
+        write (*,*) ' get_command_argument failed: status = ', cmd_status, ' arg = ', param_i
+        stop
+    end if
+    write (*,*) 'command arg ', param_i, ' = ', param_value (1:param_val_len)
+    select case (param(3:param_len))
+        case('expCode')
+            expCode = param_value (1:param_val_len)
+            write (*,*) 'Setting expCode = ', expCode
+        case ('inFileCode')
+            inFileCode = param_value (1:param_val_len)
+            write (*,*) 'Setting inFileCode = ', inFileCode
+        case ('outFileCode')
+            outFileCode = param_value (1:param_val_len)
+            write (*,*) 'Setting outFileCode = ', outFileCode
+        case ('N')
+            read(param_value,*,iostat=io_status)  N
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting N = ', N
+        case ('F')
+            read(param_value,*,iostat=io_status)  F
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting F = ', F
+        case ('Ffree')
+            read(param_value,*,iostat=io_status)  Ffree
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting Ffree = ', Ffree
+        case ('stats')
+            read(param_value,*,iostat=io_status)  stats
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting stats = ', stats
+        case ('M')
+            read(param_value,*,iostat=io_status)  M
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting M = ', M
+        case ('tf')
+            read(param_value,*,iostat=io_status)  tf
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting tf = ', tf
+        case ('nummicro')
+            read(param_value,*,iostat=io_status)  nummicro
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting nummicro = ', nummicro
+        case ('kon')
+            read(param_value,*,iostat=io_status)  kon
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting kon = ', kon
+        case ('frac_forced')
+            read(param_value,*,iostat=io_status)  frac_forced
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting frac_forced = ', frac_forced
+        case ('avgwait')
+            read(param_value,*,iostat=io_status)  avgwait
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting avgwait = ', avgwait
+        case ('q')
+            read(param_value,*,iostat=io_status)  q
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting q = ', q
+        case ('delx')
+            read(param_value,*,iostat=io_status)  delx
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting delx = ', delx
+        case ('Diff')
+            read(param_value,*,iostat=io_status)  Diff
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting Diff = ', Diff
+        case ('bs')
+            read(param_value,*,iostat=io_status)  bs
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting bs = ', bs
+        case ('dist')
+            read(param_value,*,iostat=io_status)  dist
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting dist = ', dist
+        case ('seed')
+            read(param_value,*,iostat=io_status)  seed
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting seed = ', seed
+        case default
+            write (*,*) 'Unrecognized parameter'
+            stop
+    end select
+end do
+
+write (*,*) 'command line processed'
+
+
+num=(2*N-1)*F+N*(F-1)
+enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
+backrow=num-(2*N-1)+1 !defines the first fiber number in the back row of the clot. To calculate mean first passage time, I will record the first time that each tPA molecule diffuses to a fiber with edge number backrow or greater
+tstep=q*delx**2/(12*Diff)  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
+num_t=tf/tstep            !number of timesteps
+
+allocate (closeneigh(num,num))
+allocate (endpts(2,num))
+allocate (neighborc(8,num))
+allocate (V(2,M))
+allocate (init_state(enoFB))
+allocate (degrade(num))
+allocate (t_degrade(num))
+allocate (t_leave(M))
+allocate (t_wait(M))
+allocate (bind(M))
+allocate (Nsavevect(stats))
+allocate (rvect(M))
+allocate (degnext(tf+1,num))
+allocate (Vedgenext(tf+1,M))
+allocate (Vboundnext(tf+1,M))
+allocate (ind(F-1))
+allocate (place(F-1))
+allocate (degold(num))
+allocate (tsave(tf+1))
+allocate (front(tf,N))
+allocate (firstdeg(N))
+allocate (deglast(N))
+allocate (lastmove(N,stats))
+allocate (move(N,N))
+allocate (plotstuff(N,N), totmove(N,N),time2plot(N,N))
+allocate (plotstuff2(N,N))
+allocate (intact2(num))
+allocate (X1plot(2,F*(N-1)), Y1plot(2,F*(N-1)))
+allocate (X2plot(2,N*(F-1)), Y2plot(2,N*(F-1)))
+allocate (Xvplot(N*F), Yvplot(N*F))
+allocate (bdtPA(2,M), freetPA(2,M))
+allocate (lysismat(nummicro,100))!(100,100) if only did 10,000 micro runs, (500,100) if did 50,000
+allocate (countbindV(stats,tf), countindepV(stats,tf), bind1V(stats,tf))
+allocate (bind1(num))
+allocate (forcedunbdbydeg(M))
+allocate (mfpt(M)) !vector I'll use to save the first passage times of each tPA molecule
+allocate (yesfpt(M))  !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
+
+
+!! BRAD END
 
 
 if( isBinary ) then
@@ -206,9 +430,11 @@ write(*,*)'fraction of time tPA is forced to unbind',frac_forced
     ui = kiss32()
     uf = urcw1()
 
-    !seed = mscw()
+!! BRAD 2023-01-26:
+    if (seed == 0) seed = mscw()
     !seed= 1884637428
-!    seed = -2137354075
+    !seed = -2137354075
+    !seed = 5784279
     write(*,*)' seed=',seed
 
     state(1) = 129281

@@ -24,6 +24,8 @@ import inspect
 import json
 import logging
 import os
+import pkgutil
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, List, Mapping, Tuple, Union
@@ -83,7 +85,7 @@ class Experiment(object):
     ):
         # Check if the data folder path is valid
         if not os.path.isdir(data_root):
-            raise RuntimeError("Data folder not found.")
+            raise RuntimeError("Data folder not found.", data_root)
         self.os_data_root = data_root
         # If no experiment code was given, create a new one from the current
         # date and time.
@@ -94,6 +96,7 @@ class Experiment(object):
 
         # Generate the path to the experiment folder and the parameters file
         self.os_path = os.path.join(data_root, str(self.experiment_code))
+        os.makedirs(self.os_path, exist_ok=True)
         self.os_param_file = os.path.join(self.os_path, "params.json")
 
         # TODO(bpaynter): Check if the parameters are already stored.
@@ -203,7 +206,6 @@ class Experiment(object):
                     # If that key is not needed, then toss it
                     if key not in sig.parameters:
                         macro_params.pop(key)
-                macro_params['state'] = tuple(macro_params['state'])
                 # Now unpack whatever is left in the dict and pass it to the
                 # constructor
                 self.macro_params = MacroParameters(**macro_params)
@@ -430,7 +432,7 @@ class MacroParameters:
     :Units: None
     :Fortran: seed"""
 
-    state: Tuple[int, int, int, int] = (129281, 362436069, 123456789, None)
+    state: Tuple[int, int, int, int] = field(init=False)
     """State for the random number generator.
     
     :Units: None
@@ -563,15 +565,28 @@ class MacroParameters:
             self, "total_time_steps", int(self.total_time / self.time_step)
         )
 
-        # If no seed was given in the state, set it from the seed
-        if self.state[3] is None:
-            object.__setattr__(self, "state", self.state[:3] + (self.seed,))
+        # Set the state
+        object.__setattr__(self, "state", (129281, 362436069, 123456789, self.seed))
 
         # Total saves is one for the start of each 'save_interval' plus one at
         # the end of the run.
         object.__setattr__(
             self, "number_of_saves", int(self.total_time / self.save_interval) + 1
         )
+
+    @staticmethod
+    def fortran_names():
+        text = pkgutil.get_data(__name__, "parameters.py")
+        pattern = re.compile(
+            r"[\r\n]+^\s{4}([a-z_]+):[^\"]*\"\"\"[^\"]*:Fortran:\s([\w_]+(-1)?)(\s=[^\"]*)?\"\"\"",
+            re.M,
+        )
+        names = {}
+        matches = re.findall(pattern, text.decode("utf-8"))
+        for match in matches:
+            if match[1] != "None":
+                names[match[0]] = match[1]
+        return names
 
     def __str__(self) -> str:
         """Returns a human-readable, JSON-like string of all parameters."""
