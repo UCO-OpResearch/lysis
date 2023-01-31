@@ -1,0 +1,45 @@
+ number of command arguments =            6
+ command arg            1  = --expCode
+ command arg            2  = 2023-01-30-2002
+ Setting expCode = 2023-01-30-2002
+ command arg            3  = --inFileCode
+ command arg            4  = _PLG2_tPA01_Q2.dat
+ Setting inFileCode = 
+ _PLG2_tPA01_Q2.dat                                                             
+  
+ command arg            5  = --outFileCode
+ command arg            6  = _PLG2_tPA01_into_and_along_Q2.dat
+ Setting outFileCode = 
+ _PLG2_tPA01_into_and_along_Q2.dat                                              
+  
+ command line processed
+  filetype=
+ binary                                                                         
+  
+  N=          93
+  F=         121
+  Ffree=          29
+  num=       33545
+  M=       43074
+  obtained using code macro_Q2_diffuse_into_and_along.f90
+ fraction of time tPA is forced to unbind  8.520000000000000E-002
+  seed= -2137354075
+ read tPAleave.dat
+ read tsectPA.dat
+ enoFB=        7784
+  run number=           1
+  q=  0.200000000000000     
+  delx=  1.013500000000000E-004
+  tstep=  3.423940833333333E-004
+  tf=        1200
+  num_t=   3504733.45893584     
+  kon=  0.100000000000000     
+  bs=         427
+  avgwait=   27.8000000000000     
+  frac_forced=  8.520000000000000E-002
+  save as deg
+ _PLG2_tPA01_into_and_along_Q2.dat                                              
+  
+  t=   34.2394083333333     
+  t=   68.4788166666667     
+  t=   102.718225000000     
