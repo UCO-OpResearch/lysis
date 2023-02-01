@@ -16,15 +16,16 @@ def run(e: lysis.util.Experiment, timestamp: AnyStr):
     else:
         logger = logging.getLogger(__name__)
     logger.info(f"Initialized Experiment '{e.experiment_code}'")
-    p = {
-        "rows": 12,
-        "cols": 9,
-        "empty_rows": 3,
-        "total_molecules": 430,
-        "total_time": 10 * 60,
-        "duplicate_fortran": False,
-    }
-    e.initialize_macro_param(p)
+    # p = {
+    #     "rows": 12,
+    #     "cols": 9,
+    #     "empty_rows": 3,
+    #     "total_molecules": 430,
+    #     "total_time": 10 * 60,
+    #     "duplicate_fortran": False,
+    # }
+    # e.initialize_macro_param(p)
+    e.read_file()
     logger.debug(f"With parameters {os.linesep}{e}")
     for file in e.macro_params.output_data:
         filename = lysis.util.default_filenames[file]
@@ -46,7 +47,7 @@ def run(e: lysis.util.Experiment, timestamp: AnyStr):
 
 
 def main():
-    e = lysis.util.Experiment(r"../../data", experiment_code="2023-01-18-1600")
+    e = lysis.util.Experiment(r"../../data", experiment_code="2023-01-31-1300")
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     os.makedirs(os.path.join(e.os_path, "log"), exist_ok=True)
     logfile = os.path.join(e.os_path, "log", "lysis-py-" + timestamp + ".log")

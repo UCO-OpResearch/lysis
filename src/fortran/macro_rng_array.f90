@@ -13,19 +13,20 @@ program macrolysis
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15) :: expCode = '2023-01-18-1700'
-character(40)  :: inFileCode = '.dat'
-character(40)   :: outFileCode = '.f-array.dat'
+character(15)      :: expCode = '2023-01-31-1300'
+character(40)      :: inFileCode = '.dat'
+character(40)      :: outFileCode = '.f-array.dat'
+logical            :: verbose = .False.!.True. !
 
-integer,parameter  :: N=9  !# of lattice nodes in one row in the horizontal direction
-integer,parameter  :: F=12 !71 !81  !# of lattice nodes in one column in the vertical direction
-integer,parameter  :: Ffree=4 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
+integer,parameter  :: N=93  !# of lattice nodes in one row in the horizontal direction
+integer,parameter  :: F=121 !71 !81  !# of lattice nodes in one column in the vertical direction
+integer,parameter  :: Ffree=29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
-integer,parameter  :: stats= 100 !! BRAD 2023-01-04: 10
+integer,parameter  :: stats= 10 !! BRAD 2023-01-04: 10
 integer,parameter  :: num=(2*N-1)*F+N*(F-1)
-integer,parameter  :: M=430 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
-integer,parameter  :: tf=6*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
+integer,parameter  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
+integer,parameter  :: tf=20*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
 integer,parameter  :: enoFB=(3*N-1)*(Ffree-1) !the last edge number without fibrin
 integer,parameter  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
 integer  :: i, istat
@@ -54,7 +55,7 @@ double precision     :: bs
 double precision     :: t_bind
 double precision     :: percent2, percent4
 double precision     :: rmicro, ttPA
-double precision     :: r, r1, r3, r2, r4
+double precision     :: r, r1, r3, r2, r4, r5
 
 
 character(80) :: filetype,formatted
@@ -213,7 +214,10 @@ integer :: m_location_unit = 103
 character(80) :: m_location_file
 integer :: m_bound_unit = 104
 character(80) :: m_bound_file
-!integer :: m_bind_time_unit = 105
+
+integer :: m_tracker_last
+integer :: m_tracker_index = 22
+integer :: m_tracker_unit = 105
 
 !! BRAD END
 
@@ -247,8 +251,9 @@ write(*,*)' obtained using code macro_rng_array.f90 on data ',expCode
 
     !seed = mscw()
     !seed= 1884637428
-    seed = -2137354075
+    !seed = -2137354075
     !seed = 578439769
+    seed = 758492894
     write(*,*)' seed=',seed
 
     state(1) = 129281
@@ -455,7 +460,14 @@ neighborc=0
         enddo
     enddo
 
-!write(*,*)'neighborc=',neighborc
+!! BRAD 2023-01-31:
+!    do j=1,num
+!        write (*,'(A, I3, A, I3, A, I3, A, I3, A, I3, A, I3, A, I3, A, I3, A)') &
+!            '  [' , neighborc(1,j)-1, ',', neighborc(2,j)-1, ',', neighborc(3,j)-1, ',', neighborc(4,j)-1, ',',&
+!            neighborc(5,j)-1, ',', neighborc(6,j)-1, ',', neighborc(7,j)-1, ',', neighborc(8,j)-1, '],' 
+!    end do
+
+!    write(*,*)'neighborc=',neighborc
 
 
 ! read in the data from the micro model, which we obtained from /micro.f90
@@ -531,7 +543,7 @@ neighborc=0
         count66=0
         countbind=0
         countindep=0
-        Nsave=0
+        Nsave=10
         cNsave=0
         bind1=0
         countmacrounbd=0
@@ -589,7 +601,7 @@ neighborc=0
         do ii=1,enoFB
             init_state(ii) = dble(ii) / dble(enoFB) !make a vector that's the length of one row of lattice and scale so
                                                                !that prob. of being on any edge is equal
-        enddo
+        end do
         
         call c_vurcw1(rvect, M)
         
@@ -601,11 +613,17 @@ neighborc=0
                     !init_entry(i)=j+1
                     V(1,i)=j+1
                 end if
-            enddo
+            end do
+!! BRAD 2023-01-31:
+            if (verbose) then
+                write (*,'(A, I2, A, I3, A, F5.4)') '-> Molecule ', i-1,& 
+                    ' placed on fiber ', V(1,i)-1, '; using r = ', rvect(i)
+            end if
             !V(i,1) = init_entry(i) !molecule i starts on site init_entry(i) so I only allow tPA to start on an edge
                                   !that's in the first row of my lattice
-        enddo
+        end do
         !    write(*,*)' V=',V  !for debugging 3/31/10
+
 
 
                 
@@ -628,7 +646,7 @@ neighborc=0
         open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
         open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
         open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
-!        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
+!        open(m_tracker_unit,file=ADJUSTL('data/' // expCode // '/m_tracker' // outFileCode),form=filetype)
 
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !open(degnextunit,file=degnextfile,form=filetype)
@@ -645,6 +663,8 @@ neighborc=0
         write(t_degrade_unit) t_degrade(:)
         write(m_location_unit) V(1,:)
         write(m_bound_unit) V(2,:)
+        write(m_tracker_unit) 0, V(1,m_tracker_index)-1
+        m_tracker_last = V(1,m_tracker_index)
 
 
         write(*,*)' save as deg' // outFileCode
@@ -666,6 +686,13 @@ neighborc=0
             count=count+1
             t = count*tstep
             if(t>tf) exit  !only do the big "do" loop while t<tf
+            
+!            if (count > 290395) verbose = .True.
+
+!! BRAD 2023-01-31:
+            if (verbose) then
+                write (*,'(A,I6)') '-> ts ', count-1
+            end if
 
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
             do brad_i=1,8
@@ -712,6 +739,7 @@ neighborc=0
                     degraded_fibers = degraded_fibers + 1
                     last_degrade_time = t
 
+
                     !write(*,*)'time=',t
                     !write(*,*)'edge that degraded=',i
 
@@ -730,7 +758,9 @@ neighborc=0
                     !uncomment below if we DO remove tPA that was on a degraded fiber:
                     !if there were any tPAs bound to this edge, temporarily remove them from the simulation by assigning a waiting time before they can rebind
                     do j=1,M
-                        if(V(1,j)==i) then
+!! BRAD 2023-01-31: There was a small chance that a molecule could arrive at a fiber just as it was degrading
+!!                  Even though it was not bound, it would still be classified for "restricted movement"
+                        if(V(1,j)==i.and.V(2,j)==1) then
                             V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
                             t_leave(j)=0
                             t_wait(j)=t+avgwait-tstep/2 !waiting time is current time plus average wait time minus half a timestep so we round to nearest timestep
@@ -739,6 +769,13 @@ neighborc=0
                             forcedunbdbydeg(j)=1 !put a "1" in the entries corresponding to tPA molecules that were forced to unbind by macroscale degradation; these molecules will NOT be allowed to diffuse into the clot, only along the clot front. ADDED 5/10/18
                             countmacrounbd=countmacrounbd+1 !count the total number of tPA molecules that are forced to unbind by macro-level degradation of a fiber
                             !write(*,*)'forced unbound by degradation=',j
+!! BRAD 2023-01-31:
+                            if (verbose) then
+                                write (*,'(A,I6,A,I2,A,I3)') '-> ts ', count-1,& 
+                                    ' -> m ', j-1, ' macro-unbinding from f ', V(1,j)-1
+                                write (*,'(A,I6,A,I2,A,F10.5)') '-> ts ', count-1,& 
+                                    ' -> m ', j-1, ' wait time set to ', t_wait(j)
+                            end if
                         end if
                    enddo
                    !!end uncommentable part
@@ -779,13 +816,27 @@ neighborc=0
 
                         !BELOW ADDED 9/15/17 to account for forced-unbound tPA to be removed
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                        r1 = random_numbers(1+RNG_MICRO_UNBIND, j)
+                        r5 = random_numbers(1+RNG_MICRO_UNBIND, j)
 !!                        r1=urcw1()
-                        if(r1<=frac_forced) then
+                        if(r5<=frac_forced) then
                         !if the random number is less than the fraction of time tPA is forced to unbind, consider tPA "forced" to unbind, and temporarily remove it from the simulation by assigning it a waiting time
                             t_wait(j)=t+avgwait-tstep/2 !waiting time is current time plus average wait time minus half a timestep so we round to nearest timestep
                             bind(j)=0
                             countmicrounbd=countmicrounbd+1
+!! BRAD 2023-01-31:
+                            if (verbose) then
+                                write (*,'(A,I6,A,I2,A,I3,A,F5.4)') '-> ts ', count-1,& 
+                                    ' -> m ', j-1, ' micro-unbinding from f ', V(1,j)-1, '; using r = ', r5
+                                write (*,'(A,I6,A,I2,A,F8.5)') '-> ts ', count-1,& 
+                                    ' -> m ', j-1, ' wait time set to ', t_wait(j)
+                            end if
+                        else
+                            if (verbose) then
+                                write (*,'(A,I6,A,I2,A,I3,A,F5.4)') '-> ts ', count-1,& 
+                                    ' -> m ', j-1, ' unbinding from f ', V(1,j)-1, '; using r = ', r5
+                                write (*,'(A,I6,A,I2,A,F8.5,A,F5.4)') '-> ts ', count-1,& 
+                                    ' -> m ', j-1, ' bind time set to ', bind(j), '; using r = ', r1
+                            end if
                         end if !for frac_forced if statement
                     end if
                 end if !end if(V(2,j)==1 statement. The above unbinds tPA with leaving time < current time
@@ -799,6 +850,11 @@ neighborc=0
 !! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
                     if (t_wait(j)<=t.and.forcedunbdbydeg(j)==1) then
                         forcedunbdbydeg(j)=0
+!! BRAD 2023-01-31:
+                        if (verbose) then
+                            write (*,'(A,I6,A,I2,A)') '-> ts ', count-1,& 
+                                ' -> m ', j-1, ' no longer stuck to macro-fiber'
+                        end if
                     end if
 
 
@@ -807,12 +863,18 @@ neighborc=0
                     !if it can't bind, move it. if it can bind, pick a random number and see if r>(t-bind(j))/tstep.
                     !if it is bigger, move it. if it isn't bigger, bind it.
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
-                        r = random_numbers(1+RNG_MOVE, j)
+                    r = random_numbers(1+RNG_MOVE, j)
 !!                    r=urcw1()
                     z=V(1,j)
 
                     if (r<=(1-q)) then   !i.e. if we stay on current edge
                         !check if molecule j can bind. ADJUSTED 9/15/17 to account for waiting time
+!! BRAD 2023-01-31:
+                        if (verbose) then
+                            write (*,'(A,I6,A,I2,A,F5.4)') '-> ts ', count-1,& 
+                                ' -> m ', j-1, ' not moving; using r = ', r
+                        end if
+                            
                         if(bind(j)<t.and.bind(j)>0.and.degrade(V(1,j))==0) then
                         !i.e. if binding time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
                         !check if the molecule has a waiting time. if it does, check if the current time is later than the waiting time
@@ -850,7 +912,14 @@ neighborc=0
 
                                 t_leave(j) = t + ttPA - tstep/2 !time tPA leaves is current time plus leaving time drawn from distribution
                                                         !minus half a time step so we round to nearest timestep
-
+!! BRAD 2023-01-31:
+                                if (verbose) then
+                                    write (*,'(A,I6,A,I2,A,I3)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' binding to f ', V(1,j)-1
+                                    write (*,'(A,I6,A,I2,A,F8.5,A,F5.4)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' leaving time set to ', t_leave(j), '; using r = ', r3
+                                    write (*,'(A, F8.5, A, F8.5)') 'interpolated between ',tsec1(colr2),' and ',tsec1(colr2-1)
+                                end if
 
 !! BRAD 2023-01-18: Converting to use one big RNG array so that the numbers are identical to the Python code
                                 r4 = random_numbers(1+RNG_LYSIS_TIME, j)
@@ -872,6 +941,13 @@ neighborc=0
                                     else
                                         percent4 = r400-1-r4*nummicro
                                         rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4)
+                                    end if
+                                    
+!! BRAD 2023-01-31:
+                                    if (verbose.and.t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
+                                        write (*,'(A, I6, A, I3, A, F8.5, A, F5.4)') '-> ts ', count-1,& 
+                                            ' -> f ', V(1,j)-1, 'degrade time set to ', t+rmicro-tstep/2,& 
+                                            '; using r = ', r4
                                     end if
 
                                     if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
@@ -961,6 +1037,17 @@ neighborc=0
 !! BRAD 2023-01-22:
 !                                write(m_bind_time_unit)r1, t, bind(j)
 
+!! BRAD 2023-01-31:
+                                if (verbose) then
+                                    write (*,'(A, I6, A, I2, A, F5.4)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' move before bind; using r = ', r2
+                                    write (*,'(A, I6, A, I2, A, I3, A, F5.4)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' moving to f ', V(1,j)-1, '; using r = ', r
+                                    write (*,'(A, I6, A, I2, A, F8.5, A, F5.4)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' binding time set to ', bind(j), '; using r = ', r1
+!                                    write (*,*) 't-dlog(r1)/(kon*bs)-tstep/2 = ',t,'-dlog(',r1,')/(',kon,'*',bs,')-',tstep,'/2'
+                                end if
+
 !! BRAD 2023-01-13:
                                 total_regular_moves = total_regular_moves + 1
 
@@ -996,6 +1083,19 @@ neighborc=0
 
                                 t_leave(j) = t + ttPA - tstep/2 !time tPA leaves is current time plus leaving time drawn from distribution
                                                             !minus half a time step so we round to nearest timestep
+!! BRAD 2023-01-31:
+                                if (verbose) then
+                                    write (*,'(A, I6, A, I2, A, F5.4)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' bind before move; using r = ', r2
+                                    write (*,'(A, I6, A, I2, A, I3)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' binding to f ', V(1,j)-1
+                                    write (*,'(A, I6, A, I2, A, F8.5, A, F5.4)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' leaving time set to ', t_leave(j), '; using r = ', r3
+                                    write (*,'(F8.5, A, F8.5, A, F8.5)') ttPA, '; interpolated between ',tsec1(colr2),' and ',tsec1(colr2-1)
+                                    write (*,*) t, ttPA, tstep
+                                    write (*,*) t+ttPA, tstep/2
+                                    write (*,*) t+ttPA - tstep/2
+                                end if
 
 
                                 !Using the tPA leaving time, find the lysis time by using the lysis time distribution for the given ttPA
@@ -1023,6 +1123,13 @@ neighborc=0
 
                                     end if
 
+!! BRAD 2023-01-31:
+                                    if (verbose.and.t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
+                                        write (*,'(A, I6, A, I3, A, F8.5, A, F5.4)') '-> ts ', count-1,& 
+                                            ' -> f ', V(1,j)-1, 'degrade time set to ', t+rmicro-tstep/2,& 
+                                            '; using r = ', r4
+                                    end if
+                                    
                                     if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
                                         t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
                                                                                  !the cutting time obtained from the lysis time function
@@ -1080,6 +1187,13 @@ neighborc=0
 
                                 end if !end countij>0
                                 
+!! BRAD 2023-01-31:
+                                if (verbose) then
+                                    write (*,'(A, I6, A, I2, A, I3, A, F5.4)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' restriced moving to f ', V(1,j)-1, '; using r = ', r1
+                                end if
+
+
 !! BRAD 2023-01-13:
                                 total_restricted_moves = total_restricted_moves + 1
 
@@ -1130,6 +1244,15 @@ neighborc=0
 !! BRAD 2023-01-22:
 !                                write(m_bind_time_unit)r1, t, bind(j)
 
+!! BRAD 2023-01-31:
+                                if (verbose) then
+                                    write (*,'(A, I6, A, I2, A, I3, A, F5.4)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' moving to f ', V(1,j)-1, '; using r = ', r
+                                    write (*,'(A, I6, A, I2, A, F8.5, A, F5.4)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1, ' binding time set to ', bind(j), '; using r = ', r1
+!                                    write (*,*) 't-dlog(r1)/(kon*bs)-tstep/2 = ',t,'-dlog(',r1,')/(',kon,'*',bs,')-',tstep,'/2'
+                                end if
+
 !! BRAD 2023-01-04:
                                 total_regular_moves = total_regular_moves + 1
                             endif !end t_wait part
@@ -1147,6 +1270,13 @@ neighborc=0
                         
                         mfpt(j)=t
                         yesfpt(j)=1 !set entry to 1 so we don't track this molecule any more
+!! BRAD 2023-01-31:
+                        if (verbose) then
+                            write (*,'(A, I6, A, I2, A)') '-> ts ', count-1,& 
+                                ' -> m ', j-1, ' reached the back row for the first time'
+                        end if
+
+
                     end if !end if(V(1,j)>=backrow....) loop
                 !end if !end if(istat=1) loop
             enddo !for j=1,M loop
@@ -1169,7 +1299,7 @@ neighborc=0
             !!bind1V(istat,Nsave)=sum(bind1)
             !!end if
 
-            if(Ninteger>Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
+            if(Ninteger>=Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
                 write(degunit)    degrade(1:num)
                 write(tunit)  t
                 
@@ -1190,8 +1320,25 @@ neighborc=0
                 !bind1V(istat,cNsave)=sum(bind1)
             end if
 
+!! BRAD 2023-01-31:
+            if (verbose) then
+                do j=1,M
+                    if (V(2,j) == 0) then
+                        write (*,'(A, I6, A, I2, A, I3)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1,  ' located on fiber ', V(1,j)-1
+                    else
+                        write (*,'(A, I6, A, I2, A, I3)') '-> ts ', count-1,& 
+                                        ' -> m ', j-1,  ' bound to fiber ', V(1,j)-1
+                    end if
+                end do
+                read (*,*)
+            end if
+!            if (m_tracker_last.ne.V(1,m_tracker_index)) then
+!                write(m_tracker_unit) count-1, V(1, m_tracker_index)-1
+!                m_tracker_last = V(1, m_tracker_index)
+!            end if
 
-        enddo !for time loop
+        end do !for time loop
 
 !! BRAD 2023-01-08: Once the last fiber has degraded, is there any reason to keep going?
 !! BRITT:           No.
@@ -1205,6 +1352,13 @@ neighborc=0
         write(*,*)'Total Restricted Moves: ',total_restricted_moves
         write(*,*)'Molecules that reached back row: ',reached_back_row
         write(*,*)'Last fiber degraded at: ',last_degrade_time,' sec'
+        
+!! BRAD 2023-01-31:        
+        write(degunit)    degrade(1:num)
+        write(tunit)  t
+        write(t_degrade_unit) t_degrade(:)
+        write(m_location_unit) V(1,:)
+        write(m_bound_unit) V(2,:)
 
         Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
         front=0
@@ -1754,7 +1908,7 @@ write(*,*)'Nsavevect=',Nsavevect(:)
         close(t_degrade_unit)
         close(m_location_unit)
         close(m_bound_unit)
-!        close(m_bind_time_unit)
+!        close(m_tracker_unit)
 
     !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     !close(degnextunit)
