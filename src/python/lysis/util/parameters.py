@@ -516,6 +516,9 @@ class MacroParameters:
             "output_data",
             [
                 "degradation_state",  # Fortran: degnext
+                "molecule_location",
+                "molecule_state",
+                "save_time",  # Fortran: tsave
             ],
         )
         # A full row of the fiber grid contains a 'right', 'up', and 'out' edge

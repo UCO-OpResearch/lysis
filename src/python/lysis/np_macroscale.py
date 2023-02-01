@@ -6,7 +6,7 @@ import numpy as np
 from tqdm.auto import tqdm
 
 from .util import Experiment, KissRandomGenerator, RandomDraw
-from .edge_grid import EdgeGrid, from_fortran_edge_index
+from .edge_grid import EdgeGrid, from_fortran_edge_index, to_fortran_edge_index
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -67,6 +67,32 @@ class MacroscaleRun:
         self.logger.debug(f"Precalculating neighbors.")
         self.neighbors = EdgeGrid.generate_neighborhood_structure(exp)
 
+        if exp.macro_params.duplicate_fortran:
+            perm = np.array(
+                [
+                    from_fortran_edge_index(
+                        k, exp.macro_params.rows, exp.macro_params.cols
+                    )
+                    for k in range(exp.macro_params.total_edges)
+                ]
+            )
+            perm = np.ravel_multi_index(
+                (perm[:, 0], perm[:, 1]),
+                dims=(exp.macro_params.rows, exp.macro_params.full_row),
+            )
+            inv_perm = []
+            for k in range(exp.macro_params.rows * exp.macro_params.full_row):
+                p = np.argwhere(perm == k)
+                if p.size > 0:
+                    inv_perm.append(p[0, 0])
+                else:
+                    inv_perm.append(-1)
+            inv_perm = np.array(inv_perm)
+            sort = np.argsort(inv_perm[self.neighbors[perm]], axis=1)
+            self.neighbors[perm] = np.take_along_axis(
+                self.neighbors[perm], sort, axis=1
+            )
+
         self.logger.info(f"Placing molecules on empty edges.")
         if exp.macro_params.duplicate_fortran:
             location = self.rng.random(exp.macro_params.total_molecules)
@@ -93,6 +119,22 @@ class MacroscaleRun:
             )
 
         self.location = self.edge_lookup((location_i, location_j))
+
+        m_location_ij = np.unravel_index(
+            self.location, (self.exp.macro_params.rows, self.exp.macro_params.full_row)
+        )
+
+        f_location = np.array(
+            [
+                to_fortran_edge_index(
+                    m_location_ij[0][k],
+                    m_location_ij[1][k],
+                    self.exp.macro_params.rows,
+                    self.exp.macro_params.cols,
+                )
+                for k in range(self.exp.macro_params.total_molecules)
+            ]
+        )
 
         self.m_fiber_status = None
 
@@ -128,13 +170,32 @@ class MacroscaleRun:
         self.current_save_interval = 0
 
         self.exp.data.degradation_state = np.empty(
-            (self.exp.macro_params.number_of_saves, self.exp.macro_params.total_fibers),
+            (self.exp.macro_params.number_of_saves,
+             self.exp.macro_params.rows * self.exp.macro_params.full_row),
+            dtype=np.float_,
+        )
+        self.exp.data.molecule_location = np.empty(
+            (
+                self.exp.macro_params.number_of_saves,
+                self.exp.macro_params.total_molecules,
+            ),
+            dtype=np.int_,
+        )
+        self.exp.data.molecule_state = np.empty(
+            (
+                self.exp.macro_params.number_of_saves,
+                self.exp.macro_params.total_molecules,
+            ),
+            dtype=np.bool_,
+        )
+        self.exp.data.save_time = np.empty(
+            (self.exp.macro_params.number_of_saves,),
             dtype=np.float_,
         )
 
-        # self.bind_info_file = open(
-        #     os.path.join(self.exp.os_path, "m_bind_t.p-array.dat"), "w"
-        # )
+        # self.m_tracker_index = 21
+        # self.m_tracker_last = self.location[self.m_tracker_index]
+        # self.m_tracker = [(0, self.location[self.m_tracker_index])]
 
         self.logger.debug(f"Initialization complete.")
 
@@ -306,8 +367,7 @@ class MacroscaleRun:
             )
         return interp + (current_time - self.exp.macro_params.time_step / 2)
 
-    def bind(self, m: np.ndarray, ts: int):
-        current_time = ts * self.exp.macro_params.time_step
+    def bind(self, m: np.ndarray, current_time: float):
         count = np.count_nonzero(m)
         if count == 0:
             return
@@ -361,23 +421,30 @@ class MacroscaleRun:
         return (self.waiting_time > current_time) & self.unbound_by_degradation & m
 
     def unrestricted_move(self, free_to_move: np.ndarray, current_time: float):
-        neighbor = self.rng.integers(8, size=np.count_nonzero(free_to_move))
+        if self.exp.macro_params.duplicate_fortran:
+            neighbor = self.random_numbers[RandomDraw.MOVE][free_to_move]
+            neighbor = neighbor - (1 - self.exp.macro_params.moving_probability)
+            neighbor = neighbor / self.exp.macro_params.moving_probability
+            neighbor = neighbor * 8
+            neighbor = neighbor.astype(int, copy=False)
+        else:
+            neighbor = self.rng.integers(8, size=np.count_nonzero(free_to_move))
 
         self.location[free_to_move] = self.neighbors[
             self.location[free_to_move], neighbor
         ]
         self.total_regular_moves += np.count_nonzero(free_to_move)
 
-        move_to_fiber = free_to_move & (self.m_fiber_status >= current_time)
+        # move_to_fiber = free_to_move & (self.m_fiber_status >= current_time)
 
-        num_move_to_fiber = np.count_nonzero(move_to_fiber)
+        num_move_to_fiber = np.count_nonzero(free_to_move)
         if num_move_to_fiber > 0:
             if self.exp.macro_params.duplicate_fortran:
                 self.binding_time[
-                    move_to_fiber
+                    free_to_move
                 ] = current_time + self.binding_time_factory.fill_list(
                     self.random_numbers[RandomDraw.BINDING_TIME_WHEN_MOVING][
-                        move_to_fiber
+                        free_to_move
                     ]
                 )
                 # c = np.empty((3 * num_move_to_fiber,), dtype=np.float_)
@@ -389,7 +456,7 @@ class MacroscaleRun:
                 # self.bind_info_file.write(np.array2string(c)[1:-1] + os.linesep)
             else:
                 self.binding_time[
-                    move_to_fiber
+                    free_to_move
                 ] = current_time + self.binding_time_factory.next(num_move_to_fiber)
 
     def move(self, m: np.ndarray, current_time: float):
@@ -411,25 +478,27 @@ class MacroscaleRun:
 
     def save_data(self, current_time):
         # self.logger.info(f"Saving data at time {current_time:.2f} sec.")
-        self.exp.data.degradation_state[self.current_save_interval] = self.fiber_status[
-            self.real_fiber
-        ]
+        self.exp.data.degradation_state[self.current_save_interval] = self.fiber_status
+        self.exp.data.molecule_location[self.current_save_interval] = self.location
+        self.exp.data.molecule_state[self.current_save_interval] = self.bound
+        self.exp.data.save_time[self.current_save_interval] = current_time
         self.current_save_interval += 1
 
     def record_data_to_disk(self):
         self.logger.info(f"Saving data to disk.")
         self.exp.data.save_to_disk("degradation_state")
+        self.exp.data.save_to_disk("molecule_location")
+        self.exp.data.save_to_disk("molecule_state")
+        self.exp.data.save_to_disk("save_time")
 
     def run(self):
+        self.save_data(0)
         for ts in tqdm(
             np.arange(self.exp.macro_params.total_time_steps), mininterval=2
         ):
             current_time = ts * self.exp.macro_params.time_step
-            if (
-                current_time
-                >= self.exp.macro_params.save_interval * self.current_save_interval
-            ):
-                self.save_data(current_time)
+            if self.exp.macro_params.duplicate_fortran:
+                current_time += self.exp.macro_params.time_step
 
             if self.exp.macro_params.duplicate_fortran:
                 self.random_numbers = np.empty(
@@ -457,11 +526,14 @@ class MacroscaleRun:
             )
             if self.exp.macro_params.duplicate_fortran:
                 move_chance = self.random_numbers[RandomDraw.MOVE]
+                should_move = (
+                    move_chance > 1 - self.exp.macro_params.moving_probability
+                ) & ~self.bound
             else:
                 move_chance = self.rng.random(self.exp.macro_params.total_molecules)
-            should_move = (
-                move_chance < self.exp.macro_params.moving_probability
-            ) & ~self.bound
+                should_move = (
+                    move_chance < self.exp.macro_params.moving_probability
+                ) & ~self.bound
 
             # TODO(bpaynter): Since these are all boolean vectors, I should be
             #                 able to use & and | instead of the lookup masks
@@ -480,8 +552,14 @@ class MacroscaleRun:
                 )
             should_move[conflict] = ~should_bind[conflict]
 
-            self.bind(should_bind, ts)
+            self.bind(should_bind, current_time)
             self.move(should_move, current_time)
+
+            if (
+                current_time
+                >= self.exp.macro_params.save_interval * self.current_save_interval
+            ):
+                self.save_data(current_time)
 
             if ts % 100000 == 100000 - 1:
                 unlysed_fibers = np.count_nonzero(self.fiber_status > current_time)
@@ -509,6 +587,29 @@ class MacroscaleRun:
                         f"the back row {reached_back_row_percent:.1f}% of total)."
                     )
 
+            # m_location_ij = np.unravel_index(
+            #     self.location,
+            #     (self.exp.macro_params.rows, self.exp.macro_params.full_row),
+            # )
+            # f_location = np.array(
+            #     [
+            #         to_fortran_edge_index(
+            #             m_location_ij[0][k],
+            #             m_location_ij[1][k],
+            #             self.exp.macro_params.rows,
+            #             self.exp.macro_params.cols,
+            #         )
+            #         for k in range(self.exp.macro_params.total_molecules)
+            #     ]
+            # )
+            #
+            # if self.location[self.m_tracker_index] != self.m_tracker_last:
+            #     self.m_tracker.append((ts, self.location[self.m_tracker_index]))
+            #     self.m_tracker_last = self.location[self.m_tracker_index]
+            # pass
+
+        # m_tracker = np.array(self.m_tracker)
+        # np.save(os.path.join(self.exp.os_path, "m_tracker.p.npy"), m_tracker)
         self.save_data(self.exp.macro_params.total_time)
         self.record_data_to_disk()
 

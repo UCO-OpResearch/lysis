@@ -103,8 +103,9 @@ class DataStore:
                 f"{key} already has data in memory. Use .delete(), .overwrite(), "
                 f"or .append() instead."
             )
-        elif key[:3] != "cp_" and cp.get_array_module(value) == "cupy":
-            raise RuntimeError(f"Use the prefix 'cp_' for all CuPy objects.")
+        elif cupy:
+            if key[:3] != "cp_" and cp.get_array_module(value) == "cupy":
+                raise RuntimeError(f"Use the prefix 'cp_' for all CuPy objects.")
         else:
             self._data[key] = value
             self._set_status(key, DataStatus.LOADED)
@@ -210,8 +211,9 @@ class DataStore:
                 f"'{key}' already saved to disk as '{self._filenames[key[3:]]}'. '"
                 f"This module should NOT be used for modifying existing data on disk."
             )
-        elif key[:3] != "cp_" and cp.get_array_module(value) == "cupy":
-            raise RuntimeError(f"Use the prefix 'cp_' for all CuPy objects.")
+        elif cupy:
+            if key[:3] != "cp_" and cp.get_array_module(value) == "cupy":
+                raise RuntimeError(f"Use the prefix 'cp_' for all CuPy objects.")
         elif key in self._data:
             self._data[key] = value
         else:
@@ -239,7 +241,7 @@ class DataStore:
                     f"on disk."
                 )
             elif DataStatus.LOADED in self.status(key):
-                self._data[key] = np.append(self._data[key], cp.asnumpy(value), axis)
+                self._data[key] = np.append(self._data[key], value, axis)
         else:
             self.__setattr__(key, value)
 
