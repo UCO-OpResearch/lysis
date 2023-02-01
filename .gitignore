@@ -5,6 +5,7 @@
 *.conda
 **/.ipynb_checkpoints
 bin
+lib
 octave-workspace
 __pycache__
 fort.*
