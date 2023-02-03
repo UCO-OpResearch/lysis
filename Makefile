@@ -63,7 +63,11 @@ C_SRC_DIR = ./src/c
 CPP_SRC_DIR = ./src/cpp
 FORT_SRC_DIR = ./src/fortran
 FORT_MICRO = micro_rates.f90
-FORT_MACRO = macro_Q2_diffuse_into_and_along macro_Q2_diffuse_into macro_Q2_diffuse_along macro_Q2_always_rebind macro_Q2_diffuse_into_and_along_fixed
+FORT_MACRO = macro_Q2_diffuse_into \
+             macro_Q2_diffuse_along \
+             macro_Q2_always_rebind \
+             macro_Q2_diffuse_into_and_along_fixed
+
 #FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
 C_HEADERS = $(C_SRC_DIR)/all.h \

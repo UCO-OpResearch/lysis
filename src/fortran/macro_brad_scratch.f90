@@ -4,15 +4,19 @@ program macrolysis
 !!                  - Data folder is relative to git repository root
 !!                  - Data is stored in subfolders based on expCode
 !!                  - Data file extensions removed
+!!                  - Data file codes are now set globally from the (in/out)FileCode variables
 !!                  - More console output during runs
+!!                  - Parameters can be set from the command line
+!!                  - Parameters have been moved to the top of the file
 !!                  - "restricted move" is corrected
+!!                  - "passerby molecule" is corrected
 !!                  - Many notes have been added for understanding during Python development
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15)   :: expCode
-character(80)   :: inFileCode
-character(80)   :: outFileCode
+character(15)      :: expCode = '2023-01-31-1300'
+character(60)      :: inFileCode = '.dat'
+character(60)      :: outFileCode = '.f-normal.dat'
 
 integer  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
 integer  :: F=121!121 !71 !81  !# of lattice nodes in one column in the vertical direction
@@ -37,7 +41,7 @@ double precision :: Diff= 5.0d-07 !5*10**(-7)           !diffusion coefficient, 
 integer          :: bs = 427              !concentration of binding sites in micromolar
 double precision :: dist=1.0862d+00 !microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
 
-integer  :: seed=-2137354075
+integer  :: seed=758492894!-2137354075
 
 
 integer  :: num
@@ -206,6 +210,9 @@ character(80) :: m_location_file
 integer :: m_bound_unit = 104
 character(80) :: m_bound_file
 !integer :: m_bind_time_unit = 105
+
+logical :: all_fibers_degraded
+logical :: most_molecules_passed
 
 integer :: cmd_count, param_i, param_len, param_val_len, cmd_status, io_status
 character(80) :: param, param_value
@@ -425,7 +432,7 @@ write(*,*)' M=',M
 write(*,*)' obtained using code macro_brad_scratch.f90 on data ',expCode
 
 
-    write(*,*)'fraction of time tPA is forced to unbind',frac_forced
+!    write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 ! Initialize the Random Number Generator
 
@@ -726,6 +733,8 @@ neighborc=0
         last_degrade_time = 0
         yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
         mfpt=0
+        all_fibers_degraded = .False.
+        most_molecules_passed = .False.
 
         !Initialize vectors to 0
             degrade  =0.0d+00         !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
@@ -845,18 +854,13 @@ neighborc=0
 
             count=count+1
             t = count*tstep
-            if(t>tf) exit  !only do the big "do" loop while t<tf
+        
+!! BRAD 2023-02-02:
+            if(tf>0.and.t>tf) exit  !only do the big "do" loop while t<tf
 
 !! BRAD 2023-01-10:
-            if(mod(count,100000)==0) then
-                rounded_time = real(t)
-                degraded_percent = real(degraded_fibers)/(num-enoFB)*100
-                reached_back_row_percent = real(reached_back_row)/M*100
-                write(*,'(A,F7.2,A,I5,A,F5.1,A,I5,A,F5.1,A)')'After ',rounded_time,' sec, ',&
-                degraded_fibers,' fibers are degraded (',degraded_percent,'% of total) and ',&
-                reached_back_row,' molecules have reached the back row (',&
-                reached_back_row_percent,'% of total).'
-            end if
+!            if(mod(count,100000)==0) then
+!            end if
 
 !! BRAD 2023-01-05: So we only restrict a "forcedunbdbydeg" molecule from moving for this one timestep?
 !!                  It must still wait to bind after that, but it's free to move?
@@ -873,6 +877,7 @@ neighborc=0
 !! BRAD 2023-01-13:
                     degraded_fibers = degraded_fibers + 1
                     last_degrade_time = t
+                    if (degraded_fibers==num-enoFB) all_fibers_degraded = .True.
 
                     !write(*,*)'time=',t
                     !write(*,*)'edge that degraded=',i
@@ -892,7 +897,10 @@ neighborc=0
                     !uncomment below if we DO remove tPA that was on a degraded fiber:
                     !if there were any tPAs bound to this edge, temporarily remove them from the simulation by assigning a waiting time before they can rebind
                     do j=1,M
-                        if(V(1,j)==i) then
+!! BRAD 2023-01-31: There was a small chance that a molecule could arrive at a fiber just as it was degrading
+!!                  Even though it was not bound, it would still be classified for "restricted movement"
+!!                  Fixed 'passerby molecule' bug
+                        if(V(1,j)==i.and.V(2,j)==1) then
                             V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
                             t_leave(j)=0
                             t_wait(j)=t+avgwait-tstep/2 !waiting time is current time plus average wait time minus half a timestep so we round to nearest timestep
@@ -1300,6 +1308,7 @@ neighborc=0
                     if (V(1,j)>=backrow.and.yesfpt(j)==0) then !if the molecule is on the back row and it hasn't made it there before
 !! BRAD 2023-01-13:
                         reached_back_row = reached_back_row + 1
+                        if (reached_back_row >= 0.95*M) most_molecules_passed = .True.
                         
                         mfpt(j)=t
                         yesfpt(j)=1 !set entry to 1 so we don't track this molecule any more
@@ -1344,6 +1353,17 @@ neighborc=0
                 !countbindV(istat,cNsave)=countbind
                 !countindepV(istat,cNsave)=countindep
                 !bind1V(istat,cNsave)=sum(bind1)
+
+!! BRAD 2023-02-02:
+                rounded_time = real(t)
+                degraded_percent = real(degraded_fibers)/(num-enoFB)*100
+                reached_back_row_percent = real(reached_back_row)/M*100
+                write(*,'(A,F7.2,A,I5,A,F5.1,A,I5,A,F5.1,A)')'After ',rounded_time,' sec, ',&
+                degraded_fibers,' fibers are degraded (',degraded_percent,'% of total) and ',&
+                reached_back_row,' molecules have reached the back row (',&
+                reached_back_row_percent,'% of total).'
+               
+                if (all_fibers_degraded.and.most_molecules_passed) exit
             end if
 
 
@@ -1361,6 +1381,10 @@ neighborc=0
         write(*,*)'Total Restricted Moves: ',total_restricted_moves
         write(*,*)'Molecules that reached back row: ',reached_back_row
         write(*,*)'Last fiber degraded at: ',last_degrade_time,' sec'
+
+!! BRAD 2023-02-02:
+        write(mfptunit) mfpt(:)
+
 
         Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
         front=0
@@ -1893,7 +1917,7 @@ write(*,*)'Nsavevect=',Nsavevect(:)
     !write(bind1unit) bind1V
     write(Nunit) Nsavevect(:)
     write(lastmoveunit) lastmove(:,:)
-    write(mfptunit) mfpt(:)
+!    write(mfptunit) mfpt(:)
 
     close(degunit)
     close(Nunit)

@@ -4,9 +4,13 @@ program macrolysis
 !!                  - Data folder is relative to git repository root
 !!                  - Data is stored in subfolders based on expCode
 !!                  - Data file codes are now set globally from the (in/out)FileCode variables
+!!                  - More console output during runs
+!!                  - Parameters can be set from the command line
+!!                  - "restricted move" is corrected
+!!                  - "passerby molecule" is corrected
 !!                  - Parameters have been moved to the top of the file
 !!
-!!                  Note that the "restricted move" bug HAS been fixed in this code!
+!!
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
@@ -206,6 +210,9 @@ character(80) :: m_location_file
 integer :: m_bound_unit = 104
 character(80) :: m_bound_file
 !integer :: m_bind_time_unit = 105
+
+logical :: all_fibers_degraded
+logical :: most_molecules_passed
 
 integer :: cmd_count, param_i, param_len, param_val_len, cmd_status, io_status
 character(80) :: param, param_value
@@ -422,8 +429,8 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_Q2_diffuse_into_and_along_fixed.f90'
-write(*,*)'fraction of time tPA is forced to unbind',frac_forced
+write(*,*)' obtained using code macro_Q2_diffuse_into_and_along_fixed.f90 on data ',expCode
+!write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 ! Initialize the Random Number Generator
 
@@ -687,8 +694,8 @@ neighborc=0
 
 
 !initialize variables for MFPT calculation out here b/c we only do this on the first run
-    yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
-    mfpt=0
+!    yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
+!    mfpt=0
 
 !!!!!! DO "STATS" RUNS OF THE MACRO MODEL
     do istat=1,stats
@@ -708,7 +715,19 @@ neighborc=0
         countmacrounbd=0
         countmicrounbd=0
 
-        !Initialize vectors to 0
+!! BRAD 2023-01-04:
+        total_binds = 0
+        total_regular_moves = 0
+        total_restricted_moves = 0
+        degraded_fibers = 0
+        reached_back_row = 0
+        last_degrade_time = 0
+        yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
+        mfpt=0
+        all_fibers_degraded = .False.
+        most_molecules_passed = .False.
+
+!Initialize vectors to 0
             degrade  =0.0d+00         !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
             t_degrade=0.0d+00         !vector of the degradation times of each edge
             t_leave  =0.0d+00         !vector of the tPA leaving times for each molecule
@@ -782,6 +801,14 @@ neighborc=0
         open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
         open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
         open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
+
+!! BRAD 2023-01-21:
+        open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
+        open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
+        open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
+!        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
+
+
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
         !open(degnextunit,file=degnextfile,form=filetype)
         !open(Venextunit,file=Venextfile,form=filetype)
@@ -792,6 +819,12 @@ neighborc=0
 
         write(degunit) degrade(:)
         write(tunit) t
+
+!! BRAD 2023-01-21:
+        write(t_degrade_unit) t_degrade(:)
+        write(m_location_unit) V(1,:)
+        write(m_bound_unit) V(2,:)
+        Nsave = 10
 
         write(*,*)' save as deg',outFileCode
 
@@ -806,14 +839,18 @@ neighborc=0
         !Now do the main part of the code - looping over time
 
 
+!! BRAD 2023-01-06:
+        CALL CPU_TIME ( time_begin )
         do
 
             count=count+1
             t = count*tstep
-            if(t>tf) exit  !only do the big "do" loop while t<tf
+!! BRAD 2023-02-02:
+            if(tf>0.and.t>tf) exit  !only do the big "do" loop while t<tf
 
-
-            if(mod(count,100000)==0) write(*,*)' t=',t
+!! BRAD 2023-01-10:
+!            if(mod(count,100000)==0) then
+!            end if
 
 !! BRAD 2023-01-05: So we only restrict a "forcedunbdbydeg" molecule from moving for this one timestep?
 !!                  It must still wait to bind after that, but it's free to move?
@@ -827,6 +864,10 @@ neighborc=0
                 if(t_degrade(i).lt.t.and.t_degrade(i).gt.0.and.degrade(i).eq.0) then
                 !i.e. if degradation time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
                     degrade(i)=-t
+!! BRAD 2023-01-13:
+                    degraded_fibers = degraded_fibers + 1
+                    last_degrade_time = t
+                    if (degraded_fibers==num-enoFB) all_fibers_degraded = .True.
                     !write(*,*)'time=',t
                     !write(*,*)'edge that degraded=',i
 
@@ -845,7 +886,10 @@ neighborc=0
                     !uncomment below if we DO remove tPA that was on a degraded fiber:
                     !if there were any tPAs bound to this edge, temporarily remove them from the simulation by assigning a waiting time before they can rebind
                     do j=1,M
-                        if(V(1,j)==i) then
+!! BRAD 2023-01-31: There was a small chance that a molecule could arrive at a fiber just as it was degrading
+!!                  Even though it was not bound, it would still be classified for "restricted movement"
+!!                  Fixed 'passerby molecule' bug
+                        if(V(1,j)==i.and.V(2,j)==1) then
                             V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
                             t_leave(j)=0
                             t_wait(j)=t+avgwait-tstep/2 !waiting time is current time plus average wait time minus half a timestep so we round to nearest timestep
@@ -915,6 +959,9 @@ neighborc=0
                                 t_wait(j)=0 !reset the waiting time to 0
                                 r3=urcw1()
                                 countbind=countbind+1
+
+!! BRAD 2023-01-04:
+                                total_binds = total_binds + 1
 
                                 !put a 1 in entry equal to edge number. each second I'll sum up the number of 1 entries, which
                                 !will tell me the number of independent bindings (not necessarily successful ones) at each second
@@ -1044,11 +1091,17 @@ neighborc=0
                                                                      !which tPA will bind, minus half a time step so we round
                                 end if !(for diffusion part)
 
+!! BRAD 2023-01-13:
+                                total_regular_moves = total_regular_moves + 1
+
                             else     !for if(r2.gt.(t-bind(j)/tstep) statement. i.e. if r2 is less than or equal to (t-bind(j))/tstep, have the molecule bind
                                 V(2,j)=1  !then the molecule binds
                                 bind(j)=0 !reset the binding time to 0
                                 r3=urcw1()
 
+
+!! BRAD 2023-01-04:
+                                total_binds = total_binds + 1
 
                                 !put a 1 in entry equal to edge number. each second I'll sum up the number of 1 entries, which
                                 !will tell me the number of independent bindings (not necessarily successful ones) at each second
@@ -1136,6 +1189,9 @@ neighborc=0
 
                                 end if !end countij.gt.0
 
+!! BRAD 2023-01-13:
+                                total_restricted_moves = total_restricted_moves + 1
+
                             else   ! for t_wait(j)>t... if statement. if there's no waiting time, or the waiting time is less than the current time, or the molecule was forced to unbind on the microscale (so is on a "small" FDP that can diffuse through the clot), the molecule can move as normal
 
                                 if ((1-q).lt.r.and.r.le.((1-q)+q/8)) then
@@ -1186,6 +1242,8 @@ neighborc=0
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
                                 end if !(for diffusion part)
+!! BRAD 2023-01-04:
+                                total_regular_moves = total_regular_moves + 1
                             endif !end t_wait part
 
                         end if !end bind(j) statement
@@ -1196,6 +1254,10 @@ neighborc=0
                 !for the first run only, at the end of each step, check to see if the molecule hit a fiber in the back row
                 if(istat==1) then
                     if (V(1,j)>=backrow.and.yesfpt(j)==0) then !if the molecule is on the back row and it hasn't made it there before
+!! BRAD 2023-01-13:
+                        reached_back_row = reached_back_row + 1
+                        if (reached_back_row >= 0.95*M) most_molecules_passed = .True.
+                        
                         mfpt(j)=t
                         yesfpt(j)=1 !set entry to 1 so we don't track this molecule any more
                     end if !end if(V(1,j)>=backrow....) loop
@@ -1220,9 +1282,14 @@ neighborc=0
             !!bind1V(istat,Nsave)=sum(bind1)
             !!end if
 
-            if(Ninteger>Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
+            if(Ninteger>=Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
                 write(degunit)    degrade(1:num)
                 write(tunit)  t
+!! BRAD 2023-01-21:
+                write(t_degrade_unit) t_degrade(:)
+                write(m_location_unit) V(1,:)
+                write(m_bound_unit) V(2,:)
+
                 Nsave=Nsave+10
                 cNsave=cNsave+1
                 Vedgenext(cNsave+1,:) = V(1,:)
@@ -1233,10 +1300,34 @@ neighborc=0
                 !countbindV(istat,cNsave)=countbind
                 !countindepV(istat,cNsave)=countindep
                 !bind1V(istat,cNsave)=sum(bind1)
+
+!! BRAD 2023-02-02:
+                rounded_time = real(t)
+                degraded_percent = real(degraded_fibers)/(num-enoFB)*100
+                reached_back_row_percent = real(reached_back_row)/M*100
+                write(*,'(A,F7.2,A,I5,A,F5.1,A,I5,A,F5.1,A)')'After ',rounded_time,' sec, ',&
+                degraded_fibers,' fibers are degraded (',degraded_percent,'% of total) and ',&
+                reached_back_row,' molecules have reached the back row (',&
+                reached_back_row_percent,'% of total).'
+               
+                if (all_fibers_degraded.and.most_molecules_passed) exit
             end if
 
 
         enddo !for time loop
+
+!! BRAD 2023-01-06:
+        CALL CPU_TIME ( time_end )
+
+        write(*,*)'Processing time: ', time_end - time_begin, ' sec'
+        write(*,*)'Total Binds: ',total_binds
+        write(*,*)'Total Regular Moves: ',total_regular_moves
+        write(*,*)'Total Restricted Moves: ',total_restricted_moves
+        write(*,*)'Molecules that reached back row: ',reached_back_row
+        write(*,*)'Last fiber degraded at: ',last_degrade_time,' sec'
+
+!! BRAD 2023-02-02:
+        write(mfptunit) mfpt(:)
 
         Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
         front=0
@@ -1769,6 +1860,12 @@ close(moveunit)
 close(lastmoveunit)
 close(plotunit)
 close(mfptunit)
+!! BRAD 2023-01-21:
+        close(t_degrade_unit)
+        close(m_location_unit)
+        close(m_bound_unit)
+!        close(m_bind_time_unit)
+
 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
 !close(degnextunit)
 !close(Venextunit)

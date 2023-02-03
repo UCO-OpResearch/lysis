@@ -46,7 +46,7 @@ class FortranMacro:
         for key in sig.parameters:
             if key in fortran_names and params[key] != sig.parameters[key].default:
                 if fortran_names[key][-2:] == "-1":
-                    arguments += ["--" + fortran_names[key][:-2], str(params[key] - 1)]
+                    arguments += ["--" + fortran_names[key][:-2], str(params[key] + 1)]
                 else:
                     arguments += ["--" + fortran_names[key], str(params[key])]
         return [self.executable] + arguments
