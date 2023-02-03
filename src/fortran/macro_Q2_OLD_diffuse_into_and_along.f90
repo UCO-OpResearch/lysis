@@ -839,7 +839,10 @@ neighborc=0
                     !uncomment below if we DO remove tPA that was on a degraded fiber:
                     !if there were any tPAs bound to this edge, temporarily remove them from the simulation by assigning a waiting time before they can rebind
                     do j=1,M
-                        if(V(1,j)==i) then
+!! BRAD 2023-01-31: There was a small chance that a molecule could arrive at a fiber just as it was degrading
+!!                  Even though it was not bound, it would still be classified for "restricted movement"
+!!                  Fixed 'passerby molecule' bug
+                        if(V(1,j)==i.and.V(2,j)==1) then
                             V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
                             t_leave(j)=0
                             t_wait(j)=t+avgwait-tstep/2 !waiting time is current time plus average wait time minus half a timestep so we round to nearest timestep

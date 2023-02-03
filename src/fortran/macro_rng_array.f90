@@ -760,6 +760,7 @@ neighborc=0
                     do j=1,M
 !! BRAD 2023-01-31: There was a small chance that a molecule could arrive at a fiber just as it was degrading
 !!                  Even though it was not bound, it would still be classified for "restricted movement"
+!!                  Fixed 'passerby molecule' bug
                         if(V(1,j)==i.and.V(2,j)==1) then
                             V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
                             t_leave(j)=0
