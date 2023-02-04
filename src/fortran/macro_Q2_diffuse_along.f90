@@ -681,6 +681,36 @@ enddo
 
 write(*,*)'enoFB=',enoFB
 
+        !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+        !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(Vbdnextfile,'(57a)') 'Vbdnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
+        open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
+        open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
+        open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
+        open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
+        open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
+        open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
+
+!! BRAD 2023-01-21:
+        open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
+        open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
+        open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
+!        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
+
+
+        !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+        !open(degnextunit,file=degnextfile,form=filetype)
+        !open(Venextunit,file=Venextfile,form=filetype)
+        !open(Vbdnextunit,file=Vbdnextfile,form=filetype)
+        !open(cbindunit,file=cbindfile,form=filetype)
+        !open(cindunit,file=cindfile,form=filetype)
+        !open(bind1unit,file=bind1file,form=filetype)
+
 
 !initialize variables for MFPT calculation out here b/c we only do this on the first run
 !yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
@@ -773,35 +803,6 @@ enddo
 !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-        !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-        !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        !write(Vbdnextfile,'(57a)') 'Vbdnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
-        open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
-        open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
-        open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
-        open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
-        open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
-        open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
-
-!! BRAD 2023-01-21:
-        open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
-        open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
-        open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
-!        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
-
-
-        !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-        !open(degnextunit,file=degnextfile,form=filetype)
-        !open(Venextunit,file=Venextfile,form=filetype)
-        !open(Vbdnextunit,file=Vbdnextfile,form=filetype)
-        !open(cbindunit,file=cbindfile,form=filetype)
-        !open(cindunit,file=cindfile,form=filetype)
-        !open(bind1unit,file=bind1file,form=filetype)
 
 write(degunit) degrade(:)
 write(tunit) t
@@ -1218,7 +1219,7 @@ tsave(1) = t
        end if !end V(2,j)=0 statement
 
       !for the first run only, at the end of each step, check to see if the molecule hit a fiber in the back row
-      if(istat==1) then
+!      if(istat==1) then
        if (V(1,j)>=backrow.and.yesfpt(j)==0) then !if the molecule is on the back row and it hasn't made it there before
 !! BRAD 2023-01-13:
                         reached_back_row = reached_back_row + 1
@@ -1227,7 +1228,7 @@ tsave(1) = t
          mfpt(j)=t
          yesfpt(j)=1 !set entry to 1 so we don't track this molecule any more
       end if !end if(V(1,j)>=backrow....) loop
-     end if !end if(istat=1) loop
+!     end if !end if(istat=1) loop
     enddo !for j=1,M loop
 
 
@@ -1304,503 +1305,503 @@ enddo !for time loop
 write(*,*)'nplt=',nplt
 write(*,*)'r4=',r4
 
-  do i=2,nplt
-
-      degold=degnext(i,:)  
-      ind=0
-      place=0
-   do j=1,N
-       do k=1,F-1
-           ind(k) = (3*N-1)*(k-1) + 2*N + j-1 !ind is a vector containing the vertical planar edge numbers above node j
-           place(k) = degold(ind(k))  !place(k) is the degradation state of each edge above node j
-       enddo
-       call findfirstreal(place,F-1,0,zero1)  !find the first undegraded vertical edge above node j 
-       front(i-1,j) = zero1
-   enddo
-  enddo
-
-
-  !the columns of front correspond to the nodes on the x-axis, and the
-  !rows are successive time steps of varying length. The entries are the
-  !y-position of the first undegraded edge at each x location
-
-  !use this information to calculate the front speed. How? First calculate
-  !the speed at each x-location (so I'll have N speeds. Then average them or
-  !something)
-
-  !all x-locations start with y=1, so find the first place they deviate from
-  !there:
-
-  firstdeg=0
-  deglast=0
-
-  do i=1,N
-      call findfirstineq(front(:,i),tf,1,fdeg)
-      if(fdeg==0) then
-          firstdeg(i)=1
-      else
-          firstdeg(i)=fdeg
-      end if
-  enddo
-
-  do i=1,N
-      call findfirst(front(2:tf,i),tf-1,0,first0)
-      deglast(i)=first0
-  enddo
-
-  !so firstdeg saves the row # (i.e. time) at which the front first moves and
-  !deglast is the time at which total degradation in a single row occurred.
-  !if deglast=0, then total degradation did not occur
-
-  move=0
-  move(1,:)=firstdeg
-
-  do j=2,N
-      do i=1,N
-          if(move(j-1,i)==0) then
-              temp=0
-          else
-              call findfirstineq(front(:,i),tf,front(move(j-1,i),i),temp)
-          end if
-          move(j,i)=temp
-      enddo
-  enddo
-
-  !so now "move" saves the saved-time-step at which the front moves for each x location
-
-  do i=1,N
-      call findintineq(move(:,i),N,0,lasti)
-      lastmove(i,istat)=lasti
-  enddo
-
-  plotstuff=0
-  plotstuff2=0
-
-  do j=1,N
-      do i=1,lastmove(j,istat)
-          plotstuff(j,i)=front(move(i,j),j)
-          plotstuff2(j,i)=(plotstuff(j,i)-1)*dist
-      enddo
-  enddo
-    
-  !now plotstuff has in each row the successive y-positions of x-location
-  !corresponding to row number, and plotstuff2 has in each row the successive
-  !y-positions (in microns, instead of node #) of x-location corresponding to
-  !row number
-
-  !In order to plot this and finish the calculations in Matlab, I need to save plotstuff2, lastmove, and move
-
-  write(moveunit) move(:,:)
-  write(plotunit) plotstuff2(:,:)
-
-  if(istat==1)then  !choose how many runs you want to save to make a movie
-     !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-     !write(degnextunit) degnext(:,:)
-     !write(Venextunit) Vedgenext(:,:)
-     !write(Vbdnextunit) Vboundnext(:,:)
-
-     !!!DO MORE MOVIE PROCESSING BEFORE GOING TO MATLAB
-      
-      X1plot=0
-      Y1plot=0
-      X2plot=0
-      Y2plot=0
-      Xvplot=0
-      Yvplot=0
-      freetPA=0
-      bdtPA=0
-
-     countintact2=0
-     counth=0
-     countv=0
-     countpv=0
-     do i=enoFB,num
-        if(degnext(1,i)==0) then
-          countintact2=countintact2+1
-          intact2(countintact2)=i   !finds the undegraded edge numbers
-        end if
-     enddo
-
-     lenintact2=countintact2
-
-     !Assume you have a grid with N nodes in each row of the lattice, and you
-     !assign the nodes a number simply by counting nodes, starting at the bottom
-     !left and moving right, then going to the left of row two and moving right,
-     !etc. in column K, endpts has the node numbers corresponding to the
-     !endpts of fiber (i.e. edge) K. K=1,...,num
-
-     !for vertical edges:
-     do i=1,F
-         do j=1,N
-             endpts(1,(3*N-1)*(i-1)+1+2*(j-1)) = (i-1)*N + j
-             endpts(2,(3*N-1)*(i-1)+1+2*(j-1)) = (i-1)*N + j
-         end do
-     end do
-
-     !for horizontal edges
-     do i=1,F
-         do j=1,N-1
-             endpts(1,(3*N-1)*(i-1)+2+2*(j-1)) = j + N*(i-1)
-             endpts(2,(3*N-1)*(i-1)+2+2*(j-1)) = j + N*(i-1) + 1
-         end do
-     end do
-
-     !for planar veritcal edges
-     do i=1,F-1
-         do j=1,N
-             endpts(1,(3*N-1)*(i-1)+2*N+(j-1)) = j + N*(i-1)
-             endpts(2,(3*N-1)*(i-1)+2*N+(j-1)) = j + N*(i-1) + N
-         end do
-     end do
-
-
-     do jj=1,lenintact2
-         !horizontal edges
-         do iplt=Ffree,F
-           do j=1,N-1
-             if(intact2(jj)==2*(j-1)+2+(3*N-1)*(iplt-1)) then    !if we have a horizontal edge
-                yplace=endpts(1,intact2(jj))/N+1  !find the y value at which the horizontal edge occurs
-                x2=nint((real(endpts(2,intact2(jj)))/real(N)-floor(real(endpts(2,intact2(jj)))/real(N)))*N)
-                if(x2==0) x2=N    !if it says the RHS endpoint is 0, force it to actually be N (because otherwise 
-                                  !is says we should plot from N-1 to 0)
-                counth=counth+1
-                X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N) 
-                X1plot(2,counth)=x2
-                Y1plot(1,counth)=yplace
-                Y1plot(2,counth)=yplace
-             end if
-           enddo
-        enddo
-        !vertical (planar) edges
-        do j=Ffree,F-1
-          do k=1,N
-             if(intact2(jj)==(3*N-1)*(j-1)+2*N+(k-1)) then   !if we have a vertical (planar) edge
-               xplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N) 
-                                                                !find the x value at which the vertical edge occurs
-               y1=endpts(1,intact2(jj))/N+1  !find the bottom endpoint of the vertical edge
-               y2=endpts(2,intact2(jj))/N+1
-               if(xplace==0) then
-                 xplace=N
-                 y1=endpts(1,intact2(jj))/N
-                 y2=endpts(2,intact2(jj))/N
-               end if
-               countpv=countpv+1
-               X2plot(1,countpv)=xplace
-               X2plot(2,countpv)=xplace
-               Y2plot(1,countpv)=y1
-               Y2plot(2,countpv)=y2
-            end if
-         end do
-       end do
-       !vertical edges
-       do i=Ffree,F
-         do j=1,N
-            if(intact2(jj)==(3*N-1)*(i-1)+1+2*(j-1)) then  !if we have a vertical edge
-              yvplace=(endpts(1,intact2(jj))/N)+1  !find the y value at which the vertical edge occurs
-              xvplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)  
-                                                                      !find the x value at which the vertical edge occurs
-              
-              if(xvplace==0) then
-                xvplace=N
-                yvplace=endpts(1,intact2(jj))/N
-              end if
-              countv=countv+1
-              Xvplot(countv)=xvplace
-              Yvplot(countv)=yvplace
-            end if
-         end do
-      end do
-    end do  !for jj loop
-
-            open(x1unit,file=ADJUSTL('data/' // expCode // '/X1plot' // outFileCode),form=filetype)
-            open(x2unit,file=ADJUSTL('data/' // expCode // '/X2plot' // outFileCode),form=filetype)
-            open(y1unit,file=ADJUSTL('data/' // expCode // '/Y1plot' // outFileCode),form=filetype)
-            open(y2unit,file=ADJUSTL('data/' // expCode // '/Y2plot' // outFileCode),form=filetype)
-            open(xvunit,file=ADJUSTL('data/' // expCode // '/Xvplot' // outFileCode),form=filetype)
-            open(yvunit,file=ADJUSTL('data/' // expCode // '/Yvplot' // outFileCode),form=filetype)
-
-write(x1unit) X1plot
-write(x2unit) X2plot
-write(y1unit) Y1plot
-write(y2unit) Y2plot
-write(xvunit) Xvplot
-write(yvunit) Yvplot
-
-!!Now do location and boundedness of tPA
-     do i=1,F
-        do j=1,N-1
-           !horizontal edges
-           do jplt=1,M
-              if(Vedgenext(1,jplt)==2*(j-1)+2+(3*N-1)*(i-1)) then
-                  Vedgeplace=(endpts(1,Vedgenext(1,jplt))/N)+1
-                  Vx=nint((real(endpts(2,Vedgenext(1,jplt)))/real(N)-floor(real(endpts(2,Vedgenext(1,jplt)))/real(N)))*N)
-                  if(Vx==0) then
-                     Vx=N
-                  end if
-                  if(Vboundnext(1,jplt)==0) then   !if unbound, will plot in black
-                     bdtPA(1,jplt)=-1
-                     bdtPA(2,jplt)=-1
-                     freetPA(1,jplt)=Vx-0.5d+00
-                     freetPA(2,jplt)=Vedgeplace
-                  elseif(Vboundnext(1,jplt)==1) then  !if bound, will plot in green
-                     bdtPA(1,jplt)=Vx-0.5d+00
-                     bdtPA(2,jplt)=Vedgeplace
-                     freetPA(1,jplt)=-1
-                     freetPA(2,jplt)=-1
-                  end if
-              end if
-           end do
-       end do
-     end do
-     do j=1,F-1
-        do k=1,N
-          !vertical (planar) edges
-           do kplt=1,M
-              if(Vedgenext(1,kplt)==(3*N-1)*(j-1)+2*N+(k-1)) then
-                 xVedgeplace=nint((real(endpts(1,Vedgenext(1,kplt)))/real(N)-floor(real(endpts(1,Vedgenext(1,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
-                 Vy1=endpts(1,Vedgenext(1,kplt))/N+1  !find the bottom endpoint of the vertical edge
-                 if(xVedgeplace==0) then
-                    xVedgeplace=N
-                    Vy1=endpts(1,Vedgenext(1,kplt))/N
-                 end if
-                 if(Vboundnext(1,kplt)==0) then   !if unbound, plot in black
-                    bdtPA(1,kplt)=-1
-                    bdtPA(2,kplt)=-1
-                    freetPA(1,kplt)=xVedgeplace
-                    freetPA(2,kplt)=Vy1+0.5d+00
-                 elseif(Vboundnext(1,kplt)==1) then  !if bound, plot in green
-                    bdtPA(1,kplt)=xVedgeplace
-                    bdtPA(2,kplt)=Vy1+0.5d+00
-                    freetPA(1,kplt)=-1
-                    freetPA(2,kplt)=-1
-                 end if
-               end if
-            end do
-        end do
-     end do
-     do i=1,F
-        do j=1,N
-         !vertical edges
-          do kjplt=1,M
-             if(Vedgenext(1,kjplt)==(3*N-1)*(i-1)+1+2*(j-1)) then
-                vertplace=1+(j-1)   !find the x value at which the vertical edge occurs
-                Vyvert=endpts(1,Vedgenext(1,kjplt))/N+1  !find the bottom endpoint of the vertical edge
-                if(vertplace==N) then
-                  !vertplace=N;
-                   Vyvert=endpts(1,Vedgenext(1,kjplt))/N
-                end if
-                if(Vboundnext(1,kjplt)==0) then  !if unbound, plot in black
-                   bdtPA(1,kjplt)=-1
-                   bdtPA(2,kjplt)=-1
-                   freetPA(1,kjplt)=vertplace
-                   freetPA(2,kjplt)=Vyvert
-                elseif(Vboundnext(1,kjplt)==1) then   !if bound, plot in green
-                   bdtPA(1,kjplt)=vertplace
-                   bdtPA(2,kjplt)=Vyvert
-                   freetPA(1,kjplt)=-1
-                   freetPA(2,kjplt)=-1
-                end if
-              end if
-           end do
-        end do
-     end do
-
-
-            open(tPAbdunit,file=ADJUSTL('data/' // expCode // '/tPAbd' // outFileCode),form=filetype)
-            open(tPAfreeunit,file=ADJUSTL('data/' // expCode // '/tPAfree' // outFileCode),form=filetype)
-
-write(tPAbdunit) bdtPA
-write(tPAfreeunit) freetPA
-
-
-!now save different timestep so I can make a matlab movie
-   do imod=2,nplt
-      if(mod(imod,6)==0) then  !this means we plot approximately every minute, since we saved data every 10 seconds
-
-         X1plot=0
-         Y1plot=0
-         X2plot=0
-         Y2plot=0
-         Xvplot=0
-         Yvplot=0
-         freetPA=0
-         bdtPA=0         
-
-         intact2=0
-         countintact2=0
-         counth=0
-         countv=0
-         countpv=0
-         do i=enoFB,num  !could do this as"do i=enoFB,num" since we know the first enoFB edges won't equal 0
-           if(degnext(imod,i)==0) then
-             countintact2=countintact2+1
-             intact2(countintact2)=i   !finds the undegraded edge numbers
-           end if
-         enddo
-
-         lenintact2=countintact2 
-         
-      do jj=1,lenintact2
-         !horizontal edges
-         do iplt=Ffree,F
-           do j=1,N-1
-             if(intact2(jj)==2*(j-1)+2+(3*N-1)*(iplt-1)) then    !if we have a horizontal edge
-                yplace=endpts(1,intact2(jj))/N+1  !find the y value at which the horizontal edge occurs
-                x2=nint((real(endpts(2,intact2(jj)))/real(N)-floor(real(endpts(2,intact2(jj)))/real(N)))*N)  
-                         if(x2==0) x2=N    !if it says the RHS endpoint is 0, force it to actually be N (because otherwise 
-                                           !is says we should plot from N-1 to 0)
-                         counth=counth+1
-                         X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
-                         X1plot(2,counth)=x2
-                         Y1plot(1,counth)=yplace
-                         Y1plot(2,counth)=yplace
-             end if
-           enddo
-        enddo
-        !vertical (planar) edges
-        do j=Ffree,F-1
-          do k=1,N
-             if(intact2(jj)==(3*N-1)*(j-1)+2*N+(k-1)) then   !if we have a vertical (planar) edge
-               xplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N) 
-                                                                !find the x value at which the vertical edge occurs
-               y1=endpts(1,intact2(jj))/N+1  !find the bottom endpoint of the vertical edge
-               y2=endpts(2,intact2(jj))/N+1
-               if(xplace==0) then
-                 xplace=N
-                 y1=endpts(1,intact2(jj))/N
-                 y2=endpts(2,intact2(jj))/N
-               end if
-               countpv=countpv+1
-               X2plot(1,countpv)=xplace
-               X2plot(2,countpv)=xplace
-               Y2plot(1,countpv)=y1
-               Y2plot(2,countpv)=y2
-            end if
-         end do
-       end do
-       !vertical edges
-       do i=Ffree,F
-         do j=1,N
-            if(intact2(jj)==(3*N-1)*(i-1)+1+2*(j-1)) then  !if we have a vertical edge
-              yvplace=(endpts(1,intact2(jj))/N)+1  !find the y value at which the vertical edge occurs
-              xvplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)  
-                                                                      !find the x value at which the vertical edge occurs
-              if(xvplace==0) then
-                xvplace=N
-                yvplace=endpts(1,intact2(jj))/N
-              end if
-              countv=countv+1
-              Xvplot(countv)=xvplace
-              Yvplot(countv)=yvplace
-            end if
-         end do
-      end do
-    end do  !for jj loop
-  
-  write(x1unit) X1plot
-  write(x2unit) X2plot
-  write(y1unit) Y1plot
-  write(y2unit) Y2plot
-  write(xvunit) Xvplot
-  write(yvunit) Yvplot
-
-!!Now do location and boundedness of tPA
-     do i=1,F
-        do j=1,N-1
-           !horizontal edges
-           do jplt=1,M
-              if(Vedgenext(imod,jplt)==2*(j-1)+2+(3*N-1)*(i-1)) then
-                  Vedgeplace=(endpts(1,Vedgenext(imod,jplt))/N)+1
-                  Vx=nint((real(endpts(2,Vedgenext(imod,jplt)))/real(N)-floor(real(endpts(2,Vedgenext(imod,jplt)))/real(N)))*N)
-                  if(Vx==0) then
-                     Vx=N
-                  end if
-                  if(Vboundnext(imod,jplt)==0) then   !if unbound, will plot in black
-                     bdtPA(1,jplt)=-1
-                     bdtPA(2,jplt)=-1
-                     freetPA(1,jplt)=Vx-0.5d+00
-                     freetPA(2,jplt)=Vedgeplace
-                  elseif(Vboundnext(imod,jplt)==1) then  !if bound, will plot in green
-                     bdtPA(1,jplt)=Vx-0.5d+00
-                     bdtPA(2,jplt)=Vedgeplace
-                     freetPA(1,jplt)=-1
-                     freetPA(2,jplt)=-1
-                  end if
-              end if
-           end do
-       end do
-     end do
-     do j=1,F-1
-        do k=1,N
-          !vertical (planar) edges
-           do kplt=1,M
-              if(Vedgenext(imod,kplt)==(3*N-1)*(j-1)+2*N+(k-1)) then
-                 xVedgeplace=nint((real(endpts(1,Vedgenext(imod,kplt)))/real(N)-floor(real(endpts(1,Vedgenext(imod,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
-                 Vy1=endpts(1,Vedgenext(imod,kplt))/N+1  !find the bottom endpoint of the vertical edge
-                 if(xVedgeplace==0) then
-                    xVedgeplace=N
-                    Vy1=endpts(1,Vedgenext(imod,kplt))/N
-                 end if
-                 if(Vboundnext(imod,kplt)==0) then   !if unbound, plot in black
-                    bdtPA(1,kplt)=-1
-                    bdtPA(2,kplt)=-1
-                    freetPA(1,kplt)=xVedgeplace
-                    freetPA(2,kplt)=Vy1+0.5d+00
-                 elseif(Vboundnext(imod,kplt)==1) then  !if bound, plot in green
-                    bdtPA(1,kplt)=xVedgeplace
-                    bdtPA(2,kplt)=Vy1+0.5d+00
-                    freetPA(1,kplt)=-1
-                    freetPA(2,kplt)=-1
-                 end if
-               end if
-            end do
-        end do
-     end do
-     do i=1,F
-        do j=1,N
-         !vertical edges
-          do kjplt=1,M
-             if(Vedgenext(imod,kjplt)==(3*N-1)*(i-1)+1+2*(j-1)) then
-                vertplace=1+(j-1)   !find the x value at which the vertical edge occurs
-                Vyvert=endpts(1,Vedgenext(imod,kjplt))/N+1  !find the bottom endpoint of the vertical edge
-                if(vertplace==N) then
-                  !vertplace=N;
-                   Vyvert=endpts(1,Vedgenext(imod,kjplt))/N
-                end if
-                if(Vboundnext(imod,kjplt)==0) then  !if unbound, plot in black
-                   bdtPA(1,kjplt)=-1
-                   bdtPA(2,kjplt)=-1
-                   freetPA(1,kjplt)=vertplace
-                   freetPA(2,kjplt)=Vyvert
-                elseif(Vboundnext(imod,kjplt)==1) then   !if bound, plot in green
-                   bdtPA(1,kjplt)=vertplace
-                   bdtPA(2,kjplt)=Vyvert
-                   freetPA(1,kjplt)=-1
-                   freetPA(2,kjplt)=-1
-                end if
-              end if
-           end do
-        end do
-     end do
-  
-  write(tPAbdunit) bdtPA
-  write(tPAfreeunit) freetPA
-
-   end if !for if mod(imod,60) loop 
-  end do !for imod loop
-
-close(x1unit)
-close(x2unit)
-close(y1unit)
-close(y2unit)
-close(xvunit)
-close(yvunit)
-close(tPAbdunit)
-close(tPAfreeunit)
-
-
-!!!!! END ADDED STUFF FOR MOVIE
-  end if
+!  do i=2,nplt
+!
+!      degold=degnext(i,:)
+!      ind=0
+!      place=0
+!   do j=1,N
+!       do k=1,F-1
+!           ind(k) = (3*N-1)*(k-1) + 2*N + j-1 !ind is a vector containing the vertical planar edge numbers above node j
+!           place(k) = degold(ind(k))  !place(k) is the degradation state of each edge above node j
+!       enddo
+!       call findfirstreal(place,F-1,0,zero1)  !find the first undegraded vertical edge above node j
+!       front(i-1,j) = zero1
+!   enddo
+!  enddo
+!
+!
+!  !the columns of front correspond to the nodes on the x-axis, and the
+!  !rows are successive time steps of varying length. The entries are the
+!  !y-position of the first undegraded edge at each x location
+!
+!  !use this information to calculate the front speed. How? First calculate
+!  !the speed at each x-location (so I'll have N speeds. Then average them or
+!  !something)
+!
+!  !all x-locations start with y=1, so find the first place they deviate from
+!  !there:
+!
+!  firstdeg=0
+!  deglast=0
+!
+!  do i=1,N
+!      call findfirstineq(front(:,i),tf,1,fdeg)
+!      if(fdeg==0) then
+!          firstdeg(i)=1
+!      else
+!          firstdeg(i)=fdeg
+!      end if
+!  enddo
+!
+!  do i=1,N
+!      call findfirst(front(2:tf,i),tf-1,0,first0)
+!      deglast(i)=first0
+!  enddo
+!
+!  !so firstdeg saves the row # (i.e. time) at which the front first moves and
+!  !deglast is the time at which total degradation in a single row occurred.
+!  !if deglast=0, then total degradation did not occur
+!
+!  move=0
+!  move(1,:)=firstdeg
+!
+!  do j=2,N
+!      do i=1,N
+!          if(move(j-1,i)==0) then
+!              temp=0
+!          else
+!              call findfirstineq(front(:,i),tf,front(move(j-1,i),i),temp)
+!          end if
+!          move(j,i)=temp
+!      enddo
+!  enddo
+!
+!  !so now "move" saves the saved-time-step at which the front moves for each x location
+!
+!  do i=1,N
+!      call findintineq(move(:,i),N,0,lasti)
+!      lastmove(i,istat)=lasti
+!  enddo
+!
+!  plotstuff=0
+!  plotstuff2=0
+!
+!  do j=1,N
+!      do i=1,lastmove(j,istat)
+!          plotstuff(j,i)=front(move(i,j),j)
+!          plotstuff2(j,i)=(plotstuff(j,i)-1)*dist
+!      enddo
+!  enddo
+!
+!  !now plotstuff has in each row the successive y-positions of x-location
+!  !corresponding to row number, and plotstuff2 has in each row the successive
+!  !y-positions (in microns, instead of node #) of x-location corresponding to
+!  !row number
+!
+!  !In order to plot this and finish the calculations in Matlab, I need to save plotstuff2, lastmove, and move
+!
+!  write(moveunit) move(:,:)
+!  write(plotunit) plotstuff2(:,:)
+!
+!  if(istat==1)then  !choose how many runs you want to save to make a movie
+!     !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+!     !write(degnextunit) degnext(:,:)
+!     !write(Venextunit) Vedgenext(:,:)
+!     !write(Vbdnextunit) Vboundnext(:,:)
+!
+!     !!!DO MORE MOVIE PROCESSING BEFORE GOING TO MATLAB
+!
+!      X1plot=0
+!      Y1plot=0
+!      X2plot=0
+!      Y2plot=0
+!      Xvplot=0
+!      Yvplot=0
+!      freetPA=0
+!      bdtPA=0
+!
+!     countintact2=0
+!     counth=0
+!     countv=0
+!     countpv=0
+!     do i=enoFB,num
+!        if(degnext(1,i)==0) then
+!          countintact2=countintact2+1
+!          intact2(countintact2)=i   !finds the undegraded edge numbers
+!        end if
+!     enddo
+!
+!     lenintact2=countintact2
+!
+!     !Assume you have a grid with N nodes in each row of the lattice, and you
+!     !assign the nodes a number simply by counting nodes, starting at the bottom
+!     !left and moving right, then going to the left of row two and moving right,
+!     !etc. in column K, endpts has the node numbers corresponding to the
+!     !endpts of fiber (i.e. edge) K. K=1,...,num
+!
+!     !for vertical edges:
+!     do i=1,F
+!         do j=1,N
+!             endpts(1,(3*N-1)*(i-1)+1+2*(j-1)) = (i-1)*N + j
+!             endpts(2,(3*N-1)*(i-1)+1+2*(j-1)) = (i-1)*N + j
+!         end do
+!     end do
+!
+!     !for horizontal edges
+!     do i=1,F
+!         do j=1,N-1
+!             endpts(1,(3*N-1)*(i-1)+2+2*(j-1)) = j + N*(i-1)
+!             endpts(2,(3*N-1)*(i-1)+2+2*(j-1)) = j + N*(i-1) + 1
+!         end do
+!     end do
+!
+!     !for planar veritcal edges
+!     do i=1,F-1
+!         do j=1,N
+!             endpts(1,(3*N-1)*(i-1)+2*N+(j-1)) = j + N*(i-1)
+!             endpts(2,(3*N-1)*(i-1)+2*N+(j-1)) = j + N*(i-1) + N
+!         end do
+!     end do
+!
+!
+!     do jj=1,lenintact2
+!         !horizontal edges
+!         do iplt=Ffree,F
+!           do j=1,N-1
+!             if(intact2(jj)==2*(j-1)+2+(3*N-1)*(iplt-1)) then    !if we have a horizontal edge
+!                yplace=endpts(1,intact2(jj))/N+1  !find the y value at which the horizontal edge occurs
+!                x2=nint((real(endpts(2,intact2(jj)))/real(N)-floor(real(endpts(2,intact2(jj)))/real(N)))*N)
+!                if(x2==0) x2=N    !if it says the RHS endpoint is 0, force it to actually be N (because otherwise
+!                                  !is says we should plot from N-1 to 0)
+!                counth=counth+1
+!                X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+!                X1plot(2,counth)=x2
+!                Y1plot(1,counth)=yplace
+!                Y1plot(2,counth)=yplace
+!             end if
+!           enddo
+!        enddo
+!        !vertical (planar) edges
+!        do j=Ffree,F-1
+!          do k=1,N
+!             if(intact2(jj)==(3*N-1)*(j-1)+2*N+(k-1)) then   !if we have a vertical (planar) edge
+!               xplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+!                                                                !find the x value at which the vertical edge occurs
+!               y1=endpts(1,intact2(jj))/N+1  !find the bottom endpoint of the vertical edge
+!               y2=endpts(2,intact2(jj))/N+1
+!               if(xplace==0) then
+!                 xplace=N
+!                 y1=endpts(1,intact2(jj))/N
+!                 y2=endpts(2,intact2(jj))/N
+!               end if
+!               countpv=countpv+1
+!               X2plot(1,countpv)=xplace
+!               X2plot(2,countpv)=xplace
+!               Y2plot(1,countpv)=y1
+!               Y2plot(2,countpv)=y2
+!            end if
+!         end do
+!       end do
+!       !vertical edges
+!       do i=Ffree,F
+!         do j=1,N
+!            if(intact2(jj)==(3*N-1)*(i-1)+1+2*(j-1)) then  !if we have a vertical edge
+!              yvplace=(endpts(1,intact2(jj))/N)+1  !find the y value at which the vertical edge occurs
+!              xvplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+!                                                                      !find the x value at which the vertical edge occurs
+!
+!              if(xvplace==0) then
+!                xvplace=N
+!                yvplace=endpts(1,intact2(jj))/N
+!              end if
+!              countv=countv+1
+!              Xvplot(countv)=xvplace
+!              Yvplot(countv)=yvplace
+!            end if
+!         end do
+!      end do
+!    end do  !for jj loop
+!
+!            open(x1unit,file=ADJUSTL('data/' // expCode // '/X1plot' // outFileCode),form=filetype)
+!            open(x2unit,file=ADJUSTL('data/' // expCode // '/X2plot' // outFileCode),form=filetype)
+!            open(y1unit,file=ADJUSTL('data/' // expCode // '/Y1plot' // outFileCode),form=filetype)
+!            open(y2unit,file=ADJUSTL('data/' // expCode // '/Y2plot' // outFileCode),form=filetype)
+!            open(xvunit,file=ADJUSTL('data/' // expCode // '/Xvplot' // outFileCode),form=filetype)
+!            open(yvunit,file=ADJUSTL('data/' // expCode // '/Yvplot' // outFileCode),form=filetype)
+!
+!write(x1unit) X1plot
+!write(x2unit) X2plot
+!write(y1unit) Y1plot
+!write(y2unit) Y2plot
+!write(xvunit) Xvplot
+!write(yvunit) Yvplot
+!
+!!!Now do location and boundedness of tPA
+!     do i=1,F
+!        do j=1,N-1
+!           !horizontal edges
+!           do jplt=1,M
+!              if(Vedgenext(1,jplt)==2*(j-1)+2+(3*N-1)*(i-1)) then
+!                  Vedgeplace=(endpts(1,Vedgenext(1,jplt))/N)+1
+!                  Vx=nint((real(endpts(2,Vedgenext(1,jplt)))/real(N)-floor(real(endpts(2,Vedgenext(1,jplt)))/real(N)))*N)
+!                  if(Vx==0) then
+!                     Vx=N
+!                  end if
+!                  if(Vboundnext(1,jplt)==0) then   !if unbound, will plot in black
+!                     bdtPA(1,jplt)=-1
+!                     bdtPA(2,jplt)=-1
+!                     freetPA(1,jplt)=Vx-0.5d+00
+!                     freetPA(2,jplt)=Vedgeplace
+!                  elseif(Vboundnext(1,jplt)==1) then  !if bound, will plot in green
+!                     bdtPA(1,jplt)=Vx-0.5d+00
+!                     bdtPA(2,jplt)=Vedgeplace
+!                     freetPA(1,jplt)=-1
+!                     freetPA(2,jplt)=-1
+!                  end if
+!              end if
+!           end do
+!       end do
+!     end do
+!     do j=1,F-1
+!        do k=1,N
+!          !vertical (planar) edges
+!           do kplt=1,M
+!              if(Vedgenext(1,kplt)==(3*N-1)*(j-1)+2*N+(k-1)) then
+!                 xVedgeplace=nint((real(endpts(1,Vedgenext(1,kplt)))/real(N)-floor(real(endpts(1,Vedgenext(1,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
+!                 Vy1=endpts(1,Vedgenext(1,kplt))/N+1  !find the bottom endpoint of the vertical edge
+!                 if(xVedgeplace==0) then
+!                    xVedgeplace=N
+!                    Vy1=endpts(1,Vedgenext(1,kplt))/N
+!                 end if
+!                 if(Vboundnext(1,kplt)==0) then   !if unbound, plot in black
+!                    bdtPA(1,kplt)=-1
+!                    bdtPA(2,kplt)=-1
+!                    freetPA(1,kplt)=xVedgeplace
+!                    freetPA(2,kplt)=Vy1+0.5d+00
+!                 elseif(Vboundnext(1,kplt)==1) then  !if bound, plot in green
+!                    bdtPA(1,kplt)=xVedgeplace
+!                    bdtPA(2,kplt)=Vy1+0.5d+00
+!                    freetPA(1,kplt)=-1
+!                    freetPA(2,kplt)=-1
+!                 end if
+!               end if
+!            end do
+!        end do
+!     end do
+!     do i=1,F
+!        do j=1,N
+!         !vertical edges
+!          do kjplt=1,M
+!             if(Vedgenext(1,kjplt)==(3*N-1)*(i-1)+1+2*(j-1)) then
+!                vertplace=1+(j-1)   !find the x value at which the vertical edge occurs
+!                Vyvert=endpts(1,Vedgenext(1,kjplt))/N+1  !find the bottom endpoint of the vertical edge
+!                if(vertplace==N) then
+!                  !vertplace=N;
+!                   Vyvert=endpts(1,Vedgenext(1,kjplt))/N
+!                end if
+!                if(Vboundnext(1,kjplt)==0) then  !if unbound, plot in black
+!                   bdtPA(1,kjplt)=-1
+!                   bdtPA(2,kjplt)=-1
+!                   freetPA(1,kjplt)=vertplace
+!                   freetPA(2,kjplt)=Vyvert
+!                elseif(Vboundnext(1,kjplt)==1) then   !if bound, plot in green
+!                   bdtPA(1,kjplt)=vertplace
+!                   bdtPA(2,kjplt)=Vyvert
+!                   freetPA(1,kjplt)=-1
+!                   freetPA(2,kjplt)=-1
+!                end if
+!              end if
+!           end do
+!        end do
+!     end do
+!
+!
+!            open(tPAbdunit,file=ADJUSTL('data/' // expCode // '/tPAbd' // outFileCode),form=filetype)
+!            open(tPAfreeunit,file=ADJUSTL('data/' // expCode // '/tPAfree' // outFileCode),form=filetype)
+!
+!write(tPAbdunit) bdtPA
+!write(tPAfreeunit) freetPA
+!
+!
+!!now save different timestep so I can make a matlab movie
+!   do imod=2,nplt
+!      if(mod(imod,6)==0) then  !this means we plot approximately every minute, since we saved data every 10 seconds
+!
+!         X1plot=0
+!         Y1plot=0
+!         X2plot=0
+!         Y2plot=0
+!         Xvplot=0
+!         Yvplot=0
+!         freetPA=0
+!         bdtPA=0
+!
+!         intact2=0
+!         countintact2=0
+!         counth=0
+!         countv=0
+!         countpv=0
+!         do i=enoFB,num  !could do this as"do i=enoFB,num" since we know the first enoFB edges won't equal 0
+!           if(degnext(imod,i)==0) then
+!             countintact2=countintact2+1
+!             intact2(countintact2)=i   !finds the undegraded edge numbers
+!           end if
+!         enddo
+!
+!         lenintact2=countintact2
+!
+!      do jj=1,lenintact2
+!         !horizontal edges
+!         do iplt=Ffree,F
+!           do j=1,N-1
+!             if(intact2(jj)==2*(j-1)+2+(3*N-1)*(iplt-1)) then    !if we have a horizontal edge
+!                yplace=endpts(1,intact2(jj))/N+1  !find the y value at which the horizontal edge occurs
+!                x2=nint((real(endpts(2,intact2(jj)))/real(N)-floor(real(endpts(2,intact2(jj)))/real(N)))*N)
+!                         if(x2==0) x2=N    !if it says the RHS endpoint is 0, force it to actually be N (because otherwise
+!                                           !is says we should plot from N-1 to 0)
+!                         counth=counth+1
+!                         X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+!                         X1plot(2,counth)=x2
+!                         Y1plot(1,counth)=yplace
+!                         Y1plot(2,counth)=yplace
+!             end if
+!           enddo
+!        enddo
+!        !vertical (planar) edges
+!        do j=Ffree,F-1
+!          do k=1,N
+!             if(intact2(jj)==(3*N-1)*(j-1)+2*N+(k-1)) then   !if we have a vertical (planar) edge
+!               xplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+!                                                                !find the x value at which the vertical edge occurs
+!               y1=endpts(1,intact2(jj))/N+1  !find the bottom endpoint of the vertical edge
+!               y2=endpts(2,intact2(jj))/N+1
+!               if(xplace==0) then
+!                 xplace=N
+!                 y1=endpts(1,intact2(jj))/N
+!                 y2=endpts(2,intact2(jj))/N
+!               end if
+!               countpv=countpv+1
+!               X2plot(1,countpv)=xplace
+!               X2plot(2,countpv)=xplace
+!               Y2plot(1,countpv)=y1
+!               Y2plot(2,countpv)=y2
+!            end if
+!         end do
+!       end do
+!       !vertical edges
+!       do i=Ffree,F
+!         do j=1,N
+!            if(intact2(jj)==(3*N-1)*(i-1)+1+2*(j-1)) then  !if we have a vertical edge
+!              yvplace=(endpts(1,intact2(jj))/N)+1  !find the y value at which the vertical edge occurs
+!              xvplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+!                                                                      !find the x value at which the vertical edge occurs
+!              if(xvplace==0) then
+!                xvplace=N
+!                yvplace=endpts(1,intact2(jj))/N
+!              end if
+!              countv=countv+1
+!              Xvplot(countv)=xvplace
+!              Yvplot(countv)=yvplace
+!            end if
+!         end do
+!      end do
+!    end do  !for jj loop
+!
+!  write(x1unit) X1plot
+!  write(x2unit) X2plot
+!  write(y1unit) Y1plot
+!  write(y2unit) Y2plot
+!  write(xvunit) Xvplot
+!  write(yvunit) Yvplot
+!
+!!!Now do location and boundedness of tPA
+!     do i=1,F
+!        do j=1,N-1
+!           !horizontal edges
+!           do jplt=1,M
+!              if(Vedgenext(imod,jplt)==2*(j-1)+2+(3*N-1)*(i-1)) then
+!                  Vedgeplace=(endpts(1,Vedgenext(imod,jplt))/N)+1
+!                  Vx=nint((real(endpts(2,Vedgenext(imod,jplt)))/real(N)-floor(real(endpts(2,Vedgenext(imod,jplt)))/real(N)))*N)
+!                  if(Vx==0) then
+!                     Vx=N
+!                  end if
+!                  if(Vboundnext(imod,jplt)==0) then   !if unbound, will plot in black
+!                     bdtPA(1,jplt)=-1
+!                     bdtPA(2,jplt)=-1
+!                     freetPA(1,jplt)=Vx-0.5d+00
+!                     freetPA(2,jplt)=Vedgeplace
+!                  elseif(Vboundnext(imod,jplt)==1) then  !if bound, will plot in green
+!                     bdtPA(1,jplt)=Vx-0.5d+00
+!                     bdtPA(2,jplt)=Vedgeplace
+!                     freetPA(1,jplt)=-1
+!                     freetPA(2,jplt)=-1
+!                  end if
+!              end if
+!           end do
+!       end do
+!     end do
+!     do j=1,F-1
+!        do k=1,N
+!          !vertical (planar) edges
+!           do kplt=1,M
+!              if(Vedgenext(imod,kplt)==(3*N-1)*(j-1)+2*N+(k-1)) then
+!                 xVedgeplace=nint((real(endpts(1,Vedgenext(imod,kplt)))/real(N)-floor(real(endpts(1,Vedgenext(imod,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
+!                 Vy1=endpts(1,Vedgenext(imod,kplt))/N+1  !find the bottom endpoint of the vertical edge
+!                 if(xVedgeplace==0) then
+!                    xVedgeplace=N
+!                    Vy1=endpts(1,Vedgenext(imod,kplt))/N
+!                 end if
+!                 if(Vboundnext(imod,kplt)==0) then   !if unbound, plot in black
+!                    bdtPA(1,kplt)=-1
+!                    bdtPA(2,kplt)=-1
+!                    freetPA(1,kplt)=xVedgeplace
+!                    freetPA(2,kplt)=Vy1+0.5d+00
+!                 elseif(Vboundnext(imod,kplt)==1) then  !if bound, plot in green
+!                    bdtPA(1,kplt)=xVedgeplace
+!                    bdtPA(2,kplt)=Vy1+0.5d+00
+!                    freetPA(1,kplt)=-1
+!                    freetPA(2,kplt)=-1
+!                 end if
+!               end if
+!            end do
+!        end do
+!     end do
+!     do i=1,F
+!        do j=1,N
+!         !vertical edges
+!          do kjplt=1,M
+!             if(Vedgenext(imod,kjplt)==(3*N-1)*(i-1)+1+2*(j-1)) then
+!                vertplace=1+(j-1)   !find the x value at which the vertical edge occurs
+!                Vyvert=endpts(1,Vedgenext(imod,kjplt))/N+1  !find the bottom endpoint of the vertical edge
+!                if(vertplace==N) then
+!                  !vertplace=N;
+!                   Vyvert=endpts(1,Vedgenext(imod,kjplt))/N
+!                end if
+!                if(Vboundnext(imod,kjplt)==0) then  !if unbound, plot in black
+!                   bdtPA(1,kjplt)=-1
+!                   bdtPA(2,kjplt)=-1
+!                   freetPA(1,kjplt)=vertplace
+!                   freetPA(2,kjplt)=Vyvert
+!                elseif(Vboundnext(imod,kjplt)==1) then   !if bound, plot in green
+!                   bdtPA(1,kjplt)=vertplace
+!                   bdtPA(2,kjplt)=Vyvert
+!                   freetPA(1,kjplt)=-1
+!                   freetPA(2,kjplt)=-1
+!                end if
+!              end if
+!           end do
+!        end do
+!     end do
+!
+!  write(tPAbdunit) bdtPA
+!  write(tPAfreeunit) freetPA
+!
+!   end if !for if mod(imod,60) loop
+!  end do !for imod loop
+!
+!close(x1unit)
+!close(x2unit)
+!close(y1unit)
+!close(y2unit)
+!close(xvunit)
+!close(yvunit)
+!close(tPAbdunit)
+!close(tPAfreeunit)
+!
+!
+!!!!!! END ADDED STUFF FOR MOVIE
+!  end if
 
 
  
@@ -1817,7 +1818,7 @@ write(*,*)'Nsavevect=',Nsavevect(:)
 !write(bind1unit) bind1V
 write(Nunit) Nsavevect(:)
 write(lastmoveunit) lastmove(:,:)
-write(mfptunit) mfpt(:)
+!write(mfptunit) mfpt(:)
 
 close(degunit)
 close(Nunit)
