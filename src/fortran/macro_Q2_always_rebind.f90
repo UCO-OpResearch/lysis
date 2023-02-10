@@ -683,6 +683,36 @@ lastmove=0
 
 write(*,*)'enoFB=',enoFB
 
+    !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+    !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+    !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+    !write(Vbdnextfile,'(57a)') 'Vbdnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+    !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+    !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+    !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+    open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
+    open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
+    open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
+    open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
+    open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
+    open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
+    open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
+
+!! BRAD 2023-01-21:
+    open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
+    open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
+    open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
+!   open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
+
+
+    !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+    !open(degnextunit,file=degnextfile,form=filetype)
+    !open(Venextunit,file=Venextfile,form=filetype)
+    !open(Vbdnextunit,file=Vbdnextfile,form=filetype)
+    !open(cbindunit,file=cbindfile,form=filetype)
+    !open(cindunit,file=cindfile,form=filetype)
+    !open(bind1unit,file=bind1file,form=filetype)
+
 
 !initialize variables for MFPT calculation out here b/c we only do this on the first run
 !yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
@@ -771,35 +801,6 @@ stats_loop: do istat=1,stats
     !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-    !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-    !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    !write(Vbdnextfile,'(57a)') 'Vbdnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
-    open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
-    open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
-    open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
-    open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
-    open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
-    open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
-
-!! BRAD 2023-01-21:
-    open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
-    open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
-    open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
-!   open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
-
-
-    !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-    !open(degnextunit,file=degnextfile,form=filetype)
-    !open(Venextunit,file=Venextfile,form=filetype)
-    !open(Vbdnextunit,file=Vbdnextfile,form=filetype)
-    !open(cbindunit,file=cbindfile,form=filetype)
-    !open(cindunit,file=cindfile,form=filetype)
-    !open(bind1unit,file=bind1file,form=filetype)
 
     write(degunit) degrade(:)
     write(tunit) t
