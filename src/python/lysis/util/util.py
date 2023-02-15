@@ -1,4 +1,5 @@
 import os
+
 from typing import Any, AnyStr, Mapping
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -27,7 +28,7 @@ def dict_to_formatted_str(d: Mapping[AnyStr, Any]) -> str:
         d (dict): A dictionary with string-like keys.
     """
     # Initialize the output string
-    output = ''
+    output = ""
     # Get the system line separator
     nl = os.linesep
     # Determine the longest key
@@ -37,18 +38,19 @@ def dict_to_formatted_str(d: Mapping[AnyStr, Any]) -> str:
     # Add a space to the key length for clearance
     key_len += 1
     # Determine the tab space for sub-dictionaries
-    tab = ' ' * (key_len + 2)
+    tab = " " * (key_len + 2)
     # Iterate over the dictionary
     for k, v in d.items():
         # If the value is a dictionary itself...
         if isinstance(v, dict):
             # Then we write the key
-            output += f'{k:<{key_len}}: '
-            # Then call this function recursively on the value, and indent it appropriately.
+            output += f"{k:<{key_len}}: "
+            # Then call this function recursively on the value, and indent it
+            # appropriately.
             output += tab.join(dict_to_formatted_str(v).splitlines(True))
         # Otherwise we just print the key and its value.
         elif isinstance(v, (int, float, complex)):
-            output += f'{k:<{key_len}}: {v:,}' + nl
+            output += f"{k:<{key_len}}: {v:,}" + nl
         else:
-            output += f'{k:<{key_len}}: {v}' + nl
+            output += f"{k:<{key_len}}: {v}" + nl
     return output

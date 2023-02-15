@@ -91,4 +91,7 @@ static UINT_LEAST32_T
 double
 urcw1_(void);
 
+void
+c_vurcw1_double rvect[], int n);
+
 #endif

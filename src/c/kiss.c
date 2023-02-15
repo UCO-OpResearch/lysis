@@ -195,3 +195,21 @@ urcw1_(void)
     return (result);
 }
 
+void
+c_vurcw1_(double rvect[], int *n)
+{
+    for (int i = 0; i < *n; i++)
+    {
+        rvect[i] = urcw1_();
+    }
+}
+
+void
+c_vurcw2_(double rvect[], int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        rvect[i] = urcw1_();
+    }
+}
+

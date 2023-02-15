@@ -10,11 +10,15 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 default_filenames = {
-                        'unbinding_time': "tsectPA.dat",        # Fortran: tsec1
-                        # 'leaving_time': "tPAleave.dat",       # Fortran: CDFtPA
-                        'lysis_time':     "lysismat.dat",       # Fortran: lysismat
-                        'total_lyses':    "lenlysisvect.dat",   # Fortran: lenlysismat
-                     }
+    "unbinding_time": "tsectPA.dat",  # Fortran: tsec1
+    # 'leaving_time': "tPAleave.dat",  # Fortran: CDFtPA
+    "lysis_time": "lysismat.dat",  # Fortran: lysismat
+    "total_lyses": "lenlysisvect.dat",  # Fortran: lenlysismat
+    "degradation_state": "deg.p.npy",  # Fortran: degnext
+    "molecule_location": "m_loc.p.npy",
+    "molecule_state": "m_bound.p.npy",
+    "save_time": "tsave.p.npy",  # Fortran: tsave
+}
 
 
 class Const:
@@ -27,16 +31,25 @@ class Const:
 
 class Neighbors:
     def __init__(self):
-        self.X = ((-1, -1, 0, 0, 0, 0, 0, 0),
-                  (-2, 1, -2, 1, -1, -1, 2, 2))
-        self.Y = ((0, 0, 1, 1, 0, 1, 0, 1),
-                  (1, 1, 1, 1, -1, -1, 2, 2))
-        self.Z = ((-1, -1, 0, 0, 0, 0, 0, 0),
-                  (-1, -1, -1, -1, -2, -2, 1, 1))
+        self.X = ((-1, -1, 0, 0, 0, 0, 0, 0), (-2, 1, -2, 1, -1, -1, 2, 2))
+        self.Y = ((0, 0, 1, 1, 0, 1, 0, 1), (1, 1, 1, 1, -1, -1, 2, 2))
+        self.Z = ((-1, -1, 0, 0, 0, 0, 0, 0), (-1, -1, -1, -1, -2, -2, 1, 1))
         self.TOP_REFL = (0, 0, -1, -1, 0, 0, 0, 0)
         self.BOTTOM_REFL = (1, 1, 0, 0, 0, 0, 0, 0)
         self.LEFT_REFL = (0, 0, 0, 0, 3, 3, 0, 0)
         self.RIGHT_REFL = (0, 0, 0, 0, 0, 0, -3, -3)
+
+
+@unique
+class RandomDraw(IntEnum):
+    BINDING_TIME_WHEN_UNBINDING = 0
+    BINDING_TIME_WHEN_MOVING = 1
+    MICRO_UNBIND = 2
+    MOVE = 3
+    UNBINDING_TIME = 4
+    LYSIS_TIME = 5
+    CONFLICT_RESOLUTION = 6
+    RESTRICTED_MOVE = 7
 
 
 @unique
