@@ -1,3 +1,28 @@
+# *_* coding: utf-8 *_*
+#
+# Clot Lysis Simulation
+# Copyright (C) 2023  Bradley Paynter & Brittany Bannish
+#
+# datastore.py
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+"""Allows on-disk data to be used as class properties with lazy loading.
+
+
+"""
+
 import os
 from enum import Flag, auto, unique
 from typing import Any, AnyStr, List, Mapping, Union
@@ -14,15 +39,6 @@ except ImportError:
     cupy = False
     cp = None
 
-
-__author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish"
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
-__version__ = "0.1"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
 
 # The following are hacks to deal with loading data from Fortran into Python.
 # These must be manually coded for each file

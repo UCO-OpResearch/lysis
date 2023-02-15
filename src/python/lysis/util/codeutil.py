@@ -1,20 +1,10 @@
-import argparse
 import inspect
 import os
 import subprocess
 
 from dataclasses import asdict, dataclass
 from typing import AnyStr
-from .parameters import Experiment, MacroParameters
-
-__author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish"
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
-__version__ = "0.1"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
+from ..experiment import Experiment, Parameters
 
 
 compiler = "ifort"
@@ -40,9 +30,9 @@ class FortranMacro:
             "--outFileCode",
             self.out_file_code,
         ]
-        params = asdict(self.exp.macro_params)
-        sig = inspect.signature(MacroParameters)
-        fortran_names = MacroParameters.fortran_names()
+        params = asdict(self.exp.params)
+        sig = inspect.signature(Parameters)
+        fortran_names = Parameters.fortran_names()
         for key in sig.parameters:
             if key in fortran_names and params[key] != sig.parameters[key].default:
                 if fortran_names[key][-2:] == "-1":

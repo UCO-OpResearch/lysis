@@ -1,13 +1,33 @@
-from enum import Enum, IntEnum, unique
+# *_* coding: utf-8 *_*
+#
+# Clot Lysis Simulation
+# Copyright (C) 2023  Bradley Paynter & Brittany Bannish
+#
+# constants.py
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
 
-__author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish"
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
-__version__ = "0.1"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
+"""Constants used throughout the package
+
+"""
+
+import secrets
+import time
+
+from enum import Enum, IntEnum, unique
+from math import log, floor
 
 default_filenames = {
     "unbinding_time": "tsectPA.dat",  # Fortran: tsec1
@@ -20,6 +40,48 @@ default_filenames = {
     "save_time": "tsave.p.npy",  # Fortran: tsave
 }
 
+tokens = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+_last_v8_timestamp = None
+
+
+def uuid8code():
+    num = uuid8()
+    length = floor(128 * log(2) / log(len(tokens))) + 1
+    result = ""
+    while num > 0:
+        num, remainder = divmod(num, len(tokens))
+        result += tokens[remainder]
+    for i in range(length - len(result)):
+        result += "0"
+    result = result[::-1]
+    result = "-".join([result[:4], result[4:8], result[8:12], result[12:16], result[16:]])
+    return result
+
+
+def uuid8():
+    r"""UUID version 8 features a time-ordered value field derived from the
+    widely implemented and well known Unix Epoch timestamp source, the
+    number of nanoseconds seconds since midnight 1 Jan 1970 UTC, leap
+    seconds excluded.
+
+    Copied from https://github.com/oittaa/uuid6-python under MIT License
+    """
+
+    global _last_v8_timestamp
+
+    nanoseconds = time.time_ns()
+    if _last_v8_timestamp is not None and nanoseconds <= _last_v8_timestamp:
+        nanoseconds = _last_v8_timestamp + 1
+    _last_v8_timestamp = nanoseconds
+    timestamp_ms, timestamp_ns = divmod(nanoseconds, 10**6)
+    subsec = timestamp_ns * 2**20 // 10**6
+    subsec_a = subsec >> 8
+    subsec_b = subsec & 0xFF
+    uuid_int = (timestamp_ms & 0xFFFFFFFFFFFF) << 80
+    uuid_int |= subsec_a << 64
+    uuid_int |= subsec_b << 54
+    uuid_int |= secrets.randbits(54)
+    return uuid_int
 
 class Const:
     def __init__(self):

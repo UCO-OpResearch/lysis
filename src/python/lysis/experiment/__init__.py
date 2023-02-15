@@ -18,21 +18,5 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-__version__ = "0.1"
-__author__ = "Brittany Bannish, Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish & Bradley Paynter"
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-
-from .edge_grid import *
-from .molecule import *
-from .np_macroscale import *
-
-try:
-    import cupy
-    from .cp_macroscale import *
-except ImportError:
-    pass
+from .framework import *
+from .parameters import *

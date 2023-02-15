@@ -1,3 +1,28 @@
+# *_* coding: utf-8 *_*
+#
+# Clot Lysis Simulation
+# Copyright (C) 2023  Bradley Paynter & Brittany Bannish
+#
+# edge_grid.py
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+"""Contains structures and methods for locating fibers on a 3-D grid
+
+
+"""
+
 from functools import partial
 from typing import Tuple
 
@@ -5,15 +30,6 @@ import numpy as np
 
 from .util import Const, BoundaryCondition, Experiment
 
-
-__author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish"
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
-__version__ = "0.1"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
 
 CONST = Const()
 
@@ -70,11 +86,11 @@ class EdgeGrid(object):
                 (degrade time > experiment length).
         """
 
-        self.total_rows = exp.macro_params.rows
+        self.total_rows = exp.params.rows
         """int: The total number of rows in the grid."""
-        self.nodes_in_row = exp.macro_params.cols
+        self.nodes_in_row = exp.params.cols
         """int: The number of nodes (not edges) in each row of this EdgeGrid."""
-        self.empty_rows = exp.macro_params.empty_rows
+        self.empty_rows = exp.params.empty_rows
         """int: The number of empty (fibrin-free) rows in the grid."""
         # Set the appropriate boundary conditions
         if boundary_conditions is not None:
@@ -311,11 +327,11 @@ class EdgeGrid(object):
 
         edge_lookup = partial(
             np.ravel_multi_index,
-            dims=(exp.macro_params.rows, exp.macro_params.full_row),
+            dims=(exp.params.rows, exp.params.full_row),
         )
         edge_grid = EdgeGrid(exp)
         neighbors = np.empty(
-            (exp.macro_params.rows * exp.macro_params.full_row, 8), dtype=np.ushort
+            (exp.params.rows * exp.params.full_row, 8), dtype=np.ushort
         )
         for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
             if i == edge_grid.total_rows - 1 and j % 3 == 0:

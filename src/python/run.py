@@ -1,3 +1,25 @@
+#!/usr/bin/env python3
+# *_* coding: utf-8 *_*
+#
+# Clot Lysis Simulation
+# Copyright (C) 2023  Bradley Paynter & Brittany Bannish
+#
+# framework.py
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+
 import cProfile
 import logging
 import os
@@ -27,7 +49,7 @@ def run(e: lysis.util.Experiment, timestamp: AnyStr):
     # e.initialize_macro_param(p)
     e.read_file()
     logger.debug(f"With parameters {os.linesep}{e}")
-    for file in e.macro_params.output_data:
+    for file in e.params.output_data:
         filename = lysis.util.default_filenames[file]
         if os.path.isfile(os.path.join(e.os_path, filename)):
             os.remove(os.path.join(e.os_path, filename))
