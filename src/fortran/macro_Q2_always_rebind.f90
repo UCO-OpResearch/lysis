@@ -1747,7 +1747,7 @@ write(*,*)'Nsavevect=',Nsavevect(:)
 !write(bind1unit) bind1V
 write(Nunit) Nsavevect(:)
 write(lastmoveunit) lastmove(:,:)
-write(mfptunit) mfpt(:)
+!write(mfptunit) mfpt(:)
 
 close(degunit)
 close(Nunit)
