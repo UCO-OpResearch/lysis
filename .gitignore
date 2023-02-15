@@ -3,7 +3,11 @@
 .vs
 *.idea
 *.conda
-.ipynb_checkpoints
+**/.ipynb_checkpoints
 bin
+lib
 octave-workspace
 __pycache__
+fort.*
+*.sublime-*
+data

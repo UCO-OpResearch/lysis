@@ -3,20 +3,20 @@ program macrolysis
 !! BRAD 2023-01-15: This code has been modified in the following ways:
 !!                  - Data folder is relative to git repository root
 !!                  - Data is stored in subfolders based on expCode
-!!                  - Data file extensions removed
 !!                  - Data file codes are now set globally from the (in/out)FileCode variables
 !!                  - More console output during runs
 !!                  - Parameters can be set from the command line
-!!                  - Parameters have been moved to the top of the file
 !!                  - "restricted move" is corrected
 !!                  - "passerby molecule" is corrected
-!!                  - Many notes have been added for understanding during Python development
+!!                  - Parameters have been moved to the top of the file
+!!
+!!
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15)      :: expCode = '2023-01-31-1300'
-character(60)      :: inFileCode = '.dat'
-character(60)      :: outFileCode = '.f-normal.dat'
+character(15)   :: expCode
+character(80)   :: inFileCode
+character(80)   :: outFileCode
 
 integer  :: N=93!93  !# of lattice nodes in one row in the horizontal direction
 integer  :: F=121!121 !71 !81  !# of lattice nodes in one column in the vertical direction
@@ -41,7 +41,7 @@ double precision :: Diff= 5.0d-07 !5*10**(-7)           !diffusion coefficient, 
 integer          :: bs = 427              !concentration of binding sites in micromolar
 double precision :: dist=1.0862d+00 !microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
 
-integer  :: seed=758492894!-2137354075
+integer  :: seed=-2137354075
 
 
 integer  :: num
@@ -94,20 +94,20 @@ double precision, dimension(:), allocatable     :: t_degrade
 double precision, dimension(:), allocatable        :: t_leave
 double precision, dimension(:), allocatable        :: t_wait
 double precision, dimension(:), allocatable        :: bind
-!integer, dimension(:), allocatable             :: Nsavevect
+integer, dimension(:), allocatable             :: Nsavevect 
 integer                              :: name1, name2
 
 logical       :: isBinary = .True.      ! flag for binary output
 integer       :: degunit = 20
-!integer       :: Vunit = 21
-!integer       :: V2unit = 22
+integer       :: Vunit = 21
+integer       :: V2unit = 22
 integer       :: Nunit = 23
 integer       :: tunit = 24
-!character(80) :: degfile       ! degradation vector
-!character(80) :: Vfile
-!character(80) :: V2file
-!character(80) :: Nfile
-!character(80) :: tfile
+character(80) :: degfile       ! degradation vector
+character(80) :: Vfile
+character(80) :: V2file
+character(80) :: Nfile
+character(80) :: tfile
 
 !stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
 !is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
@@ -116,75 +116,75 @@ double precision :: uf, urcw1
 external :: mscw, kiss32, urcw1
 
 double precision, dimension(:), allocatable         :: rvect
-!double precision, dimension(:,:), allocatable :: degnext
-!integer, dimension(:,:), allocatable :: Vedgenext
-!integer, dimension(:,:), allocatable :: Vboundnext
+double precision, dimension(:,:), allocatable :: degnext
+integer, dimension(:,:), allocatable :: Vedgenext
+integer, dimension(:,:), allocatable :: Vboundnext
 integer, dimension(:), allocatable  :: ind
-!double precision, dimension(:), allocatable  :: place
-!double precision, dimension(:), allocatable  :: degold
+double precision, dimension(:), allocatable  :: place
+double precision, dimension(:), allocatable  :: degold
 double precision, dimension(:), allocatable :: tsave
 integer  :: zero1
-!integer, dimension(:,:), allocatable  :: front
-!integer, dimension(:), allocatable  :: firstdeg
-!integer, dimension(:), allocatable  :: deglast
-!integer, dimension(:,:), allocatable  :: lastmove
+integer, dimension(:,:), allocatable  :: front
+integer, dimension(:), allocatable  :: firstdeg
+integer, dimension(:), allocatable  :: deglast
+integer, dimension(:,:), allocatable  :: lastmove
 integer  :: fdeg
 integer  :: first0
-!integer, dimension(:,:), allocatable  :: move
+integer, dimension(:,:), allocatable  :: move
 integer  :: temp
 integer  :: lasti
-!integer, dimension(:,:), allocatable  :: plotstuff, totmove,time2plot
-!double precision, dimension(:,:), allocatable  :: plotstuff2
-!integer       :: moveunit = 25
-!integer       :: lastmoveunit = 26
-!integer       :: plotunit = 27
-!integer       :: degnextunit = 28
-!integer       :: Venextunit = 29
-!integer       :: Vbdnextunit = 30
+integer, dimension(:,:), allocatable  :: plotstuff, totmove,time2plot
+double precision, dimension(:,:), allocatable  :: plotstuff2
+integer       :: moveunit = 25
+integer       :: lastmoveunit = 26
+integer       :: plotunit = 27
+integer       :: degnextunit = 28
+integer       :: Venextunit = 29
+integer       :: Vbdnextunit = 30
 integer       :: mfptunit = 42
-!character(80) :: movefile
-!character(80) :: lastmovefile
-!character(80) :: plotfile
-!character(80) :: degnextfile
-!character(80) :: Venextfile
-!character(80) :: Vbdnextfile
-!character(80) :: mfptfile
+character(80) :: movefile
+character(80) :: lastmovefile
+character(80) :: plotfile
+character(80) :: degnextfile
+character(80) :: Venextfile
+character(80) :: Vbdnextfile
+character(80) :: mfptfile
 
-!integer, dimension(:), allocatable  :: intact2
+integer, dimension(:), allocatable  :: intact2
 integer  :: countintact2, lenintact2, counth, countv, countpv, countmacrounbd, countmicrounbd
-!integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
-!integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx
-!integer, dimension(:,:), allocatable  :: X1plot, Y1plot
-!integer, dimension(:,:), allocatable  :: X2plot, Y2plot
-!integer, dimension(:), allocatable  :: Xvplot, Yvplot
-!double precision, dimension(:,:), allocatable  :: bdtPA, freetPA
+integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
+integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx 
+integer, dimension(:,:), allocatable  :: X1plot, Y1plot
+integer, dimension(:,:), allocatable  :: X2plot, Y2plot
+integer, dimension(:), allocatable  :: Xvplot, Yvplot
+double precision, dimension(:,:), allocatable  :: bdtPA, freetPA
 double precision, dimension(:,:), allocatable :: lysismat !(100,100) if only did 10,000 micro runs, (500,100) if did 50,000
 integer, dimension(100)  :: lenlysismat
 integer  :: r400
-!integer  :: x1unit = 31
-!integer  :: x2unit = 32
-!integer  :: y1unit = 33
-!integer  :: y2unit = 34
-!integer  :: xvunit = 35
-!integer  :: yvunit = 36
-!integer  :: tPAbdunit = 37
-!integer  :: tPAfreeunit = 38
-!integer  :: cbindunit = 39
-!integer  :: cindunit = 40
-!integer  :: bind1unit = 41
-!character(80)  :: x1file
-!character(80)  :: x2file
-!character(80)  :: y1file
-!character(80)  :: y2file
-!character(80)  :: xvfile
-!character(80)  :: yvfile
-!character(80)  :: tPAbdfile
-!character(80)  :: tPAfreefile
-!character(80)  :: cbindfile
-!character(80)  :: cindfile
-!character(80)  :: bind1file
+integer  :: x1unit = 31
+integer  :: x2unit = 32
+integer  :: y1unit = 33
+integer  :: y2unit = 34
+integer  :: xvunit = 35
+integer  :: yvunit = 36
+integer  :: tPAbdunit = 37
+integer  :: tPAfreeunit = 38
+integer  :: cbindunit = 39
+integer  :: cindunit = 40
+integer  :: bind1unit = 41
+character(80)  :: x1file
+character(80)  :: x2file
+character(80)  :: y1file
+character(80)  :: y2file
+character(80)  :: xvfile
+character(80)  :: yvfile
+character(80)  :: tPAbdfile
+character(80)  :: tPAfreefile
+character(80)  :: cbindfile
+character(80)  :: cindfile
+character(80)  :: bind1file
 integer :: countbind, countindep
-!integer, dimension(:,:), allocatable  :: countbindV, countindepV, bind1V
+integer, dimension(:,:), allocatable  :: countbindV, countindepV, bind1V
 integer, dimension(:), allocatable :: bind1
 integer, dimension(:), allocatable :: forcedunbdbydeg
 double precision, dimension(:), allocatable :: mfpt !vector I'll use to save the first passage times of each tPA molecule
@@ -204,11 +204,11 @@ double precision :: last_degrade_time
 real :: temp_len_lysis_mat
 
 integer :: t_degrade_unit = 102
-!character(80) :: t_degrade_file
+character(80) :: t_degrade_file
 integer :: m_location_unit = 103
-!character(80) :: m_location_file
+character(80) :: m_location_file
 integer :: m_bound_unit = 104
-!character(80) :: m_bound_file
+character(80) :: m_bound_file
 !integer :: m_bind_time_unit = 105
 
 logical :: all_fibers_degraded
@@ -238,13 +238,13 @@ do while (param_i<cmd_count)
     write (*,*) 'command arg ', param_i, ' = ', param_value (1:param_val_len)
     select case (param(3:param_len))
         case('expCode')
-            expCode = param_value
+            expCode = param_value (1:param_val_len)
             write (*,*) 'Setting expCode = ', expCode
         case ('inFileCode')
-            inFileCode = param_value
+            inFileCode = param_value (1:param_val_len)
             write (*,*) 'Setting inFileCode = ', inFileCode
         case ('outFileCode')
-            outFileCode = param_value
+            outFileCode = param_value (1:param_val_len)
             write (*,*) 'Setting outFileCode = ', outFileCode
         case ('N')
             read(param_value,*,iostat=io_status)  N
@@ -383,29 +383,29 @@ allocate (t_degrade(num))
 allocate (t_leave(M))
 allocate (t_wait(M))
 allocate (bind(M))
-!allocate (Nsavevect(stats))
+allocate (Nsavevect(stats))
 allocate (rvect(M))
-!allocate (degnext(tf+1,num))
-!allocate (Vedgenext(tf+1,M))
-!allocate (Vboundnext(tf+1,M))
+allocate (degnext(tf+1,num))
+allocate (Vedgenext(tf+1,M))
+allocate (Vboundnext(tf+1,M))
 allocate (ind(F-1))
-!allocate (place(F-1))
-!allocate (degold(num))
+allocate (place(F-1))
+allocate (degold(num))
 allocate (tsave(tf+1))
-!allocate (front(tf,N))
-!allocate (firstdeg(N))
-!allocate (deglast(N))
-!allocate (lastmove(N,stats))
-!allocate (move(N,N))
-!allocate (plotstuff(N,N), totmove(N,N),time2plot(N,N))
-!allocate (plotstuff2(N,N))
-!allocate (intact2(num))
-!allocate (X1plot(2,F*(N-1)), Y1plot(2,F*(N-1)))
-!allocate (X2plot(2,N*(F-1)), Y2plot(2,N*(F-1)))
-!allocate (Xvplot(N*F), Yvplot(N*F))
-!allocate (bdtPA(2,M), freetPA(2,M))
+allocate (front(tf,N))
+allocate (firstdeg(N))
+allocate (deglast(N))
+allocate (lastmove(N,stats))
+allocate (move(N,N))
+allocate (plotstuff(N,N), totmove(N,N),time2plot(N,N))
+allocate (plotstuff2(N,N))
+allocate (intact2(num))
+allocate (X1plot(2,F*(N-1)), Y1plot(2,F*(N-1)))
+allocate (X2plot(2,N*(F-1)), Y2plot(2,N*(F-1)))
+allocate (Xvplot(N*F), Yvplot(N*F))
+allocate (bdtPA(2,M), freetPA(2,M))
 allocate (lysismat(nummicro,100))!(100,100) if only did 10,000 micro runs, (500,100) if did 50,000
-!allocate (countbindV(stats,tf), countindepV(stats,tf), bind1V(stats,tf))
+allocate (countbindV(stats,tf), countindepV(stats,tf), bind1V(stats,tf))
 allocate (bind1(num))
 allocate (forcedunbdbydeg(M))
 allocate (mfpt(M)) !vector I'll use to save the first passage times of each tPA molecule
@@ -429,10 +429,8 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_brad_scratch.f90 on data ',expCode
-
-
-!    write(*,*)'fraction of time tPA is forced to unbind',frac_forced
+write(*,*)' obtained using code macro_Q2_diffuse_into_and_along_fixed.f90 on data ',expCode
+!write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 ! Initialize the Random Number Generator
 
@@ -453,11 +451,6 @@ write(*,*)' obtained using code macro_brad_scratch.f90 on data ',expCode
     call set_kiss32(state)
 
     call get_kiss32(state)
-
-!! BRAD 2023-01-05: The result of this neighborhood structure is that, when a molecule is on a boundary,
-!!                  it has a higher probability of reflecting than moving paralell to the boundary.
-!!                  Is this a desired result, or just a result of wanting equal-length neighborhoods?
-!! BRITT:           Desired scheme
 
 ! neighborc is a num x 8 array
 ! neighborc(i, k) = j where fiber j is the kth neighbor of fiber i
@@ -687,57 +680,54 @@ neighborc=0
 !did not occur, i.e. the first entry there's a 6000
     OPEN(unit=202,FILE=ADJUSTL('data/' // expCode // '/lenlysisvect' // inFileCode))
     do i=1,100
-        READ(202,*)temp_len_lysis_mat
-        lenlysismat(i) = INT(temp_len_lysis_mat)
+        READ(202,*)lenlysismat(i)
     end do
     close(202)
-  
 
-!    lastmove=0
+
+    lastmove=0
 
 !The edges that don't contain fibrin are those with edge number <= to enoFB
 !enoFB=(3*N-1)*(Ffree-1)
 
     write(*,*)'enoFB=',enoFB
 
-
-               
-    !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-    !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    !write(Vbdnextfile,'(57a)') 'Vbdnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
-    open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
-    open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
-!    open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
-!    open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
-!    open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
-    open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
+        !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+        !write(degnextfile,'(57a)') 'degnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(Venextfile,'(59a)') 'Vedgenext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(Vbdnextfile,'(57a)') 'Vbdnext_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
+        open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
+        open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
+        open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
+        open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
+        open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
+        open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
+        open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
 
 !! BRAD 2023-01-21:
-    open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
-    open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
-    open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
+        open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
+        open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
+        open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
 !        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
 
 
-    !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-    !open(degnextunit,file=degnextfile,form=filetype)
-    !open(Venextunit,file=Venextfile,form=filetype)
-    !open(Vbdnextunit,file=Vbdnextfile,form=filetype)
-    !open(cbindunit,file=cbindfile,form=filetype)
-    !open(cindunit,file=cindfile,form=filetype)
-    !open(bind1unit,file=bind1file,form=filetype)
+        !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+        !open(degnextunit,file=degnextfile,form=filetype)
+        !open(Venextunit,file=Venextfile,form=filetype)
+        !open(Vbdnextunit,file=Vbdnextfile,form=filetype)
+        !open(cbindunit,file=cbindfile,form=filetype)
+        !open(cindunit,file=cindfile,form=filetype)
+        !open(bind1unit,file=bind1file,form=filetype)
 
 !initialize variables for MFPT calculation out here b/c we only do this on the first run
 !    yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
 !    mfpt=0
 
 !!!!!! DO "STATS" RUNS OF THE MACRO MODEL
-    stats_loop: do istat=1,stats
+    do istat=1,stats
 
         write(*,*)' run number=',istat
 
@@ -766,21 +756,21 @@ neighborc=0
         all_fibers_degraded = .False.
         most_molecules_passed = .False.
 
-        !Initialize vectors to 0
+!Initialize vectors to 0
             degrade  =0.0d+00         !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
             t_degrade=0.0d+00         !vector of the degradation times of each edge
             t_leave  =0.0d+00         !vector of the tPA leaving times for each molecule
             t_wait   =0.0d+00          !vector of the tPA waiting times for each molecule
-!            degnext  =0
-!            Vedgenext = 0
-!            Vboundnext = 0
-!            totmove = 0
-!            time2plot = 0
+            degnext  =0
+            Vedgenext = 0
+            Vboundnext = 0
+            totmove = 0
+            time2plot = 0
             bind = 0.0d+00             !vector of the binding times for each tPA
 
 !! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
             forcedunbdbydeg=0
-
+            
             degrade(1:enoFB) = -1.0  !set the undegradable fibers' degradation status to -1
 
 
@@ -809,13 +799,13 @@ neighborc=0
                                                                !that prob. of being on any edge is equal
         enddo
 
-        call c_vurcw1(rvect,M)
-        
+        call vurcw1(rvect,M)
+
         !use the random numbers to decide where we start the tPAs
         do i=1,M
-            if (0<=rvect(i).and.rvect(i)<=init_state(1)) V(1,i)=1 !init_entry(i)=1
+            if (0.le.rvect(i).and.rvect(i).le.init_state(1)) V(1,i)=1 !init_entry(i)=1
             do j=1,enoFB
-                if (init_state(j)<rvect(i).and.rvect(i)<=init_state(j+1)) then
+                if (init_state(j).lt.rvect(i).and.rvect(i).le.init_state(j+1)) then
                     !init_entry(i)=j+1
                     V(1,i)=j+1
                 end if
@@ -823,40 +813,40 @@ neighborc=0
             !V(i,1) = init_entry(i) !molecule i starts on site init_entry(i) so I only allow tPA to start on an edge
                                   !that's in the first row of my lattice
         enddo
-        ! write(*,*)' V=',V  !for debugging 3/31/10
+        !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
 
         write(degunit) degrade(:)
         write(tunit) t
-        
+
 !! BRAD 2023-01-21:
         write(t_degrade_unit) t_degrade(:)
         write(m_location_unit) V(1,:)
         write(m_bound_unit) V(2,:)
         Nsave = 10
 
-        write(*,*)' save as deg' // outFileCode
+        write(*,*)' save as deg',outFileCode
 
 
-!        Vedgenext(1,:)=V(1,:)
-!        Vboundnext(1,:)=V(2,:)
-!        degnext(1,:)=degrade(:)
-!        tsave(1) = t
+        Vedgenext(1,:)=V(1,:)
+        Vboundnext(1,:)=V(2,:)
+        degnext(1,:)=degrade(:)
+        tsave(1) = t
 
 
 
         !Now do the main part of the code - looping over time
 
+
 !! BRAD 2023-01-06:
         CALL CPU_TIME ( time_begin )
-        main: do
+        do
 
             count=count+1
             t = count*tstep
-        
 !! BRAD 2023-02-02:
-            if(tf>0.and.t>tf) exit main  !only do the big "do" loop while t<tf
+            if(tf>0.and.t>tf) exit  !only do the big "do" loop while t<tf
 
 !! BRAD 2023-01-10:
 !            if(mod(count,100000)==0) then
@@ -866,19 +856,18 @@ neighborc=0
 !!                  It must still wait to bind after that, but it's free to move?
 !! BRITT:           It was not supposed to be this way. We fixed it 2023-01-12
 
-            ! forcedunbdbydeg=0 !every timestep reset vector that records which tPA molecules were on degraded fibers to 0
+            !            forcedunbdbydeg=0 !every timestep reset vector that records which tPA molecules were on degraded fibers to 0
 
             !at the beginning of each time step, check to see if any of the fibers should be degraded at this time.
             !Degrade fiber before moving and binding/unbinding tPA:
             do i=enoFB+1,num
-                if(t_degrade(i)<t.and.t_degrade(i)>0.and.degrade(i)==0) then
+                if(t_degrade(i).lt.t.and.t_degrade(i).gt.0.and.degrade(i).eq.0) then
                 !i.e. if degradation time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
                     degrade(i)=-t
 !! BRAD 2023-01-13:
                     degraded_fibers = degraded_fibers + 1
                     last_degrade_time = t
                     if (degraded_fibers==num-enoFB) all_fibers_degraded = .True.
-
                     !write(*,*)'time=',t
                     !write(*,*)'edge that degraded=',i
 
@@ -923,7 +912,7 @@ neighborc=0
 
             do j=1,M
                 if(V(2,j)==1) then   !if the molecule is bound
-                    if(t_leave(j)<=t) then
+                    if(t_leave(j).le.t) then
                         !if the time to tPA leaving is smaller than current time, have the molecule unbind
                         V(2,j)=0
 
@@ -932,21 +921,9 @@ neighborc=0
                         bind(j)=t-log(r1)/(kon*bs)-tstep/2   !subtract half a time step so that we round to nearest timestep
                         !else if time to tPA leaving is bigger than current time, keep the molecule bound and continue.
                         !we don't need to change anything in this case
-!! BRAD 2023-01-22:
-!                        write(m_bind_time_unit)r1, t, bind(j)
-                        
-!! BRAD 2023-01-04: The molecule just unbound. Now we check to see if it should be forced to unbind?
-!!                  Are we saying that, some of the molecules that unbound after t seconds of binding time did so willingly
-!!                  but others did so unwillingly.
-!!                  Another way of saying this: these forced-unbound tPA aren't unbinding early,
-!!                  but at the same time they would've anyway
-
-!! BRITT:           Of those tPA that unbound on this timestep, some fraction are still stuck to a small piece of fiber.
-!!                  They can move through the clot freely, but can't bind to anything else yet.
-
                         !BELOW ADDED 9/15/17 to account for forced-unbound tPA to be removed
                         r1=urcw1()
-                        if(r1<=frac_forced) then
+                        if(r1.le.frac_forced) then
                         !if the random number is less than the fraction of time tPA is forced to unbind, consider tPA "forced" to unbind, and temporarily remove it from the simulation by assigning it a waiting time
                             t_wait(j)=t+avgwait-tstep/2 !waiting time is current time plus average wait time minus half a timestep so we round to nearest timestep
                             bind(j)=0
@@ -955,31 +932,27 @@ neighborc=0
                     end if
                 end if !end if(V(2,j)==1 statement. The above unbinds tPA with leaving time < current time
 
-!! BRAD 2023-01-04: So if a molecule unbinds in the if statment immediately above,
-!!                  it is eligible to move/rebind in the same timestep?
-!! BRITT:           This is deliberate. Unbinding takes no time so you can still move/bind in the same timestep
-
                 if(V(2,j)==0) then   !if the molecule is unbound
-
+                
 !! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
                     if (t_wait(j)<=t.and.forcedunbdbydeg(j)==1) then
                         forcedunbdbydeg(j)=0
                     end if
-
-
-                    !first check if it will move or not. if it does not move (i.e. r<=1-q), check if it can bind.
+                    
+                    
+                    !first check if it will move or not. if it does not move (i.e. r.le.1-q), check if it can bind.
                     !if it can bind, bind it, if not leave it unbound at the same location. if it does move, check if it can bind.
                     !if it can't bind, move it. if it can bind, pick a random number and see if r>(t-bind(j))/tstep.
                     !if it is bigger, move it. if it isn't bigger, bind it.
                     r=urcw1()
                     z=V(1,j)
 
-                    if (r<=(1-q)) then   !i.e. if we stay on current edge
+                    if (r.le.(1-q)) then   !i.e. if we stay on current edge
                         !check if molecule j can bind. ADJUSTED 9/15/17 to account for waiting time
-                        if(bind(j)<t.and.bind(j)>0.and.degrade(V(1,j))==0) then
+                        if(bind(j).lt.t.and.bind(j).gt.0.and.degrade(V(1,j)).eq.0) then
                         !i.e. if binding time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
                         !check if the molecule has a waiting time. if it does, check if the current time is later than the waiting time
-                            if(t_wait(j)<=t) then
+                            if(t_wait(j).le.t) then
                                 !i.e., if the waiting time is t or less, then the molecule can bind so we proceed as normal
                                 V(2,j)=1  !then the molecule binds
                                 bind(j)=0 !reset the binding time to 0
@@ -997,14 +970,13 @@ neighborc=0
                                 !find the time that tPA will unbind:
                                 colr2=0
                                 do i=1,101
-                                    if(CDFtPA(i)>=r3)then
+                                    if(CDFtPA(i).ge.r3)then
                                         colr2 = i    !find the first place on CDF that's bigger than r3
                                         exit
                                     end if
                                 enddo
 
-                                if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should ',&
-                                    'not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
+                                if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
 
                                 percent2 = (CDFtPA(colr2)-r3)/(CDFtPA(colr2)-CDFtPA(colr2-1))
                                 ttPA = (tsec1(colr2)-(tsec1(colr2)-tsec1(colr2-1))*percent2)
@@ -1023,9 +995,8 @@ neighborc=0
                                     r400=nummicro
                                 end if !for if(r400==nummicro+1) loop
 
-!! BRAD 2023-01-04: Why are we using colr2 again here? What is the connection between the lysis time and the unbinding time?
 
-                                if(r400<=lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
+                                if(r400.le.lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
                                     if(r400==lenlysismat(colr2-1)) then
                                         !percent4 = (CDFlys(r400)-r4)/CDFlys(r400)
                                         rmicro = lysismat(r400-1,colr2-1)!tseclys(r400)-tseclys(r400)*percent4
@@ -1044,7 +1015,7 @@ neighborc=0
                                                                                                 !that's what will happen first
                                     end if
 
-                                end if !for if(r400<=lenlysismat) loop
+                                end if !for if(r400.le.lenlysismat) loop
 
 
 
@@ -1059,79 +1030,75 @@ neighborc=0
 
                     else              !for if(r.le(1-q) statement. if r>1-q, i.e. if molecule j has the possibility to move
                         !check if molecule j can bind. adjusted 9/15/17 to account for waiting time
-                        if(bind(j)<t.and.bind(j)>0.and.degrade(V(1,j))==0.and.t_wait(j)<t) then
+                        if(bind(j).lt.t.and.bind(j).gt.0.and.degrade(V(1,j)).eq.0.and.t_wait(j).le.t) then
                         !i.e. if binding time is smaller than t AND bigger than 0  AND the edge hasn't already been degraded AND the waiting time is less than the current time.
                         !then the molecule could bind. To determine whether it binds or moves, draw a random number, r2.
-                        !if r2>(t-bind(j))/tstep, then movement happened before binding, so move the molecule rather than bind it
-                        !don't need an if statement here to distinguish between macroscale forced unbinding (by degradation) and microscale forced unbinding, because it's implicit in the "if(bind(j)>0)" statement. tPA molecules that were forced to unbind by macro level degradation have bind(j)=0.
+                        !if r2.gt.(t-bind(j))/tstep, then movement happened before binding, so move the molecule rather than bind it
+                        !don't need an if statement here to distinguish between macroscale forced unbinding (by degradation) and microscale forced unbinding, because it's implicit in the "if(bind(j).gt.0)" statement. tPA molecules that were forced to unbind by macro level degradation have bind(j)=0.
 
                             t_wait(j)=0 !reset waiting time to 0
                             r2=urcw1()
 
-!! BRAD 2023-01-04: r2 > log(r1)/(kon*bs*tstep)+1/2 (Bannish2014 p27)
-!! BRITT:           Since bind < t, (t-bind)/t_step is the part of the interval AFTER the binding time.
-!!                  r2 is the moving time (in the interval) so 
-                            
-                            if(r2>(t-bind(j))/tstep) then   !if r2 is such that movement happened before binding, move the molecule
+
+                            if(r2.gt.(t-bind(j))/tstep) then   !if r2 is such that movement happened before binding, move the molecule
                                                            !and calculate the new binding time associated with the new edge
-                                if ((1-q)<r.and.r<=((1-q)+q/8)) then
+                                if ((1-q).lt.r.and.r.le.((1-q)+q/8)) then
                                     V(1,j) = neighborc(1,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+q/8)<r.and.r<=((1-q)+2*q/8)) then
+                                elseif (((1-q)+q/8).lt.r.and.r.le.((1-q)+2*q/8)) then
                                     V(1,j) = neighborc(2,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+2*q/8)<r.and.r<=((1-q)+3*q/8)) then
+                                elseif (((1-q)+2*q/8).lt.r.and.r.le.((1-q)+3*q/8)) then
                                     V(1,j) = neighborc(3,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+3*q/8)<r.and.r<=((1-q)+4*q/8)) then
+                                elseif (((1-q)+3*q/8).lt.r.and.r.le.((1-q)+4*q/8)) then
                                     V(1,j) = neighborc(4,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+4*q/8)<r.and.r<=((1-q)+5*q/8)) then
+                                elseif (((1-q)+4*q/8).lt.r.and.r.le.((1-q)+5*q/8)) then
                                     V(1,j) = neighborc(5,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+5*q/8)<r.and.r<=((1-q)+6*q/8)) then
+                                elseif (((1-q)+5*q/8).lt.r.and.r.le.((1-q)+6*q/8)) then
                                     V(1,j) = neighborc(6,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+6*q/8)<r.and.r<=((1-q)+7*q/8)) then
+                                elseif (((1-q)+6*q/8).lt.r.and.r.le.((1-q)+7*q/8)) then
                                     V(1,j) = neighborc(7,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+7*q/8)<r.and.r<=((1-q)+8*q/8)) then
+                                elseif (((1-q)+7*q/8).lt.r.and.r.le.((1-q)+8*q/8)) then
                                     V(1,j) = neighborc(8,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
                                 end if !(for diffusion part)
-!! BRAD 2023-01-22:
-!                                write(m_bind_time_unit)r1, t, bind(j)
 
 !! BRAD 2023-01-13:
                                 total_regular_moves = total_regular_moves + 1
 
-                            else     !for if(r2>(t-bind(j)/tstep) statement. i.e. if r2 is less than or equal to (t-bind(j))/tstep, have the molecule bind
+                            else     !for if(r2.gt.(t-bind(j)/tstep) statement. i.e. if r2 is less than or equal to (t-bind(j))/tstep, have the molecule bind
                                 V(2,j)=1  !then the molecule binds
                                 bind(j)=0 !reset the binding time to 0
                                 r3=urcw1()
+
 
 !! BRAD 2023-01-04:
                                 total_binds = total_binds + 1
@@ -1143,14 +1110,13 @@ neighborc=0
                                 !find the time that tPA will unbind:
                                 colr2=0
                                 do i=1,101
-                                    if(CDFtPA(i)>=r3)then   ! r3 in (0,1) so colr2 in {2 .. 101}
+                                    if(CDFtPA(i).ge.r3)then
                                         colr2 = i    !find the first place on CDF that's bigger than r3
                                         exit
                                     end if
                                 enddo
 
-                                if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should ',&
-                                    'not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
+                                if(colr2==0.or.colr2==1) write(*,*)'PROBLEM: colr2 should not equal 0 since CDFtPA goes between 0 and 1 exactly', colr2
 
                                 percent2 = (CDFtPA(colr2)-r3)/(CDFtPA(colr2)-CDFtPA(colr2-1))
                                 ttPA = (tsec1(colr2)-(tsec1(colr2)-tsec1(colr2-1))*percent2)
@@ -1161,26 +1127,22 @@ neighborc=0
 
 
                                 !Using the tPA leaving time, find the lysis time by using the lysis time distribution for the given ttPA
-                                                                ! assume colr2-1 == 1
-                                r4=urcw1()                      ! r4 in [0,1)
-                                r400=ceiling(r4*nummicro)+1     ! r400 in {2 .. 501}
+
+                                r4=urcw1()
+                                r400=ceiling(r4*nummicro)+1
 
                                 !if r400=501, redefine it to be the 500th bin, since we don't have 501 entries
                                 if(r400==nummicro+1) then
-                                    r400=nummicro               ! r400 in {2 .. 500}
+                                    r400=nummicro
                                 end if !for if(r400==nummicro+1) loop
 
-                                if(r400<=lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
-                                    if(r400==lenlysismat(colr2-1)) then     ! r400 == 23
+                                if(r400.le.lenlysismat(colr2-1)) then !only have lysis if the random number puts us in a bin that's < the first place we have a 6000, i.e. the first place lysis doesn't happen
+                                    if(r400==lenlysismat(colr2-1)) then
                                         !percent4 = (CDFlys(r400)-r4)/CDFlys(r400)
-                                        rmicro = lysismat(r400-1,colr2-1)   ! rmicro = lysismat[23, 1]
-                                    else                                    ! r400 in {2 .. 22}
-                                        percent4 = r400-1-r4*nummicro       ! percent4 i
-                                        rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4) !tseclys(r400)-tseclys(r400)*percent4
-                                                                            ! rmicro in [lysismat[{1..21}, 1] , lysismat[{2..22}, 0]]
-!! BRAD 2023-01-09: What about r400 in (22, 23)?
-!! BRITT            Can interpolate as well, but still map [23, 24) to f(23)                                        
-
+                                        rmicro = lysismat(r400-1,colr2-1)!tseclys(r400)-tseclys(r400)*percent4
+                                    else
+                                        percent4 = r400-1-r4*nummicro
+                                        rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4)
                                     end if
 
                                     if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
@@ -1193,16 +1155,12 @@ neighborc=0
                                                                                                       !that's what will happen first
                                     end if
 
-                                end if !for if(r400<=lenlysismat) loop
+                                end if !for if(r400.le.lenlysismat) loop
 
                             end if  !end r2 statement
 
 
-                        else         !for if(bind(j)<t... statement. if molecule j canNOT bind this timestep, just have it move
-
-!! BRAD 2023-01-05: Shouldn't need both here, right?
-!!                  If forcedunbdbydeg(j)==1 then we must have just set it and t_wait on this timestep
-!! BRITT:           (Now that we fixed it) t_wait(j)>t is unnecessary
+                        else         !for if(bind(j).lt.t... statement. if molecule j canNOT bind this timestep, just have it move
 
                             if(t_wait(j)>t.and.forcedunbdbydeg(j)==1) then   !adjusted 9/15/17 and 5/10/18 to account for waiting time. if molecule has a waiting time>t AND it's a molecule that was forced to unbind by macro level degradation, restrict its diffusion to be away from or along (not into) the clot
                                 temp_neighborc=0 !set temporary neighbor array to 0
@@ -1218,12 +1176,7 @@ neighborc=0
                                 !write(*,*)'countij=',countij
                                 !write(*,*)'V(1,j) before movement=',V(1,j)
 
-!! BRAD 2023-01-05: In this situation, a molecule has a probability of not moving, even if there is an edge available.
-!!                  This is unlike the normal situation where a molecule MUST move.
-!!                  This results in forcedunbdbydeg molecules having a lower probability of moving (q-q/(countij+1))
-!!                  Is this a desired outcome, or just a result of "making it work"
-!! BRITT:           This is desired. It moves slower because it is stuck to a BIG piece.    
-                                if(countij>0) then !if there is at least one edge available for diffusion, randomly choose which edge the molecule goes to
+                                if(countij.gt.0) then !if there is at least one edge available for diffusion, randomly choose which edge the molecule goes to
                                     r1=urcw1()
                                     newindex=int(r1*(countij+1))  !choose which edge to diffuse to by randomly drawing an integer between 0 and countij. 0 corresponding to staying on same edge, and a nonzero value corresponds to moving to the edge given by the newindex entry of the temp_neighborc array
                                     !write(*,*)'r1=',r1
@@ -1233,67 +1186,62 @@ neighborc=0
                                     !write(*,*)'V(1,j) AFTER movement=',V(1,j)
                                     !write(*,*)'end of new loop **************'
                                     !if countij=0 then none of the edges are available for diffusion, molecule is stuck and must stay on current edge, so do nothing
-!! BRAD 2023-01-04:
-!                                    total_moves = total_moves + 1
 
-                                end if !end countij>0
-                                
+                                end if !end countij.gt.0
+
 !! BRAD 2023-01-13:
                                 total_restricted_moves = total_restricted_moves + 1
 
                             else   ! for t_wait(j)>t... if statement. if there's no waiting time, or the waiting time is less than the current time, or the molecule was forced to unbind on the microscale (so is on a "small" FDP that can diffuse through the clot), the molecule can move as normal
 
-                                if ((1-q)<r.and.r<=((1-q)+q/8)) then
+                                if ((1-q).lt.r.and.r.le.((1-q)+q/8)) then
                                     V(1,j) = neighborc(1,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+q/8)<r.and.r<=((1-q)+2*q/8)) then
+                                elseif (((1-q)+q/8).lt.r.and.r.le.((1-q)+2*q/8)) then
                                     V(1,j) = neighborc(2,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+2*q/8)<r.and.r<=((1-q)+3*q/8)) then
+                                elseif (((1-q)+2*q/8).lt.r.and.r.le.((1-q)+3*q/8)) then
                                     V(1,j) = neighborc(3,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+3*q/8)<r.and.r<=((1-q)+4*q/8)) then
+                                elseif (((1-q)+3*q/8).lt.r.and.r.le.((1-q)+4*q/8)) then
                                     V(1,j) = neighborc(4,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+4*q/8)<r.and.r<=((1-q)+5*q/8)) then
+                                elseif (((1-q)+4*q/8).lt.r.and.r.le.((1-q)+5*q/8)) then
                                     V(1,j) = neighborc(5,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+5*q/8)<r.and.r<=((1-q)+6*q/8)) then
+                                elseif (((1-q)+5*q/8).lt.r.and.r.le.((1-q)+6*q/8)) then
                                     V(1,j) = neighborc(6,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+6*q/8)<r.and.r<=((1-q)+7*q/8)) then
+                                elseif (((1-q)+6*q/8).lt.r.and.r.le.((1-q)+7*q/8)) then
                                     V(1,j) = neighborc(7,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
 
-                                elseif (((1-q)+7*q/8)<r.and.r<=((1-q)+8*q/8)) then
+                                elseif (((1-q)+7*q/8).lt.r.and.r.le.((1-q)+8*q/8)) then
                                     V(1,j) = neighborc(8,z)
                                     r1=urcw1()
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
                                 end if !(for diffusion part)
-!! BRAD 2023-01-22:
-!                                write(m_bind_time_unit)r1, t, bind(j)
-
 !! BRAD 2023-01-04:
                                 total_regular_moves = total_regular_moves + 1
                             endif !end t_wait part
@@ -1304,7 +1252,7 @@ neighborc=0
                 end if !end V(2,j)=0 statement
 
                 !for the first run only, at the end of each step, check to see if the molecule hit a fiber in the back row
-                !if(istat==1) then
+!                if(istat==1) then
                     if (V(1,j)>=backrow.and.yesfpt(j)==0) then !if the molecule is on the back row and it hasn't made it there before
 !! BRAD 2023-01-13:
                         reached_back_row = reached_back_row + 1
@@ -1313,7 +1261,7 @@ neighborc=0
                         mfpt(j)=t
                         yesfpt(j)=1 !set entry to 1 so we don't track this molecule any more
                     end if !end if(V(1,j)>=backrow....) loop
-                !end if !end if(istat=1) loop
+!                end if !end if(istat=1) loop
             enddo !for j=1,M loop
 
 
@@ -1337,7 +1285,6 @@ neighborc=0
             if(Ninteger>=Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
                 write(degunit)    degrade(1:num)
                 write(tunit)  t
-                
 !! BRAD 2023-01-21:
                 write(t_degrade_unit) t_degrade(:)
                 write(m_location_unit) V(1,:)
@@ -1345,10 +1292,10 @@ neighborc=0
 
                 Nsave=Nsave+10
                 cNsave=cNsave+1
-!                Vedgenext(cNsave+1,:) = V(1,:)
-!                Vboundnext(cNsave+1,:) = V(2,:)
-!                degnext(cNsave+1,:) = degrade(1:num)
-!                tsave(cNsave+1) = t
+                Vedgenext(cNsave+1,:) = V(1,:)
+                Vboundnext(cNsave+1,:) = V(2,:)
+                degnext(cNsave+1,:) = degrade(1:num)
+                tsave(cNsave+1) = t
                 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
                 !countbindV(istat,cNsave)=countbind
                 !countindepV(istat,cNsave)=countindep
@@ -1363,14 +1310,11 @@ neighborc=0
                 reached_back_row,' molecules have reached the back row (',&
                 reached_back_row_percent,'% of total).'
                
-                if (all_fibers_degraded.and.most_molecules_passed) exit main
+                if (all_fibers_degraded.and.most_molecules_passed) exit
             end if
 
 
-        enddo main !for time loop
-
-!! BRAD 2023-01-08: Once the last fiber has degraded, is there any reason to keep going?
-!! BRITT:           No.
+        enddo !for time loop
 
 !! BRAD 2023-01-06:
         CALL CPU_TIME ( time_end )
@@ -1385,16 +1329,15 @@ neighborc=0
 !! BRAD 2023-02-02:
         write(mfptunit) mfpt(:)
 
+        Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
+        front=0
+        degold=0
 
-!        Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
-!        front=0
-!        degold=0
-!
-!        !NOW PROCESS THE DATA WE OBTAINED FROM THE ABOVE RUN
-!        nplt=Nsavevect(istat)+2 !+1 because I saved once at the beginning, and another +1 to account for the final time point
-!        write(*,*)'nplt=',nplt
-!        write(*,*)'r4=',r4
-!
+        !NOW PROCESS THE DATA WE OBTAINED FROM THE ABOVE RUN
+        nplt=Nsavevect(istat)+2 !+1 because I saved once at the beginning, and another +1 to account for the final time point
+        write(*,*)'nplt=',nplt
+        write(*,*)'r4=',r4
+
 !        do i=2,nplt
 !
 !            degold=degnext(i,:)
@@ -1555,8 +1498,7 @@ neighborc=0
 !                            if(x2==0) x2=N      !if it says the RHS endpoint is 0, force it to actually be N (because otherwise
 !                                                !is says we should plot from N-1 to 0)
 !                            counth=counth+1
-!                            X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))&
-!                                                   /real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+!                            X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
 !                            X1plot(2,counth)=x2
 !                            Y1plot(1,counth)=yplace
 !                            Y1plot(2,counth)=yplace
@@ -1649,8 +1591,7 @@ neighborc=0
 !                    !vertical (planar) edges
 !                    do kplt=1,M
 !                        if(Vedgenext(1,kplt)==(3*N-1)*(j-1)+2*N+(k-1)) then
-!                            xVedgeplace=nint((real(endpts(1,Vedgenext(1,kplt)))/real(N)&
-!                                              -floor(real(endpts(1,Vedgenext(1,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
+!                            xVedgeplace=nint((real(endpts(1,Vedgenext(1,kplt)))/real(N)-floor(real(endpts(1,Vedgenext(1,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
 !                            Vy1=endpts(1,Vedgenext(1,kplt))/N+1  !find the bottom endpoint of the vertical edge
 !                            if(xVedgeplace==0) then
 !                                xVedgeplace=N
@@ -1739,14 +1680,11 @@ neighborc=0
 !                            do j=1,N-1
 !                                if(intact2(jj)==2*(j-1)+2+(3*N-1)*(iplt-1)) then    !if we have a horizontal edge
 !                                    yplace=endpts(1,intact2(jj))/N+1  !find the y value at which the horizontal edge occurs
-!                                    x2=nint((real(endpts(2,intact2(jj)))/real(N)&
-!                                             -floor(real(endpts(2,intact2(jj)))/real(N)))*N)
+!                                    x2=nint((real(endpts(2,intact2(jj)))/real(N)-floor(real(endpts(2,intact2(jj)))/real(N)))*N)
 !                                    if(x2==0) x2=N    !if it says the RHS endpoint is 0, force it to actually be N (because otherwise
 !                                                   !is says we should plot from N-1 to 0)
 !                                    counth=counth+1
-!                                    X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)&
-!                                                           -floor(real(endpts(1,intact2(jj)))&
-!                                                                  /real(N)))*N)
+!                                    X1plot(1,counth)=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
 !                                    X1plot(2,counth)=x2
 !                                    Y1plot(1,counth)=yplace
 !                                    Y1plot(2,counth)=yplace
@@ -1757,8 +1695,7 @@ neighborc=0
 !                        do j=Ffree,F-1
 !                            do k=1,N
 !                                if(intact2(jj)==(3*N-1)*(j-1)+2*N+(k-1)) then   !if we have a vertical (planar) edge
-!                                    xplace=nint((real(endpts(1,intact2(jj)))/real(N)&
-!                                                 -floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+!                                    xplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
 !                                                                                    !find the x value at which the vertical edge occurs
 !                                    y1=endpts(1,intact2(jj))/N+1  !find the bottom endpoint of the vertical edge
 !                                    y2=endpts(2,intact2(jj))/N+1
@@ -1780,8 +1717,7 @@ neighborc=0
 !                            do j=1,N
 !                                if(intact2(jj)==(3*N-1)*(i-1)+1+2*(j-1)) then  !if we have a vertical edge
 !                                    yvplace=(endpts(1,intact2(jj))/N)+1  !find the y value at which the vertical edge occurs
-!                                    xvplace=nint((real(endpts(1,intact2(jj)))/real(N)&
-!                                                  -floor(real(endpts(1,intact2(jj)))/real(N)))*N)
+!                                    xvplace=nint((real(endpts(1,intact2(jj)))/real(N)-floor(real(endpts(1,intact2(jj)))/real(N)))*N)
 !                                                                                          !find the x value at which the vertical edge occurs
 !                                    if(xvplace==0) then
 !                                        xvplace=N
@@ -1809,8 +1745,7 @@ neighborc=0
 !                            do jplt=1,M
 !                                if(Vedgenext(imod,jplt)==2*(j-1)+2+(3*N-1)*(i-1)) then
 !                                    Vedgeplace=(endpts(1,Vedgenext(imod,jplt))/N)+1
-!                                    Vx=nint((real(endpts(2,Vedgenext(imod,jplt)))/real(N)&
-!                                             -floor(real(endpts(2,Vedgenext(imod,jplt)))/real(N)))*N)
+!                                    Vx=nint((real(endpts(2,Vedgenext(imod,jplt)))/real(N)-floor(real(endpts(2,Vedgenext(imod,jplt)))/real(N)))*N)
 !                                    if(Vx==0) then
 !                                        Vx=N
 !                                    end if
@@ -1834,8 +1769,7 @@ neighborc=0
 !                            !vertical (planar) edges
 !                            do kplt=1,M
 !                                if(Vedgenext(imod,kplt)==(3*N-1)*(j-1)+2*N+(k-1)) then
-!                                    xVedgeplace=nint((real(endpts(1,Vedgenext(imod,kplt)))/real(N)&
-!                                                      -floor(real(endpts(1,Vedgenext(imod,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
+!                                    xVedgeplace=nint((real(endpts(1,Vedgenext(imod,kplt)))/real(N)-floor(real(endpts(1,Vedgenext(imod,kplt)))/real(N)))*N)  !find the x value at which the vertical edge occurs
 !                                    Vy1=endpts(1,Vedgenext(imod,kplt))/N+1  !find the bottom endpoint of the vertical edge
 !                                    if(xVedgeplace==0) then
 !                                        xVedgeplace=N
@@ -1901,45 +1835,44 @@ neighborc=0
 !
 !            !!!!! END ADDED STUFF FOR MOVIE
 !        end if
-!
+
 
 
         write(*,*)'countmacrounbd=',countmacrounbd
         write(*,*)'countmicrounbd=',countmicrounbd
-!         countindepV(istat,tf)=countindep
-     end do stats_loop  !for stats loop
+         countindepV(istat,tf)=countindep
+     enddo  !for stats loop
 
-!write(*,*)'Nsavevect=',Nsavevect(:)
+write(*,*)'Nsavevect=',Nsavevect(:)
 
-    !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-    !write(cbindunit) countbindV
-    !write(cindunit) countindepV
-    !write(bind1unit) bind1V
-!    write(Nunit) Nsavevect(:)
-!    write(lastmoveunit) lastmove(:,:)
-!    write(mfptunit) mfpt(:)
+!!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+!write(cbindunit) countbindV
+!write(cindunit) countindepV
+!write(bind1unit) bind1V
+write(Nunit) Nsavevect(:)
+write(lastmoveunit) lastmove(:,:)
+!write(mfptunit) mfpt(:)
 
-    close(degunit)
-    close(Nunit)
-    close(tunit)
-!    close(moveunit)
-!    close(lastmoveunit)
-!    close(plotunit)
-    close(mfptunit)
-    
+close(degunit)
+close(Nunit)
+close(tunit)
+close(moveunit)
+close(lastmoveunit)
+close(plotunit)
+close(mfptunit)
 !! BRAD 2023-01-21:
         close(t_degrade_unit)
         close(m_location_unit)
         close(m_bound_unit)
 !        close(m_bind_time_unit)
 
-    !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
-    !close(degnextunit)
-    !close(Venextunit)
-    !close(Vbdnextunit)
-    !close(cbindunit)
-    !close(cindunit)
-    !close(bind1unit)
+!!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
+!close(degnextunit)
+!close(Venextunit)
+!close(Vbdnextunit)
+!close(cbindunit)
+!close(cindunit)
+!close(bind1unit)
 
 CONTAINS
 

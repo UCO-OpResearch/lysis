@@ -1,7 +1,9 @@
 program micromodel
 
 implicit none
-character(15) :: expCode = '2022-12-20-1600'
+character(15) :: expCode = '2022-12-20-1700'
+character(6)  :: inFileCode = 'Q2.dat'
+character(17)   :: outFileCode = 'PLG2_tPA01_Q2.dat'
 !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
 !!!! Lines 19-25 allow you to set the various dissociation constants, binding rates, and the concentration of free PLG
 !!!! This code treats degradation and exposure in the gillespie algorithm, rather than separately with 
@@ -316,7 +318,7 @@ double precision :: uf, urcw1
  if(nodes==5) then
      radius=0.02875      !radius of fiber, in microns, with diameter 57.5 nm
      !!!Read in LatQ1 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='../data/' // expCode // '/LatQ1.dat')
+     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
      do i=1,nodes**2
         READ(1,*)(Lat(i,ii),ii=1,nodes**2)
      enddo
@@ -324,7 +326,7 @@ double precision :: uf, urcw1
  elseif(nodes==7) then
      radius=0.03635        !radius of fiber, in microns, with diameter 72.7 nm
      !!!Read in LatQ2 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='../data/' // expCode // '/LatQ2.dat')
+     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
      do i=1,nodes**2
      READ(1,*)(Lat(i,ii),ii=1,nodes**2)
      enddo
@@ -332,7 +334,7 @@ double precision :: uf, urcw1
  elseif(nodes==8) then
      radius=0.04065        !radius of fiber, in microns, with diameter 81.3 nm
      !!!Read in LatQ3 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='../data/' // expCode // '/LatQ3.dat')
+     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
      do i=1,nodes**2
         READ(1,*)(Lat(i,ii),ii=1,nodes**2)
      enddo
@@ -433,9 +435,9 @@ write(*,*)'runs=',runs
 
 !below starts the big loop where we do 50000 independent simulations ("do stats=1,runs")
 do stats = 1,runs
-  !if(MODULO(stats,1000)==1) then
+  if(MODULO(stats,1000)==0) then
     write(*,*)' stats=',stats
-  !endif
+  endif
   Nsave=0
   persave=0
   tsave=0
@@ -449,22 +451,22 @@ do stats = 1,runs
   endif
 
   if(stats==1) then
-    write(lysfile,'(58a)'  ) '../data/' // expCode // '/lysisPLG2_tPA01_Q2.dat'
-    write(tPAfile,'(61a)'  ) '../data/' // expCode // '/tPA_timePLG2_tPA01_Q2.dat'
-    write(PLifile,'(56a)' ) '../data/' // expCode // '/PLiPLG2_tPA01_Q2.dat'
-    write(endfile,'(64a)' ) '../data/' // expCode // '/lyscompletePLG2_tPA01_Q2.dat'
-    write(plgfile,'(56a)' ) '../data/' // expCode // '/PLGPLG2_tPA01_Q2.dat'
-    write(ctfile,'(58a)' ) '../data/' // expCode // '/countPLG2_tPA01_Q2.dat'
-    !write(plgbdfile,'(27a)') '../data/' // expCode // '/PLGunbindPLG2_tPA01_Q2.dat'
-    !write(plgunbdfile,'(29a)') '../data/' // expCode // '/PLGbindPLG2_tPA01_Q2.dat'
-    write(plitimefile,'(63a)') '../data/' // expCode // '/PLitimePLG2_tPA01_Q2.dat'
-    write(tPAPLifile,'(63a)') '../data/' // expCode // '/tPAPLiunbdPLG2_tPA01_Q2.dat'
-    !write(sfile,'(28a)' ) '../data/' // expCode // '/statetPAPLG2_tPA01_Q2.dat'
-    !write(profile,'(23a)' ) 'p../data/' // expCode // '/ersavePLG2_tPA01_Q2.dat'
-    !write(t2file,'(23a)' ) '../data/' // expCode // '/tsavePLG2_tPA01_Q2.dat'
-    write(tPAunbdfile,'(61a)') '../data/' // expCode // '/tPAunbindPLG2_tPA01_Q2.dat'
-    write(s2file,'(67a)' ) '../data/' // expCode // '/lasttPAPLG2_tPA01_Q2.dat'
-    write(fpfile,'(77a)') '../data/' // expCode // '/firstPLiPLG2_tPA01_Q2.dat'
+    write(lysfile,'(58a)'  ) 'data/' // expCode // '/lysis' // outFileCode
+    write(tPAfile,'(61a)'  ) 'data/' // expCode // '/tPA_time' // outFileCode
+    write(PLifile,'(56a)' ) 'data/' // expCode // '/PLi' // outFileCode
+    write(endfile,'(64a)' ) 'data/' // expCode // '/lyscomplete' // outFileCode
+    write(plgfile,'(56a)' ) 'data/' // expCode // '/PLG' // outFileCode
+    write(ctfile,'(58a)' ) 'data/' // expCode // '/count' // outFileCode
+    !write(plgbdfile,'(27a)') 'data/' // expCode // '/PLGunbindPLG2_tPA01_Q2.dat'
+    !write(plgunbdfile,'(29a)') 'data/' // expCode // '/PLGbindPLG2_tPA01_Q2.dat'
+    write(plitimefile,'(63a)') 'data/' // expCode // '/PLitime' // outFileCode
+    write(tPAPLifile,'(63a)') 'data/' // expCode // '/tPAPLiunbd' // outFileCode
+    !write(sfile,'(28a)' ) 'data/' // expCode // '/statetPAPLG2_tPA01_Q2.dat'
+    !write(profile,'(23a)' ) 'data/' // expCode // '/ersavePLG2_tPA01_Q2.dat'
+    !write(t2file,'(23a)' ) 'data/' // expCode // '/tsavePLG2_tPA01_Q2.dat'
+    write(tPAunbdfile,'(61a)') 'data/' // expCode // '/tPAunbind' // outFileCode
+    write(s2file,'(67a)' ) 'data/' // expCode // '/lasttPA' // outFileCode
+    write(fpfile,'(77a)') 'data/' // expCode // '/firstPLi' // outFileCode
     open(lysunit,file=lysfile,form=filetype)
     open(tPAunit,file=tPAfile,form=filetype)
     open(PLiunit,file=PLifile,form=filetype)
@@ -555,7 +557,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
         endif
   enddo
 
-   write(*,*)'init_entry=',init_entry
+!! BRAD   write(*,*)'init_entry=',init_entry
   
   tPA_loc(1) = init_entry;       !tPA starts on node init_entry
 
@@ -569,7 +571,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
       state(1,init_entry) = 3 !set the state of the double to be N10
   end if
 
-  write(*,*)'state(1,init_entry)=',state(1,init_entry)
+!! BRAD  write(*,*)'state(1,init_entry)=',state(1,init_entry)
   
   t = 0
   tfinal = 24*60*60 !final time to run Gillespie algorithm for (if the algorithm doesn't stop before then because fiber degraded or all tPA and PLi unbound)
@@ -666,7 +668,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
        A=countstate3   !number of activated states
 
       if(A==0)  then    !if there are no activated sites, stop the algorithm
-         write(*,*)'no tPA - stopped algorithm'
+!! BRAD         write(*,*)'no tPA - stopped algorithm'
          exit
       end if
  
@@ -870,7 +872,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
           !release one tPA and one PLi (because when doublet degrades, tPA and plasmin are released). start with tPA:
                       
           call movetpa(Ntot,nodes,state,prob_N02i,prob_N00i,prob_N02n,prob_N00n,vol3,param(9,ipar),D,count,p_rebind)
-          write(*,*)'p_rebind=',p_rebind
+!! BRAD          write(*,*)'p_rebind=',p_rebind
 
           reaction3=reaction3+1
                  
@@ -1057,7 +1059,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
           !release tPA
                       
           call movetpa(Ntot,nodes,state,prob_N02i,prob_N00i,prob_N02n,prob_N00n,vol3,param(9,ipar),D,count,p_rebind)
-          write(*,*)'p_rebind=',p_rebind
+!! BRAD          write(*,*)'p_rebind=',p_rebind
 
           reaction3=reaction3+1
       
@@ -1079,7 +1081,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
           !release tPA
                       
           call movetpa(Ntot,nodes,state,prob_N02i,prob_N00i,prob_N02n,prob_N00n,vol3,param(9,ipar),D,count,p_rebind)
-          write(*,*)'p_rebind=',p_rebind
+!! BRAD          write(*,*)'p_rebind=',p_rebind
           
           reaction3=reaction3+1
       
@@ -1415,7 +1417,7 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
          
          !first calculate the rebinding probability
              call movetpa(Ntot,nodes,state,prob_N02i,prob_N00i,prob_N02n,prob_N00n,vol3,param(9,ipar),D,count,p_rebind)
-             write(*,*)'p_rebind=',p_rebind
+!! BRAD             write(*,*)'p_rebind=',p_rebind
 
       elseif(bigJ(place)==2.or.bigJ(place)==5.or.bigJ(place)==1.or.bigJ(place)==6)then
           !if a rxn that results in a binding or unbinding of PLG occurs
