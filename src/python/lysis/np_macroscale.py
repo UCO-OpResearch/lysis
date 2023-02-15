@@ -170,8 +170,10 @@ class MacroscaleRun:
         self.current_save_interval = 0
 
         self.exp.data.degradation_state = np.empty(
-            (self.exp.macro_params.number_of_saves,
-             self.exp.macro_params.rows * self.exp.macro_params.full_row),
+            (
+                self.exp.macro_params.number_of_saves,
+                self.exp.macro_params.rows * self.exp.macro_params.full_row,
+            ),
             dtype=np.float_,
         )
         self.exp.data.molecule_location = np.empty(
@@ -192,6 +194,8 @@ class MacroscaleRun:
             (self.exp.macro_params.number_of_saves,),
             dtype=np.float_,
         )
+
+        self.degrade_time_tracker = []
 
         # self.m_tracker_index = 21
         # self.m_tracker_last = self.location[self.m_tracker_index]
@@ -357,6 +361,9 @@ class MacroscaleRun:
         lysis_happens = lysis_time_bin < total_lyses
         interp[~lysis_happens] = float("inf")
 
+        mol_index = np.arange(self.exp.macro_params.total_molecules)
+        mol_index = mol_index[m]
+
         # TODO(bpaynter): Should be able to improve this with a 2D
         #                 interpolation or a custom numpy kernel
         for i in np.arange(count)[lysis_happens]:
@@ -365,6 +372,20 @@ class MacroscaleRun:
                 np.arange(total_lyses[i]),
                 self.exp.data.lysis_time[unbinding_time_bin[i], : total_lyses[i]],
             )
+            if (
+                interp[i] + (current_time - self.exp.macro_params.time_step / 2)
+                < self.fiber_status[self.location[mol_index[i]]]
+            ):
+                self.degrade_time_tracker.append(
+                    (
+                        current_time,
+                        self.location[mol_index[i]],
+                        self.random_numbers[RandomDraw.LYSIS_TIME][mol_index[i]],
+                        interp[i],
+                        interp[i]
+                        + (current_time - self.exp.macro_params.time_step / 2),
+                    )
+                )
         return interp + (current_time - self.exp.macro_params.time_step / 2)
 
     def bind(self, m: np.ndarray, current_time: float):
@@ -386,7 +407,20 @@ class MacroscaleRun:
 
         lysis_time = self.find_lysis_time(m, unbinding_time_bin, current_time, count)
         locations = self.location[m]
-        self.fiber_status[locations] = np.fmin(self.fiber_status[locations], lysis_time)
+        for i in range(count):
+            if locations[i] == 7794:
+                if self.fiber_status[locations[i]] > lysis_time[i]:
+                    pass
+            if lysis_time[i] < float("inf"):
+                self.fiber_status[locations[i]] = min(
+                    self.fiber_status[locations[i]], lysis_time[i]
+                )
+        # NOTE:
+        # This line should NOT be vectorized as below. If two (or more) molecules bind
+        # to the same fiber on the same timestep, the second molecule's lysis time will
+        # override the first one's, even if the first one's lysis time is lower!
+        #
+        # self.fiber_status[locations] = np.fmin(self.fiber_status[locations], lysis_time)
 
     def move_to_empty_edge(self, m: np.ndarray, current_time: float):
         count = np.count_nonzero(m)
@@ -500,6 +534,9 @@ class MacroscaleRun:
             if self.exp.macro_params.duplicate_fortran:
                 current_time += self.exp.macro_params.time_step
 
+            if ts == 23:
+                pass
+
             if self.exp.macro_params.duplicate_fortran:
                 self.random_numbers = np.empty(
                     (8, self.exp.macro_params.total_molecules), np.float_
@@ -608,8 +645,10 @@ class MacroscaleRun:
             #     self.m_tracker_last = self.location[self.m_tracker_index]
             # pass
 
-        # m_tracker = np.array(self.m_tracker)
-        # np.save(os.path.join(self.exp.os_path, "m_tracker.p.npy"), m_tracker)
+        degrade_time_tracker = np.array(self.degrade_time_tracker)
+        np.save(
+            os.path.join(self.exp.os_path, "deg_tracker.p.npy"), degrade_time_tracker
+        )
         self.save_data(self.exp.macro_params.total_time)
         self.record_data_to_disk()
 

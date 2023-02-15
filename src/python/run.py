@@ -47,7 +47,7 @@ def run(e: lysis.util.Experiment, timestamp: AnyStr):
 
 
 def main():
-    e = lysis.util.Experiment(r"../../data", experiment_code="2023-01-31-1300")
+    e = lysis.util.Experiment(r"../../data", experiment_code="2023-01-31-1301")
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     os.makedirs(os.path.join(e.os_path, "log"), exist_ok=True)
     logfile = os.path.join(e.os_path, "log", "lysis-py-" + timestamp + ".log")

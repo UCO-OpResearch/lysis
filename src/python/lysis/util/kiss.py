@@ -60,7 +60,7 @@ class KissRandomGenerator:
         # It returns a double-precision (64-bit) float (equivalent to Python float)
         self.urcw1.restype = ctypes.c_double
 
-        self.vurcw1 = my_kiss.c_vurcw1_
+        self.vurcw1 = my_kiss.c_vurcw2_
         self.vurcw1.argtypes = [
             np.ctypeslib.ndpointer(np.float_, flags="C_CONTIGUOUS"),
             ctypes.c_int,
@@ -149,9 +149,9 @@ class KissRandomGenerator:
             return self.urcw1()
         else:
             out = np.empty(size, dtype=np.float_)
-            # self.vurcw1(out, size)
-            for i in range(size):
-                out[i] = self.urcw1()
+            self.vurcw1(out, size)
+            # for i in range(size):
+            #     out[i] = self.urcw1()
             return out
 
     def integers(
