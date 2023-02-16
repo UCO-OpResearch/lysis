@@ -1143,7 +1143,7 @@ neighborc=0
                                 !find the time that tPA will unbind:
                                 colr2=0
                                 do i=1,101
-                                    if(CDFtPA(i)>=r3)then
+                                    if(CDFtPA(i)>=r3)then   ! r3 in (0,1) so colr2 in {2 .. 101}
                                         colr2 = i    !find the first place on CDF that's bigger than r3
                                         exit
                                     end if
