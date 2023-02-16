@@ -4,6 +4,14 @@ lysis.util package
 Submodules
 ----------
 
+lysis.util.codeutil module
+--------------------------
+
+.. automodule:: lysis.util.codeutil
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 lysis.util.constants module
 ---------------------------
 
@@ -28,16 +36,16 @@ lysis.util.kiss module
    :undoc-members:
    :show-inheritance:
 
-lysis.util.parameters module
-----------------------------
+lysis.util.slurm module
+-----------------------
 
-.. automodule:: lysis.util.parameters
+.. automodule:: lysis.util.slurm
    :members:
    :undoc-members:
    :show-inheritance:
 
 lysis.util.util module
----------------------------
+----------------------
 
 .. automodule:: lysis.util.util
    :members:

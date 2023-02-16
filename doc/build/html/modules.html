@@ -166,12 +166,20 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="lysis.html">lysis package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="lysis.html#subpackages">Subpackages</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="lysis.experiment.html">lysis.experiment package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#submodules">Submodules</a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#module-lysis.experiment.framework">lysis.experiment.framework module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#module-lysis.experiment.parameters">lysis.experiment.parameters module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#module-lysis.experiment">Module contents</a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html">lysis.util package</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#submodules">Submodules</a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#module-lysis.util.codeutil">lysis.util.codeutil module</a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#module-lysis.util.constants">lysis.util.constants module</a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#module-lysis.util.datastore">lysis.util.datastore module</a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#module-lysis.util.kiss">lysis.util.kiss module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#module-lysis.util.parameters">lysis.util.parameters module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis-util-slurm-module">lysis.util.slurm module</a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#module-lysis.util.util">lysis.util.util module</a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#module-lysis.util">Module contents</a></li>
 </ul>
@@ -179,22 +187,71 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="lysis.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lysis.html#module-lysis.cp_macroscale">lysis.cp_macroscale module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.actual_move"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.actual_move()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.bind"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.bind()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.check_back_row"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.check_back_row()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.find_binding_time"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.find_binding_time()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.find_free_to_move"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.find_free_to_move()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.find_lysis_time"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.find_lysis_time()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.find_molecule_fiber_status"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.find_molecule_fiber_status()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.find_should_bind"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.find_should_bind()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.find_still_stuck"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.find_still_stuck()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.find_unbinding_time"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.find_unbinding_time()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.find_which_neighbor"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.find_which_neighbor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.move"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.move()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.move_to_empty_edge"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.move_to_empty_edge()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.run"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.run()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.unbind_by_degradation"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.unbind_by_degradation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.cp_macroscale.CudaMacroscaleRun.unbind_by_time"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun.unbind_by_time()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="lysis.html#module-lysis.edge_grid">lysis.edge_grid module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid"><code class="docutils literal notranslate"><span class="pre">EdgeGrid</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.empty_rows"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.empty_rows</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.fiber_status"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.fiber_status</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.molecules"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.molecules</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.move_molecule"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.move_molecule()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.generate_neighborhood_structure"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.generate_neighborhood_structure()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.neighbor"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.neighbor()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.nodes_in_row"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.nodes_in_row</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.place_molecule_row"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.place_molecule_row()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.pop_molecule_row"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.pop_molecule_row()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.thisgrid_empty_rows"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.thisgrid_empty_rows</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.total_empty_rows"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.total_empty_rows</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.edge_grid.EdgeGrid.total_rows"><code class="docutils literal notranslate"><span class="pre">EdgeGrid.total_rows</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.html#lysis.edge_grid.from_fortran_edge_index"><code class="docutils literal notranslate"><span class="pre">from_fortran_edge_index()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.html#lysis.edge_grid.to_fortran_edge_index"><code class="docutils literal notranslate"><span class="pre">to_fortran_edge_index()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="lysis.html#module-lysis.molecule">lysis.molecule module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="lysis.html#lysis.molecule.Molecule"><code class="docutils literal notranslate"><span class="pre">Molecule</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.molecule.Molecule.binding_time"><code class="docutils literal notranslate"><span class="pre">Molecule.binding_time</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.molecule.Molecule.bound"><code class="docutils literal notranslate"><span class="pre">Molecule.bound</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.molecule.Molecule.index"><code class="docutils literal notranslate"><span class="pre">Molecule.index</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.molecule.Molecule.leaving_time"><code class="docutils literal notranslate"><span class="pre">Molecule.leaving_time</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.molecule.Molecule.location"><code class="docutils literal notranslate"><span class="pre">Molecule.location</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.molecule.Molecule.time_to_reach_back_row"><code class="docutils literal notranslate"><span class="pre">Molecule.time_to_reach_back_row</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.molecule.Molecule.unbound_by_degradation"><code class="docutils literal notranslate"><span class="pre">Molecule.unbound_by_degradation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.molecule.Molecule.waiting_time"><code class="docutils literal notranslate"><span class="pre">Molecule.waiting_time</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="lysis.html#module-lysis.np_macroscale">lysis.np_macroscale module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.bind"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.bind()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.find_lysis_time"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.find_lysis_time()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.find_unbinding_time"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.find_unbinding_time()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.move"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.move()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.move_to_empty_edge"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.move_to_empty_edge()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.record_data_to_disk"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.record_data_to_disk()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.run"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.run()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.save_data"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.save_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.unbind_by_degradation"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.unbind_by_degradation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.unbind_by_time"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.unbind_by_time()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.html#lysis.np_macroscale.MacroscaleRun.unrestricted_move"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun.unrestricted_move()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="lysis.html#module-lysis">Module contents</a></li>

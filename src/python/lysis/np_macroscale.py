@@ -1,5 +1,26 @@
+# *_* coding: utf-8 *_*
+#
+# Clot Lysis Simulation
+# Copyright (C) 2023  Bradley Paynter & Brittany Bannish
+#
+# np_macroscale.py
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+"""Macroscale clot lysis simulation"""
+
 import logging
-import os
 from functools import partial
 
 import numpy as np
@@ -323,12 +344,12 @@ class MacroscaleRun:
         """Deals with molecules bound to a fiber that just degraded
 
         Args:
-            m: A boolean array of molecules. Used as a mask to apply this
-                function to.
-            current_time: The current model time
+            m: A boolean array of molecules. Used as a mask when applying this
+                function.
+            current_time: The current simulation time.
         """
-        # Count how many molecules need to be unbound
-        # that is, how many elements of `m` are `True`
+        # Count how many molecules need to be unbound.
+        # That is, how many elements of `m` are `True`
         count = np.count_nonzero(m)
         # If none, then return without any more work
         if count == 0:
@@ -357,71 +378,103 @@ class MacroscaleRun:
         """Deals with bound molecules whose 'unbind' timer just expired.
 
         Args:
-            m: A boolean array of molecules. Used as a mask to apply this
-                function to.
-            current_time: The current model time
+            m: A boolean array of molecules. Used as a mask when applying this
+                function.
+            current_time: The current simulation time.
         """
-        # Count how many molecules need to be unbound
-        # that is, how many elements of `m` are `True`
+        # Count how many molecules need to be unbound.
+        # That is, how many elements of `m` are `True`
         count = np.count_nonzero(m)
         # If none, then return without any more work
         if count == 0:
             return
+        # Set the bound status
+        # True if we are currently bound and not selected for unbinding
         self.bound = self.bound & ~m
+        # Set the 'macro unbind' flag to False
         self.unbound_by_degradation = self.unbound_by_degradation & ~m
+
+        # Deal with Micro unbinding
+        # Allocate space
         forced = np.full(self.exp.params.total_molecules, False, dtype=np.bool_)
+        # Draw random numbers
         if self.exp.params.duplicate_fortran:
-            forced[m] = (
-                self.random_numbers[RandomDraw.MICRO_UNBIND][m]
-                <= self.exp.params.forced_unbind
-            )
+            random = self.random_numbers[RandomDraw.MICRO_UNBIND][m]
         else:
-            forced[m] = self.rng.random(count) <= self.exp.params.forced_unbind
+            random = self.rng.random(count)
+        # Determine which molecules were forced to unbind
+        forced[m] = random <= self.exp.params.forced_unbind
+        # Calculate waiting time
         self.waiting_time[forced] = (
             current_time
             + self.exp.params.average_bind_time
             - self.exp.params.time_step / 2
         )
+        # Micro unbound molecules cannot bind
         self.binding_time[forced] = float("inf")
         num_forced = np.count_nonzero(forced)
         self.total_micro_unbinds += num_forced
+
+        # If a molecule unbound from an intact fiber and is not micro-unbound
+        # then it could rebind at some point, so we should calculate a binding
+        # time.
         if num_forced < count:
+            # Determine the amount of simulation time from now that the
+            # molecule will bind
             if self.exp.params.duplicate_fortran:
-                self.binding_time[
-                    m & ~forced
-                ] = current_time + self.binding_time_factory.fill_list(
+                binding_times = self.binding_time_factory.fill_list(
                     self.random_numbers[RandomDraw.BINDING_TIME_WHEN_UNBINDING][
                         m & ~forced
                     ]
                 )
             else:
-                self.binding_time[
-                    m & ~forced
-                ] = current_time + self.binding_time_factory.next(count - num_forced)
+                binding_times = self.binding_time_factory.next(count - num_forced)
+            # Add the binding time to the current time and store.
+            self.binding_time[m & ~forced] = current_time + binding_times
 
     def find_unbinding_time(
         self, unbinding_time_bin: np.ndarray, current_time: float
     ) -> np.ndarray:
-        """Find the experiment time at which the tPA molecule will unbind
+        """Find the simulation time at which the tPA molecule will unbind
 
-        If we think of the binding_time matrix as a function f(x) where
-        binding_time[100*x] = f(x), we want to draw uniformly from the range of
-        f, that is, we want the unbinding timestep to be f(r) where r~U(0,1).
+        If we think of the `binding_time` array as a function :math:`f(x)` where
+        `binding_time[100*x] =` :math:`f(x)`, we want to draw uniformly from
+        the range of :math:`f`. That is, we want the unbinding timestep to be
+        :math:`f(r)` where :math:`r\\sim U(0,1)`.
 
-        If -- magically -- 100 * r is an integer i, this is easy because we
-        just look up binding_time[i], but what if it isn't a perfect integer?
+        If :math:`100r` is an integer :math:`i`, this is easy because we
+        just look up `binding_time[i]`, but what if it isn't a perfect integer?
 
-        Then f(r) lies in the interval ( f(floor(100*r)), f(ceil(100*r)) ) so
-        we interpolate it linearly. That is, define a linear function g(x) such
-        that
-        g(floor(100*r)) = f(floor(100*r)) and g(ceil(100*r)) = f(ceil(100*r))
-        and then use g(r) to approximate f(r).
+        Then :math:`f(r)` lies in the interval
+        :math:`\\Bigl(f\\bigl(\\lfloor 100r \\rfloor\\bigr),
+        f\\bigl(\\lceil 100r \\rceil\\bigr)\\Bigr)` so we
+        interpolate it linearly. That is, define a linear function :math:`g(x)`
+        such that
+        :math:`g\\bigl(\\lfloor 100r \\rfloor\\bigr) =
+        f\\bigl(\\lfloor 100r \\rfloor\\bigr)` and
+        :math:`g\\bigl(\\lceil 100r \\rceil\\bigr) =
+        f\\bigl(\\lceil 100r \\rceil\\bigr)`.
+        Then use :math:`g(r)` to approximate :math:`f(r)`.
 
-        Another way to see this is,
-        if i is an integer such that 100i < 100r < 100(i+1) and
-        lambda is such that 100i + lambda = 100r,
-        then f(r) ~ (1-lambda)*f(i/100) + lambda*f( (i+1)/100 )"""
+        Another way to see this is, if :math:`i` is an integer such that
+        :math:`100i < 100r < 100(i+1)` and
+        :math:`\\lambda` is such that :math:`100i + \\lambda = 100r`,
+        then
+        :math:`f(r) \\approx (1-\\lambda)f(\\frac{i}{100}) +
+        \\lambda f(\\frac{i+1}{100})`.
+
+        Args:
+            unbinding_time_bin: Which bin of unbinding times are we drawing from?
+                Entries should be floats, drawn uniformly from (0, 100).
+            current_time: The current simulation time.
+
+        Returns: An array of unbinding times, randomly drawn from the provided
+            microscale data.
+        """
+        # Use NumPy's interp function to do the interpolation of the microscale
+        # unbinding data
         interp = np.interp(unbinding_time_bin, self.xp, self.exp.data.unbinding_time)
+        # Add the current simulation time and a half timestep. Then return
         return interp + (current_time - self.exp.params.time_step / 2)
 
     def find_lysis_time(
@@ -431,48 +484,106 @@ class MacroscaleRun:
         current_time: float,
         count: int,
     ) -> np.ndarray:
+        """Find the (possibly infinite) simulation time at which the molecule
+        will degrade the fiber to which it just bound.
+
+        Args:
+            m: A boolean array of molecules. Used as a mask when applying this
+                function.
+            unbinding_time_bin: Which bin of unbinding times are we drawing from?
+                This should be the same array passed to the
+                `find_unbinding_time` method.
+                Entries should be floats, drawn uniformly from (0, 100).
+            current_time: The current simulation time.
+            count: The number of molecules for which we are finding lysis times.
+
+        Returns: An array of lysis times, randomly drawn from the provided
+            microscale data.
+
+        """
+        # Draw random numbers to determine where we will interpolate the lysis
+        # time from.
+        # `unbinding_time_bin` determines the row of the `lysis_time` matrix,
+        # while `lysis_time_bin` determines the column.
         if self.exp.params.duplicate_fortran:
             lysis_time_bin = self.random_numbers[RandomDraw.LYSIS_TIME][m]
         else:
             lysis_time_bin = self.rng.random(count)
         lysis_time_bin = lysis_time_bin * (self.exp.params.microscale_runs / 100)
+        # Allocate memory for the lysis times
         interp = np.full(count, float("inf"), dtype=np.double)
+        # Floor the `unbinding_time_bin` so that we can use it indexes the
+        # appropriate row of the lysis matrix
         unbinding_time_bin = unbinding_time_bin.astype(int)
+        # Determine how many entries in the current row of `lysis_time` have
+        # finite entries (infinite entries are stored as `6,000` for legacy
+        # reasons).
+        # The `total_lyses` array stores the address of the first infinite entry
+        # so we need to subtract one to find the number of finite entries.
         total_lyses = self.exp.data.total_lyses[unbinding_time_bin] - 1
+        # Determine which bindings actually result in lysis (non-infinite)
         lysis_happens = lysis_time_bin < total_lyses
+        # Set the other entries to infinite lysis times.
         interp[~lysis_happens] = float("inf")
 
         # TODO(bpaynter): Should be able to improve this with a 2D
         #                 interpolation or a custom numpy kernel
+        # For each molecule where lysis takes place
         for i in np.arange(count)[lysis_happens]:
+            # Interpolate the `lysis_time_bin` into the appropriate row of the
+            # `lysis_time` matrix using the NumPy `interp` function.
             interp[i] = np.interp(
                 lysis_time_bin[i],
                 np.arange(total_lyses[i]),
                 self.exp.data.lysis_time[unbinding_time_bin[i], : total_lyses[i]],
             )
+        # Add the current time and a half timestep. Then return.
         return interp + (current_time - self.exp.params.time_step / 2)
 
     def bind(self, m: np.ndarray, current_time: float):
+        """Deals with molecules that just bound to a fiber.
+
+        Args:
+            m: A boolean array of molecules. Used as a mask when applying this
+                function.
+            current_time: The current simulation time.
+        """
+        # Count how many molecules need to be bound.
+        # That is, how many elements of `m` are `True`
         count = np.count_nonzero(m)
+        # If none, then return without any more work
         if count == 0:
             return
 
+        # Set the molecule status to 'bound'
+        # This is true if the molecule was already bound, or if it is binding
+        # on this timestep
         self.bound = self.bound | m
+        # Reset the molecule's waiting time
         self.waiting_time[m] = 0
+        # Add to the total number of binds for the simulation
         self.total_binds += count
 
+        # Draw random numbers for the unbinding time
         if self.exp.params.duplicate_fortran:
             unbinding_time_bin = self.random_numbers[RandomDraw.UNBINDING_TIME][m] * 100
         else:
             unbinding_time_bin = self.rng.random(count) * 100
+        # Determine the time at which the molecule would unbind itself
         self.binding_time[m] = self.find_unbinding_time(
             unbinding_time_bin, current_time
         )
-
+        # Determine the (possibly infinite) simulation time at which the
+        # molecule would degrade this fiber
         lysis_time = self.find_lysis_time(m, unbinding_time_bin, current_time, count)
+        # Find the fibers to which the molecules have just been bound
         locations = self.location[m]
+        # For each molecule
         for i in range(count):
+            # Check if the molecule would degrade the fiber
             if lysis_time[i] < float("inf"):
+                # Set the fiber's status (degrade time) if the new time is
+                # smaller than its previously stored time.
                 self.fiber_status[locations[i]] = min(
                     self.fiber_status[locations[i]], lysis_time[i]
                 )
@@ -484,87 +595,160 @@ class MacroscaleRun:
         # self.fiber_status[locations] = np.fmin(self.fiber_status[locations], lysis_time)
 
     def move_to_empty_edge(self, m: np.ndarray, current_time: float):
+        """Deal with molecules that need to move this timestep, but are still
+        bound to a fiber particle due to macro- or micro-unbinding.
+
+        Also known as 'restricted move'.
+
+        Here, a molecule cannot move to an edge containing an intact fiber.
+        The new location for the molecule is drawn uniformly from a set
+        containing the molecule's current location and any neighboring edge
+        without a fiber (whether always empty or empty due to degradation).
+
+        Args:
+            m: A boolean array of molecules. Used as a mask when applying this
+                function.
+            current_time: The current simulation time.
+        """
+        # Count how many molecules need to be moved.
+        # That is, how many elements of `m` are `True`
         count = np.count_nonzero(m)
+        # If none, then return without any more work
         if count == 0:
             return
 
+        # Add to the total restricted moves for the simulation
         self.total_restricted_moves += count
-
+        # Get the current location of the molecules
         current_locations = self.location[m]
 
+        # Get the full neighborhoods of the molecule's current location
         neighborhoods = self.neighbors[current_locations]
+        # Neighbors that are valid for movement were either empty from the
+        # start of the simulation (`fiber_status` = 0) or have degraded by this
+        # point of the simulation (`fiber_status` < current_time)
         valid_neighbors = self.fiber_status[neighborhoods] < current_time
+        # We then determine the indices of the valid neighbors
+        # (True sorts before False)
         valid_neighborhood_index = np.argsort(~valid_neighbors, axis=1)
+        # And sort so that the valid neighbors are at the front of each
+        # molecule's neighborhood
         valid_neighborhoods = np.take_along_axis(
             neighborhoods, valid_neighborhood_index, axis=1
         )
+        # Add the molecules' current locations to the front of their array of
+        # valid neighbors
         valid_neighborhoods = np.append(
             current_locations.reshape(count, 1), valid_neighborhoods, axis=1
         )
+        # Determine the number of valid neighbors for each molecule
+        # (not counting its current location)
         num_valid_neighbors = np.count_nonzero(valid_neighbors, axis=1)
+        # Draw random numbers to determine which neighbor
         if self.exp.params.duplicate_fortran:
-            neighbor = self.random_numbers[RandomDraw.RESTRICTED_MOVE][m] * (
-                num_valid_neighbors + 1
-            )
+            neighbor = self.random_numbers[RandomDraw.RESTRICTED_MOVE][m]
         else:
-            neighbor = self.rng.random(count) * (num_valid_neighbors + 1)
-        neighbor = neighbor.astype(int, copy=False)
-
+            neighbor = self.rng.random(count)
+        # Convert the random float into an integer
+        neighbor = (neighbor * (num_valid_neighbors + 1)).astype(int, copy=False)
+        # Set the molecules' locations to the randomly determined neighbor.
         self.location[m] = valid_neighborhoods[np.full(count, True), neighbor]
 
-    def find_still_stuck(self, m: np.ndarray, current_time: float):
-        return (self.waiting_time > current_time) & self.unbound_by_degradation & m
+    def unrestricted_move(self, m: np.ndarray, current_time: float):
+        """Deals with molecules that need to move this timestep and are free to
+        move to any neighboring edge.
 
-    def unrestricted_move(self, free_to_move: np.ndarray, current_time: float):
+        Args:
+            m: A boolean array of molecules. Used as a mask when applying this
+                function.
+            current_time: The current simulation time.
+        """
+        # Count how many molecules need to be moved.
+        # That is, how many elements of `free_to_move` are `True`
+        count = np.count_nonzero(m)
+        # If none, then return without any more work
+        if count == 0:
+            return
+
+        # Draw random numbers to determine the neighbor we should move to
         if self.exp.params.duplicate_fortran:
-            neighbor = self.random_numbers[RandomDraw.MOVE][free_to_move]
+            # The Fortran code uses the same random number that determines IF a
+            # molecule should move to determine WHERE a molecule should move
+            neighbor = self.random_numbers[RandomDraw.MOVE][m]
+            # So all of these numbers will be in the interval (.8, 1), so they
+            # first need to be scaled back to (0, 1)
             neighbor = neighbor - (1 - self.exp.params.moving_probability)
             neighbor = neighbor / self.exp.params.moving_probability
+            # Then to (0, 8)
             neighbor = neighbor * 8
+            # Then converted to an integer in {1..8}
             neighbor = neighbor.astype(int, copy=False)
         else:
-            neighbor = self.rng.integers(8, size=np.count_nonzero(free_to_move))
+            # All neighborhoods have eight entries, so choose one uniformly
+            neighbor = self.rng.integers(8, size=count)
 
-        self.location[free_to_move] = self.neighbors[
-            self.location[free_to_move], neighbor
-        ]
-        self.total_regular_moves += np.count_nonzero(free_to_move)
+        # Set the molecules' new location to that of the selected neighbor.
+        self.location[m] = self.neighbors[self.location[m], neighbor]
+        # Add to the total moves for this simulation
+        self.total_regular_moves += count
 
-        # move_to_fiber = free_to_move & (self.m_fiber_status >= current_time)
+        # TODO(bpaynter): It might be quicker to only assign binding times
+        #   to those molecules whose new location contains a non-degraded fiber
 
-        num_move_to_fiber = np.count_nonzero(free_to_move)
-        if num_move_to_fiber > 0:
-            if self.exp.params.duplicate_fortran:
-                self.binding_time[
-                    free_to_move
-                ] = current_time + self.binding_time_factory.fill_list(
-                    self.random_numbers[RandomDraw.BINDING_TIME_WHEN_MOVING][
-                        free_to_move
-                    ]
-                )
-            else:
-                self.binding_time[
-                    free_to_move
-                ] = current_time + self.binding_time_factory.next(num_move_to_fiber)
+        # Generate binding times for each molecule
+        if self.exp.params.duplicate_fortran:
+            binding_time = self.binding_time_factory.fill_list(
+                self.random_numbers[RandomDraw.BINDING_TIME_WHEN_MOVING][m]
+            )
+        else:
+            binding_time = self.binding_time_factory.next(count)
+        # Add the binding times to the current time and store
+        self.binding_time[m] = current_time + binding_time
 
     def move(self, m: np.ndarray, current_time: float):
-        still_stuck_to_fiber = self.find_still_stuck(m, current_time)
+        """Deals with all molecules that need to move on this timestep
+
+        Args:
+            m: A boolean array of molecules. Used as a mask when applying this
+                function.
+            current_time: The current simulation time.
+        """
+        # Determine which molecules are restricted in their movement. These are
+        # molecules that have been macro- or micro-unbound.
+        still_stuck_to_fiber = (
+            (self.waiting_time > current_time) & self.unbound_by_degradation & m
+        )
+        # Process those molecules that have restricted movement
         self.move_to_empty_edge(still_stuck_to_fiber, current_time)
 
+        # Determine the molecules which are free to move to any neighbor
         free_to_move = m & ~still_stuck_to_fiber
-
+        # Process those molecules that are unrestricted in their movement.
         self.unrestricted_move(free_to_move, current_time)
 
+        # If there are still molecules which have not yet passed through the clot
         if self.number_reached_back_row < self.exp.params.total_molecules:
-            first_time = ~self.reached_back_row & (
-                self.location
-                > (self.exp.params.rows - 1) * self.exp.params.full_row - 1
-            )
-            self.time_to_reach_back_row[first_time] = current_time
-            self.reached_back_row = self.reached_back_row | first_time
-            self.number_reached_back_row += np.count_nonzero(first_time)
+            back_row = (self.exp.params.rows - 1) * self.exp.params.full_row - 1
+            # Determine those molecules which are currently on the back row of
+            # the grid and have not been counted before
+            first_time = (self.location > back_row) & ~self.reached_back_row
+            # Count how many molecules have passed through for the first time
+            # on this timestep
+            count = np.count_nonzero(first_time)
+            if count > 0:
+                # Store the 'first passage time' for these molecules
+                self.time_to_reach_back_row[first_time] = current_time
+                # Flag these molecules as having passed through the clot
+                self.reached_back_row = self.reached_back_row | first_time
+                # Add the number to the total for the simulation
+                self.number_reached_back_row += count
 
     def save_data(self, current_time):
+        """Saves the current simulation state.
+
+        Args:
+            current_time: The current simulation time.
+        """
         self.exp.data.degradation_state[self.current_save_interval] = self.fiber_status
         self.exp.data.molecule_location[self.current_save_interval] = self.location
         self.exp.data.molecule_state[self.current_save_interval] = self.bound
@@ -572,6 +756,7 @@ class MacroscaleRun:
         self.current_save_interval += 1
 
     def record_data_to_disk(self):
+        """Records the saved data to disk."""
         self.logger.info(f"Saving data to disk.")
         self.exp.data.save_to_disk("degradation_state")
         self.exp.data.save_to_disk("molecule_location")
@@ -579,110 +764,139 @@ class MacroscaleRun:
         self.exp.data.save_to_disk("save_time")
 
     def run(self):
+        """Runs the simulation."""
+        # Save the initial state of the simulation.
         self.save_data(0)
+        # Start the main loop of the simulation, looping over all timesteps.
         for ts in tqdm(np.arange(self.exp.params.total_time_steps), mininterval=2):
-            current_time = ts * self.exp.params.time_step
-            if self.exp.params.duplicate_fortran:
-                current_time += self.exp.params.time_step
+            # We process each timestep at the end of that time interval.
+            # Therefor, the current time is the number of timesteps,
+            # times the length of one timestep,
+            # plus the length of the current timestep.
+            current_time = (ts + 1) * self.exp.params.time_step
 
-            if ts == 23:
-                pass
-
+            # If we are matching the 'rng-array' Fortran code step-by-step,
+            # then we need to roll all random numbers that might be used for
+            # this timestep at the beginning.
             if self.exp.params.duplicate_fortran:
+                # Allocate space for eight random numbers per molecule.
+                # See lysis.util.constants.RandomDraw for their use-codes
                 self.random_numbers = np.empty(
                     (8, self.exp.params.total_molecules), np.float_
                 )
+                # Draw random numbers
                 for i in range(8):
                     self.random_numbers[i] = self.rng.random(
                         self.exp.params.total_molecules
                     )
 
+            # Store the fiber status of each molecule's current location.
+            # This sort of complex indexing function is resource intensive and
+            # reducing the number of calls of this type will improve running
+            # time.
             self.m_fiber_status = self.fiber_status[self.location]
 
+            # Find any molecules bound to a degraded fiber and deal with them.
             self.unbind_by_degradation(
                 self.bound & (self.m_fiber_status < current_time), current_time
             )
+            # Find any bound molecules whose binding/unbinding timer has
+            # expired and deal with them
             self.unbind_by_time(
                 self.bound & (self.binding_time < current_time), current_time
             )
 
+            # Determine which molecules are ready to bind on this timestep.
             should_bind = (
-                ~self.bound
-                & (self.binding_time < current_time)
-                & (self.m_fiber_status > current_time)
-                & (self.waiting_time < current_time)
+                ~self.bound  # Not currently bound
+                & (self.binding_time < current_time)  # Binding time passed
+                & (self.m_fiber_status > current_time)  # Fiber not degraded
+                & (self.waiting_time < current_time)  # Not waiting
             )
+
+            # Draw random numbers to determine if molecules should move on this
+            # timestep
             if self.exp.params.duplicate_fortran:
                 move_chance = self.random_numbers[RandomDraw.MOVE]
-                should_move = (
-                    move_chance > 1 - self.exp.params.moving_probability
-                ) & ~self.bound
             else:
                 move_chance = self.rng.random(self.exp.params.total_molecules)
-                should_move = (
-                    move_chance < self.exp.params.moving_probability
-                ) & ~self.bound
+            # Molecules should move if their moving chance is rolled and they
+            # are not currently bound
+            # NOTE: It is faster to roll for all molecules and mask out those
+            # that are bound, than it is to look up those that are unbound and
+            # just roll for them
+            should_move = (
+                move_chance > 1 - self.exp.params.moving_probability
+            ) & ~self.bound
 
             # TODO(bpaynter): Since these are all boolean vectors, I should be
             #                 able to use & and | instead of the lookup masks
+            # Find those molecules that are scheduled to both bind and move on
+            # this timestep
             conflict = should_bind & should_move
+            # Determine how far into this timestep the molecule will bind
             threshold = (
                 current_time - self.binding_time[conflict]
             ) / self.exp.params.time_step
+
+            # Draw random numbers to resolve move & bind conflicts
             if self.exp.params.duplicate_fortran:
-                should_bind[conflict] = (
-                    self.random_numbers[RandomDraw.CONFLICT_RESOLUTION][conflict]
-                    <= threshold
-                )
+                random = self.random_numbers[RandomDraw.CONFLICT_RESOLUTION][conflict]
             else:
-                should_bind[conflict] = (
-                    self.rng.random(np.count_nonzero(conflict)) <= threshold
-                )
+                random = self.rng.random(np.count_nonzero(conflict))
+            # The molecule binds if its move time (uniformly drawn) is earlier(??)
+            # than its binding time.
+            should_bind[conflict] = random <= threshold
+            # If it has been chosen to bind, it should not move
             should_move[conflict] = ~should_bind[conflict]
 
+            # Deal with all molecules that will bind on this timestep
             self.bind(should_bind, current_time)
+            # Deal with all molecules that should move on this timestep
             self.move(should_move, current_time)
 
+            # If a full save interval has passed, then save the current
+            # simulation state.
             if (
                 current_time
                 >= self.exp.params.save_interval * self.current_save_interval
             ):
                 self.save_data(current_time)
 
-            if ts % 100000 == 100000 - 1:
+            # If 100,000 timesteps have passed,
+            # output status and check termination criteria
+            if ts % 100_000 == 100_000 - 1:
+                # Count the number of non-degraded fibers
                 unlysed_fibers = np.count_nonzero(self.fiber_status > current_time)
-
-                if unlysed_fibers == 0:
-                    self.logger.info(
-                        f"All fibers degraded after {current_time:.2f} sec. Terminating"
-                    )
+                # Determine the percentage of fibers that have degraded
+                lysed_fiber_percent = (
+                    100 - unlysed_fibers / self.exp.params.total_fibers * 100
+                )
+                # Determine the percentage of molecules that have passed
+                # through the clot
+                reached_back_row_percent = (
+                    self.number_reached_back_row / self.exp.params.total_molecules * 100
+                )
+                # Output status to log
+                self.logger.info(
+                    f"After {current_time:.2f} sec, "
+                    f"{self.exp.params.total_fibers - unlysed_fibers:,} "
+                    f"fibers are degraded ({lysed_fiber_percent:.1f}% of total) "
+                    f"and {self.number_reached_back_row:,} molecules have reached "
+                    f"the back row {reached_back_row_percent:.1f}% of total)."
+                )
+                # Determine if the simulation should terminate
+                if unlysed_fibers == 0 and reached_back_row_percent > 95:
                     self.last_degrade_time = np.max(self.fiber_status)
-                    # break
-                else:
-                    unlysed_fiber_percent = (
-                        100 - unlysed_fibers / self.exp.params.total_fibers * 100
-                    )
-                    reached_back_row_percent = (
-                        self.number_reached_back_row
-                        / self.exp.params.total_molecules
-                        * 100
-                    )
-                    self.logger.info(
-                        f"After {current_time:.2f} sec, "
-                        f"{self.exp.params.total_fibers - unlysed_fibers:,} "
-                        f"fibers are degraded ({unlysed_fiber_percent:.1f}% of total) "
-                        f"and {self.number_reached_back_row:,} molecules have reached "
-                        f"the back row {reached_back_row_percent:.1f}% of total)."
-                    )
+                    break
 
+        # Save the final status of the simulation
         self.save_data(self.exp.params.total_time)
+        # Store simulation data to disk
         self.record_data_to_disk()
 
+        # Output final simulation metrics to log
         self.logger.info(f"Total binds: {self.total_binds:,}")
-        self.logger.info(
-            f"Timesteps with changes to degrade time: "
-            f"{self.timesteps_with_fiber_changes:,}"
-        )
         self.logger.info(f"Total regular moves: {self.total_regular_moves:,}")
         self.logger.info(f"Total restricted moves: {self.total_restricted_moves:,}")
         self.logger.info(f"Total macro unbinds: {self.total_macro_unbinds:,}")

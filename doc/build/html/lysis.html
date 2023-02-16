@@ -35,13 +35,14 @@
         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/sphinx_highlight.js"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
     
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="lysis.util package" href="lysis.util.html" />
+    <link rel="next" title="lysis.experiment package" href="lysis.experiment.html" />
     <link rel="prev" title="lysis" href="modules.html" /> 
 </head>
 
@@ -92,14 +93,27 @@
 <li class="toctree-l1 current"><a class="reference internal" href="modules.html">lysis</a><ul class="current">
 <li class="toctree-l2 current"><a class="current reference internal" href="#">lysis package</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#subpackages">Subpackages</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html">lysis.experiment package</a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html">lysis.util package</a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-lysis.cp_macroscale">lysis.cp_macroscale module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#lysis.cp_macroscale.CudaMacroscaleRun"><code class="docutils literal notranslate"><span class="pre">CudaMacroscaleRun</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="#module-lysis.edge_grid">lysis.edge_grid module</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#lysis.edge_grid.EdgeGrid"><code class="docutils literal notranslate"><span class="pre">EdgeGrid</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#lysis.edge_grid.from_fortran_edge_index"><code class="docutils literal notranslate"><span class="pre">from_fortran_edge_index()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#lysis.edge_grid.to_fortran_edge_index"><code class="docutils literal notranslate"><span class="pre">to_fortran_edge_index()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-lysis.molecule">lysis.molecule module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#lysis.molecule.Molecule"><code class="docutils literal notranslate"><span class="pre">Molecule</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-lysis.np_macroscale">lysis.np_macroscale module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#lysis.np_macroscale.MacroscaleRun"><code class="docutils literal notranslate"><span class="pre">MacroscaleRun</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#module-lysis">Module contents</a></li>
@@ -182,8 +196,95 @@
 <h2>Subpackages<a class="headerlink" href="#subpackages" title="Permalink to this heading">¶</a></h2>
 <div class="toctree-wrapper compound">
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="lysis.experiment.html">lysis.experiment package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="lysis.experiment.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lysis.experiment.html#module-lysis.experiment.framework">lysis.experiment.framework module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Experiment"><code class="docutils literal notranslate"><span class="pre">Experiment</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Experiment.experiment_code"><code class="docutils literal notranslate"><span class="pre">Experiment.experiment_code</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Experiment.os_path"><code class="docutils literal notranslate"><span class="pre">Experiment.os_path</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Experiment.params"><code class="docutils literal notranslate"><span class="pre">Experiment.params</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Experiment.split_variations"><code class="docutils literal notranslate"><span class="pre">Experiment.split_variations()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Model"><code class="docutils literal notranslate"><span class="pre">Model</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Model.language"><code class="docutils literal notranslate"><span class="pre">Model.language</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Model.macro_unbind_can_bind"><code class="docutils literal notranslate"><span class="pre">Model.macro_unbind_can_bind</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Model.macro_unbind_can_diffuse"><code class="docutils literal notranslate"><span class="pre">Model.macro_unbind_can_diffuse</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Model.micro_unbind_can_bind"><code class="docutils literal notranslate"><span class="pre">Model.micro_unbind_can_bind</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Model.micro_unbind_can_diffuse"><code class="docutils literal notranslate"><span class="pre">Model.micro_unbind_can_diffuse</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Model.red_blood_cells"><code class="docutils literal notranslate"><span class="pre">Model.red_blood_cells</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Model.source_code"><code class="docutils literal notranslate"><span class="pre">Model.source_code</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Scenario"><code class="docutils literal notranslate"><span class="pre">Scenario</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Scenario.to_dict"><code class="docutils literal notranslate"><span class="pre">Scenario.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.load_scenario"><code class="docutils literal notranslate"><span class="pre">load_scenario()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="lysis.experiment.html#module-lysis.experiment.parameters">lysis.experiment.parameters module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.OLDExperiment"><code class="docutils literal notranslate"><span class="pre">OLDExperiment</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.OLDExperiment.to_file"><code class="docutils literal notranslate"><span class="pre">OLDExperiment.to_file()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters"><code class="docutils literal notranslate"><span class="pre">Parameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.average_bind_time"><code class="docutils literal notranslate"><span class="pre">Parameters.average_bind_time</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.binding_rate"><code class="docutils literal notranslate"><span class="pre">Parameters.binding_rate</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.binding_sites"><code class="docutils literal notranslate"><span class="pre">Parameters.binding_sites</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.cols"><code class="docutils literal notranslate"><span class="pre">Parameters.cols</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.diffusion_coeff"><code class="docutils literal notranslate"><span class="pre">Parameters.diffusion_coeff</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.duplicate_fortran"><code class="docutils literal notranslate"><span class="pre">Parameters.duplicate_fortran</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.empty_rows"><code class="docutils literal notranslate"><span class="pre">Parameters.empty_rows</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.forced_unbind"><code class="docutils literal notranslate"><span class="pre">Parameters.forced_unbind</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.fortran_names"><code class="docutils literal notranslate"><span class="pre">Parameters.fortran_names()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.full_row"><code class="docutils literal notranslate"><span class="pre">Parameters.full_row</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.grid_node_distance"><code class="docutils literal notranslate"><span class="pre">Parameters.grid_node_distance</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.input_data"><code class="docutils literal notranslate"><span class="pre">Parameters.input_data</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.last_empty_edge"><code class="docutils literal notranslate"><span class="pre">Parameters.last_empty_edge</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.log_lvl"><code class="docutils literal notranslate"><span class="pre">Parameters.log_lvl</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.macro_version"><code class="docutils literal notranslate"><span class="pre">Parameters.macro_version</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.microscale_runs"><code class="docutils literal notranslate"><span class="pre">Parameters.microscale_runs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.moving_probability"><code class="docutils literal notranslate"><span class="pre">Parameters.moving_probability</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.number_of_saves"><code class="docutils literal notranslate"><span class="pre">Parameters.number_of_saves</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.output_data"><code class="docutils literal notranslate"><span class="pre">Parameters.output_data</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.pore_size"><code class="docutils literal notranslate"><span class="pre">Parameters.pore_size</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.print_default_values"><code class="docutils literal notranslate"><span class="pre">Parameters.print_default_values()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.processing_library"><code class="docutils literal notranslate"><span class="pre">Parameters.processing_library</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.rows"><code class="docutils literal notranslate"><span class="pre">Parameters.rows</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.save_interval"><code class="docutils literal notranslate"><span class="pre">Parameters.save_interval</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.seed"><code class="docutils literal notranslate"><span class="pre">Parameters.seed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.time_step"><code class="docutils literal notranslate"><span class="pre">Parameters.time_step</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.to_dict"><code class="docutils literal notranslate"><span class="pre">Parameters.to_dict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.total_edges"><code class="docutils literal notranslate"><span class="pre">Parameters.total_edges</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.total_fibers"><code class="docutils literal notranslate"><span class="pre">Parameters.total_fibers</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.total_molecules"><code class="docutils literal notranslate"><span class="pre">Parameters.total_molecules</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.total_time"><code class="docutils literal notranslate"><span class="pre">Parameters.total_time</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.total_time_steps"><code class="docutils literal notranslate"><span class="pre">Parameters.total_time_steps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.total_trials"><code class="docutils literal notranslate"><span class="pre">Parameters.total_trials</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.parameters.Parameters.xz_row"><code class="docutils literal notranslate"><span class="pre">Parameters.xz_row</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="lysis.experiment.html#module-lysis.experiment">Module contents</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="lysis.util.html">lysis.util package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="lysis.util.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lysis.util.html#module-lysis.util.codeutil">lysis.util.codeutil module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.codeutil.FortranMacro"><code class="docutils literal notranslate"><span class="pre">FortranMacro</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.codeutil.FortranMacro.cwd"><code class="docutils literal notranslate"><span class="pre">FortranMacro.cwd</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.codeutil.FortranMacro.exec_command"><code class="docutils literal notranslate"><span class="pre">FortranMacro.exec_command()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.codeutil.FortranMacro.executable"><code class="docutils literal notranslate"><span class="pre">FortranMacro.executable</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.codeutil.FortranMacro.exp"><code class="docutils literal notranslate"><span class="pre">FortranMacro.exp</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.codeutil.FortranMacro.in_file_code"><code class="docutils literal notranslate"><span class="pre">FortranMacro.in_file_code</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.codeutil.FortranMacro.out_file_code"><code class="docutils literal notranslate"><span class="pre">FortranMacro.out_file_code</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.codeutil.FortranMacro.run"><code class="docutils literal notranslate"><span class="pre">FortranMacro.run()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="lysis.util.html#module-lysis.util.constants">lysis.util.constants module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryCondition"><code class="docutils literal notranslate"><span class="pre">BoundaryCondition</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryCondition.CONTINUING"><code class="docutils literal notranslate"><span class="pre">BoundaryCondition.CONTINUING</span></code></a></li>
@@ -211,9 +312,29 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.Neighbors"><code class="docutils literal notranslate"><span class="pre">Neighbors</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw"><code class="docutils literal notranslate"><span class="pre">RandomDraw</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.BINDING_TIME_WHEN_MOVING"><code class="docutils literal notranslate"><span class="pre">RandomDraw.BINDING_TIME_WHEN_MOVING</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.BINDING_TIME_WHEN_UNBINDING"><code class="docutils literal notranslate"><span class="pre">RandomDraw.BINDING_TIME_WHEN_UNBINDING</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.CONFLICT_RESOLUTION"><code class="docutils literal notranslate"><span class="pre">RandomDraw.CONFLICT_RESOLUTION</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.LYSIS_TIME"><code class="docutils literal notranslate"><span class="pre">RandomDraw.LYSIS_TIME</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.MICRO_UNBIND"><code class="docutils literal notranslate"><span class="pre">RandomDraw.MICRO_UNBIND</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.MOVE"><code class="docutils literal notranslate"><span class="pre">RandomDraw.MOVE</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.RESTRICTED_MOVE"><code class="docutils literal notranslate"><span class="pre">RandomDraw.RESTRICTED_MOVE</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.UNBINDING_TIME"><code class="docutils literal notranslate"><span class="pre">RandomDraw.UNBINDING_TIME</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.uuid8"><code class="docutils literal notranslate"><span class="pre">uuid8()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.uuid8code"><code class="docutils literal notranslate"><span class="pre">uuid8code()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="lysis.util.html#module-lysis.util.datastore">lysis.util.datastore module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStatus"><code class="docutils literal notranslate"><span class="pre">DataStatus</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStatus.INITIALIZED"><code class="docutils literal notranslate"><span class="pre">DataStatus.INITIALIZED</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStatus.LOADED"><code class="docutils literal notranslate"><span class="pre">DataStatus.LOADED</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStatus.NONE"><code class="docutils literal notranslate"><span class="pre">DataStatus.NONE</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStatus.SAVED"><code class="docutils literal notranslate"><span class="pre">DataStatus.SAVED</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStore"><code class="docutils literal notranslate"><span class="pre">DataStore</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStore.append"><code class="docutils literal notranslate"><span class="pre">DataStore.append()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStore.delete"><code class="docutils literal notranslate"><span class="pre">DataStore.delete()</span></code></a></li>
@@ -225,18 +346,13 @@
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStore.to_dict"><code class="docutils literal notranslate"><span class="pre">DataStore.to_dict()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.Status"><code class="docutils literal notranslate"><span class="pre">Status</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.Status.INITIALIZED"><code class="docutils literal notranslate"><span class="pre">Status.INITIALIZED</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.Status.LOADED"><code class="docutils literal notranslate"><span class="pre">Status.LOADED</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.Status.NONE"><code class="docutils literal notranslate"><span class="pre">Status.NONE</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.Status.SAVED"><code class="docutils literal notranslate"><span class="pre">Status.SAVED</span></code></a></li>
-</ul>
-</li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.identity"><code class="docutils literal notranslate"><span class="pre">identity()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="lysis.util.html#module-lysis.util.kiss">lysis.util.kiss module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator.getstate"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator.getstate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator.integers"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator.integers()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator.kiss32"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator.kiss32()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator.mscw"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator.mscw()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator.random"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator.random()</span></code></a></li>
@@ -246,50 +362,7 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="lysis.util.html#module-lysis.util.parameters">lysis.util.parameters module</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment"><code class="docutils literal notranslate"><span class="pre">Experiment</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.experiment_code"><code class="docutils literal notranslate"><span class="pre">Experiment.experiment_code</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.os_path"><code class="docutils literal notranslate"><span class="pre">Experiment.os_path</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.macro_params"><code class="docutils literal notranslate"><span class="pre">Experiment.macro_params</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.initialize_macro_param"><code class="docutils literal notranslate"><span class="pre">Experiment.initialize_macro_param()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.read_file"><code class="docutils literal notranslate"><span class="pre">Experiment.read_file()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.to_dict"><code class="docutils literal notranslate"><span class="pre">Experiment.to_dict()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.to_file"><code class="docutils literal notranslate"><span class="pre">Experiment.to_file()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters"><code class="docutils literal notranslate"><span class="pre">MacroParameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.average_bind_time"><code class="docutils literal notranslate"><span class="pre">MacroParameters.average_bind_time</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.binding_rate"><code class="docutils literal notranslate"><span class="pre">MacroParameters.binding_rate</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.binding_sites"><code class="docutils literal notranslate"><span class="pre">MacroParameters.binding_sites</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.cols"><code class="docutils literal notranslate"><span class="pre">MacroParameters.cols</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.data_required"><code class="docutils literal notranslate"><span class="pre">MacroParameters.data_required</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.diffusion_coeff"><code class="docutils literal notranslate"><span class="pre">MacroParameters.diffusion_coeff</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.duplicate_fortran"><code class="docutils literal notranslate"><span class="pre">MacroParameters.duplicate_fortran</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.first_fiber_row"><code class="docutils literal notranslate"><span class="pre">MacroParameters.first_fiber_row</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.forced_unbind"><code class="docutils literal notranslate"><span class="pre">MacroParameters.forced_unbind</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.full_row"><code class="docutils literal notranslate"><span class="pre">MacroParameters.full_row</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.grid_node_distance"><code class="docutils literal notranslate"><span class="pre">MacroParameters.grid_node_distance</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.last_ghost_edge"><code class="docutils literal notranslate"><span class="pre">MacroParameters.last_ghost_edge</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.log_lvl"><code class="docutils literal notranslate"><span class="pre">MacroParameters.log_lvl</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.macro_version"><code class="docutils literal notranslate"><span class="pre">MacroParameters.macro_version</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.moving_probability"><code class="docutils literal notranslate"><span class="pre">MacroParameters.moving_probability</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.pore_size"><code class="docutils literal notranslate"><span class="pre">MacroParameters.pore_size</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.print_default_values"><code class="docutils literal notranslate"><span class="pre">MacroParameters.print_default_values()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.rows"><code class="docutils literal notranslate"><span class="pre">MacroParameters.rows</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.seed"><code class="docutils literal notranslate"><span class="pre">MacroParameters.seed</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.state"><code class="docutils literal notranslate"><span class="pre">MacroParameters.state</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.time_step"><code class="docutils literal notranslate"><span class="pre">MacroParameters.time_step</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_edges"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_edges</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_molecules"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_molecules</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_time"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_time</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_time_steps"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_time_steps</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_trials"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_trials</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.xz_row"><code class="docutils literal notranslate"><span class="pre">MacroParameters.xz_row</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters"><code class="docutils literal notranslate"><span class="pre">MicroParameters</span></code></a></li>
-</ul>
-</li>
+<li class="toctree-l2"><a class="reference internal" href="lysis.util.html#lysis-util-slurm-module">lysis.util.slurm module</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lysis.util.html#module-lysis.util.util">lysis.util.util module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.util.dict_to_formatted_str"><code class="docutils literal notranslate"><span class="pre">dict_to_formatted_str()</span></code></a></li>
 </ul>
@@ -303,13 +376,118 @@
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this heading">¶</a></h2>
 </section>
+<section id="module-lysis.cp_macroscale">
+<span id="lysis-cp-macroscale-module"></span><h2>lysis.cp_macroscale module<a class="headerlink" href="#module-lysis.cp_macroscale" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">lysis.cp_macroscale.</span></span><span class="sig-name descname"><span class="pre">CudaMacroscaleRun</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Experiment" title="lysis.experiment.framework.Experiment"><span class="pre">Experiment</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.actual_move">
+<span class="sig-name descname"><span class="pre">actual_move</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">free_to_move</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighbor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.actual_move" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.bind">
+<span class="sig-name descname"><span class="pre">bind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.bind" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.check_back_row">
+<span class="sig-name descname"><span class="pre">check_back_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.check_back_row" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.find_binding_time">
+<span class="sig-name descname"><span class="pre">find_binding_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">cupy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.find_binding_time" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.find_free_to_move">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">find_free_to_move</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">still_stuck_to_fiber</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.find_free_to_move" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.find_lysis_time">
+<span class="sig-name descname"><span class="pre">find_lysis_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">r</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.find_lysis_time" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.find_molecule_fiber_status">
+<span class="sig-name descname"><span class="pre">find_molecule_fiber_status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.find_molecule_fiber_status" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.find_should_bind">
+<span class="sig-name descname"><span class="pre">find_should_bind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.find_should_bind" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.find_still_stuck">
+<span class="sig-name descname"><span class="pre">find_still_stuck</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">move_chance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.find_still_stuck" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.find_unbinding_time">
+<span class="sig-name descname"><span class="pre">find_unbinding_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">r</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.find_unbinding_time" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find the experiment time at which the tPA molecule will unbind</p>
+<p>If we think of the binding_time matrix as a function f(x) where
+binding_time[100*x] = f(x) we want to draw uniformly from the range of
+f, that is, we want the unbinding timestep to be f(r) where r~U(0,1).</p>
+<p>If – magically – 100 * r is an integer i, this is easy because we
+just look up binding_time[i], but what if it isn’t a perfect integer?</p>
+<p>Then f(r) lies in the interval ( f(floor(100*r)), f(ceil(100*r)) ) so
+we interpolate it linearly. That is, define a linear function g(x) such
+that g(floor(100*r)) = f(floor(100*r)) and
+g(ceil(100*r)) = f(ceil(100*r)) and then use g(r) to approximate f(r).</p>
+<p>Another way to see this is,
+if i is an integer such that 100i &lt; 100r &lt; 100(i+1) and
+lambda is such that 100i + lambda = 100r,
+then f(r) ~ (1-lambda)*f(i/100) + lambda*f( (i+1)/100 )</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.find_which_neighbor">
+<span class="sig-name descname"><span class="pre">find_which_neighbor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">free_to_move</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">move_chance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.find_which_neighbor" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.move">
+<span class="sig-name descname"><span class="pre">move</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">move_chance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.move" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.move_to_empty_edge">
+<span class="sig-name descname"><span class="pre">move_to_empty_edge</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">move_chance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.move_to_empty_edge" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.run" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.unbind_by_degradation">
+<span class="sig-name descname"><span class="pre">unbind_by_degradation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.unbind_by_degradation" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.cp_macroscale.CudaMacroscaleRun.unbind_by_time">
+<span class="sig-name descname"><span class="pre">unbind_by_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.cp_macroscale.CudaMacroscaleRun.unbind_by_time" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
 <section id="module-lysis.edge_grid">
 <span id="lysis-edge-grid-module"></span><h2>lysis.edge_grid module<a class="headerlink" href="#module-lysis.edge_grid" title="Permalink to this heading">¶</a></h2>
+<p>Contains structures and methods for locating fibers on a 3-D grid</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">lysis.edge_grid.</span></span><span class="sig-name descname"><span class="pre">EdgeGrid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment" title="lysis.util.parameters.Experiment"><span class="pre">Experiment</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">thisgrid_rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thisgrid_starting_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary_conditions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryCondition" title="lysis.util.constants.BoundaryCondition"><span class="pre">BoundaryCondition</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryCondition" title="lysis.util.constants.BoundaryCondition"><span class="pre">BoundaryCondition</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_fiber_status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">inf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">lysis.edge_grid.</span></span><span class="sig-name descname"><span class="pre">EdgeGrid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Experiment" title="lysis.experiment.framework.Experiment"><span class="pre">Experiment</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary_conditions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryCondition" title="lysis.util.constants.BoundaryCondition"><span class="pre">BoundaryCondition</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryCondition" title="lysis.util.constants.BoundaryCondition"><span class="pre">BoundaryCondition</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_fiber_status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">inf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>The main class containing a 3-D grid of edges. This represents an xy-planar slice, one edge high, of a clot.</p>
+<p>The main class containing a 3-D grid of edges. This represents an
+xy-planar slice, one edge high, of a clot.</p>
 <p>Co-ordinate arrangement:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s1">&#39;         {        /           /           /           /           /</span>
 <span class="s1">&#39;   Row 3 {       1           4           7           10          13</span>
@@ -338,13 +516,26 @@
 </pre></div>
 </div>
 <dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.empty_rows">
+<span class="sig-name descname"><span class="pre">empty_rows</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.empty_rows" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of empty (fibrin-free) rows in the grid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.fiber_status">
 <span class="sig-name descname"><span class="pre">fiber_status</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.fiber_status" title="Permalink to this definition">¶</a></dt>
-<dd><p>The status of the fibers in this EdgeGrid. This is essentially the degrade time of the fiber.
+<dd><p>The status of the fibers in this EdgeGrid. This is
+essentially the degrade time of the fiber.
 If degrade time &lt; current time, the fiber is degraded.
-e.g., self.fiber_status[60, 25] is the status of the fiber located along edge [60, 25].</p>
+If degrade time = 0, the edge contains no fiber
+e.g., self.fiber_status[60, 25] is the status of the fiber
+located along edge [60, 25].</p>
 <p>Supports two-dimensional slicing.</p>
-<p>Note that the location should be given in reference to the entire grid, not just this EdgeGrid.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>np.ndarray</p>
@@ -352,37 +543,23 @@ e.g., self.fiber_status[60, 25] is the status of the fiber located along edge [6
 </dl>
 </dd></dl>
 
-<dl class="py attribute">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.molecules">
-<span class="sig-name descname"><span class="pre">molecules</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.molecules" title="Permalink to this definition">¶</a></dt>
-<dd><p>A structure containing the indices of the molecules currently
-located at each edge of this EdgeGrid.
-e.g., self.molecules[60, 25] is a list of molecules currently located at edge [60, 25].</p>
-<p>Supports slicing in one dimension only.</p>
-<p>Note that the location should be given in reference to the entire grid, not just this EdgeGrid.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>List[List[List]]</p>
-</dd>
-</dl>
-</dd></dl>
-
 <dl class="py method">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.move_molecule">
-<span class="sig-name descname"><span class="pre">move_molecule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.move_molecule" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.generate_neighborhood_structure">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">generate_neighborhood_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Experiment" title="lysis.experiment.framework.Experiment"><span class="pre">Experiment</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.generate_neighborhood_structure" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.neighbor">
 <span class="sig-name descname"><span class="pre">neighbor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">j</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.neighbor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Finds the co-ordinates of a neighboring edge.</p>
-<p>Given the co-ordinates of an edge, and the index (in the neighborhood) of a neighboring edge,
-this method will find the co-ordinates of the requested neighbor,
-taking appropriate boundary conditions into account.</p>
-<p>Neighborhoods each contain eight other edges and are constructed as in the following examples
-(without boundary conditions). Note that in each situation, the generating edge is labelled “(i,j)”
-and the members of the neighborhood are labelled “k:(i+p,j+q)” where (p,q) is the vector from the
-generating edge to the neighbor.</p>
+<p>Given the co-ordinates of an edge, and the index (in the neighborhood)
+of a neighboring edge, this method will find the co-ordinates of the
+requested neighbor, taking appropriate boundary conditions into account.</p>
+<p>Neighborhoods each contain eight other edges and are constructed as in
+the following examples (without boundary conditions). Note that in each
+situation, the generating edge is labelled “(i,j)” and the members of
+the neighborhood are labelled “k:(i+p,j+q)” where (p,q) is the vector
+from the generating edge to the neighbor.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">*</span> <span class="n">x</span><span class="o">-</span><span class="n">edge</span> <span class="n">neighborhood</span><span class="p">::</span>
 
     <span class="s1">&#39;        2:(i,j-2)     3:(i,j+1)</span>
@@ -439,11 +616,15 @@ generating edge to the neighbor.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>i</strong> – The row of the generating edge.</p></li>
 <li><p><strong>j</strong> – The index of the generating edge within its row.</p></li>
-<li><p><strong>k</strong> – The index of the neighbor in the neighborhood (i.e., the (k+1)st neighbor)</p></li>
+<li><p><strong>k</strong> – The index of the neighbor in the neighborhood (i.e., the (k+1)st
+neighbor)</p></li>
 </ul>
 </dd>
 </dl>
-<p>Returns: The pair of co-ordinates (in the EdgeGrid) of the requested neighbor.</p>
+<dl class="simple">
+<dt>Returns: The pair of co-ordinates (in the EdgeGrid) of the requested</dt><dd><p>neighbor.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py attribute">
@@ -457,48 +638,10 @@ generating edge to the neighbor.</p>
 </dl>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.place_molecule_row">
-<span class="sig-name descname"><span class="pre">place_molecule_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.place_molecule_row" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.pop_molecule_row">
-<span class="sig-name descname"><span class="pre">pop_molecule_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.pop_molecule_row" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.thisgrid_empty_rows">
-<span class="sig-name descname"><span class="pre">thisgrid_empty_rows</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.thisgrid_empty_rows" title="Permalink to this definition">¶</a></dt>
-<dd><p>Number of empty rows in this EdgeGrid. If they exist they are
-“Row thisgrid_starting_row” through “Row max(thisgrid_starting_row, total_empty_rows)-1”
-If a top and/or bottom “shadow” row exists, it is NOT counted in this number.
-This row is always treated as empty because, even if it does have fibrin,
-those fibers exist in a different EdgeGrid.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.total_empty_rows">
-<span class="sig-name descname"><span class="pre">total_empty_rows</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.total_empty_rows" title="Permalink to this definition">¶</a></dt>
-<dd><p>The number of empty (fibrin-free) rows in the entire grid.
-There are only empty rows in this EdgeGrid if total_empty_rows &gt; thisgrid_starting_row.
-These will always be the bottom rows of the grid (i.e., “Row 0” through “Row empty_rows-1”)</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
 <dl class="py attribute">
 <dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.total_rows">
 <span class="sig-name descname"><span class="pre">total_rows</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.total_rows" title="Permalink to this definition">¶</a></dt>
-<dd><p>The total number of rows in the entire grid (of which this EdgeGrid is either a part or the whole).</p>
+<dd><p>The total number of rows in the grid.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>int</p>
@@ -512,14 +655,16 @@ These will always be the bottom rows of the grid (i.e., “Row 0” through “R
 <dt class="sig sig-object py" id="lysis.edge_grid.from_fortran_edge_index">
 <span class="sig-prename descclassname"><span class="pre">lysis.edge_grid.</span></span><span class="sig-name descname"><span class="pre">from_fortran_edge_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes_in_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#lysis.edge_grid.from_fortran_edge_index" title="Permalink to this definition">¶</a></dt>
 <dd><p>Converts a 1-dimensional index of an edge to its 2-dimensional index.</p>
-<p>Converts from the index for an edge used in the “Macro” Fortran data structures and data files
-into the (i, j) index used by this package.</p>
+<p>Converts from the index for an edge used in the “Macro” Fortran data
+structures and data files into the (i, j) index used by this package.</p>
 <p><strong>NOTE</strong>: All indices in this method are zero-indexed.
 They will need to be incremented by one if used in Fortran code.</p>
-<p>This method exists to aid with compatability with the Fortran “Macro” code during the transition phase.
-It should be depreciated once the Python code is complete.</p>
-<p>For an example of the 2-dimensional index, see the DocString for the EdgeGrid class.
-The 1-dimensional index arrangement for the same setup is as follows:</p>
+<p>This method exists to aid with compatability with the Fortran “Macro” code
+during the transition phase. It should be depreciated once the Python code
+is complete.</p>
+<p>For an example of the 2-dimensional index, see the DocString for the
+EdgeGrid class. The 1-dimensional index arrangement for the same setup is
+as follows:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s1">&#39;        /           /           /           /           /</span>
 <span class="s1">&#39;      42          44          46           48          50</span>
 <span class="s1">&#39;      /           /           /           /           /</span>
@@ -562,14 +707,16 @@ The 1-dimensional index arrangement for the same setup is as follows:</p>
 <dt class="sig sig-object py" id="lysis.edge_grid.to_fortran_edge_index">
 <span class="sig-prename descclassname"><span class="pre">lysis.edge_grid.</span></span><span class="sig-name descname"><span class="pre">to_fortran_edge_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">j</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes_in_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#lysis.edge_grid.to_fortran_edge_index" title="Permalink to this definition">¶</a></dt>
 <dd><p>Converts a 2-dimensional index of an edge to its 1-dimensional index.</p>
-<p>Converts from the (i, j) index for an edge used by this package into the index used in
-“Macro” Fortran data structures and data files.</p>
+<p>Converts from the (i, j) index for an edge used by this package into the
+index used in “Macro” Fortran data structures and data files.</p>
 <p><strong>NOTE</strong>: All indices in this method are zero-indexed.
 They will need to be incremented by one if used in Fortran code.</p>
-<p>This method exists to aid with compatability with the Fortran “Macro” code during the transition phase.
-It should be depreciated once the Python code is complete.</p>
-<p>For an example of the 2-dimensional index, see the DocString for the EdgeGrid class.
-For a matching example of the 1-dimensional index, see the DocString for the from_fortran_edge_index() method.</p>
+<p>This method exists to aid with compatability with the Fortran “Macro” code
+during the transition phase. It should be depreciated once the Python code
+is complete.</p>
+<p>For an example of the 2-dimensional index, see the DocString for the
+EdgeGrid class. For a matching example of the 1-dimensional index, see the
+DocString for the from_fortran_edge_index() method.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -584,6 +731,251 @@ For a matching example of the 1-dimensional index, see the DocString for the fro
 </dd></dl>
 
 </section>
+<section id="module-lysis.molecule">
+<span id="lysis-molecule-module"></span><h2>lysis.molecule module<a class="headerlink" href="#module-lysis.molecule" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="lysis.molecule.Molecule">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">lysis.molecule.</span></span><span class="sig-name descname"><span class="pre">Molecule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">location</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bound</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leaving_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">waiting_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binding_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unbound_by_degradation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_to_reach_back_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">inf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.molecule.Molecule" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.molecule.Molecule.binding_time">
+<span class="sig-name descname"><span class="pre">binding_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">inf</span></em><a class="headerlink" href="#lysis.molecule.Molecule.binding_time" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.molecule.Molecule.bound">
+<span class="sig-name descname"><span class="pre">bound</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#lysis.molecule.Molecule.bound" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.molecule.Molecule.index">
+<span class="sig-name descname"><span class="pre">index</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#lysis.molecule.Molecule.index" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.molecule.Molecule.leaving_time">
+<span class="sig-name descname"><span class="pre">leaving_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">inf</span></em><a class="headerlink" href="#lysis.molecule.Molecule.leaving_time" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.molecule.Molecule.location">
+<span class="sig-name descname"><span class="pre">location</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#lysis.molecule.Molecule.location" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.molecule.Molecule.time_to_reach_back_row">
+<span class="sig-name descname"><span class="pre">time_to_reach_back_row</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">inf</span></em><a class="headerlink" href="#lysis.molecule.Molecule.time_to_reach_back_row" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.molecule.Molecule.unbound_by_degradation">
+<span class="sig-name descname"><span class="pre">unbound_by_degradation</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#lysis.molecule.Molecule.unbound_by_degradation" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="lysis.molecule.Molecule.waiting_time">
+<span class="sig-name descname"><span class="pre">waiting_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#lysis.molecule.Molecule.waiting_time" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-lysis.np_macroscale">
+<span id="lysis-np-macroscale-module"></span><h2>lysis.np_macroscale module<a class="headerlink" href="#module-lysis.np_macroscale" title="Permalink to this heading">¶</a></h2>
+<p>Macroscale clot lysis simulation</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">lysis.np_macroscale.</span></span><span class="sig-name descname"><span class="pre">MacroscaleRun</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="lysis.experiment.html#lysis.experiment.framework.Experiment" title="lysis.experiment.framework.Experiment"><span class="pre">Experiment</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">instance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.bind">
+<span class="sig-name descname"><span class="pre">bind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.bind" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deals with molecules that just bound to a fiber.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>m</strong> – A boolean array of molecules. Used as a mask when applying this
+function.</p></li>
+<li><p><strong>current_time</strong> – The current simulation time.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.find_lysis_time">
+<span class="sig-name descname"><span class="pre">find_lysis_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unbinding_time_bin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.find_lysis_time" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find the (possibly infinite) simulation time at which the molecule
+will degrade the fiber to which it just bound.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>m</strong> – A boolean array of molecules. Used as a mask when applying this
+function.</p></li>
+<li><p><strong>unbinding_time_bin</strong> – Which bin of unbinding times are we drawing from?
+This should be the same array passed to the
+<cite>find_unbinding_time</cite> method.
+Entries should be floats, drawn uniformly from (0, 100).</p></li>
+<li><p><strong>current_time</strong> – The current simulation time.</p></li>
+<li><p><strong>count</strong> – The number of molecules for which we are finding lysis times.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Returns: An array of lysis times, randomly drawn from the provided</dt><dd><p>microscale data.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.find_unbinding_time">
+<span class="sig-name descname"><span class="pre">find_unbinding_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">unbinding_time_bin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.find_unbinding_time" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find the simulation time at which the tPA molecule will unbind</p>
+<p>If we think of the <cite>binding_time</cite> array as a function <span class="math notranslate nohighlight">\(f(x)\)</span> where
+<cite>binding_time[100*x] =</cite> <span class="math notranslate nohighlight">\(f(x)\)</span>, we want to draw uniformly from
+the range of <span class="math notranslate nohighlight">\(f\)</span>. That is, we want the unbinding timestep to be
+<span class="math notranslate nohighlight">\(f(r)\)</span> where <span class="math notranslate nohighlight">\(r\sim U(0,1)\)</span>.</p>
+<p>If <span class="math notranslate nohighlight">\(100r\)</span> is an integer <span class="math notranslate nohighlight">\(i\)</span>, this is easy because we
+just look up <cite>binding_time[i]</cite>, but what if it isn’t a perfect integer?</p>
+<p>Then <span class="math notranslate nohighlight">\(f(r)\)</span> lies in the interval
+<span class="math notranslate nohighlight">\(\Bigl(f\bigl(\lfloor 100r \rfloor\bigr),
+f\bigl(\lceil 100r \rceil\bigr)\Bigr)\)</span> so we
+interpolate it linearly. That is, define a linear function <span class="math notranslate nohighlight">\(g(x)\)</span>
+such that
+<span class="math notranslate nohighlight">\(g\bigl(\lfloor 100r \rfloor\bigr) =
+f\bigl(\lfloor 100r \rfloor\bigr)\)</span> and
+<span class="math notranslate nohighlight">\(g\bigl(\lceil 100r \rceil\bigr) =
+f\bigl(\lceil 100r \rceil\bigr)\)</span>.
+Then use <span class="math notranslate nohighlight">\(g(r)\)</span> to approximate <span class="math notranslate nohighlight">\(f(r)\)</span>.</p>
+<p>Another way to see this is, if <span class="math notranslate nohighlight">\(i\)</span> is an integer such that
+<span class="math notranslate nohighlight">\(100i &lt; 100r &lt; 100(i+1)\)</span> and
+<span class="math notranslate nohighlight">\(\lambda\)</span> is such that <span class="math notranslate nohighlight">\(100i + \lambda = 100r\)</span>,
+then
+<span class="math notranslate nohighlight">\(f(r) \approx (1-\lambda)f(\frac{i}{100}) +
+\lambda f(\frac{i+1}{100})\)</span>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>unbinding_time_bin</strong> – Which bin of unbinding times are we drawing from?
+Entries should be floats, drawn uniformly from (0, 100).</p></li>
+<li><p><strong>current_time</strong> – The current simulation time.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Returns: An array of unbinding times, randomly drawn from the provided</dt><dd><p>microscale data.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.move">
+<span class="sig-name descname"><span class="pre">move</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.move" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deals with all molecules that need to move on this timestep</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>m</strong> – A boolean array of molecules. Used as a mask when applying this
+function.</p></li>
+<li><p><strong>current_time</strong> – The current simulation time.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.move_to_empty_edge">
+<span class="sig-name descname"><span class="pre">move_to_empty_edge</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.move_to_empty_edge" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deal with molecules that need to move this timestep, but are still
+bound to a fiber particle due to macro- or micro-unbinding.</p>
+<p>Also known as ‘restricted move’.</p>
+<p>Here, a molecule cannot move to an edge containing an intact fiber.
+The new location for the molecule is drawn uniformly from a set
+containing the molecule’s current location and any neighboring edge
+without a fiber (whether always empty or empty due to degradation).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>m</strong> – A boolean array of molecules. Used as a mask when applying this
+function.</p></li>
+<li><p><strong>current_time</strong> – The current simulation time.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.record_data_to_disk">
+<span class="sig-name descname"><span class="pre">record_data_to_disk</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.record_data_to_disk" title="Permalink to this definition">¶</a></dt>
+<dd><p>Records the saved data to disk.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Runs the simulation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.save_data">
+<span class="sig-name descname"><span class="pre">save_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">current_time</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.save_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current simulation state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>current_time</strong> – The current simulation time.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.unbind_by_degradation">
+<span class="sig-name descname"><span class="pre">unbind_by_degradation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.unbind_by_degradation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deals with molecules bound to a fiber that just degraded</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>m</strong> – A boolean array of molecules. Used as a mask when applying this
+function.</p></li>
+<li><p><strong>current_time</strong> – The current simulation time.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.unbind_by_time">
+<span class="sig-name descname"><span class="pre">unbind_by_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.unbind_by_time" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deals with bound molecules whose ‘unbind’ timer just expired.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>m</strong> – A boolean array of molecules. Used as a mask when applying this
+function.</p></li>
+<li><p><strong>current_time</strong> – The current simulation time.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="lysis.np_macroscale.MacroscaleRun.unrestricted_move">
+<span class="sig-name descname"><span class="pre">unrestricted_move</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.np_macroscale.MacroscaleRun.unrestricted_move" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deals with molecules that need to move this timestep and are free to
+move to any neighboring edge.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>m</strong> – A boolean array of molecules. Used as a mask when applying this
+function.</p></li>
+<li><p><strong>current_time</strong> – The current simulation time.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
 <section id="module-lysis">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-lysis" title="Permalink to this heading">¶</a></h2>
 </section>
@@ -595,7 +987,7 @@ For a matching example of the 1-dimensional index, see the DocString for the fro
           </div>
           <footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-        <a href="lysis.util.html" class="btn btn-neutral float-right" title="lysis.util package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="lysis.experiment.html" class="btn btn-neutral float-right" title="lysis.experiment package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
         <a href="modules.html" class="btn btn-neutral float-left" title="lysis" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
     </div>
 
