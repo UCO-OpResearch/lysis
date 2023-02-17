@@ -24,15 +24,12 @@
 
 import json
 import os
-import uuid
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, List, Mapping, Tuple, Union
-
-from shortuuid import encode
 
 from .parameters import Parameters
 from ..util import Const, DataStore, uuid8code
