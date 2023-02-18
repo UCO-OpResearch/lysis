@@ -29,10 +29,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, List, Mapping, Tuple, Union
+from typing import Any, List, Mapping, Self, Union
 
 from .parameters import Parameters
-from ..util import Const, DataStore, uuid8code
+from ..util import Const, DataStore, uuid8code, check_current_folder
 
 
 CONST = Const()
@@ -41,23 +41,12 @@ CONST = Const()
 class Experiment:
     """Houses all information about a given experimental run.
 
-    This object contains:
-
-
     Args:
         data_root: The path of the folder containing datasets
-        experiment_code: The code number of the experiment.
-            This will be the name of the folder containing the data specific to
-            this experiment.
-            This should be a date and time in 'YYYY-MM-DD-hhmm' format
-            If no code is given, one will be generated from the current date
-            and time.
 
     Attributes:
-        experiment_code (str): The code number of the experiment.
-        os_path (str): The path to the folder containing this experiment's data
-        params (DataClass): A dictionary of
-
+        experiment_code: The code number of the experiment.
+        os_path: The path to the folder containing this experiment's data
 
     Raises:
         RuntimeError: An invalid data folder was given.
@@ -75,7 +64,7 @@ class Experiment:
         # If no experiment code was given, create a new one from the current
         # date and time.
         if experiment_code is None:
-            self.experiment_code = datetime.now().strftime("%Y-%m-%d-%H%M")
+            self.experiment_code = datetime.now().strftime("exp_%Y-%m-%d-%H%M")
         else:
             self.experiment_code = experiment_code
 
@@ -111,7 +100,7 @@ class Experiment:
 
 class Scenario:
     def __init__(self, params=None, data=None, short_name="", readme=""):
-        self.scenario_id = uuid8code()
+        self.scenario_id = "scn_" + uuid8code()
         self.short_name = short_name
         self.readme = readme
         # TODO(bpaynter): Check if the parameters are already stored.
@@ -147,39 +136,34 @@ class Scenario:
             output += self.parameters.to_dict()
         return output
 
+    @classmethod
+    def load_scenario(cls, path) -> Self:
+        """Load the experiment parameters from disk.
 
-def load_scenario(path) -> Scenario:
-    """Load the experiment parameters from disk.
-
-    Raises:
-        RuntimeError: No parameter file is available for this experiment.
-    """
-    param_file = os.path.join(path, "scenario.json")
-    split_path = os.path.split(path)
-    if split_path[-1] == "":
-        split_path = os.path.split(split_path[0])
-    scenario_folder = split_path[-1]
-
-    # Determine whether the parameter file exists for this experiment
-    if not os.path.isfile(param_file):
-        raise RuntimeError("Scenario parameter file not found.")
-    # Open the file
-    with open(param_file, "r") as file:
-        # Use the JSON library to read in the parameters as a dictionary
-        params = json.load(file)
-        data_filenames = params.pop("data_filenames", None)
-        short_name = params.pop("short_name")
-        scenario_id = params.pop("scenario_id")
-        if scenario_id != scenario_folder:
-            raise RuntimeWarning("Scenario folder incorrectly named.")
-    if os.path.isfile(os.path.join(path, "README.rst")):
-        with open(os.path.join(path, "README.rst"), 'r') as file:
-            readme = file.read()
-    else:
-        readme = ""
-    scenario = Scenario(params, data_filenames, short_name, readme)
-    scenario.scenario_id = scenario_id
-    return scenario
+        Raises:
+            RuntimeError: No parameter file is available for this experiment.
+        """
+        param_file = os.path.join(path, "scenario.json")
+        # Determine whether the parameter file exists for this experiment
+        if not os.path.isfile(param_file):
+            raise RuntimeError("Scenario parameter file not found.")
+        # Open the file
+        with open(param_file, "r") as file:
+            # Use the JSON library to read in the parameters as a dictionary
+            params = json.load(file)
+            data_filenames = params.pop("data_filenames", None)
+            short_name = params.pop("short_name")
+            scenario_id = params.pop("scenario_id")
+            if not check_current_folder(path, scenario_id):
+                raise RuntimeWarning("Scenario folder incorrectly named.")
+        if os.path.isfile(os.path.join(path, "README.rst")):
+            with open(os.path.join(path, "README.rst"), "r") as file:
+                readme = file.read()
+        else:
+            readme = ""
+        scenario = cls(params, data_filenames, short_name, readme)
+        scenario.scenario_id = scenario_id
+        return scenario
 
 
 @dataclass
@@ -191,3 +175,23 @@ class Model:
     micro_unbind_can_diffuse = True
     red_blood_cells = False
     source_code = None
+    seed = None
+
+
+class Run:
+    def __init__(self, exp: Experiment, mod: Model, sc: Scenario, instances: int = 1):
+        self.exp = exp
+        self.mod = mod
+        self.sc = sc
+        self.instances = instances
+        self.simulations = [Simulation(self, i) for i in range(self.instances)]
+
+
+class Simulation(ABC):
+    def __init__(self, run: Run, instance: int = 0):
+        self.run = run
+        self.instance = instance
+
+    @abstractmethod
+    def run(self):
+        pass
