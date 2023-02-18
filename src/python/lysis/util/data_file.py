@@ -33,6 +33,13 @@ from typing import Any, AnyStr, Callable, Dict, Self
 import numpy as np
 import pandas as pd
 
+cupy = True
+try:
+    import cupy as cp
+except ImportError:
+    cupy = False
+    cp = None
+
 
 @unique
 class DataType(Enum):
@@ -40,6 +47,7 @@ class DataType(Enum):
     MATLAB = 1
     NUMPY = 2
     PANDAS = 3
+    CUPY = 4
 
 
 load_command = {
@@ -47,6 +55,7 @@ load_command = {
     DataType.MATLAB: np.loadtxt,
     DataType.NUMPY: np.load,
     DataType.PANDAS: pd.read_json,
+    DataType.CUPY: lambda x: cp.array(np.load(x)),
 }
 
 extension = {
@@ -54,11 +63,13 @@ extension = {
     DataType.MATLAB: ".dat",
     DataType.NUMPY: ".npy",
     DataType.PANDAS: ".json",
+    DataType.CUPY: ".npy",
 }
 
 save_command = {
     DataType.NUMPY: np.save,
     DataType.PANDAS: lambda x, y: y.to_json(x),
+    DataType.CUPY: lambda x, y: np.save(x, cp.asnumpy(y)),
 }
 
 
@@ -69,7 +80,16 @@ class DataFile:
     data_type: DataType = None
     post_load: Callable = None
     load_args: Dict = None
+    pre_save: Callable = None
     contents: Any = None
+
+    def __getitem__(self, item):
+        if self.contents is None:
+            if self.can_load():
+                self.load()
+            else:
+                raise RuntimeError("This item has no contents.")
+        return self.contents[item]
 
     def can_save(self) -> bool:
         valid = True
@@ -114,9 +134,10 @@ class DataFile:
             raise RuntimeError(f"Cannot save file {self.filename}.")
         if self.data_type not in save_command:
             raise RuntimeError(f"Cannot save data of type {self.data_type}.")
-        save_command[self.data_type](
-            os.path.join(self.path, self.filename), self.contents
-        )
+        out = self.contents
+        if self.pre_save is not None:
+            out = self.pre_save(out)
+        save_command[self.data_type](os.path.join(self.path, self.filename), out)
 
     def as_type(self, data_type: DataType) -> Self:
         if self.data_type == data_type:

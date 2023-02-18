@@ -174,7 +174,8 @@ class Model:
     micro_unbind_can_bind = False
     micro_unbind_can_diffuse = True
     red_blood_cells = False
-    source_code = None
+    commit = None
+    command = None
     seed = None
 
 
