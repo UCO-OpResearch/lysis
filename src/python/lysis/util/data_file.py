@@ -25,95 +25,61 @@
 
 import os
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from enum import Enum, unique
 from shutil import copy2
 from typing import Any, AnyStr, Callable, Dict, Self
 
-import numpy as np
-import pandas as pd
 
-cupy = True
-try:
-    import cupy as cp
-except ImportError:
-    cupy = False
-    cp = None
+class DataType(ABC):
+    @staticmethod
+    @abstractmethod
+    def save(filepath: AnyStr, data: Any, *args, **kwargs):
+        pass
 
+    @staticmethod
+    @abstractmethod
+    def load(filepath: AnyStr, *args, **kwargs) -> Any:
+        pass
 
-@unique
-class DataType(Enum):
-    FORTRAN = 0
-    MATLAB = 1
-    NUMPY = 2
-    PANDAS = 3
-    CUPY = 4
+    @property
+    @abstractmethod
+    def extension(self) -> AnyStr:
+        pass
 
-
-load_command = {
-    DataType.FORTRAN: np.fromfile,
-    DataType.MATLAB: np.loadtxt,
-    DataType.NUMPY: np.load,
-    DataType.PANDAS: pd.read_json,
-    DataType.CUPY: lambda x: cp.array(np.load(x)),
-}
-
-extension = {
-    DataType.FORTRAN: ".dat",
-    DataType.MATLAB: ".dat",
-    DataType.NUMPY: ".npy",
-    DataType.PANDAS: ".json",
-    DataType.CUPY: ".npy",
-}
-
-save_command = {
-    DataType.NUMPY: np.save,
-    DataType.PANDAS: lambda x, y: y.to_json(x),
-    DataType.CUPY: lambda x, y: np.save(x, cp.asnumpy(y)),
-}
+    @property
+    @abstractmethod
+    def name(self) -> AnyStr:
+        pass
 
 
 @dataclass
 class DataFile:
     filename: AnyStr = None
-    path: AnyStr = None
-    data_type: DataType = None
-    post_load: Callable = None
     load_args: Dict = None
+    post_load: Callable = None
+    save_args: Dict = None
     pre_save: Callable = None
+    data_type: DataType = None
     contents: Any = None
-
-    def __getitem__(self, item):
-        if self.contents is None:
-            if self.can_load():
-                self.load()
-            else:
-                raise RuntimeError("This item has no contents.")
-        return self.contents[item]
 
     def can_save(self) -> bool:
         valid = True
         valid = valid and self.filename is not None
-        valid = valid and self.path is not None
         valid = valid and self.contents is not None
-        valid = valid and self.data_type in DataType
-        valid = (
-            valid and os.path.splitext(self.filename)[1] == extension[self.data_type]
-        )
-        valid = valid and os.path.isdir(self.path)
-        valid = valid and not os.path.isfile(os.path.join(self.path, self.filename))
+        valid = valid and self.data_type is not None
+        valid = valid and os.path.splitext(self.filename)[1] == self.data_type.extension
+        valid = valid and os.path.isdir(os.path.dirname(self.filename))
+        valid = valid and not os.path.isfile(self.filename)
         return valid
 
     def can_load(self) -> bool:
         valid = True
         valid = valid and self.filename is not None
-        valid = valid and self.path is not None
-        valid = valid and self.data_type in DataType
-        valid = (
-            valid and os.path.splitext(self.filename)[1] == extension[self.data_type]
-        )
+        valid = valid and self.data_type is not None
+        valid = valid and os.path.splitext(self.filename)[1] == self.data_type.extension
         valid = valid and self.contents is None
-        valid = valid and os.path.isfile(os.path.join(self.path, self.filename))
+        valid = valid and os.path.isfile(self.filename)
         return valid
 
     def load(self):
@@ -123,42 +89,45 @@ class DataFile:
             load_args = {}
         else:
             load_args = self.load_args
-        self.contents = load_command[self.data_type](
-            os.path.join(self.path, self.filename), **load_args
-        )
+        self.contents = self.data_type.load(self.filename, **load_args)
         if self.post_load is not None:
             self.contents = self.post_load(self.contents)
 
     def save(self):
         if not self.can_save():
             raise RuntimeError(f"Cannot save file {self.filename}.")
-        if self.data_type not in save_command:
-            raise RuntimeError(f"Cannot save data of type {self.data_type}.")
+        if self.save_args is None:
+            save_args = {}
+        else:
+            save_args = self.save_args
         out = self.contents
         if self.pre_save is not None:
             out = self.pre_save(out)
-        save_command[self.data_type](os.path.join(self.path, self.filename), out)
+        self.data_type.save(self.filename, out, **save_args)
 
     def as_type(self, data_type: DataType) -> Self:
         if self.data_type == data_type:
             return self
         out = DataFile(data_type=data_type)
-        out.filename = os.path.splitext(self.filename)[0] + extension[data_type]
-        out.path = self.path
+        out.filename = os.path.splitext(self.filename)[0] + data_type.extension
         out.contents = self.contents
-        out.post_load = self.post_load
-        out.load_args = self.load_args
         return out
 
     def move(self, new_path):
-        if os.path.isfile(os.path.join(self.path, self.filename)):
+        if not os.path.isdir(new_path):
+            raise RuntimeError(f"{new_path} is not a valid location.")
+        new_filename = os.path.join(new_path, os.path.basename(self.filename))
+        if os.path.isfile(self.filename):
             os.rename(
-                os.path.join(self.path, self.filename),
-                os.path.join(new_path, self.filename),
+                self.filename,
+                new_filename,
             )
-        self.path = new_path
+        self.filename = new_filename
 
     def copy(self, new_path) -> Self:
-        if os.path.isfile(os.path.join(self.path, self.filename)):
-            copy2(os.path.join(self.path, self.filename), new_path)
-        return replace(self, path=new_path)
+        if not os.path.isdir(new_path):
+            raise RuntimeError(f"{new_path} is not a valid location.")
+        new_filename = os.path.join(new_path, os.path.basename(self.filename))
+        if os.path.isfile(self.filename):
+            copy2(self.filename, new_path)
+        return replace(self, filename=new_filename)

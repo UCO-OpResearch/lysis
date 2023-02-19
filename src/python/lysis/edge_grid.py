@@ -34,7 +34,7 @@ from .util import Const, BoundaryCondition, Experiment
 CONST = Const()
 
 
-class EdgeGrid(object):
+class EdgeGrid:
     """The main class containing a 3-D grid of edges. This represents an
     xy-planar slice, one edge high, of a clot.
 
