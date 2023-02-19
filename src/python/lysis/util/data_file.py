@@ -25,32 +25,19 @@
 
 import os
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from shutil import copy2
-from typing import Any, AnyStr, Callable, Dict, Self
+from typing import Any, AnyStr, Callable, Concatenate, Dict, ParamSpec, Self
+
+P = ParamSpec("P")
 
 
-class DataType(ABC):
-    @staticmethod
-    @abstractmethod
-    def save(filepath: AnyStr, data: Any, *args, **kwargs):
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def load(filepath: AnyStr, *args, **kwargs) -> Any:
-        pass
-
-    @property
-    @abstractmethod
-    def extension(self) -> AnyStr:
-        pass
-
-    @property
-    @abstractmethod
-    def name(self) -> AnyStr:
-        pass
+@dataclass(frozen=True)
+class DataType:
+    name: AnyStr
+    extension: AnyStr
+    save: Callable[Concatenate[AnyStr, Any, P], Any] = None
+    load: Callable[Concatenate[AnyStr, P], Any] = None
 
 
 @dataclass
@@ -96,6 +83,10 @@ class DataFile:
     def save(self):
         if not self.can_save():
             raise RuntimeError(f"Cannot save file {self.filename}.")
+        if self.data_type.save is None:
+            raise NotImplementedError(
+                f"Saving is not implemented for data type {self.data_type.name}."
+            )
         if self.save_args is None:
             save_args = {}
         else:

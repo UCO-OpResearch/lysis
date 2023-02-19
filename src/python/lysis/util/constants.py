@@ -23,8 +23,21 @@
 
 """
 
-
 from enum import Enum, IntEnum, unique
+from typing import AnyStr
+
+import numpy as np
+import pandas as pd
+
+from .data_file import DataType
+
+_cupy_loaded = True
+try:
+    import cupy as cp
+except ImportError:
+    _cupy_loaded = False
+    cp = None
+
 
 default_filenames = {
     "unbinding_time": "tsectPA.dat",  # Fortran: tsec1
@@ -36,6 +49,35 @@ default_filenames = {
     "molecule_state": "m_bound.p.npy",
     "save_time": "tsave.p.npy",  # Fortran: tsave
 }
+
+
+def _save_pandas_json(filepath: AnyStr, data: pd.DataFrame, *args, **kwargs):
+    return data.to_json(filepath, *args, **kwargs)
+
+
+if _cupy_loaded:
+
+    def _save_cupy(filepath: AnyStr, data: cp.ndarray, *args, **kwargs):
+        return np.save(filepath, cp.asnumpy(data), *args, **kwargs)
+
+else:
+    _save_cupy = None
+    
+
+class DataTypes:
+    numpy = DataType(name="NumPy", extension=".npy", load=np.load, save=np.save)
+    fortran = DataType(name="NumPy", extension=".dat", load=np.fromfile, save=None)
+    matlab = DataType(name="Matlab", extension=".dat", load=np.loadtxt, save=None)
+    pandas_json = DataType(
+        name="Pandas JSON", extension=".json", load=pd.read_json, save=_save_pandas_json
+    )
+    if _cupy_loaded:
+        cupy = DataType(
+            name="CuPy",
+            extension=".npy",
+            load=lambda *a, **kw: cp.array(np.load(*a, **kw)),
+            save=_save_cupy,
+        )
 
 
 class Const:
