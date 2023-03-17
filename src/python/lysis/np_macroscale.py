@@ -30,7 +30,7 @@ from .util import Experiment, KissRandomGenerator, RandomDraw
 from .edge_grid import EdgeGrid, from_fortran_edge_index, to_fortran_edge_index
 
 
-class MacroscaleRun:
+class MacroscaleSimulation:
     def __init__(self, exp: Experiment, instance: int = None, seed: int = None):
         self.exp = exp
         assert self.exp.params is not None

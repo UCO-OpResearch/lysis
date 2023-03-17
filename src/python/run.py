@@ -53,7 +53,7 @@ def run(e: lysis.util.Experiment, timestamp: AnyStr):
         filename = lysis.util.default_filenames[file]
         if os.path.isfile(os.path.join(e.os_path, filename)):
             os.remove(os.path.join(e.os_path, filename))
-    macro = lysis.MacroscaleRun(e)
+    macro = lysis.MacroscaleSimulation(e)
     os.makedirs(os.path.join(e.os_path, "macro_pstats"), exist_ok=True)
 
     filename = "macro_pstats_" + timestamp + ".sts"

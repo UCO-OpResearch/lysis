@@ -1,3 +1,24 @@
+! *_* coding: utf-8 *_*
+!
+! Clot Lysis Simulation
+! Copyright (C) 2023   Brittany Bannish & Bradley Paynter
+!
+! macro_Q2_diffuse_into_and_along.f90
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <https://www.gnu.org/licenses/>.
+!
+
 program macrolysis
 
 !! BRAD 2023-01-15: This code has been modified in the following ways:
@@ -429,7 +450,7 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_Q2_diffuse_into_and_along_fixed.f90 on data ',expCode
+write(*,*)' obtained using code macro_Q2_diffuse_into_and_along.f90 on data ',expCode
 !write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 ! Initialize the Random Number Generator

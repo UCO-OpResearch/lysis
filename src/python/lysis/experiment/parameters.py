@@ -19,26 +19,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-"""Code for holding, storing, and reading information about an experiment
+"""Code for holding, storing, and reading parameters for a Scenario
 
-This module gives a uniform way to handle the data and parameters of a given 
-experiment. It contains classes to house these and make them accessible to the 
-rest of the code. It also handles the storing and reading of parameters and 
-data to/from disk.
-
-Typical usage example:
-    >>> # Create a new experiment
-    >>> exp = Experiment('path/to/data')
-    >>> param = {'override_parameter': 2.54, 'another_new_parameter': 32}
-    >>> exp.initialize_params(param)
-    >>> exp.to_file()
-    >>> # Load an existing experiment
-    >>> exp = Experiment('path/to/data', '2022_12_27_1100')
-    >>> exp.read_file()
-    >>> # Access a parameter
-    >>> exp.params['pore_size']
-    >>> # Access data
-    >>> exp.data.lysis_time[4][18]
 """
 
 import inspect
@@ -53,30 +35,8 @@ from typing import Any, AnyStr, List, Mapping, Tuple, Union
 from ..util import DataStore, DataStatus, default_filenames, dict_to_formatted_str
 
 
-class OLDExperiment:
-    def __str__(self) -> str:
-        """Gives a human-readable, formatted string of the current experimental
-        parameters."""
-        # Convert internal storage to a dictionary
-        values = self.to_dict()
-        # Call the formatter and return
-        return dict_to_formatted_str(values)
-
-    def to_file(self) -> None:
-        """Stores the experiment parameters to disk.
-
-        Creates or overwrites the params.json file in the experiment's data
-        folder. This file will contain the current experiment parameters
-        (including any micro- and macroscale parameters) in JSON format.
-        """
-        with open(self.os_param_file, "w") as file:
-            # Convert the internal parameters to a dictionary and then use the
-            # JSON module to save to disk.
-            json.dump(self.to_dict(), file)
-
-
 @dataclass(frozen=True)
-class Parameters:
+class ScenarioParameters:
     """Contains parameters for a clot lysis scenario.
 
     Parameters can be accessed as attributes.

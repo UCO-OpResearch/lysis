@@ -29,9 +29,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, List, Mapping, Self, Union
+from typing import AnyStr, List, Mapping, Self, Union
 
-from .parameters import Parameters
+import numpy as np
+
+from .parameters import ScenarioParameters
 from ..util import Const, DataStore, uuid8code, check_current_folder
 
 
@@ -100,7 +102,7 @@ class Experiment:
 
 class Scenario:
     def __init__(self, params=None, data=None, short_name="", readme=""):
-        self.scenario_id = "scn_" + uuid8code()
+        self.scenario_id = "sc_" + uuid8code()
         self.short_name = short_name
         self.readme = readme
         # TODO(bpaynter): Check if the parameters are already stored.
@@ -110,11 +112,13 @@ class Scenario:
         else:
             self.parameters = Parameters()
         if data is not None:
+            # TODO(bpaynter): Add DataStore here.
             pass
         else:
             self.data = None
 
     def __copy__(self):
+        # TODO(bpaynter): Complete
         pass
 
     def to_dict(self) -> dict:
@@ -168,31 +172,34 @@ class Scenario:
 
 @dataclass
 class Model:
-    language = "Python"
-    macro_unbind_can_bind = False
-    macro_unbind_can_diffuse = False
-    micro_unbind_can_bind = False
-    micro_unbind_can_diffuse = True
-    red_blood_cells = False
-    commit = None
-    command = None
-    seed = None
+    language: AnyStr = "Python"
+    run_micro: bool = False
+    run_macro: bool = True
+    macro_unbind_can_bind: bool = False
+    macro_unbind_can_diffuse: bool = False
+    micro_unbind_can_bind: bool = False
+    micro_unbind_can_diffuse: bool = True
+    red_blood_cells: bool = False
+    repository: AnyStr = None
+    commit: AnyStr = None
+    seed: int = None
 
 
 class Run:
-    def __init__(self, exp: Experiment, mod: Model, sc: Scenario, instances: int = 1):
-        self.exp = exp
-        self.mod = mod
-        self.sc = sc
-        self.instances = instances
-        self.simulations = [Simulation(self, i) for i in range(self.instances)]
+    def __init__(self, model: Model, scenario: Scenario, num_simulations: int = 1):
+        self.model = model
+        self.scenario = scenario
+        self.sims = [
+            Simulation(model, scenario, index) for index in range(num_simulations)
+        ]
 
 
 class Simulation(ABC):
-    def __init__(self, run: Run, instance: int = 0):
-        self.run = run
-        self.instance = instance
+    def __init__(self, model: Model, scenario: Scenario, index: int = 0):
+        self.model = model
+        self.scenario = scenario
+        self.index = index
 
     @abstractmethod
-    def run(self):
+    def run(self) -> Mapping[AnyStr, np.ndarray]:
         pass
