@@ -66,7 +66,7 @@ FORT_MICRO = micro_rates.f90
 FORT_MACRO = macro_Q2_diffuse_into \
              macro_Q2_diffuse_along \
              macro_Q2_always_rebind \
-             macro_Q2_diffuse_into_and_along_fixed
+             macro_Q2_diffuse_into_and_along
 
 #FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
@@ -113,9 +113,6 @@ $(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(BUILD_DIR)/kiss.o
 
 $(BUILD_DIR)/macro_Q2_diffuse_into_and_along: $(FORT_SRC_DIR)/macro_Q2_diffuse_into_and_along.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into_and_along.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into_and_along
-    
-$(BUILD_DIR)/macro_Q2_diffuse_into_and_along_fixed: $(FORT_SRC_DIR)/macro_Q2_diffuse_into_and_along_fixed.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into_and_along_fixed.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into_and_along_fixed
     
 $(BUILD_DIR)/macro_Q2_diffuse_into: $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into
