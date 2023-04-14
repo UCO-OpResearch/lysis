@@ -12,6 +12,7 @@ program macrolysis
 !!
 !!                  - Macro-unbound molecules have their wait time set to their remaining unbinding time
 !!                  - Verbose output option added
+!!                  - Commented out unnecessary data variables
 !!
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
@@ -88,9 +89,9 @@ integer, dimension(:,:), allocatable    :: endpts
 integer, dimension(:,:), allocatable    :: neighborc
 integer, dimension(8)      :: temp_neighborc
 integer, dimension(:,:), allocatable   :: V
-double precision, dimension(:), allocatable      :: init_state
-double precision, dimension(2)         :: p
-double precision, dimension(2)         :: pfit
+!double precision, dimension(:), allocatable      :: init_state
+!double precision, dimension(2)         :: p
+!double precision, dimension(2)         :: pfit
 double precision, dimension(101)       :: CDFtPA, CDFlys
 double precision, dimension(101)       :: tsec1, tseclys
 double precision, dimension(:), allocatable      :: degrade
@@ -121,75 +122,75 @@ external :: mscw, kiss32, urcw1
 
 double precision, dimension(:), allocatable         :: rvect
 double precision, dimension(:,:), allocatable :: degnext
-integer, dimension(:,:), allocatable :: Vedgenext
-integer, dimension(:,:), allocatable :: Vboundnext
-integer, dimension(:), allocatable  :: ind
-double precision, dimension(:), allocatable  :: place
-double precision, dimension(:), allocatable  :: degold
+!integer, dimension(:,:), allocatable :: Vedgenext
+!integer, dimension(:,:), allocatable :: Vboundnext
+!integer, dimension(:), allocatable  :: ind
+!double precision, dimension(:), allocatable  :: place
+!double precision, dimension(:), allocatable  :: degold
 double precision, dimension(:), allocatable :: tsave
-integer  :: zero1
-integer, dimension(:,:), allocatable  :: front
-integer, dimension(:), allocatable  :: firstdeg
-integer, dimension(:), allocatable  :: deglast
-integer, dimension(:,:), allocatable  :: lastmove
-integer  :: fdeg
-integer  :: first0
-integer, dimension(:,:), allocatable  :: move
-integer  :: temp
-integer  :: lasti
-integer, dimension(:,:), allocatable  :: plotstuff, totmove,time2plot
-double precision, dimension(:,:), allocatable  :: plotstuff2
-integer       :: moveunit = 25
-integer       :: lastmoveunit = 26
-integer       :: plotunit = 27
-integer       :: degnextunit = 28
-integer       :: Venextunit = 29
-integer       :: Vbdnextunit = 30
+!integer  :: zero1
+!integer, dimension(:,:), allocatable  :: front
+!integer, dimension(:), allocatable  :: firstdeg
+!integer, dimension(:), allocatable  :: deglast
+!integer, dimension(:,:), allocatable  :: lastmove
+!integer  :: fdeg
+!integer  :: first0
+!integer, dimension(:,:), allocatable  :: move
+!integer  :: temp
+!integer  :: lasti
+!integer, dimension(:,:), allocatable  :: plotstuff, totmove,time2plot
+!double precision, dimension(:,:), allocatable  :: plotstuff2
+!integer       :: moveunit = 25
+!integer       :: lastmoveunit = 26
+!integer       :: plotunit = 27
+!integer       :: degnextunit = 28
+!integer       :: Venextunit = 29
+!integer       :: Vbdnextunit = 30
 integer       :: mfptunit = 42
-character(80) :: movefile
-character(80) :: lastmovefile
-character(80) :: plotfile
-character(80) :: degnextfile
-character(80) :: Venextfile
-character(80) :: Vbdnextfile
+!character(80) :: movefile
+!character(80) :: lastmovefile
+!character(80) :: plotfile
+!character(80) :: degnextfile
+!character(80) :: Venextfile
+!character(80) :: Vbdnextfile
 character(80) :: mfptfile
 
-integer, dimension(:), allocatable  :: intact2
+!integer, dimension(:), allocatable  :: intact2
 integer  :: countintact2, lenintact2, counth, countv, countpv, countmacrounbd, countmicrounbd
-integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
-integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx 
-integer, dimension(:,:), allocatable  :: X1plot, Y1plot
-integer, dimension(:,:), allocatable  :: X2plot, Y2plot
-integer, dimension(:), allocatable  :: Xvplot, Yvplot
-double precision, dimension(:,:), allocatable  :: bdtPA, freetPA
+!integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
+!integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx 
+!integer, dimension(:,:), allocatable  :: X1plot, Y1plot
+!integer, dimension(:,:), allocatable  :: X2plot, Y2plot
+!integer, dimension(:), allocatable  :: Xvplot, Yvplot
+!double precision, dimension(:,:), allocatable  :: bdtPA, freetPA
 double precision, dimension(:,:), allocatable :: lysismat !(100,100) if only did 10,000 micro runs, (500,100) if did 50,000
 integer, dimension(100)  :: lenlysismat
 integer  :: r400
-integer  :: x1unit = 31
-integer  :: x2unit = 32
-integer  :: y1unit = 33
-integer  :: y2unit = 34
-integer  :: xvunit = 35
-integer  :: yvunit = 36
-integer  :: tPAbdunit = 37
-integer  :: tPAfreeunit = 38
-integer  :: cbindunit = 39
-integer  :: cindunit = 40
-integer  :: bind1unit = 41
-character(80)  :: x1file
-character(80)  :: x2file
-character(80)  :: y1file
-character(80)  :: y2file
-character(80)  :: xvfile
-character(80)  :: yvfile
-character(80)  :: tPAbdfile
-character(80)  :: tPAfreefile
-character(80)  :: cbindfile
-character(80)  :: cindfile
-character(80)  :: bind1file
-integer :: countbind, countindep
-integer, dimension(:,:), allocatable  :: countbindV, countindepV, bind1V
-integer, dimension(:), allocatable :: bind1
+!integer  :: x1unit = 31
+!integer  :: x2unit = 32
+!integer  :: y1unit = 33
+!integer  :: y2unit = 34
+!integer  :: xvunit = 35
+!integer  :: yvunit = 36
+!integer  :: tPAbdunit = 37
+!integer  :: tPAfreeunit = 38
+!integer  :: cbindunit = 39
+!integer  :: cindunit = 40
+!integer  :: bind1unit = 41
+!character(80)  :: x1file
+!character(80)  :: x2file
+!character(80)  :: y1file
+!character(80)  :: y2file
+!character(80)  :: xvfile
+!character(80)  :: yvfile
+!character(80)  :: tPAbdfile
+!character(80)  :: tPAfreefile
+!character(80)  :: cbindfile
+!character(80)  :: cindfile
+!character(80)  :: bind1file
+!integer :: countbind, countindep
+!integer, dimension(:,:), allocatable  :: countbindV, countindepV, bind1V
+!integer, dimension(:), allocatable :: bind1
 integer, dimension(:), allocatable :: forcedunbdbydeg
 double precision, dimension(:), allocatable :: mfpt !vector I'll use to save the first passage times of each tPA molecule
 integer, dimension(:), allocatable :: yesfpt !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
@@ -205,7 +206,7 @@ real :: rounded_time
 real :: degraded_percent
 real :: reached_back_row_percent
 double precision :: last_degrade_time
-real :: temp_len_lysis_mat
+!real :: temp_len_lysis_mat
 
 integer :: t_degrade_unit = 102
 character(80) :: t_degrade_file
@@ -381,7 +382,7 @@ allocate (closeneigh(num,num))
 allocate (endpts(2,num))
 allocate (neighborc(8,num))
 allocate (V(2,M))
-allocate (init_state(enoFB))
+!allocate (init_state(enoFB))
 allocate (degrade(num))
 allocate (t_degrade(num))
 allocate (t_leave(M))
@@ -390,27 +391,27 @@ allocate (bind(M))
 allocate (Nsavevect(stats))
 allocate (rvect(M))
 allocate (degnext(tf+1,num))
-allocate (Vedgenext(tf+1,M))
-allocate (Vboundnext(tf+1,M))
-allocate (ind(F-1))
-allocate (place(F-1))
-allocate (degold(num))
+!allocate (Vedgenext(tf+1,M))
+!allocate (Vboundnext(tf+1,M))
+!allocate (ind(F-1))
+!allocate (place(F-1))
+!allocate (degold(num))
 allocate (tsave(tf+1))
-allocate (front(tf,N))
-allocate (firstdeg(N))
-allocate (deglast(N))
-allocate (lastmove(N,stats))
-allocate (move(N,N))
-allocate (plotstuff(N,N), totmove(N,N),time2plot(N,N))
-allocate (plotstuff2(N,N))
-allocate (intact2(num))
-allocate (X1plot(2,F*(N-1)), Y1plot(2,F*(N-1)))
-allocate (X2plot(2,N*(F-1)), Y2plot(2,N*(F-1)))
-allocate (Xvplot(N*F), Yvplot(N*F))
-allocate (bdtPA(2,M), freetPA(2,M))
+!allocate (front(tf,N))
+!allocate (firstdeg(N))
+!allocate (deglast(N))
+!allocate (lastmove(N,stats))
+!allocate (move(N,N))
+!allocate (plotstuff(N,N), totmove(N,N),time2plot(N,N))
+!allocate (plotstuff2(N,N))
+!allocate (intact2(num))
+!allocate (X1plot(2,F*(N-1)), Y1plot(2,F*(N-1)))
+!allocate (X2plot(2,N*(F-1)), Y2plot(2,N*(F-1)))
+!allocate (Xvplot(N*F), Yvplot(N*F))
+!allocate (bdtPA(2,M), freetPA(2,M))
 allocate (lysismat(nummicro,100))!(100,100) if only did 10,000 micro runs, (500,100) if did 50,000
-allocate (countbindV(stats,tf), countindepV(stats,tf), bind1V(stats,tf))
-allocate (bind1(num))
+!allocate (countbindV(stats,tf), countindepV(stats,tf), bind1V(stats,tf))
+!allocate (bind1(num))
 allocate (forcedunbdbydeg(M))
 allocate (mfpt(M)) !vector I'll use to save the first passage times of each tPA molecule
 allocate (yesfpt(M))  !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
@@ -433,7 +434,7 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_Q2_diffuse_into_and_along_fixed.f90 on data ',expCode
+write(*,*)' obtained using code macro_diffuse_into_and_along__internal.f90 on data ',expCode
 !write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 ! Initialize the Random Number Generator
@@ -689,7 +690,7 @@ neighborc=0
     close(202)
 
 
-    lastmove=0
+!    lastmove=0
 
 !The edges that don't contain fibrin are those with edge number <= to enoFB
 !enoFB=(3*N-1)*(Ffree-1)
@@ -706,9 +707,9 @@ neighborc=0
         open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
         open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
         open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
-        open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
-        open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
-        open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
+!        open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
+!        open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
+!        open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
         open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
 
 !! BRAD 2023-01-21:
@@ -740,11 +741,11 @@ neighborc=0
         count2=0
         countcolr4=0
         count66=0
-        countbind=0
-        countindep=0
+!        countbind=0
+!        countindep=0
         Nsave=0
         cNsave=0
-        bind1=0
+!        bind1=0
         countmacrounbd=0
         countmicrounbd=0
 
@@ -766,10 +767,10 @@ neighborc=0
             t_leave  =0.0d+00         !vector of the tPA leaving times for each molecule
             t_wait   =0.0d+00          !vector of the tPA waiting times for each molecule
             degnext  =0
-            Vedgenext = 0
-            Vboundnext = 0
-            totmove = 0
-            time2plot = 0
+!            Vedgenext = 0
+!            Vboundnext = 0
+!            totmove = 0
+!            time2plot = 0
             bind = 0.0d+00             !vector of the binding times for each tPA
 
 !! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
@@ -798,30 +799,36 @@ neighborc=0
             V(2,i)=0
         enddo
 
-        do ii=1,enoFB
-            init_state(ii) = dble(ii) / dble(enoFB) !make a vector that's the length of one row of lattice and scale so
-                                                               !that prob. of being on any edge is equal
-        enddo
+!        do ii=1,enoFB
+!            init_state(ii) = dble(ii) / dble(enoFB) !make a vector that's the length of one row of lattice and scale so
+!                                                               !that prob. of being on any edge is equal
+!        enddo
 
         call vurcw1(rvect,M)
-
+        
         !use the random numbers to decide where we start the tPAs
-        do i=1,M
-            if (0.le.rvect(i).and.rvect(i).le.init_state(1)) V(1,i)=1 !init_entry(i)=1
-            do j=1,enoFB
-                if (init_state(j).lt.rvect(i).and.rvect(i).le.init_state(j+1)) then
+        
+!! BRAD 2023-04-13: Switching molecule starting locations to fiber edges
+            V(1,:) = enoFB + CEILING(rvect * (num - enoFB))
+
+!        do i=1,M
+!            if (0.le.rvect(i).and.rvect(i).le.init_state(1)) V(1,i)=1 !init_entry(i)=1
+!            do j=1,enoFB
+!                if (init_state(j).lt.rvect(i).and.rvect(i).le.init_state(j+1)) then
                     !init_entry(i)=j+1
-                    V(1,i)=j+1
-                end if
-            end do
+!                    V(1,i)=j+1
+!                end if
+!            end do
 !! BRAD 2023-01-31:
             if (verbose) then
-                write (*,'(A, I5, A, I5, A, F5.4)') '-> Molecule ', i-1,&
-                    ' placed on fiber ', V(1,i)-1, '; using r = ', rvect(i)
+                do i=1,M
+                    write (*,'(A, I5, A, I5, A, F5.4)') '-> Molecule ', i-1,&
+                        ' placed on fiber ', V(1,i)-1, '; using r = ', rvect(i)
+                end do
             end if
             !V(i,1) = init_entry(i) !molecule i starts on site init_entry(i) so I only allow tPA to start on an edge
                                   !that's in the first row of my lattice
-        end do
+!        end do
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
@@ -838,8 +845,8 @@ neighborc=0
         write(*,*)' save as deg',outFileCode
 
 
-        Vedgenext(1,:)=V(1,:)
-        Vboundnext(1,:)=V(2,:)
+!        Vedgenext(1,:)=V(1,:)
+!        Vboundnext(1,:)=V(2,:)
         degnext(1,:)=degrade(:)
         tsave(1) = t
 
@@ -1007,14 +1014,14 @@ neighborc=0
                                 bind(j)=0 !reset the binding time to 0
                                 t_wait(j)=0 !reset the waiting time to 0
                                 r3=urcw1()
-                                countbind=countbind+1
+!                                countbind=countbind+1
 
 !! BRAD 2023-01-04:
                                 total_binds = total_binds + 1
 
                                 !put a 1 in entry equal to edge number. each second I'll sum up the number of 1 entries, which
                                 !will tell me the number of independent bindings (not necessarily successful ones) at each second
-                                bind1(V(1,j))=1
+!                                bind1(V(1,j))=1
 
                                 !find the time that tPA will unbind:
                                 colr2=0
@@ -1074,7 +1081,7 @@ neighborc=0
                                         t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
                                                                            !the cutting time obtained from the lysis time function
                                                                            !minus half a time step so we round to nearest time step
-                                        countindep=countindep+1 !save the number of independent binding events
+!                                        countindep=countindep+1 !save the number of independent binding events
                                     else               !if tPA has previously landed on this edge and dictated a degradation time,
                                         t_degrade(V(1,j)) = min(t_degrade(V(1,j)),(t+rmicro-tstep/2)) !choose the smallest time, because
                                                                                                 !that's what will happen first
@@ -1181,7 +1188,7 @@ neighborc=0
 
                                 !put a 1 in entry equal to edge number. each second I'll sum up the number of 1 entries, which
                                 !will tell me the number of independent bindings (not necessarily successful ones) at each second
-                                bind1(V(1,j))=1
+!                                bind1(V(1,j))=1
 
                                 !find the time that tPA will unbind:
                                 colr2=0
@@ -1248,7 +1255,7 @@ neighborc=0
                                         t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
                                                                                  !the cutting time obtained from the lysis time function
                                                                                  !minus half a time step so we round to nearest time step
-                                        countindep=countindep+1 !save the number of independent binding events
+!                                        countindep=countindep+1 !save the number of independent binding events
                                     else               !if tPA has previously landed on this edge and dictated a degradation time,
                                         t_degrade(V(1,j)) = min(t_degrade(V(1,j)),(t+rmicro-tstep/2)) !choose the smallest time, because
                                                                                                       !that's what will happen first
@@ -1413,8 +1420,8 @@ neighborc=0
 
                 Nsave=Nsave+10
                 cNsave=cNsave+1
-                Vedgenext(cNsave+1,:) = V(1,:)
-                Vboundnext(cNsave+1,:) = V(2,:)
+ !               Vedgenext(cNsave+1,:) = V(1,:)
+ !               Vboundnext(cNsave+1,:) = V(2,:)
                 degnext(cNsave+1,:) = degrade(1:num)
                 tsave(cNsave+1) = t
                 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
@@ -1464,8 +1471,8 @@ neighborc=0
         write(mfptunit) mfpt(:)
 
         Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
-        front=0
-        degold=0
+!        front=0
+!        degold=0
 
         !NOW PROCESS THE DATA WE OBTAINED FROM THE ABOVE RUN
         nplt=Nsavevect(istat)+2 !+1 because I saved once at the beginning, and another +1 to account for the final time point
@@ -1974,7 +1981,7 @@ neighborc=0
 
         write(*,*)'countmacrounbd=',countmacrounbd
         write(*,*)'countmicrounbd=',countmicrounbd
-         countindepV(istat,tf)=countindep
+!         countindepV(istat,tf)=countindep
      enddo  !for stats loop
 
 write(*,*)'Nsavevect=',Nsavevect(:)
@@ -1984,15 +1991,15 @@ write(*,*)'Nsavevect=',Nsavevect(:)
 !write(cindunit) countindepV
 !write(bind1unit) bind1V
 write(Nunit) Nsavevect(:)
-write(lastmoveunit) lastmove(:,:)
+!write(lastmoveunit) lastmove(:,:)
 !write(mfptunit) mfpt(:)
 
 close(degunit)
 close(Nunit)
 close(tunit)
-close(moveunit)
-close(lastmoveunit)
-close(plotunit)
+!close(moveunit)
+!close(lastmoveunit)
+!close(plotunit)
 close(mfptunit)
 !! BRAD 2023-01-21:
         close(t_degrade_unit)
