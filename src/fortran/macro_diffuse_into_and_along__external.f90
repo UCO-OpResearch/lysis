@@ -121,13 +121,13 @@ double precision :: uf, urcw1
 external :: mscw, kiss32, urcw1
 
 double precision, dimension(:), allocatable         :: rvect
-double precision, dimension(:,:), allocatable :: degnext
+!double precision, dimension(:,:), allocatable :: degnext
 !nteger, dimension(:,:), allocatable :: Vedgenext
 !nteger, dimension(:,:), allocatable :: Vboundnext
 !nteger, dimension(:), allocatable  :: ind
 !double precision, dimension(:), allocatable  :: place
 !double precision, dimension(:), allocatable  :: degold
-double precision, dimension(:), allocatable :: tsave
+!double precision, dimension(:), allocatable :: tsave
 !integer  :: zero1
 !integer, dimension(:,:), allocatable  :: front
 !integer, dimension(:), allocatable  :: firstdeg
@@ -390,13 +390,13 @@ allocate (t_wait(M))
 allocate (bind(M))
 allocate (Nsavevect(stats))
 allocate (rvect(M))
-allocate (degnext(tf+1,num))
+!allocate (degnext(tf+1,num))
 !llocate (Vedgenext(tf+1,M))
 !llocate (Vboundnext(tf+1,M))
 !llocate (ind(F-1))
 !allocate (place(F-1))
 !allocate (degold(num))
-allocate (tsave(tf+1))
+!allocate (tsave(tf+1))
 !allocate (front(tf,N))
 !allocate (firstdeg(N))
 !allocate (deglast(N))
@@ -650,6 +650,7 @@ neighborc=0
 
 !write(*,*)'neighborc=',neighborc
 
+DEALLOCATE(closeneigh)
 
 ! read in the data from the micro model, which we obtained from /micro.f90
 ! READ IN VECTORS FROM MATLAB 
@@ -766,7 +767,7 @@ neighborc=0
             t_degrade=0.0d+00         !vector of the degradation times of each edge
             t_leave  =0.0d+00         !vector of the tPA leaving times for each molecule
             t_wait   =0.0d+00          !vector of the tPA waiting times for each molecule
-            degnext  =0
+!            degnext  =0
 !           Vedgenext = 0
 !           Vboundnext = 0
 !           totmove = 0
@@ -848,8 +849,8 @@ neighborc=0
 
 !       Vedgenext(1,:)=V(1,:)
 !       Vboundnext(1,:)=V(2,:)
-        degnext(1,:)=degrade(:)
-        tsave(1) = t
+!        degnext(1,:)=degrade(:)
+!        tsave(1) = t
 
 
 
@@ -1423,8 +1424,8 @@ neighborc=0
                 cNsave=cNsave+1
 !               Vedgenext(cNsave+1,:) = V(1,:)
 !               Vboundnext(cNsave+1,:) = V(2,:)
-                degnext(cNsave+1,:) = degrade(1:num)
-                tsave(cNsave+1) = t
+!                degnext(cNsave+1,:) = degrade(1:num)
+!                tsave(cNsave+1) = t
                 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
                 !countbindV(istat,cNsave)=countbind
                 !countindepV(istat,cNsave)=countindep
