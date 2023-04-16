@@ -669,7 +669,7 @@ class MacroscaleRun:
                         f"All fibers degraded after {current_time:.2f} sec. Terminating"
                     )
                     self.last_degrade_time = np.max(self.fiber_status)
-                    # break
+                    break
                 else:
                     unlysed_fiber_percent = (
                         100 - unlysed_fibers / self.exp.macro_params.total_fibers * 100

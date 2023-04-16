@@ -1,1 +1,1 @@
-Data obtained from Dr Bannish. Compied for use with Fortran code in 2022, but unchanged.
+Data obtained from Dr Bannish. Copied for use with Fortran code in 2022, but unchanged.
