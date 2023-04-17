@@ -1433,7 +1433,7 @@ DEALLOCATE(closeneigh)
                 rounded_time = real(t)
                 degraded_percent = real(degraded_fibers)/(num-enoFB)*100
                 reached_back_row_percent = real(reached_back_row)/M*100
-                write(*,'(A,F7.2,A,I5,A,F5.1,A,I5,A,F5.1,A)')'After ',rounded_time,' sec, ',&
+                write(*,'(A,F7.0,A,I5,A,F5.1,A,I5,A,F5.1,A)')'After ',rounded_time,' sec, ',&
                 degraded_fibers,' fibers are degraded (',degraded_percent,'% of total) and ',&
                 reached_back_row,' molecules have reached the back row (',&
                 reached_back_row_percent,'% of total).'

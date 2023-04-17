@@ -1,10 +1,12 @@
-import argparse
 import inspect
 import os
 import subprocess
 
 from dataclasses import asdict, dataclass
 from typing import AnyStr
+
+import numpy as np
+
 from .parameters import Experiment, MacroParameters
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -30,8 +32,16 @@ class FortranMacro:
     executable: AnyStr = None
     in_file_code: AnyStr = ".dat"
     out_file_code: AnyStr = ".dat"
+    index: int = None
 
     def exec_command(self):
+        params = asdict(self.exp.macro_params)
+        if self.index is not None:
+            stream = np.random.SeedSequence(params['seed'])
+            seeds = stream.generate_state(params['total_trials'])
+            params['total_trials'] = 1
+            params['seed'] = int(np.int32(seeds[self.index]))
+            self.out_file_code = self.out_file_code[:-4] + f"_{self.index:02}" + self.out_file_code[-4:]
         arguments = [
             "--expCode",
             self.exp.experiment_code,
@@ -40,7 +50,6 @@ class FortranMacro:
             "--outFileCode",
             self.out_file_code,
         ]
-        params = asdict(self.exp.macro_params)
         sig = inspect.signature(MacroParameters)
         fortran_names = MacroParameters.fortran_names()
         for key in sig.parameters:
