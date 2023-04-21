@@ -94,7 +94,7 @@ integer, dimension(:,:), allocatable   :: V
 !double precision, dimension(2)         :: pfit
 double precision, dimension(101)       :: CDFtPA, CDFlys
 double precision, dimension(101)       :: tsec1, tseclys
-double precision, dimension(:), allocatable      :: degrade
+!double precision, dimension(:), allocatable      :: degrade
 double precision, dimension(:), allocatable     :: t_degrade
 double precision, dimension(:), allocatable        :: t_leave
 double precision, dimension(:), allocatable        :: t_wait
@@ -108,7 +108,7 @@ integer       :: Vunit = 21
 integer       :: V2unit = 22
 integer       :: Nunit = 23
 integer       :: tunit = 24
-character(80) :: degfile       ! degradation vector
+!character(80) :: degfile       ! degradation vector
 character(80) :: Vfile
 character(80) :: V2file
 character(80) :: Nfile
@@ -383,7 +383,7 @@ allocate (endpts(2,num))
 allocate (neighborc(8,num))
 allocate (V(2,M))
 !allocate (init_state(enoFB))
-allocate (degrade(num))
+!allocate (degrade(num))
 allocate (t_degrade(num))
 allocate (t_leave(M))
 allocate (t_wait(M))
@@ -704,7 +704,7 @@ DEALLOCATE(closeneigh)
         !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
+!        open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
         open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
         open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
 !        open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
@@ -762,8 +762,9 @@ DEALLOCATE(closeneigh)
         most_molecules_passed = .False.
 
 !Initialize vectors to 0
-            degrade  =0.0d+00         !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
-            t_degrade=0.0d+00         !vector of the degradation times of each edge
+!! BRAD 2023-04-20
+!            degrade  =0.0d+00         !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
+            t_degrade=9.9d+100         !vector of the degradation times of each edge
             t_leave  =0.0d+00         !vector of the tPA leaving times for each molecule
             t_wait   =0.0d+00          !vector of the tPA waiting times for each molecule
 !            degnext  =0
@@ -776,7 +777,8 @@ DEALLOCATE(closeneigh)
 !! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
             forcedunbdbydeg=0
             
-            degrade(1:enoFB) = -1.0  !set the undegradable fibers' degradation status to -1
+!! BRAD 2023-04-20
+            t_degrade(1:enoFB) = 0  !set the undegradable fibers' degradation status to -1
 
 
         write(*,*)' q=',q
@@ -832,8 +834,8 @@ DEALLOCATE(closeneigh)
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-
-        write(degunit) degrade(:)
+!! BRAD 2023-04-20
+!        write(degunit) degrade(:)
         write(tunit) t
 
 !! BRAD 2023-01-21:
@@ -880,60 +882,7 @@ DEALLOCATE(closeneigh)
 
             !            forcedunbdbydeg=0 !every timestep reset vector that records which tPA molecules were on degraded fibers to 0
 
-            !at the beginning of each time step, check to see if any of the fibers should be degraded at this time.
-            !Degrade fiber before moving and binding/unbinding tPA:
-            do i=enoFB+1,num
-                if(t_degrade(i).lt.t.and.t_degrade(i).gt.0.and.degrade(i).eq.0) then
-                !i.e. if degradation time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
-                    degrade(i)=-t
-!! BRAD 2023-01-13:
-                    degraded_fibers = degraded_fibers + 1
-                    last_degrade_time = t
-                    if (degraded_fibers==num-enoFB) all_fibers_degraded = .True.
-                    !write(*,*)'time=',t
-                    !write(*,*)'edge that degraded=',i
 
-                    !uncomment below if we do NOT remove tPA that was on a degraded fiber:
-                    !!if there were any tPAs bound to this edge, have them unbind, and reset their leaving times to 0:
-                    !do j=1,M
-                    !   if(V(1,j)==i) then
-                    !      V(2,j)=0
-                    !      t_leave(j)=0
-                    !      !also find the new binding time for this molecule !FOLLOWING LINE ADDED 4/21/2011:
-                    !      bind(j)=0  !because the molecule can never rebind to a degraded edge
-                    !   end if
-                    !enddo
-                    !!end uncommentable part
-
-                    !uncomment below if we DO remove tPA that was on a degraded fiber:
-                    !if there were any tPAs bound to this edge, temporarily remove them from the simulation by assigning a waiting time before they can rebind
-                    do j=1,M
-!! BRAD 2023-01-31: There was a small chance that a molecule could arrive at a fiber just as it was degrading
-!!                  Even though it was not bound, it would still be classified for "restricted movement"
-!!                  Fixed 'passerby molecule' bug
-                        if(V(1,j)==i.and.V(2,j)==1) then
-                            V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
-!! BRAD 2023-04-13: Change macro-unbound wait time to remaining leave time. 
-!!                  That is, the molecule will be restricted in its movement and binding until it would have unbound (if the fiber hadn't degraded first)
-                            t_wait(j)=t_leave(j)
-                            t_leave(j)=0
-                            !also find the new binding time for this molecule !FOLLOWING LINE ADDED 4/21/2011:
-                            bind(j)=0  !because the molecule can never rebind to a degraded edge
-                            forcedunbdbydeg(j)=1 !put a "1" in the entries corresponding to tPA molecules that were forced to unbind by macroscale degradation; these molecules will NOT be allowed to diffuse into the clot, only along the clot front. ADDED 5/10/18
-                            countmacrounbd=countmacrounbd+1 !count the total number of tPA molecules that are forced to unbind by macro-level degradation of a fiber
-                            !write(*,*)'forced unbound by degradation=',j
-!! BRAD 2023-01-31:
-                            if (verbose) then
-                                write (*,'(A,I6,A,I5,A,I5)') '-> ts ', count-1,&
-                                    ' -> m ', j-1, ' macro-unbinding from f ', V(1,j)-1
-                                write (*,'(A,I6,A,I5,A,F10.5)') '-> ts ', count-1,&
-                                    ' -> m ', j-1, ' wait time set to ', t_wait(j)
-                            end if
-                        end if
-                   end do
-                   !!end uncommentable part
-                end if
-            end do
 
 
             !!!!!!!!!!!!!!!! Now do the binding/unbinding and moving part of the algorithm !!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -942,6 +891,32 @@ DEALLOCATE(closeneigh)
 
 
             do j=1,M
+!! BRAD 2023-04-20: Moving degraded fiber check inside the molecule loop
+
+!! BRAD 2023-01-31: There was a small chance that a molecule could arrive at a fiber just as it was degrading
+!!                  Even though it was not bound, it would still be classified for "restricted movement"
+!!                  Fixed 'passerby molecule' bug
+                if(V(2,j)==1.and.t_degrade(V(1,j))<=t) then
+                    V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
+!! BRAD 2023-04-13: Change macro-unbound wait time to remaining leave time. 
+!!                  That is, the molecule will be restricted in its movement and binding until it would have unbound (if the fiber hadn't degraded first)
+                    t_wait(j)=t_leave(j)
+                    t_leave(j)=0
+                    !also find the new binding time for this molecule !FOLLOWING LINE ADDED 4/21/2011:
+                    bind(j)=0  !because the molecule can never rebind to a degraded edge
+                    forcedunbdbydeg(j)=1 !put a "1" in the entries corresponding to tPA molecules that were forced to unbind by macroscale degradation; these molecules will NOT be allowed to diffuse into the clot, only along the clot front. ADDED 5/10/18
+                    countmacrounbd=countmacrounbd+1 !count the total number of tPA molecules that are forced to unbind by macro-level degradation of a fiber
+                    !write(*,*)'forced unbound by degradation=',j
+!! BRAD 2023-01-31:
+                    if (verbose) then
+                        write (*,'(A,I6,A,I5,A,I5)') '-> ts ', count-1,&
+                            ' -> m ', j-1, ' macro-unbinding from f ', V(1,j)-1
+                        write (*,'(A,I6,A,I5,A,F10.5)') '-> ts ', count-1,&
+                            ' -> m ', j-1, ' wait time set to ', t_wait(j)
+                    end if
+                end if
+!! BRAD 2023-04-20: End of degraded fiber check
+            
                 if(V(2,j)==1) then   !if the molecule is bound
                     if(t_leave(j).le.t) then
                         !if the time to tPA leaving is smaller than current time, have the molecule unbind
@@ -1005,7 +980,7 @@ DEALLOCATE(closeneigh)
                                 ' -> m ', j-1, ' not moving; using r = ', r
                         end if
                         
-                        if(bind(j).lt.t.and.bind(j).gt.0.and.degrade(V(1,j)).eq.0) then
+                        if(bind(j).lt.t.and.bind(j).gt.0.and.t_degrade(V(1,j))>t) then
                         !i.e. if binding time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
                         !check if the molecule has a waiting time. if it does, check if the current time is later than the waiting time
                             if(t_wait(j).le.t) then
@@ -1070,22 +1045,23 @@ DEALLOCATE(closeneigh)
                                     
 !! BRAD 2023-01-31:
                                     if (verbose) then
-                                        if (t_degrade(V(1,j))==0.or.t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
+                                        if (t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
                                             write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
                                                 ' -> f ', V(1,j)-1, ' degrade time set to ', t+rmicro-tstep/2,&
                                                 '; using r = ', r4
                                         end if
                                     end if
 
-                                    if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
-                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
+!! BRAD 2023-04-20:
+!                                    if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
+!                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
                                                                            !the cutting time obtained from the lysis time function
                                                                            !minus half a time step so we round to nearest time step
 !                                        countindep=countindep+1 !save the number of independent binding events
-                                    else               !if tPA has previously landed on this edge and dictated a degradation time,
+!                                    else               !if tPA has previously landed on this edge and dictated a degradation time,
                                         t_degrade(V(1,j)) = min(t_degrade(V(1,j)),(t+rmicro-tstep/2)) !choose the smallest time, because
                                                                                                 !that's what will happen first
-                                    end if
+!                                    end if
 
                                 end if !for if(r400.le.lenlysismat) loop
 
@@ -1102,7 +1078,7 @@ DEALLOCATE(closeneigh)
 
                     else              !for if(r.le(1-q) statement. if r>1-q, i.e. if molecule j has the possibility to move
                         !check if molecule j can bind. adjusted 9/15/17 to account for waiting time
-                        if(bind(j).lt.t.and.bind(j).gt.0.and.degrade(V(1,j)).eq.0.and.t_wait(j).le.t) then
+                        if(bind(j).lt.t.and.bind(j).gt.0.and.t_degrade(V(1,j))>t.and.t_wait(j).le.t) then
                         !i.e. if binding time is smaller than t AND bigger than 0  AND the edge hasn't already been degraded AND the waiting time is less than the current time.
                         !then the molecule could bind. To determine whether it binds or moves, draw a random number, r2.
                         !if r2.gt.(t-bind(j))/tstep, then movement happened before binding, so move the molecule rather than bind it
@@ -1243,23 +1219,23 @@ DEALLOCATE(closeneigh)
                                     
 !! BRAD 2023-01-31:
                                     if (verbose) then
-                                        if (t_degrade(V(1,j))==0.or.t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
+                                        if (t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
                                             write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
                                                 ' -> f ', V(1,j)-1, ' degrade time set to ', t+rmicro-tstep/2,&
                                                 '; using r = ', r4
                                         end if
                                     end if
 
-
-                                    if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
-                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
+!! BRAD 2023-04-20:
+!                                    if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
+!                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
                                                                                  !the cutting time obtained from the lysis time function
                                                                                  !minus half a time step so we round to nearest time step
 !                                        countindep=countindep+1 !save the number of independent binding events
-                                    else               !if tPA has previously landed on this edge and dictated a degradation time,
+!                                    else               !if tPA has previously landed on this edge and dictated a degradation time,
                                         t_degrade(V(1,j)) = min(t_degrade(V(1,j)),(t+rmicro-tstep/2)) !choose the smallest time, because
                                                                                                       !that's what will happen first
-                                    end if
+!                                    end if
 
                                 end if !for if(r400.le.lenlysismat) loop
 
@@ -1272,7 +1248,7 @@ DEALLOCATE(closeneigh)
                                 temp_neighborc=0 !set temporary neighbor array to 0
                                 countij=0
                                 do ij=1,8 !loop over all 8 entries of neighborc vector
-                                    if(degrade(neighborc(ij,z))<0) then !if the edge has degraded or was a ghost edge, then it is available for diffusion
+                                    if(t_degrade(neighborc(ij,z))<=t) then !if the edge has degraded or was a ghost edge, then it is available for diffusion
                                         countij=countij+1
                                         temp_neighborc(countij)=neighborc(ij,z) !set the next entry of temp_neighborc vector to be the edge # that's available for diffusion
                                     end if !end degrade(neighborc...) if statement
@@ -1411,7 +1387,26 @@ DEALLOCATE(closeneigh)
             !!end if
 
             if(Ninteger>=Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
-                write(degunit)    degrade(1:num)
+!! BRAD 2023-04-20: Count up degraded fibers
+                degraded_fibers = 0
+                !Degrade fiber before moving and binding/unbinding tPA:
+                do i=enoFB+1,num
+                    if(t_degrade(i)<=t) then
+!! BRAD 2023-01-13:
+                        degraded_fibers = degraded_fibers + 1
+!                        last_degrade_time = t
+                        if (degraded_fibers==num-enoFB) all_fibers_degraded = .True.
+                        !write(*,*)'time=',t
+                        !write(*,*)'edge that degraded=',i
+
+
+                       !!end uncommentable part
+                    end if
+                end do
+            
+            
+!! BRAD 2023-04-20:           
+!                write(degunit)    degrade(1:num)
                 write(tunit)  t
 !! BRAD 2023-01-21:
                 write(t_degrade_unit) t_degrade(:)
