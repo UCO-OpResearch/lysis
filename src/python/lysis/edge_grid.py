@@ -330,6 +330,21 @@ class EdgeGrid(object):
                 ] = edge_lookup(tuple(edge_grid.neighbor(i, j, k)))
         return neighbors
 
+    @staticmethod
+    def generate_fortran_neighborhood_structure(exp: Experiment):
+        edge_grid = EdgeGrid(exp)
+        fort_neighbors = np.empty((exp.macro_params.total_edges, 8), dtype="int")
+        for f in range(exp.macro_params.total_edges):
+            i, j = from_fortran_edge_index(
+                f, exp.macro_params.rows, exp.macro_params.cols
+            )
+            for k in range(8):
+                neighbor_i, neighbor_j = edge_grid.neighbor(i, j, k)
+                fort_neighbors[f, k] = to_fortran_edge_index(
+                    neighbor_i, neighbor_j, exp.macro_params.rows, exp.macro_params.cols
+                )
+        return fort_neighbors
+
 
 def from_fortran_edge_index(
     index: int, rows: int, nodes_in_row: int
