@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import AnyStr
 
+from lysis import EdgeGrid
 from lysis.util import Experiment, FortranMacro
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -18,27 +19,37 @@ __status__ = "Development"
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("executable", type=str, help="The name of the compiled fortran executable.")
+    parser.add_argument(
+        "executable", type=str, help="The name of the compiled fortran executable."
+    )
     parser.add_argument("exp_code", type=str)
     parser.add_argument("--in_code", type=str, default=".dat")
     parser.add_argument("--out_code", type=str, default=".dat")
-    parser.add_argument("-n", "--index", type=int, help="The index of this simulation in this run.")
-    parser.add_argument("--cwd", type=str, default=".", help="Root directory of this project.")
+    parser.add_argument(
+        "-n", "--index", type=int, help="The index of this simulation in this run."
+    )
+    parser.add_argument(
+        "--cwd", type=str, default=".", help="Root directory of this project."
+    )
     return parser.parse_args()
+
 
 def main():
     args = parse_arguments()
     e = Experiment(os.path.join(args.cwd, "data"), experiment_code=args.exp_code)
     e.read_file()
-    fort = FortranMacro(
-        exp=e, 
-        cwd=args.cwd, 
-        executable=args.executable, 
-        in_file_code=args.in_code,
-        out_file_code=args.out_code,
-        index=args.index,
-    )
-    fort.run()
+    fort_neighbors = EdgeGrid.generate_fortran_neighborhood_structure(e) + 1
+    fort_neighbors.tofile(os.path.join(e.os_path, "neighbors.dat"), sep=" ")
+    # fort = FortranMacro(
+    #     exp=e,
+    #     cwd=args.cwd,
+    #     executable=args.executable,
+    #     in_file_code=args.in_code,
+    #     out_file_code=args.out_code,
+    #     index=args.index,
+    # )
+    # fort.run()
+
 
 if __name__ == "__main__":
     main()
