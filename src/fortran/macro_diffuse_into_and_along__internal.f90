@@ -896,7 +896,7 @@ DEALLOCATE(closeneigh)
 !! BRAD 2023-01-31: There was a small chance that a molecule could arrive at a fiber just as it was degrading
 !!                  Even though it was not bound, it would still be classified for "restricted movement"
 !!                  Fixed 'passerby molecule' bug
-                if(V(2,j)==1.and.t_degrade(V(1,j))<=t) then
+                if(V(2,j)==1.and.t_degrade(V(1,j))<t) then
                     V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
 !! BRAD 2023-04-13: Change macro-unbound wait time to remaining leave time. 
 !!                  That is, the molecule will be restricted in its movement and binding until it would have unbound (if the fiber hadn't degraded first)
@@ -980,7 +980,7 @@ DEALLOCATE(closeneigh)
                                 ' -> m ', j-1, ' not moving; using r = ', r
                         end if
                         
-                        if(bind(j).lt.t.and.bind(j).gt.0.and.t_degrade(V(1,j))>t) then
+                        if(bind(j).lt.t.and.bind(j).gt.0.and.t_degrade(V(1,j))>=t) then
                         !i.e. if binding time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
                         !check if the molecule has a waiting time. if it does, check if the current time is later than the waiting time
                             if(t_wait(j).le.t) then
@@ -1248,7 +1248,7 @@ DEALLOCATE(closeneigh)
                                 temp_neighborc=0 !set temporary neighbor array to 0
                                 countij=0
                                 do ij=1,8 !loop over all 8 entries of neighborc vector
-                                    if(t_degrade(neighborc(ij,z))<=t) then !if the edge has degraded or was a ghost edge, then it is available for diffusion
+                                    if(t_degrade(neighborc(ij,z))<t) then !if the edge has degraded or was a ghost edge, then it is available for diffusion
                                         countij=countij+1
                                         temp_neighborc(countij)=neighborc(ij,z) !set the next entry of temp_neighborc vector to be the edge # that's available for diffusion
                                     end if !end degrade(neighborc...) if statement
@@ -1391,7 +1391,7 @@ DEALLOCATE(closeneigh)
                 degraded_fibers = 0
                 !Degrade fiber before moving and binding/unbinding tPA:
                 do i=enoFB+1,num
-                    if(t_degrade(i)<=t) then
+                    if(t_degrade(i)<t) then
 !! BRAD 2023-01-13:
                         degraded_fibers = degraded_fibers + 1
 !                        last_degrade_time = t
