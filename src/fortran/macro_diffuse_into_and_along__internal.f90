@@ -14,6 +14,8 @@ program macrolysis
 !!                  - Verbose output option added
 !!                  - Commented out unnecessary data variables
 !!
+!!                  - Moved degraded fiber check into molecule loop
+!!                  - Removed "degrade" array and use "t_degrade" instead
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
@@ -215,6 +217,8 @@ character(80) :: m_location_file
 integer :: m_bound_unit = 104
 character(80) :: m_bound_file
 !integer :: m_bind_time_unit = 105
+integer :: neighbors_unit = 106
+character(80) :: neighbors_file
 
 logical :: all_fibers_degraded
 logical :: most_molecules_passed
@@ -870,9 +874,13 @@ DEALLOCATE(closeneigh)
 !            if(mod(count,100000)==0) then
 !            end if
 
+!            if (count==3700465) then
+!                verbose = .True.
+!            end if
+
 !! BRAD 2023-01-31:
             if (verbose) then
-                write (*,'(A,I6)') '-> ts ', count-1
+                write (*,'(A,I10)') '-> ts ', count-1
             end if
 
 
@@ -909,9 +917,9 @@ DEALLOCATE(closeneigh)
                     !write(*,*)'forced unbound by degradation=',j
 !! BRAD 2023-01-31:
                     if (verbose) then
-                        write (*,'(A,I6,A,I5,A,I5)') '-> ts ', count-1,&
+                        write (*,'(A,I10,A,I5,A,I6)') '-> ts ', count-1,&
                             ' -> m ', j-1, ' macro-unbinding from f ', V(1,j)-1
-                        write (*,'(A,I6,A,I5,A,F10.5)') '-> ts ', count-1,&
+                        write (*,'(A,I10,A,I5,A,F10.5)') '-> ts ', count-1,&
                             ' -> m ', j-1, ' wait time set to ', t_wait(j)
                     end if
                 end if
@@ -936,16 +944,16 @@ DEALLOCATE(closeneigh)
                             countmicrounbd=countmicrounbd+1
 !! BRAD 2023-01-31:
                             if (verbose) then
-                                write (*,'(A,I6,A,I5,A,I5,A,F5.4)') '-> ts ', count-1,&
+                                write (*,'(A,I10,A,I5,A,I6,A,F5.4)') '-> ts ', count-1,&
                                     ' -> m ', j-1, ' micro-unbinding from f ', V(1,j)-1, '; using r = ', r5
-                                write (*,'(A,I6,A,I5,A,F8.5)') '-> ts ', count-1,&
+                                write (*,'(A,I10,A,I5,A,F8.5)') '-> ts ', count-1,&
                                     ' -> m ', j-1, ' wait time set to ', t_wait(j)
                             end if
                         else
                             if (verbose) then
-                                write (*,'(A,I6,A,I5,A,I5,A,F5.4)') '-> ts ', count-1,&
+                                write (*,'(A,I10,A,I5,A,I6,A,F5.4)') '-> ts ', count-1,&
                                     ' -> m ', j-1, ' unbinding from f ', V(1,j)-1, '; using r = ', r5
-                                write (*,'(A,I6,A,I5,A,F8.5,A,F5.4)') '-> ts ', count-1,&
+                                write (*,'(A,I10,A,I5,A,F8.5,A,F5.4)') '-> ts ', count-1,&
                                     ' -> m ', j-1, ' bind time set to ', bind(j), '; using r = ', r1
                             end if
                         end if !for frac_forced if statement
@@ -959,7 +967,7 @@ DEALLOCATE(closeneigh)
                         forcedunbdbydeg(j)=0
 !! BRAD 2023-01-31:
                         if (verbose) then
-                            write (*,'(A,I6,A,I5,A)') '-> ts ', count-1,&
+                            write (*,'(A,I10,A,I5,A)') '-> ts ', count-1,&
                                 ' -> m ', j-1, ' no longer stuck to macro-fiber'
                         end if
                     end if
@@ -976,7 +984,7 @@ DEALLOCATE(closeneigh)
                         !check if molecule j can bind. ADJUSTED 9/15/17 to account for waiting time
 !! BRAD 2023-01-31:
                         if (verbose) then
-                            write (*,'(A,I6,A,I5,A,F5.4)') '-> ts ', count-1,&
+                            write (*,'(A,I10,A,I5,A,F5.4)') '-> ts ', count-1,&
                                 ' -> m ', j-1, ' not moving; using r = ', r
                         end if
                         
@@ -1017,9 +1025,9 @@ DEALLOCATE(closeneigh)
                                                         !minus half a time step so we round to nearest timestep
 !! BRAD 2023-01-31:
                                 if (verbose) then
-                                    write (*,'(A,I6,A,I5,A,I5)') '-> ts ', count-1,&
+                                    write (*,'(A,I10,A,I5,A,I6)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' binding to f ', V(1,j)-1
-                                    write (*,'(A,I6,A,I5,A,F8.5,A,F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A,I10,A,I5,A,F8.5,A,F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' leaving time set to ', t_leave(j), '; using r = ', r3
                                     write (*,'(A, F8.5, A, F8.5)') ' interpolated between ',tsec1(colr2),' and ',tsec1(colr2-1)
                                 end if
@@ -1043,10 +1051,11 @@ DEALLOCATE(closeneigh)
                                         rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4)
                                     end if
                                     
+                                    
 !! BRAD 2023-01-31:
                                     if (verbose) then
                                         if (t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
-                                            write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
+                                            write (*,'(A, I10, A, I5, A, F12.5, A, F5.4)') '-> ts ', count-1,&
                                                 ' -> f ', V(1,j)-1, ' degrade time set to ', t+rmicro-tstep/2,&
                                                 '; using r = ', r4
                                         end if
@@ -1078,7 +1087,7 @@ DEALLOCATE(closeneigh)
 
                     else              !for if(r.le(1-q) statement. if r>1-q, i.e. if molecule j has the possibility to move
                         !check if molecule j can bind. adjusted 9/15/17 to account for waiting time
-                        if(bind(j).lt.t.and.bind(j).gt.0.and.t_degrade(V(1,j))>t.and.t_wait(j).le.t) then
+                        if(bind(j).lt.t.and.bind(j).gt.0.and.t_degrade(V(1,j))>=t.and.t_wait(j).le.t) then
                         !i.e. if binding time is smaller than t AND bigger than 0  AND the edge hasn't already been degraded AND the waiting time is less than the current time.
                         !then the molecule could bind. To determine whether it binds or moves, draw a random number, r2.
                         !if r2.gt.(t-bind(j))/tstep, then movement happened before binding, so move the molecule rather than bind it
@@ -1141,11 +1150,11 @@ DEALLOCATE(closeneigh)
                                 
 !! BRAD 2023-01-31:
                                 if (verbose) then
-                                    write (*,'(A, I6, A, I5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' move before bind; using r = ', r2
-                                    write (*,'(A, I6, A, I5, A, I5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, I6, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' moving to f ', V(1,j)-1, '; using r = ', r
-                                    write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' binding time set to ', bind(j), '; using r = ', r1
 !                                    write (*,*) 't-dlog(r1)/(kon*bs)-tstep/2 = ',t,'-dlog(',r1,')/(',kon,'*',bs,')-',tstep,'/2'
                                 end if
@@ -1186,11 +1195,11 @@ DEALLOCATE(closeneigh)
 
 !! BRAD 2023-01-31:
                                 if (verbose) then
-                                    write (*,'(A, I6, A, I5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' bind before move; using r = ', r2
-                                    write (*,'(A, I6, A, I5, A, I5)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, I6)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' binding to f ', V(1,j)-1
-                                    write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' leaving time set to ', t_leave(j), '; using r = ', r3
                                     write (*,'(F8.5, A, F8.5, A, F8.5)') ttPA, '; interpolated between ',tsec1(colr2),' and ',tsec1(colr2-1)
                                     !write (*,*) t, ttPA, tstep
@@ -1217,10 +1226,11 @@ DEALLOCATE(closeneigh)
                                         rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4)
                                     end if
                                     
+                                   
 !! BRAD 2023-01-31:
                                     if (verbose) then
                                         if (t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
-                                            write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
+                                            write (*,'(A, I10, A, I5, A, F12.5, A, F5.4)') '-> ts ', count-1,&
                                                 ' -> f ', V(1,j)-1, ' degrade time set to ', t+rmicro-tstep/2,&
                                                 '; using r = ', r4
                                         end if
@@ -1273,7 +1283,7 @@ DEALLOCATE(closeneigh)
                                 
 !! BRAD 2023-01-31:
                                 if (verbose) then
-                                    write (*,'(A, I6, A, I5, A, I5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, I6, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' restriced moving to f ', V(1,j)-1, '; using r = ', r1
                                 end if
 
@@ -1333,9 +1343,9 @@ DEALLOCATE(closeneigh)
                                 
 !! BRAD 2023-01-31:
                                 if (verbose) then
-                                    write (*,'(A, I6, A, I5, A, I5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, I6, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' moving to f ', V(1,j)-1, '; using r = ', r
-                                    write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' binding time set to ', bind(j), '; using r = ', r1
 !                                    write (*,*) 't-dlog(r1)/(kon*bs)-tstep/2 = ',t,'-dlog(',r1,')/(',kon,'*',bs,')-',tstep,'/2'
                                 end if
@@ -1360,7 +1370,7 @@ DEALLOCATE(closeneigh)
                         
 !! BRAD 2023-01-31:
                         if (verbose) then
-                            write (*,'(A, I6, A, I5, A)') '-> ts ', count-1,&
+                            write (*,'(A, I10, A, I5, A)') '-> ts ', count-1,&
                                 ' -> m ', j-1, ' reached the back row for the first time'
                         end if
                         
@@ -1440,14 +1450,14 @@ DEALLOCATE(closeneigh)
             if (verbose) then
                 do j=1,M
                     if (V(2,j) == 0) then
-                        write (*,'(A, I6, A, I5, A, I5)') '-> ts ', count-1,&
+                        write (*,'(A, I10, A, I5, A, I6)') '-> ts ', count-1,&
                                         ' -> m ', j-1,  ' located on fiber ', V(1,j)-1
                     else
-                        write (*,'(A, I6, A, I5, A, I5)') '-> ts ', count-1,&
+                        write (*,'(A, I10, A, I5, A, I6)') '-> ts ', count-1,&
                                         ' -> m ', j-1,  ' bound to fiber ', V(1,j)-1
                     end if
                 end do
-                if (count > 3500) read (*,*)
+                read (*,*)
             end if
             
         end do !for time loop
