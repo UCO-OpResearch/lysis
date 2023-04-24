@@ -16,6 +16,7 @@ program macrolysis
 !!
 !!                  - Moved degraded fiber check into molecule loop
 !!                  - Removed "degrade" array and use "t_degrade" instead
+!!                  - Read in "neighborc" array generated in Python
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
@@ -86,9 +87,10 @@ character(95) :: filename4
 character(80) :: filename6
 
 
-integer*1, dimension(:, :), allocatable  :: closeneigh
+!integer*1, dimension(:, :), allocatable  :: closeneigh
 integer, dimension(:,:), allocatable    :: endpts
 integer, dimension(:,:), allocatable    :: neighborc
+!integer, dimension(:,:), allocatable    :: new_neighborc
 integer, dimension(8)      :: temp_neighborc
 integer, dimension(:,:), allocatable   :: V
 !double precision, dimension(:), allocatable      :: init_state
@@ -217,8 +219,6 @@ character(80) :: m_location_file
 integer :: m_bound_unit = 104
 character(80) :: m_bound_file
 !integer :: m_bind_time_unit = 105
-integer :: neighbors_unit = 106
-character(80) :: neighbors_file
 
 logical :: all_fibers_degraded
 logical :: most_molecules_passed
@@ -382,9 +382,10 @@ backrow=num-(2*N-1)+1 !defines the first fiber number in the back row of the clo
 tstep=q*delx**2/(12*Diff)  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
 num_t=tf/tstep            !number of timesteps
 
-allocate (closeneigh(num,num))
+!allocate (closeneigh(num,num))
 allocate (endpts(2,num))
 allocate (neighborc(8,num))
+!allocate (new_neighborc(8,num))
 allocate (V(2,M))
 !allocate (init_state(enoFB))
 !allocate (degrade(num))
@@ -471,189 +472,207 @@ write(*,*)' obtained using code macro_diffuse_into_and_along__internal.f90 on da
 ! closeneigh(i, j) = 0 if a molecule on fiber i cannot move to fiber j in one time-step
 ! closeneigh(i, j) > 0 if a molecule on fiber i can move to fiber j in one time-step
 
-closeneigh=0
-neighborc=0
+!closeneigh=0
+!neighborc=0
 
 !the corner vertical (3-D) edges
-    closeneigh(1,2) = 4
-    closeneigh(1,2*N) = 4
+!    closeneigh(1,2) = 4
+!    closeneigh(1,2*N) = 4
 
-    closeneigh(2*N-1,2*N-1-1) = 4
-    closeneigh(2*N-1,2*N-1+N) = 4
+!    closeneigh(2*N-1,2*N-1-1) = 4
+!    closeneigh(2*N-1,2*N-1+N) = 4
 
-    closeneigh((3*N-1)*(F-1)+1,(3*N-1)*(F-1)+1+1) = 4
-    closeneigh((3*N-1)*(F-1)+1,(3*N-1)*(F-1)+1-N) = 4
+!    closeneigh((3*N-1)*(F-1)+1,(3*N-1)*(F-1)+1+1) = 4
+!    closeneigh((3*N-1)*(F-1)+1,(3*N-1)*(F-1)+1-N) = 4
 
-    closeneigh((3*N-1)*(F-1)+1+2*(N-1),(3*N-1)*(F-1)+1+2*(N-1)-1) = 4
-    closeneigh((3*N-1)*(F-1)+1+2*(N-1),(3*N-1)*(F-1)+1+2*(N-1)-(2*N-1)) = 4
+!    closeneigh((3*N-1)*(F-1)+1+2*(N-1),(3*N-1)*(F-1)+1+2*(N-1)-1) = 4
+!    closeneigh((3*N-1)*(F-1)+1+2*(N-1),(3*N-1)*(F-1)+1+2*(N-1)-(2*N-1)) = 4
 
 !the bottom and top left-most and right-most horizontal edges
-    closeneigh(2,2*N) = 2
-    closeneigh(2,2*N+1) = 2
-    closeneigh(2,1) = 2
-    closeneigh(2,3) = 2
+!    closeneigh(2,2*N) = 2
+!    closeneigh(2,2*N+1) = 2
+!    closeneigh(2,1) = 2
+!    closeneigh(2,3) = 2
 
-    closeneigh(2*N-2,2*N-1) = 2
-    closeneigh(2*N-2,2*N-3) = 2
-    closeneigh(2*N-2,2*N-2+N) = 2
-    closeneigh(2*N-2,2*N-2+N+1) = 2
+!    closeneigh(2*N-2,2*N-1) = 2
+!    closeneigh(2*N-2,2*N-3) = 2
+!    closeneigh(2*N-2,2*N-2+N) = 2
+!    closeneigh(2*N-2,2*N-2+N+1) = 2
 
-    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-1) = 2
-    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2+1) = 2
-    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-N) = 2
-    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-(N+1)) = 2
+!    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-1) = 2
+!    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2+1) = 2
+!    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-N) = 2
+!    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-(N+1)) = 2
 
-    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)+1) = 2
-    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-1) = 2
-    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-(2*N-1)) = 2
-    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-(2*N-2)) = 2
+!    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)+1) = 2
+!    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-1) = 2
+!    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-(2*N-1)) = 2
+!    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-(2*N-2)) = 2
 
 !right and left bottom-most and top-most vertical planar edges
-    closeneigh(2*N,1) = 2
-    closeneigh(2*N,2*N+N) = 2
-    closeneigh(2*N,2) = 2
-    closeneigh(2*N,2*N+N+1) = 2
+!    closeneigh(2*N,1) = 2
+!    closeneigh(2*N,2*N+N) = 2
+!    closeneigh(2*N,2) = 2
+!    closeneigh(2*N,2*N+N+1) = 2
 
-    closeneigh(2*N+N-1,2*N+N-1-N) = 2
-    closeneigh(2*N+N-1,2*N+N-1+2*N-1) = 2
-    closeneigh(2*N+N-1,2*N+N-1-(N+1)) = 2
-    closeneigh(2*N+N-1,2*N+N-1+N+(N-2)) = 2
+!    closeneigh(2*N+N-1,2*N+N-1-N) = 2
+!    closeneigh(2*N+N-1,2*N+N-1+2*N-1) = 2
+!    closeneigh(2*N+N-1,2*N+N-1-(N+1)) = 2
+!    closeneigh(2*N+N-1,2*N+N-1+N+(N-2)) = 2
 
-    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N+N) = 2
-    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N-(2*N-1)) = 2
-    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N+N+1) = 2
-    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N-(2*N-1)+1) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N+N) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N-(2*N-1)) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N+N+1) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N-(2*N-1)+1) = 2
 
-    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)+(2*N-1)) = 2
-    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)-N) = 2
-    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)+(2*N-1)-1) = 2
-    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)-N-1) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)+(2*N-1)) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)-N) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)+(2*N-1)-1) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)-N-1) = 2
 
 !the bottom and top rows of vertical edges on the lattice (not including
 !the left-most and right-most edges)
-    do j=2,N-1
-        closeneigh(1+2*(j-1),1+2*(j-1)-1) = 2
-        closeneigh(1+2*(j-1),1+2*(j-1)+1) = 2
-        closeneigh(1+2*(j-1),2*N-1+j) = 4
+!    do j=2,N-1
+!        closeneigh(1+2*(j-1),1+2*(j-1)-1) = 2
+!        closeneigh(1+2*(j-1),1+2*(j-1)+1) = 2
+!        closeneigh(1+2*(j-1),2*N-1+j) = 4
 
-        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)-1) = 2
-        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)+1) = 2
-        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+(j-1)) = 4
+!        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)-1) = 2
+!        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)+1) = 2
+!        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+(j-1)) = 4
 
-    enddo
+!    enddo
 
 !the left and right columns of vertical edges (not including the top-most
-!and bottom-most edges)
-    do i=2,F-1
-        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1-N) = 2
-        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1+(2*N-1)) = 2
-        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1+1) = 4
+! and bottom-most edges)
+!    do i=2,F-1
+!        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1-N) = 2
+!        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1+(2*N-1)) = 2
+!        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1+1) = 4
 
-        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)-(2*N-1)) = 2
-        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)+N) = 2
-        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)-1) = 4
-    enddo
+!        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)-(2*N-1)) = 2
+!        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)+N) = 2
+!        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)-1) = 4
+!    enddo
 
 
 !the bottom and top rows of horizontal edges on the lattice (not including
 !the left-most and right-most edges)
-    do j=2,N-2
-        closeneigh(2+(j-1)*2,2+(j-1)*2-1) = 2
-        closeneigh(2+(j-1)*2,2+(j-1)*2+1) = 2
-        closeneigh(2+(j-1)*2,2*N-1+j) = 2
-        closeneigh(2+(j-1)*2,2*N-1+j+1) = 2
+!    do j=2,N-2
+!        closeneigh(2+(j-1)*2,2+(j-1)*2-1) = 2
+!        closeneigh(2+(j-1)*2,2+(j-1)*2+1) = 2
+!        closeneigh(2+(j-1)*2,2*N-1+j) = 2
+!        closeneigh(2+(j-1)*2,2*N-1+j+1) = 2
 
-        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),2+(j-1)*2+(3*N-1)*(F-1)-1) = 2
-        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),2+(j-1)*2+(3*N-1)*(F-1)+1) = 2
-        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+j-1) = 2
-        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+j) = 2
-    enddo
+!        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),2+(j-1)*2+(3*N-1)*(F-1)-1) = 2
+!        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),2+(j-1)*2+(3*N-1)*(F-1)+1) = 2
+!        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+j-1) = 2
+!        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+j) = 2
+!    enddo
     
 !the left and right columns of vertical planar edges on the lattice (not including
 !the top-most and bottom-most edges)
-    do i=2,F-2
-        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)+N) = 2
-        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)-(2*N-1)) = 2
-        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)+N+1) = 2
-        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)-(2*N-1)+1) = 2
+!    do i=2,F-2
+!        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)+N) = 2
+!        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)-(2*N-1)) = 2
+!        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)+N+1) = 2
+!        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)-(2*N-1)+1) = 2
 
-        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)-N) = 2
-        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)+(2*N-1)) = 2
-        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)-N-1) = 2
-        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)+(2*N-1)-1) = 2
-    enddo
+!        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)-N) = 2
+!        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)+(2*N-1)) = 2
+!        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)-N-1) = 2
+!        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)+(2*N-1)-1) = 2
+!    enddo
 
 
 !finally, do all the remaining edges (i.e. the edges that do not have ghost points on the boundary):
 
-    do j=2,N
-        do i=2,F-1
+!    do j=2,N
+!        do i=2,F-1
             !horizontal egdes
 
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)+1) = 2
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-1) = 2
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-(2*N-1)+N-j) = 1
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-(2*N-1)+N-j+1) = 1
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),(3*N-1)*(i-1)+2*N+(j-1)-1) = 1
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),(3*N-1)*(i-1)+2*N+(j-1)) = 1
-        enddo
-    enddo
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)+1) = 2
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-1) = 2
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-(2*N-1)+N-j) = 1
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-(2*N-1)+N-j+1) = 1
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),(3*N-1)*(i-1)+2*N+(j-1)-1) = 1
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),(3*N-1)*(i-1)+2*N+(j-1)) = 1
+!        enddo
+!    enddo
 
-    do i=1,F-1
-        do j=2,N-1
+!    do i=1,F-1
+!        do j=2,N-1
             !vertical planar edges
 
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*(j-1)) = 1
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*j) = 1
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*(j-1)+(3*N-1)) = 1
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*j+(3*N-1)) = 1
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),2*N+(j-1)+(i-1)*(3*N-1)-(2*N-1)+(j-1)) = 2
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),2*N+(j-1)+(i-1)*(3*N-1)-(2*N-1)+(j-1)+(3*N-1)) = 2
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*(j-1)) = 1
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*j) = 1
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*(j-1)+(3*N-1)) = 1
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*j+(3*N-1)) = 1
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),2*N+(j-1)+(i-1)*(3*N-1)-(2*N-1)+(j-1)) = 2
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),2*N+(j-1)+(i-1)*(3*N-1)-(2*N-1)+(j-1)+(3*N-1)) = 2
 
-        enddo
-    enddo
+!        enddo
+!    enddo
 
-    do i=2,F-1
-        do j=2,N-1
+!    do i=2,F-1
+!        do j=2,N-1
             !vertical edges
 
-            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),1+(j-1)*2+(i-1)*(3*N-1)+1) = 2
-            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),1+(j-1)*2+(i-1)*(3*N-1)-1) = 2
-            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),2*N+(j-2)+(i-2)*(3*N-1)+1) = 2
-            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),2*N+(j-2)+(i-2)*(3*N-1)+1+(3*N-1)) = 2
+!            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),1+(j-1)*2+(i-1)*(3*N-1)+1) = 2
+!            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),1+(j-1)*2+(i-1)*(3*N-1)-1) = 2
+!            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),2*N+(j-2)+(i-2)*(3*N-1)+1) = 2
+!            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),2*N+(j-2)+(i-2)*(3*N-1)+1+(3*N-1)) = 2
 
-        enddo
-    enddo
+!        enddo
+!    enddo
 
 !!Create a 8 x num matrix of neighboring edges. Column number corresponds to edge number, and the row entries represent 
 !!neighboring edges
 
-    do j=1,num
-        countc=0
-        do i=1,num
-            if(closeneigh(j,i)==1) then
-                countc=countc+1
-                neighborc(countc,j)=i
-            elseif(closeneigh(j,i)==2) then
-                countc=countc+1
-                neighborc(countc,j)=i
-                countc=countc+1
-                neighborc(countc,j)=i
-            elseif(closeneigh(j,i)==4) then
-                countc=countc+1
-                neighborc(countc,j)=i
-                countc=countc+1
-                neighborc(countc,j)=i
-                countc=countc+1
-                neighborc(countc,j)=i
-                countc=countc+1
-                neighborc(countc,j)=i
-            end if
-        enddo
-    enddo
+!! BRAD 2023-04-23:
+
+open(106,file=ADJUSTL('data/' // expCode // '/neighbors.dat'))
+do j=1,num
+    do countc=1,8
+        read(106,*)neighborc(countc,j)
+    end do
+end do
+close(106)
+write(*,*)'read neighbors.dat'
+
+!    do j=1,num
+!        countc=0
+!        do i=1,num
+!            if(closeneigh(j,i)==1) then
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!            elseif(closeneigh(j,i)==2) then
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!            elseif(closeneigh(j,i)==4) then
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!            end if
+!        enddo
+!        do countc=1,8
+!            if (neighborc(countc,j).ne.new_neighborc(countc,j)) then
+!                write (*,*)'NEIGHBOR ERROR: ',neighborc(countc,j),new_neighborc(countc,j)
+!            end if
+!        end do
+!    enddo
 
 !write(*,*)'neighborc=',neighborc
-DEALLOCATE(closeneigh)
+!DEALLOCATE(closeneigh)
+
+
 
 ! read in the data from the micro model, which we obtained from /micro.f90
 ! READ IN VECTORS FROM MATLAB 
@@ -846,7 +865,7 @@ DEALLOCATE(closeneigh)
         write(t_degrade_unit) t_degrade(:)
         write(m_location_unit) V(1,:)
         write(m_bound_unit) V(2,:)
-        Nsave = 10
+        Nsave = 100
 
         write(*,*)' save as deg',outFileCode
 
@@ -1423,7 +1442,7 @@ DEALLOCATE(closeneigh)
                 write(m_location_unit) V(1,:)
                 write(m_bound_unit) V(2,:)
 
-                Nsave=Nsave+10
+                Nsave=Nsave+100
                 cNsave=cNsave+1
 !                Vedgenext(cNsave+1,:) = V(1,:)
 !                Vboundnext(cNsave+1,:) = V(2,:)

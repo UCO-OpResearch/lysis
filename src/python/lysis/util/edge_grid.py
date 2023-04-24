@@ -3,7 +3,8 @@ from typing import Tuple
 
 import numpy as np
 
-from .util import Const, BoundaryCondition, Experiment
+from .constants import Const, BoundaryCondition
+from .parameters import Experiment
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -343,7 +344,7 @@ class EdgeGrid(object):
                 fort_neighbors[f, k] = to_fortran_edge_index(
                     neighbor_i, neighbor_j, exp.macro_params.rows, exp.macro_params.cols
                 )
-        return fort_neighbors
+        return np.sort(fort_neighbors)
 
 
 def from_fortran_edge_index(
