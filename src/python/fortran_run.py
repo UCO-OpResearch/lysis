@@ -4,8 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import AnyStr
 
-from lysis import EdgeGrid
-from lysis.util import Experiment, FortranMacro
+from lysis.util import EdgeGrid, Experiment, FortranMacro
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -38,17 +37,15 @@ def main():
     args = parse_arguments()
     e = Experiment(os.path.join(args.cwd, "data"), experiment_code=args.exp_code)
     e.read_file()
-    fort_neighbors = EdgeGrid.generate_fortran_neighborhood_structure(e) + 1
-    fort_neighbors.tofile(os.path.join(e.os_path, "neighbors.dat"), sep=" ")
-    # fort = FortranMacro(
-    #     exp=e,
-    #     cwd=args.cwd,
-    #     executable=args.executable,
-    #     in_file_code=args.in_code,
-    #     out_file_code=args.out_code,
-    #     index=args.index,
-    # )
-    # fort.run()
+    fort = FortranMacro(
+        exp=e,
+        cwd=args.cwd,
+        executable=args.executable,
+        in_file_code=args.in_code,
+        out_file_code=args.out_code,
+        index=args.index,
+    )
+    fort.run()
 
 
 if __name__ == "__main__":

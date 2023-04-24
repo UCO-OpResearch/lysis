@@ -5,8 +5,7 @@ from functools import partial
 import numpy as np
 from tqdm.auto import tqdm
 
-from .util import Experiment, KissRandomGenerator, RandomDraw
-from .edge_grid import EdgeGrid, from_fortran_edge_index, to_fortran_edge_index
+from .util import Experiment, KissRandomGenerator, RandomDraw, EdgeGrid, from_fortran_edge_index, to_fortran_edge_index
 
 
 class MacroscaleRun:

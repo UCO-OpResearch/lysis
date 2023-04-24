@@ -8,6 +8,7 @@ from typing import AnyStr
 import numpy as np
 
 from .parameters import Experiment, MacroParameters
+from .edge_grid import EdgeGrid
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -33,6 +34,10 @@ class FortranMacro:
     in_file_code: AnyStr = ".dat"
     out_file_code: AnyStr = ".dat"
     index: int = None
+    
+    def generate_neighborhoods(self):
+        fort_neighbors = EdgeGrid.generate_fortran_neighborhood_structure(self.exp) + 1
+        fort_neighbors.tofile(os.path.join(self.exp.os_path, "neighbors.dat"), sep=os.linesep)
 
     def exec_command(self):
         params = asdict(self.exp.macro_params)
@@ -61,6 +66,7 @@ class FortranMacro:
         return [self.executable] + arguments
 
     def run(self):
+        self.generate_neighborhoods()
         command = self.exec_command()
         output_file_name = os.path.join(
             self.exp.os_path,
