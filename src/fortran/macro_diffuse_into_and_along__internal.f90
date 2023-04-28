@@ -64,8 +64,8 @@ integer  :: j, ij, newindex
 integer  :: k
 integer  :: ii 
 integer  :: Nsave, Ninteger, nplt, cNsave
-integer  :: count, countij
-integer  :: count2, countc, countcolr4 
+integer(8)  :: count
+integer  :: countij, count2, countc, countcolr4 
 integer  :: count66 
 integer  :: Ntot2
 integer  :: colr2, colr4 
@@ -160,7 +160,8 @@ integer       :: mfptunit = 42
 character(80) :: mfptfile
 
 !integer, dimension(:), allocatable  :: intact2
-integer  :: countintact2, lenintact2, counth, countv, countpv, countmacrounbd, countmicrounbd
+integer  :: countintact2, lenintact2, counth, countv, countpv
+integer(8) :: countmacrounbd, countmicrounbd
 !integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
 !integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx 
 !integer, dimension(:,:), allocatable  :: X1plot, Y1plot
@@ -202,7 +203,7 @@ integer, dimension(:), allocatable :: yesfpt !vector of 1's and 0's to let me kn
 !! BRAD 2023-01-06:
 integer(8) :: total_regular_moves
 integer(8) :: total_restricted_moves
-integer :: total_binds
+integer(8) :: total_binds
 integer :: degraded_fibers
 integer :: reached_back_row
 real :: time_begin, time_end
