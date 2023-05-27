@@ -212,6 +212,7 @@ real :: degraded_percent
 real :: reached_back_row_percent
 double precision :: last_degrade_time
 !real :: temp_len_lysis_mat
+integer :: save_interval = 10
 
 integer :: t_degrade_unit = 102
 character(80) :: t_degrade_file
@@ -368,6 +369,13 @@ do while (param_i<cmd_count)
                 stop
             end if
             write (*,*) 'Setting seed = ', seed
+        case ('save_interval')
+            read(param_value,*,iostat=io_status)  save_interval
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting save_interval = ', save_interval
         case default
             write (*,*) 'Unrecognized parameter'
             stop
@@ -866,7 +874,7 @@ write(*,*)'read neighbors.dat'
         write(t_degrade_unit) t_degrade(:)
         write(m_location_unit) V(1,:)
         write(m_bound_unit) V(2,:)
-        Nsave = 100
+        Nsave = save_interval
 
         write(*,*)' save as deg',outFileCode
 
@@ -1443,7 +1451,7 @@ write(*,*)'read neighbors.dat'
                 write(m_location_unit) V(1,:)
                 write(m_bound_unit) V(2,:)
 
-                Nsave=Nsave+100
+                Nsave=Nsave+save_interval
                 cNsave=cNsave+1
 !                Vedgenext(cNsave+1,:) = V(1,:)
 !                Vboundnext(cNsave+1,:) = V(2,:)
