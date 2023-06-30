@@ -220,7 +220,20 @@ integer :: m_location_unit = 103
 character(80) :: m_location_file
 integer :: m_bound_unit = 104
 character(80) :: m_bound_file
-!integer :: m_bind_time_unit = 105
+integer :: m_bind_time_unit = 105
+
+!! BRAD 2023-06-09:
+!!      Format: simulation time (t), molecule index (j), new status (m_stat)
+!!      m_stat = {
+!!          0 : unbound (V(2,j)==0 & t_wait(j)==0)
+!!          1 : bound to undegraded fiber (V(2,j)==1)
+!!          2 : bound to degraded fiber aka macro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==1)
+!!          3 : bound to fiber degradation product aka micro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==0)
+!!      }
+character(20) :: m_bind_time_format = '(f0.9, a, i0, a, i0)'
+
+
+!! BRAD 2023-02-02
 
 logical :: all_fibers_degraded
 logical :: most_molecules_passed
@@ -748,7 +761,9 @@ write(*,*)'read neighbors.dat'
         open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
         open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
         open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
-!        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
+        
+!! BRAD 2023-06-09:
+        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form='formatted')
 
 
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
@@ -943,6 +958,8 @@ write(*,*)'read neighbors.dat'
                     forcedunbdbydeg(j)=1 !put a "1" in the entries corresponding to tPA molecules that were forced to unbind by macroscale degradation; these molecules will NOT be allowed to diffuse into the clot, only along the clot front. ADDED 5/10/18
                     countmacrounbd=countmacrounbd+1 !count the total number of tPA molecules that are forced to unbind by macro-level degradation of a fiber
                     !write(*,*)'forced unbound by degradation=',j
+!! BRAD 2023-06-09:
+                    write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 2
 !! BRAD 2023-01-31:
                     if (verbose) then
                         write (*,'(A,I10,A,I5,A,I6)') '-> ts ', count-1,&
@@ -967,9 +984,14 @@ write(*,*)'read neighbors.dat'
                         r5=urcw1()
                         if(r5.le.frac_forced) then
                         !if the random number is less than the fraction of time tPA is forced to unbind, consider tPA "forced" to unbind, and temporarily remove it from the simulation by assigning it a waiting time
+                        
+!! BRAD 2023-06-09: Would it not be better to set the bind time to bind(j)+avgwait?
+
                             t_wait(j)=t+avgwait-tstep/2 !waiting time is current time plus average wait time minus half a timestep so we round to nearest timestep
                             bind(j)=0
                             countmicrounbd=countmicrounbd+1
+!! BRAD 2023-06-09:
+                            write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 3
 !! BRAD 2023-01-31:
                             if (verbose) then
                                 write (*,'(A,I10,A,I5,A,I6,A,F5.4)') '-> ts ', count-1,&
@@ -978,6 +1000,9 @@ write(*,*)'read neighbors.dat'
                                     ' -> m ', j-1, ' wait time set to ', t_wait(j)
                             end if
                         else
+!! BRAD 2023-06-09:
+                            write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
+!! BRAD 2023-01-31:
                             if (verbose) then
                                 write (*,'(A,I10,A,I5,A,I6,A,F5.4)') '-> ts ', count-1,&
                                     ' -> m ', j-1, ' unbinding from f ', V(1,j)-1, '; using r = ', r5
@@ -991,13 +1016,21 @@ write(*,*)'read neighbors.dat'
                 if(V(2,j)==0) then   !if the molecule is unbound
                 
 !! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
-                    if (t_wait(j)<=t.and.forcedunbdbydeg(j)==1) then
+                    if (0<t_wait(j) .and. t_wait(j)<=t .and. forcedunbdbydeg(j)==1) then
                         forcedunbdbydeg(j)=0
+!! BRAD 2023-06-09:
+                        t_wait(j)=0
+                        write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
 !! BRAD 2023-01-31:
                         if (verbose) then
                             write (*,'(A,I10,A,I5,A)') '-> ts ', count-1,&
                                 ' -> m ', j-1, ' no longer stuck to macro-fiber'
                         end if
+                    end if
+!! BRAD 2023-06-09:
+                    if (0<t_wait(j) .and. t_wait(j)<=t .and. forcedunbdbydeg(j)==0) then
+                        t_wait(j)=0
+                        write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
                     end if
                     
                     
@@ -1051,6 +1084,8 @@ write(*,*)'read neighbors.dat'
 
                                 t_leave(j) = t + ttPA - tstep/2 !time tPA leaves is current time plus leaving time drawn from distribution
                                                         !minus half a time step so we round to nearest timestep
+!! BRAD 2023-06-09:
+                                write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1
 !! BRAD 2023-01-31:
                                 if (verbose) then
                                     write (*,'(A,I10,A,I5,A,I6)') '-> ts ', count-1,&
@@ -1221,6 +1256,8 @@ write(*,*)'read neighbors.dat'
                                 t_leave(j) = t + ttPA - tstep/2 !time tPA leaves is current time plus leaving time drawn from distribution
                                                             !minus half a time step so we round to nearest timestep
 
+!! BRAD 2023-06-09:
+                                write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1
 !! BRAD 2023-01-31:
                                 if (verbose) then
                                     write (*,'(A, I10, A, I5, A, F5.4)') '-> ts ', count-1,&
@@ -1466,7 +1503,7 @@ write(*,*)'read neighbors.dat'
                 rounded_time = real(t)
                 degraded_percent = real(degraded_fibers)/(num-enoFB)*100
                 reached_back_row_percent = real(reached_back_row)/M*100
-                write(*,'(A,F7.0,A,I5,A,F5.1,A,I5,A,F5.1,A)')'After ',rounded_time,' sec, ',&
+                write(*,'(A,F7.0,A,I0,A,F5.1,A,I0,A,F5.1,A)')'After ',rounded_time,' sec, ',&
                 degraded_fibers,' fibers are degraded (',degraded_percent,'% of total) and ',&
                 reached_back_row,' molecules have reached the back row (',&
                 reached_back_row_percent,'% of total).'
@@ -2038,7 +2075,7 @@ close(mfptunit)
         close(t_degrade_unit)
         close(m_location_unit)
         close(m_bound_unit)
-!        close(m_bind_time_unit)
+        close(m_bind_time_unit)
 
 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
 !close(degnextunit)

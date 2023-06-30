@@ -282,7 +282,7 @@ class MacroParameters:
     diffusion_coeff: float = 5.0e-7
     """Diffusion coefficient
     
-    :Units: cm^2/s.
+    :Units: cm^2/s
     :Fortran: Diff"""
 
     # TODO(bpaynter): This value should derive from MicroParameters
@@ -300,6 +300,7 @@ class MacroParameters:
     :Fortran: frac_forced"""
 
     # TODO(bpaynter): This value should derive from MicroParameters
+    # TODO(bpaynter): Rename to average_bound_time
     average_bind_time: float = 27.8
     """this is the average time a tPA molecule stays bound to fibrin. 
     For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
@@ -607,6 +608,20 @@ class MacroParameters:
             if match[1] != "None":
                 names[match[0]] = match[1]
         return names
+    
+    @staticmethod
+    def units():
+        text = pkgutil.get_data(__name__, "parameters.py")
+        pattern = re.compile(
+            r"[\r\n]^\s{4}([a-z_]+):[^\"]*\"\"\"[^\"]*:Units:\s([^\n\r]+)[\r\n]",
+            re.M,
+        )
+        units = {}
+        matches = re.findall(pattern, text.decode("utf-8"))
+        for match in matches:
+            if match[1] != "None":
+                units[match[0]] = match[1]
+        return units
 
     def __str__(self) -> str:
         """Returns a human-readable, JSON-like string of all parameters."""
