@@ -1,4 +1,4 @@
-program micromodel
+tPAunbindprogram micromodel
 
 implicit none
 character(15) :: expCode = '2022-12-20-1700'
