@@ -1,9 +1,9 @@
-tPAunbindprogram micromodel
+program micromodel
 
 implicit none
-character(15) :: expCode = '2022-12-20-1700'
+character(15) :: expCode = '2023-02-01-2200'
 character(6)  :: inFileCode = 'Q2.dat'
-character(17)   :: outFileCode = 'PLG2_tPA01_Q2.dat'
+character(40)   :: outFileCode = 'PLG2_tPA01_Q2.dat'
 !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
 !!!! Lines 19-25 allow you to set the various dissociation constants, binding rates, and the concentration of free PLG
 !!!! This code treats degradation and exposure in the gillespie algorithm, rather than separately with 
@@ -451,22 +451,22 @@ do stats = 1,runs
   endif
 
   if(stats==1) then
-    write(lysfile,'(58a)'  ) 'data/' // expCode // '/lysis' // outFileCode
-    write(tPAfile,'(61a)'  ) 'data/' // expCode // '/tPA_time' // outFileCode
-    write(PLifile,'(56a)' ) 'data/' // expCode // '/PLi' // outFileCode
-    write(endfile,'(64a)' ) 'data/' // expCode // '/lyscomplete' // outFileCode
-    write(plgfile,'(56a)' ) 'data/' // expCode // '/PLG' // outFileCode
-    write(ctfile,'(58a)' ) 'data/' // expCode // '/count' // outFileCode
+    write(lysfile,'(58a)'  ) 'data/' // expCode // '/lysis_' // outFileCode
+    write(tPAfile,'(61a)'  ) 'data/' // expCode // '/tPA_time_' // outFileCode
+    write(PLifile,'(56a)' ) 'data/' // expCode // '/PLi_' // outFileCode
+    write(endfile,'(64a)' ) 'data/' // expCode // '/lyscomplete_' // outFileCode
+    write(plgfile,'(56a)' ) 'data/' // expCode // '/PLG_' // outFileCode
+    write(ctfile,'(58a)' ) 'data/' // expCode // '/count_' // outFileCode
     !write(plgbdfile,'(27a)') 'data/' // expCode // '/PLGunbindPLG2_tPA01_Q2.dat'
     !write(plgunbdfile,'(29a)') 'data/' // expCode // '/PLGbindPLG2_tPA01_Q2.dat'
-    write(plitimefile,'(63a)') 'data/' // expCode // '/PLitime' // outFileCode
-    write(tPAPLifile,'(63a)') 'data/' // expCode // '/tPAPLiunbd' // outFileCode
+    write(plitimefile,'(63a)') 'data/' // expCode // '/PLitime_' // outFileCode
+    write(tPAPLifile,'(63a)') 'data/' // expCode // '/tPAPLiunbd_' // outFileCode
     !write(sfile,'(28a)' ) 'data/' // expCode // '/statetPAPLG2_tPA01_Q2.dat'
     !write(profile,'(23a)' ) 'data/' // expCode // '/ersavePLG2_tPA01_Q2.dat'
     !write(t2file,'(23a)' ) 'data/' // expCode // '/tsavePLG2_tPA01_Q2.dat'
-    write(tPAunbdfile,'(61a)') 'data/' // expCode // '/tPAunbind' // outFileCode
-    write(s2file,'(67a)' ) 'data/' // expCode // '/lasttPA' // outFileCode
-    write(fpfile,'(77a)') 'data/' // expCode // '/firstPLi' // outFileCode
+    write(tPAunbdfile,'(61a)') 'data/' // expCode // '/tPAunbind_' // outFileCode
+    write(s2file,'(67a)' ) 'data/' // expCode // '/lasttPA_' // outFileCode
+    write(fpfile,'(77a)') 'data/' // expCode // '/firstPLi_' // outFileCode
     open(lysunit,file=lysfile,form=filetype)
     open(tPAunit,file=tPAfile,form=filetype)
     open(PLiunit,file=PLifile,form=filetype)
