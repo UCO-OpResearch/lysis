@@ -14,6 +14,9 @@ program macrolysis
 !!                  - Verbose output option added
 !!                  - Commented out unnecessary data variables
 !!
+!!                  - Moved degraded fiber check into molecule loop
+!!                  - Removed "degrade" array and use "t_degrade" instead
+!!                  - Read in "neighborc" array generated in Python
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
@@ -61,8 +64,8 @@ integer  :: j, ij, newindex
 integer  :: k
 integer  :: ii 
 integer  :: Nsave, Ninteger, nplt, cNsave
-integer  :: count, countij
-integer  :: count2, countc, countcolr4 
+integer(8)  :: count
+integer  :: countij, count2, countc, countcolr4 
 integer  :: count66 
 integer  :: Ntot2
 integer  :: colr2, colr4 
@@ -84,9 +87,10 @@ character(95) :: filename4
 character(80) :: filename6
 
 
-integer*1, dimension(:, :), allocatable  :: closeneigh
+!integer*1, dimension(:, :), allocatable  :: closeneigh
 integer, dimension(:,:), allocatable    :: endpts
 integer, dimension(:,:), allocatable    :: neighborc
+!integer, dimension(:,:), allocatable    :: new_neighborc
 integer, dimension(8)      :: temp_neighborc
 integer, dimension(:,:), allocatable   :: V
 !double precision, dimension(:), allocatable      :: init_state
@@ -94,7 +98,7 @@ integer, dimension(:,:), allocatable   :: V
 !double precision, dimension(2)         :: pfit
 double precision, dimension(101)       :: CDFtPA, CDFlys
 double precision, dimension(101)       :: tsec1, tseclys
-double precision, dimension(:), allocatable      :: degrade
+!double precision, dimension(:), allocatable      :: degrade
 double precision, dimension(:), allocatable     :: t_degrade
 double precision, dimension(:), allocatable        :: t_leave
 double precision, dimension(:), allocatable        :: t_wait
@@ -108,7 +112,7 @@ integer       :: Vunit = 21
 integer       :: V2unit = 22
 integer       :: Nunit = 23
 integer       :: tunit = 24
-character(80) :: degfile       ! degradation vector
+!character(80) :: degfile       ! degradation vector
 character(80) :: Vfile
 character(80) :: V2file
 character(80) :: Nfile
@@ -122,9 +126,9 @@ external :: mscw, kiss32, urcw1
 
 double precision, dimension(:), allocatable         :: rvect
 !double precision, dimension(:,:), allocatable :: degnext
-!nteger, dimension(:,:), allocatable :: Vedgenext
-!nteger, dimension(:,:), allocatable :: Vboundnext
-!nteger, dimension(:), allocatable  :: ind
+!integer, dimension(:,:), allocatable :: Vedgenext
+!integer, dimension(:,:), allocatable :: Vboundnext
+!integer, dimension(:), allocatable  :: ind
 !double precision, dimension(:), allocatable  :: place
 !double precision, dimension(:), allocatable  :: degold
 !double precision, dimension(:), allocatable :: tsave
@@ -156,7 +160,8 @@ integer       :: mfptunit = 42
 character(80) :: mfptfile
 
 !integer, dimension(:), allocatable  :: intact2
-integer  :: countintact2, lenintact2, counth, countv, countpv, countmacrounbd, countmicrounbd
+integer  :: countintact2, lenintact2, counth, countv, countpv
+integer(8) :: countmacrounbd, countmicrounbd
 !integer  :: jj, iplt, yplace, x2, xplace, y1, y2, yvplace, xvplace, imod
 !integer  :: jplt, kplt, kjplt, vertplace, Vyvert, Vy1, xVedgeplace, Vedgeplace, Vx 
 !integer, dimension(:,:), allocatable  :: X1plot, Y1plot
@@ -188,9 +193,9 @@ integer  :: r400
 !character(80)  :: cbindfile
 !character(80)  :: cindfile
 !character(80)  :: bind1file
-!nteger :: countbind, countindep
+!integer :: countbind, countindep
 !integer, dimension(:,:), allocatable  :: countbindV, countindepV, bind1V
-!nteger, dimension(:), allocatable :: bind1
+!integer, dimension(:), allocatable :: bind1
 integer, dimension(:), allocatable :: forcedunbdbydeg
 double precision, dimension(:), allocatable :: mfpt !vector I'll use to save the first passage times of each tPA molecule
 integer, dimension(:), allocatable :: yesfpt !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
@@ -198,7 +203,7 @@ integer, dimension(:), allocatable :: yesfpt !vector of 1's and 0's to let me kn
 !! BRAD 2023-01-06:
 integer(8) :: total_regular_moves
 integer(8) :: total_restricted_moves
-integer :: total_binds
+integer(8) :: total_binds
 integer :: degraded_fibers
 integer :: reached_back_row
 real :: time_begin, time_end
@@ -207,6 +212,7 @@ real :: degraded_percent
 real :: reached_back_row_percent
 double precision :: last_degrade_time
 !real :: temp_len_lysis_mat
+integer :: save_interval = 10
 
 integer :: t_degrade_unit = 102
 character(80) :: t_degrade_file
@@ -214,7 +220,20 @@ integer :: m_location_unit = 103
 character(80) :: m_location_file
 integer :: m_bound_unit = 104
 character(80) :: m_bound_file
-!integer :: m_bind_time_unit = 105
+integer :: m_bind_time_unit = 105
+
+!! BRAD 2023-06-09:
+!!      Format: simulation time (t), molecule index (j), new status (m_stat)
+!!      m_stat = {
+!!          0 : unbound (V(2,j)==0 & t_wait(j)==0)
+!!          1 : bound to undegraded fiber (V(2,j)==1)
+!!          2 : bound to degraded fiber aka macro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==1)
+!!          3 : bound to fiber degradation product aka micro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==0)
+!!      }
+character(20) :: m_bind_time_format = '(f0.9, a, i0, a, i0)'
+
+
+!! BRAD 2023-02-02
 
 logical :: all_fibers_degraded
 logical :: most_molecules_passed
@@ -363,6 +382,13 @@ do while (param_i<cmd_count)
                 stop
             end if
             write (*,*) 'Setting seed = ', seed
+        case ('save_interval')
+            read(param_value,*,iostat=io_status)  save_interval
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting save_interval = ', save_interval
         case default
             write (*,*) 'Unrecognized parameter'
             stop
@@ -378,12 +404,13 @@ backrow=num-(2*N-1)+1 !defines the first fiber number in the back row of the clo
 tstep=q*delx**2/(12*Diff)  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
 num_t=tf/tstep            !number of timesteps
 
-allocate (closeneigh(num,num))
+!allocate (closeneigh(num,num))
 allocate (endpts(2,num))
 allocate (neighborc(8,num))
+!allocate (new_neighborc(8,num))
 allocate (V(2,M))
-!llocate (init_state(enoFB))
-allocate (degrade(num))
+!allocate (init_state(enoFB))
+!allocate (degrade(num))
 allocate (t_degrade(num))
 allocate (t_leave(M))
 allocate (t_wait(M))
@@ -391,9 +418,9 @@ allocate (bind(M))
 allocate (Nsavevect(stats))
 allocate (rvect(M))
 !allocate (degnext(tf+1,num))
-!llocate (Vedgenext(tf+1,M))
-!llocate (Vboundnext(tf+1,M))
-!llocate (ind(F-1))
+!allocate (Vedgenext(tf+1,M))
+!allocate (Vboundnext(tf+1,M))
+!allocate (ind(F-1))
 !allocate (place(F-1))
 !allocate (degold(num))
 !allocate (tsave(tf+1))
@@ -411,7 +438,7 @@ allocate (rvect(M))
 !allocate (bdtPA(2,M), freetPA(2,M))
 allocate (lysismat(nummicro,100))!(100,100) if only did 10,000 micro runs, (500,100) if did 50,000
 !allocate (countbindV(stats,tf), countindepV(stats,tf), bind1V(stats,tf))
-!llocate (bind1(num))
+!allocate (bind1(num))
 allocate (forcedunbdbydeg(M))
 allocate (mfpt(M)) !vector I'll use to save the first passage times of each tPA molecule
 allocate (yesfpt(M))  !vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
@@ -434,7 +461,7 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_diffuse_into_and_along__external.f90 on data ',expCode
+write(*,*)' obtained using code macro_diffuse_into_and_along__internal.f90 on data ',expCode
 !write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 ! Initialize the Random Number Generator
@@ -467,190 +494,207 @@ write(*,*)' obtained using code macro_diffuse_into_and_along__external.f90 on da
 ! closeneigh(i, j) = 0 if a molecule on fiber i cannot move to fiber j in one time-step
 ! closeneigh(i, j) > 0 if a molecule on fiber i can move to fiber j in one time-step
 
-closeneigh=0
-neighborc=0
+!closeneigh=0
+!neighborc=0
 
 !the corner vertical (3-D) edges
-    closeneigh(1,2) = 4
-    closeneigh(1,2*N) = 4
+!    closeneigh(1,2) = 4
+!    closeneigh(1,2*N) = 4
 
-    closeneigh(2*N-1,2*N-1-1) = 4
-    closeneigh(2*N-1,2*N-1+N) = 4
+!    closeneigh(2*N-1,2*N-1-1) = 4
+!    closeneigh(2*N-1,2*N-1+N) = 4
 
-    closeneigh((3*N-1)*(F-1)+1,(3*N-1)*(F-1)+1+1) = 4
-    closeneigh((3*N-1)*(F-1)+1,(3*N-1)*(F-1)+1-N) = 4
+!    closeneigh((3*N-1)*(F-1)+1,(3*N-1)*(F-1)+1+1) = 4
+!    closeneigh((3*N-1)*(F-1)+1,(3*N-1)*(F-1)+1-N) = 4
 
-    closeneigh((3*N-1)*(F-1)+1+2*(N-1),(3*N-1)*(F-1)+1+2*(N-1)-1) = 4
-    closeneigh((3*N-1)*(F-1)+1+2*(N-1),(3*N-1)*(F-1)+1+2*(N-1)-(2*N-1)) = 4
+!    closeneigh((3*N-1)*(F-1)+1+2*(N-1),(3*N-1)*(F-1)+1+2*(N-1)-1) = 4
+!    closeneigh((3*N-1)*(F-1)+1+2*(N-1),(3*N-1)*(F-1)+1+2*(N-1)-(2*N-1)) = 4
 
 !the bottom and top left-most and right-most horizontal edges
-    closeneigh(2,2*N) = 2
-    closeneigh(2,2*N+1) = 2
-    closeneigh(2,1) = 2
-    closeneigh(2,3) = 2
+!    closeneigh(2,2*N) = 2
+!    closeneigh(2,2*N+1) = 2
+!    closeneigh(2,1) = 2
+!    closeneigh(2,3) = 2
 
-    closeneigh(2*N-2,2*N-1) = 2
-    closeneigh(2*N-2,2*N-3) = 2
-    closeneigh(2*N-2,2*N-2+N) = 2
-    closeneigh(2*N-2,2*N-2+N+1) = 2
+!    closeneigh(2*N-2,2*N-1) = 2
+!    closeneigh(2*N-2,2*N-3) = 2
+!    closeneigh(2*N-2,2*N-2+N) = 2
+!    closeneigh(2*N-2,2*N-2+N+1) = 2
 
-    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-1) = 2
-    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2+1) = 2
-    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-N) = 2
-    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-(N+1)) = 2
+!    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-1) = 2
+!    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2+1) = 2
+!    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-N) = 2
+!    closeneigh((3*N-1)*(F-1)+2,(3*N-1)*(F-1)+2-(N+1)) = 2
 
-    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)+1) = 2
-    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-1) = 2
-    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-(2*N-1)) = 2
-    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-(2*N-2)) = 2
+!    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)+1) = 2
+!    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-1) = 2
+!    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-(2*N-1)) = 2
+!    closeneigh((3*N-1)*(F-1)+2+2*(N-2),(3*N-1)*(F-1)+2+2*(N-2)-(2*N-2)) = 2
 
 !right and left bottom-most and top-most vertical planar edges
-    closeneigh(2*N,1) = 2
-    closeneigh(2*N,2*N+N) = 2
-    closeneigh(2*N,2) = 2
-    closeneigh(2*N,2*N+N+1) = 2
+!    closeneigh(2*N,1) = 2
+!    closeneigh(2*N,2*N+N) = 2
+!    closeneigh(2*N,2) = 2
+!    closeneigh(2*N,2*N+N+1) = 2
 
-    closeneigh(2*N+N-1,2*N+N-1-N) = 2
-    closeneigh(2*N+N-1,2*N+N-1+2*N-1) = 2
-    closeneigh(2*N+N-1,2*N+N-1-(N+1)) = 2
-    closeneigh(2*N+N-1,2*N+N-1+N+(N-2)) = 2
+!    closeneigh(2*N+N-1,2*N+N-1-N) = 2
+!    closeneigh(2*N+N-1,2*N+N-1+2*N-1) = 2
+!    closeneigh(2*N+N-1,2*N+N-1-(N+1)) = 2
+!    closeneigh(2*N+N-1,2*N+N-1+N+(N-2)) = 2
 
-    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N+N) = 2
-    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N-(2*N-1)) = 2
-    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N+N+1) = 2
-    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N-(2*N-1)+1) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N+N) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N-(2*N-1)) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N+N+1) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N,(3*N-1)*(F-2)+2*N-(2*N-1)+1) = 2
 
-    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)+(2*N-1)) = 2
-    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)-N) = 2
-    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)+(2*N-1)-1) = 2
-    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)-N-1) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)+(2*N-1)) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)-N) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)+(2*N-1)-1) = 2
+!    closeneigh((3*N-1)*(F-2)+2*N+(N-1),(3*N-1)*(F-2)+2*N+(N-1)-N-1) = 2
 
 !the bottom and top rows of vertical edges on the lattice (not including
 !the left-most and right-most edges)
-    do j=2,N-1
-        closeneigh(1+2*(j-1),1+2*(j-1)-1) = 2
-        closeneigh(1+2*(j-1),1+2*(j-1)+1) = 2
-        closeneigh(1+2*(j-1),2*N-1+j) = 4
+!    do j=2,N-1
+!        closeneigh(1+2*(j-1),1+2*(j-1)-1) = 2
+!        closeneigh(1+2*(j-1),1+2*(j-1)+1) = 2
+!        closeneigh(1+2*(j-1),2*N-1+j) = 4
 
-        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)-1) = 2
-        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)+1) = 2
-        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+(j-1)) = 4
+!        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)-1) = 2
+!        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),1+2*(j-1)+(3*N-1)*(F-1)+1) = 2
+!        closeneigh(1+2*(j-1)+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+(j-1)) = 4
 
-    enddo
+!    enddo
 
 !the left and right columns of vertical edges (not including the top-most
-!and bottom-most edges)
-    do i=2,F-1
-        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1-N) = 2
-        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1+(2*N-1)) = 2
-        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1+1) = 4
+! and bottom-most edges)
+!    do i=2,F-1
+!        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1-N) = 2
+!        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1+(2*N-1)) = 2
+!        closeneigh((3*N-1)*(i-1)+1,(3*N-1)*(i-1)+1+1) = 4
 
-        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)-(2*N-1)) = 2
-        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)+N) = 2
-        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)-1) = 4
-    enddo
+!        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)-(2*N-1)) = 2
+!        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)+N) = 2
+!        closeneigh((3*N-1)*(i-1)+1+2*(N-1),(3*N-1)*(i-1)+1+2*(N-1)-1) = 4
+!    enddo
 
 
 !the bottom and top rows of horizontal edges on the lattice (not including
 !the left-most and right-most edges)
-    do j=2,N-2
-        closeneigh(2+(j-1)*2,2+(j-1)*2-1) = 2
-        closeneigh(2+(j-1)*2,2+(j-1)*2+1) = 2
-        closeneigh(2+(j-1)*2,2*N-1+j) = 2
-        closeneigh(2+(j-1)*2,2*N-1+j+1) = 2
+!    do j=2,N-2
+!        closeneigh(2+(j-1)*2,2+(j-1)*2-1) = 2
+!        closeneigh(2+(j-1)*2,2+(j-1)*2+1) = 2
+!        closeneigh(2+(j-1)*2,2*N-1+j) = 2
+!        closeneigh(2+(j-1)*2,2*N-1+j+1) = 2
 
-        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),2+(j-1)*2+(3*N-1)*(F-1)-1) = 2
-        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),2+(j-1)*2+(3*N-1)*(F-1)+1) = 2
-        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+j-1) = 2
-        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+j) = 2
-    enddo
+!        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),2+(j-1)*2+(3*N-1)*(F-1)-1) = 2
+!        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),2+(j-1)*2+(3*N-1)*(F-1)+1) = 2
+!        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+j-1) = 2
+!        closeneigh(2+(j-1)*2+(3*N-1)*(F-1),(3*N-1)*(F-2)+2*N+j) = 2
+!    enddo
     
 !the left and right columns of vertical planar edges on the lattice (not including
 !the top-most and bottom-most edges)
-    do i=2,F-2
-        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)+N) = 2
-        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)-(2*N-1)) = 2
-        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)+N+1) = 2
-        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)-(2*N-1)+1) = 2
+!    do i=2,F-2
+!        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)+N) = 2
+!        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)-(2*N-1)) = 2
+!        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)+N+1) = 2
+!        closeneigh(2*N+(i-1)*(3*N-1),2*N+(i-1)*(3*N-1)-(2*N-1)+1) = 2
 
-        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)-N) = 2
-        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)+(2*N-1)) = 2
-        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)-N-1) = 2
-        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)+(2*N-1)-1) = 2
-    enddo
+!        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)-N) = 2
+!        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)+(2*N-1)) = 2
+!        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)-N-1) = 2
+!        closeneigh(3*N-1+(i-1)*(3*N-1),3*N-1+(i-1)*(3*N-1)+(2*N-1)-1) = 2
+!    enddo
 
 
 !finally, do all the remaining edges (i.e. the edges that do not have ghost points on the boundary):
 
-    do j=2,N
-        do i=2,F-1
+!    do j=2,N
+!        do i=2,F-1
             !horizontal egdes
 
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)+1) = 2
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-1) = 2
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-(2*N-1)+N-j) = 1
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-(2*N-1)+N-j+1) = 1
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),(3*N-1)*(i-1)+2*N+(j-1)-1) = 1
-            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),(3*N-1)*(i-1)+2*N+(j-1)) = 1
-        enddo
-    enddo
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)+1) = 2
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-1) = 2
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-(2*N-1)+N-j) = 1
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),2+(j-2)*2+(i-1)*(3*N-1)-(2*N-1)+N-j+1) = 1
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),(3*N-1)*(i-1)+2*N+(j-1)-1) = 1
+!            closeneigh(2+(j-2)*2+(i-1)*(3*N-1),(3*N-1)*(i-1)+2*N+(j-1)) = 1
+!        enddo
+!    enddo
 
-    do i=1,F-1
-        do j=2,N-1
+!    do i=1,F-1
+!        do j=2,N-1
             !vertical planar edges
 
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*(j-1)) = 1
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*j) = 1
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*(j-1)+(3*N-1)) = 1
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*j+(3*N-1)) = 1
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),2*N+(j-1)+(i-1)*(3*N-1)-(2*N-1)+(j-1)) = 2
-            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),2*N+(j-1)+(i-1)*(3*N-1)-(2*N-1)+(j-1)+(3*N-1)) = 2
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*(j-1)) = 1
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*j) = 1
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*(j-1)+(3*N-1)) = 1
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),(i-1)*(3*N-1)+2*j+(3*N-1)) = 1
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),2*N+(j-1)+(i-1)*(3*N-1)-(2*N-1)+(j-1)) = 2
+!            closeneigh(2*N+(j-1)+(i-1)*(3*N-1),2*N+(j-1)+(i-1)*(3*N-1)-(2*N-1)+(j-1)+(3*N-1)) = 2
 
-        enddo
-    enddo
+!        enddo
+!    enddo
 
-    do i=2,F-1
-        do j=2,N-1
+!    do i=2,F-1
+!        do j=2,N-1
             !vertical edges
 
-            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),1+(j-1)*2+(i-1)*(3*N-1)+1) = 2
-            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),1+(j-1)*2+(i-1)*(3*N-1)-1) = 2
-            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),2*N+(j-2)+(i-2)*(3*N-1)+1) = 2
-            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),2*N+(j-2)+(i-2)*(3*N-1)+1+(3*N-1)) = 2
+!            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),1+(j-1)*2+(i-1)*(3*N-1)+1) = 2
+!            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),1+(j-1)*2+(i-1)*(3*N-1)-1) = 2
+!            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),2*N+(j-2)+(i-2)*(3*N-1)+1) = 2
+!            closeneigh(1+(j-1)*2+(i-1)*(3*N-1),2*N+(j-2)+(i-2)*(3*N-1)+1+(3*N-1)) = 2
 
-        enddo
-    enddo
+!        enddo
+!    enddo
 
 !!Create a 8 x num matrix of neighboring edges. Column number corresponds to edge number, and the row entries represent 
 !!neighboring edges
 
-    do j=1,num
-        countc=0
-        do i=1,num
-            if(closeneigh(j,i)==1) then
-                countc=countc+1
-                neighborc(countc,j)=i
-            elseif(closeneigh(j,i)==2) then
-                countc=countc+1
-                neighborc(countc,j)=i
-                countc=countc+1
-                neighborc(countc,j)=i
-            elseif(closeneigh(j,i)==4) then
-                countc=countc+1
-                neighborc(countc,j)=i
-                countc=countc+1
-                neighborc(countc,j)=i
-                countc=countc+1
-                neighborc(countc,j)=i
-                countc=countc+1
-                neighborc(countc,j)=i
-            end if
-        enddo
-    enddo
+!! BRAD 2023-04-23:
+
+open(106,file=ADJUSTL('data/' // expCode // '/neighbors.dat'))
+do j=1,num
+    do countc=1,8
+        read(106,*)neighborc(countc,j)
+    end do
+end do
+close(106)
+write(*,*)'read neighbors.dat'
+
+!    do j=1,num
+!        countc=0
+!        do i=1,num
+!            if(closeneigh(j,i)==1) then
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!            elseif(closeneigh(j,i)==2) then
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!            elseif(closeneigh(j,i)==4) then
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!                countc=countc+1
+!                neighborc(countc,j)=i
+!            end if
+!        enddo
+!        do countc=1,8
+!            if (neighborc(countc,j).ne.new_neighborc(countc,j)) then
+!                write (*,*)'NEIGHBOR ERROR: ',neighborc(countc,j),new_neighborc(countc,j)
+!            end if
+!        end do
+!    enddo
 
 !write(*,*)'neighborc=',neighborc
+!DEALLOCATE(closeneigh)
 
-DEALLOCATE(closeneigh)
+
 
 ! read in the data from the micro model, which we obtained from /micro.f90
 ! READ IN VECTORS FROM MATLAB 
@@ -691,7 +735,7 @@ DEALLOCATE(closeneigh)
     close(202)
 
 
-!   lastmove=0
+!    lastmove=0
 
 !The edges that don't contain fibrin are those with edge number <= to enoFB
 !enoFB=(3*N-1)*(Ffree-1)
@@ -705,7 +749,7 @@ DEALLOCATE(closeneigh)
         !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
         !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-        open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
+!        open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
         open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
         open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
 !        open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
@@ -717,7 +761,9 @@ DEALLOCATE(closeneigh)
         open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
         open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
         open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
-!        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
+        
+!! BRAD 2023-06-09:
+        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form='formatted')
 
 
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
@@ -742,11 +788,11 @@ DEALLOCATE(closeneigh)
         count2=0
         countcolr4=0
         count66=0
-!       countbind=0
-!       countindep=0
+!        countbind=0
+!        countindep=0
         Nsave=0
         cNsave=0
-!       bind1=0
+!        bind1=0
         countmacrounbd=0
         countmicrounbd=0
 
@@ -763,21 +809,23 @@ DEALLOCATE(closeneigh)
         most_molecules_passed = .False.
 
 !Initialize vectors to 0
-            degrade  =0.0d+00         !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
-            t_degrade=0.0d+00         !vector of the degradation times of each edge
+!! BRAD 2023-04-20
+!            degrade  =0.0d+00         !vector of degradation state of each edge. 0=not degraded, -t=degraded at time t
+            t_degrade=9.9d+100         !vector of the degradation times of each edge
             t_leave  =0.0d+00         !vector of the tPA leaving times for each molecule
             t_wait   =0.0d+00          !vector of the tPA waiting times for each molecule
 !            degnext  =0
-!           Vedgenext = 0
-!           Vboundnext = 0
-!           totmove = 0
-!           time2plot = 0
+!            Vedgenext = 0
+!            Vboundnext = 0
+!            totmove = 0
+!            time2plot = 0
             bind = 0.0d+00             !vector of the binding times for each tPA
 
 !! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
             forcedunbdbydeg=0
             
-            degrade(1:enoFB) = -1.0  !set the undegradable fibers' degradation status to -1
+!! BRAD 2023-04-20
+            t_degrade(1:enoFB) = 0  !set the undegradable fibers' degradation status to -1
 
 
         write(*,*)' q=',q
@@ -802,22 +850,23 @@ DEALLOCATE(closeneigh)
 
 !        do ii=1,enoFB
 !            init_state(ii) = dble(ii) / dble(enoFB) !make a vector that's the length of one row of lattice and scale so
-                                                               !that prob. of being on any edge is equal
+!                                                               !that prob. of being on any edge is equal
 !        enddo
 
         call vurcw1(rvect,M)
         
-
         !use the random numbers to decide where we start the tPAs
-
-!! BRAD 2023-04-13: Switching how molecule starting locations are calculated
-        V(1,:) = CEILING(rvect * enoFB)
+        
+!! BRAD 2023-04-13: Internal molecule start
+!            V(1,:) = enoFB + CEILING(rvect * (num - enoFB))
+!! BRAD 2023-07-14: External molecule start
+            V(1,:) = CEILING(rvect * enoFB)
 
 !        do i=1,M
 !            if (0.le.rvect(i).and.rvect(i).le.init_state(1)) V(1,i)=1 !init_entry(i)=1
 !            do j=1,enoFB
 !                if (init_state(j).lt.rvect(i).and.rvect(i).le.init_state(j+1)) then
-!                    !init_entry(i)=j+1
+                    !init_entry(i)=j+1
 !                    V(1,i)=j+1
 !                end if
 !            end do
@@ -834,21 +883,21 @@ DEALLOCATE(closeneigh)
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
 
-
-        write(degunit) degrade(:)
+!! BRAD 2023-04-20
+!        write(degunit) degrade(:)
         write(tunit) t
 
 !! BRAD 2023-01-21:
         write(t_degrade_unit) t_degrade(:)
         write(m_location_unit) V(1,:)
         write(m_bound_unit) V(2,:)
-        Nsave = 10
+        Nsave = save_interval
 
         write(*,*)' save as deg',outFileCode
 
 
-!       Vedgenext(1,:)=V(1,:)
-!       Vboundnext(1,:)=V(2,:)
+!        Vedgenext(1,:)=V(1,:)
+!        Vboundnext(1,:)=V(2,:)
 !        degnext(1,:)=degrade(:)
 !        tsave(1) = t
 
@@ -870,9 +919,13 @@ DEALLOCATE(closeneigh)
 !            if(mod(count,100000)==0) then
 !            end if
 
+!            if (count==3700465) then
+!                verbose = .True.
+!            end if
+
 !! BRAD 2023-01-31:
             if (verbose) then
-                write (*,'(A,I6)') '-> ts ', count-1
+                write (*,'(A,I10)') '-> ts ', count-1
             end if
 
 
@@ -882,60 +935,7 @@ DEALLOCATE(closeneigh)
 
             !            forcedunbdbydeg=0 !every timestep reset vector that records which tPA molecules were on degraded fibers to 0
 
-            !at the beginning of each time step, check to see if any of the fibers should be degraded at this time.
-            !Degrade fiber before moving and binding/unbinding tPA:
-            do i=enoFB+1,num
-                if(t_degrade(i).lt.t.and.t_degrade(i).gt.0.and.degrade(i).eq.0) then
-                !i.e. if degradation time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
-                    degrade(i)=-t
-!! BRAD 2023-01-13:
-                    degraded_fibers = degraded_fibers + 1
-                    last_degrade_time = t
-                    if (degraded_fibers==num-enoFB) all_fibers_degraded = .True.
-                    !write(*,*)'time=',t
-                    !write(*,*)'edge that degraded=',i
 
-                    !uncomment below if we do NOT remove tPA that was on a degraded fiber:
-                    !!if there were any tPAs bound to this edge, have them unbind, and reset their leaving times to 0:
-                    !do j=1,M
-                    !   if(V(1,j)==i) then
-                    !      V(2,j)=0
-                    !      t_leave(j)=0
-                    !      !also find the new binding time for this molecule !FOLLOWING LINE ADDED 4/21/2011:
-                    !      bind(j)=0  !because the molecule can never rebind to a degraded edge
-                    !   end if
-                    !enddo
-                    !!end uncommentable part
-
-                    !uncomment below if we DO remove tPA that was on a degraded fiber:
-                    !if there were any tPAs bound to this edge, temporarily remove them from the simulation by assigning a waiting time before they can rebind
-                    do j=1,M
-!! BRAD 2023-01-31: There was a small chance that a molecule could arrive at a fiber just as it was degrading
-!!                  Even though it was not bound, it would still be classified for "restricted movement"
-!!                  Fixed 'passerby molecule' bug
-                        if(V(1,j)==i.and.V(2,j)==1) then
-                            V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
-!! BRAD 2023-04-13: Change macro-unbound wait time to remaining leave time. 
-!!                  That is, the molecule will be restricted in its movement and binding until it would have unbound (if the fiber hadn't degraded first)
-                            t_wait(j)=t_leave(j)
-                            t_leave(j)=0
-                            !also find the new binding time for this molecule !FOLLOWING LINE ADDED 4/21/2011:
-                            bind(j)=0  !because the molecule can never rebind to a degraded edge
-                            forcedunbdbydeg(j)=1 !put a "1" in the entries corresponding to tPA molecules that were forced to unbind by macroscale degradation; these molecules will NOT be allowed to diffuse into the clot, only along the clot front. ADDED 5/10/18
-                            countmacrounbd=countmacrounbd+1 !count the total number of tPA molecules that are forced to unbind by macro-level degradation of a fiber
-                            !write(*,*)'forced unbound by degradation=',j
-!! BRAD 2023-01-31:
-                            if (verbose) then
-                                write (*,'(A,I6,A,I5,A,I5)') '-> ts ', count-1,&
-                                    ' -> m ', j-1, ' macro-unbinding from f ', V(1,j)-1
-                                write (*,'(A,I6,A,I5,A,F10.5)') '-> ts ', count-1,&
-                                    ' -> m ', j-1, ' wait time set to ', t_wait(j)
-                            end if
-                        end if
-                   end do
-                   !!end uncommentable part
-                end if
-            end do
 
 
             !!!!!!!!!!!!!!!! Now do the binding/unbinding and moving part of the algorithm !!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -944,6 +944,34 @@ DEALLOCATE(closeneigh)
 
 
             do j=1,M
+!! BRAD 2023-04-20: Moving degraded fiber check inside the molecule loop
+
+!! BRAD 2023-01-31: There was a small chance that a molecule could arrive at a fiber just as it was degrading
+!!                  Even though it was not bound, it would still be classified for "restricted movement"
+!!                  Fixed 'passerby molecule' bug
+                if(V(2,j)==1.and.t_degrade(V(1,j))<t) then
+                    V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
+!! BRAD 2023-04-13: Change macro-unbound wait time to remaining leave time. 
+!!                  That is, the molecule will be restricted in its movement and binding until it would have unbound (if the fiber hadn't degraded first)
+                    t_wait(j)=t_leave(j)
+                    t_leave(j)=0
+                    !also find the new binding time for this molecule !FOLLOWING LINE ADDED 4/21/2011:
+                    bind(j)=0  !because the molecule can never rebind to a degraded edge
+                    forcedunbdbydeg(j)=1 !put a "1" in the entries corresponding to tPA molecules that were forced to unbind by macroscale degradation; these molecules will NOT be allowed to diffuse into the clot, only along the clot front. ADDED 5/10/18
+                    countmacrounbd=countmacrounbd+1 !count the total number of tPA molecules that are forced to unbind by macro-level degradation of a fiber
+                    !write(*,*)'forced unbound by degradation=',j
+!! BRAD 2023-06-09:
+                    write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 2
+!! BRAD 2023-01-31:
+                    if (verbose) then
+                        write (*,'(A,I10,A,I5,A,I6)') '-> ts ', count-1,&
+                            ' -> m ', j-1, ' macro-unbinding from f ', V(1,j)-1
+                        write (*,'(A,I10,A,I5,A,F10.5)') '-> ts ', count-1,&
+                            ' -> m ', j-1, ' wait time set to ', t_wait(j)
+                    end if
+                end if
+!! BRAD 2023-04-20: End of degraded fiber check
+            
                 if(V(2,j)==1) then   !if the molecule is bound
                     if(t_leave(j).le.t) then
                         !if the time to tPA leaving is smaller than current time, have the molecule unbind
@@ -958,21 +986,29 @@ DEALLOCATE(closeneigh)
                         r5=urcw1()
                         if(r5.le.frac_forced) then
                         !if the random number is less than the fraction of time tPA is forced to unbind, consider tPA "forced" to unbind, and temporarily remove it from the simulation by assigning it a waiting time
+                        
+!! BRAD 2023-06-09: Would it not be better to set the bind time to bind(j)+avgwait?
+
                             t_wait(j)=t+avgwait-tstep/2 !waiting time is current time plus average wait time minus half a timestep so we round to nearest timestep
                             bind(j)=0
                             countmicrounbd=countmicrounbd+1
+!! BRAD 2023-06-09:
+                            write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 3
 !! BRAD 2023-01-31:
                             if (verbose) then
-                                write (*,'(A,I6,A,I5,A,I5,A,F5.4)') '-> ts ', count-1,&
+                                write (*,'(A,I10,A,I5,A,I6,A,F5.4)') '-> ts ', count-1,&
                                     ' -> m ', j-1, ' micro-unbinding from f ', V(1,j)-1, '; using r = ', r5
-                                write (*,'(A,I6,A,I5,A,F8.5)') '-> ts ', count-1,&
+                                write (*,'(A,I10,A,I5,A,F8.5)') '-> ts ', count-1,&
                                     ' -> m ', j-1, ' wait time set to ', t_wait(j)
                             end if
                         else
+!! BRAD 2023-06-09:
+                            write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
+!! BRAD 2023-01-31:
                             if (verbose) then
-                                write (*,'(A,I6,A,I5,A,I5,A,F5.4)') '-> ts ', count-1,&
+                                write (*,'(A,I10,A,I5,A,I6,A,F5.4)') '-> ts ', count-1,&
                                     ' -> m ', j-1, ' unbinding from f ', V(1,j)-1, '; using r = ', r5
-                                write (*,'(A,I6,A,I5,A,F8.5,A,F5.4)') '-> ts ', count-1,&
+                                write (*,'(A,I10,A,I5,A,F8.5,A,F5.4)') '-> ts ', count-1,&
                                     ' -> m ', j-1, ' bind time set to ', bind(j), '; using r = ', r1
                             end if
                         end if !for frac_forced if statement
@@ -982,13 +1018,21 @@ DEALLOCATE(closeneigh)
                 if(V(2,j)==0) then   !if the molecule is unbound
                 
 !! BRITT/BRAD 2023-01-12: Fixed macro unbind issue
-                    if (t_wait(j)<=t.and.forcedunbdbydeg(j)==1) then
+                    if (0<t_wait(j) .and. t_wait(j)<=t .and. forcedunbdbydeg(j)==1) then
                         forcedunbdbydeg(j)=0
+!! BRAD 2023-06-09:
+                        t_wait(j)=0
+                        write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
 !! BRAD 2023-01-31:
                         if (verbose) then
-                            write (*,'(A,I6,A,I5,A)') '-> ts ', count-1,&
+                            write (*,'(A,I10,A,I5,A)') '-> ts ', count-1,&
                                 ' -> m ', j-1, ' no longer stuck to macro-fiber'
                         end if
+                    end if
+!! BRAD 2023-06-09:
+                    if (0<t_wait(j) .and. t_wait(j)<=t .and. forcedunbdbydeg(j)==0) then
+                        t_wait(j)=0
+                        write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
                     end if
                     
                     
@@ -1003,11 +1047,11 @@ DEALLOCATE(closeneigh)
                         !check if molecule j can bind. ADJUSTED 9/15/17 to account for waiting time
 !! BRAD 2023-01-31:
                         if (verbose) then
-                            write (*,'(A,I6,A,I5,A,F5.4)') '-> ts ', count-1,&
+                            write (*,'(A,I10,A,I5,A,F5.4)') '-> ts ', count-1,&
                                 ' -> m ', j-1, ' not moving; using r = ', r
                         end if
                         
-                        if(bind(j).lt.t.and.bind(j).gt.0.and.degrade(V(1,j)).eq.0) then
+                        if(bind(j).lt.t.and.bind(j).gt.0.and.t_degrade(V(1,j))>=t) then
                         !i.e. if binding time is smaller than t AND bigger than 0 AND the edge hasn't already been degraded
                         !check if the molecule has a waiting time. if it does, check if the current time is later than the waiting time
                             if(t_wait(j).le.t) then
@@ -1016,14 +1060,14 @@ DEALLOCATE(closeneigh)
                                 bind(j)=0 !reset the binding time to 0
                                 t_wait(j)=0 !reset the waiting time to 0
                                 r3=urcw1()
-!                               countbind=countbind+1
+!                                countbind=countbind+1
 
 !! BRAD 2023-01-04:
                                 total_binds = total_binds + 1
 
                                 !put a 1 in entry equal to edge number. each second I'll sum up the number of 1 entries, which
                                 !will tell me the number of independent bindings (not necessarily successful ones) at each second
-!                               bind1(V(1,j))=1
+!                                bind1(V(1,j))=1
 
                                 !find the time that tPA will unbind:
                                 colr2=0
@@ -1042,11 +1086,13 @@ DEALLOCATE(closeneigh)
 
                                 t_leave(j) = t + ttPA - tstep/2 !time tPA leaves is current time plus leaving time drawn from distribution
                                                         !minus half a time step so we round to nearest timestep
+!! BRAD 2023-06-09:
+                                write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1
 !! BRAD 2023-01-31:
                                 if (verbose) then
-                                    write (*,'(A,I6,A,I5,A,I5)') '-> ts ', count-1,&
+                                    write (*,'(A,I10,A,I5,A,I6)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' binding to f ', V(1,j)-1
-                                    write (*,'(A,I6,A,I5,A,F8.5,A,F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A,I10,A,I5,A,F8.5,A,F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' leaving time set to ', t_leave(j), '; using r = ', r3
                                     write (*,'(A, F8.5, A, F8.5)') ' interpolated between ',tsec1(colr2),' and ',tsec1(colr2-1)
                                 end if
@@ -1070,24 +1116,26 @@ DEALLOCATE(closeneigh)
                                         rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4)
                                     end if
                                     
+                                    
 !! BRAD 2023-01-31:
                                     if (verbose) then
-                                        if (t_degrade(V(1,j))==0.or.t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
-                                            write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
+                                        if (t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
+                                            write (*,'(A, I10, A, I5, A, F12.5, A, F5.4)') '-> ts ', count-1,&
                                                 ' -> f ', V(1,j)-1, ' degrade time set to ', t+rmicro-tstep/2,&
                                                 '; using r = ', r4
                                         end if
                                     end if
 
-                                    if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
-                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
+!! BRAD 2023-04-20:
+!                                    if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
+!                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
                                                                            !the cutting time obtained from the lysis time function
                                                                            !minus half a time step so we round to nearest time step
-!                                       countindep=countindep+1 !save the number of independent binding events
-                                    else               !if tPA has previously landed on this edge and dictated a degradation time,
+!                                        countindep=countindep+1 !save the number of independent binding events
+!                                    else               !if tPA has previously landed on this edge and dictated a degradation time,
                                         t_degrade(V(1,j)) = min(t_degrade(V(1,j)),(t+rmicro-tstep/2)) !choose the smallest time, because
                                                                                                 !that's what will happen first
-                                    end if
+!                                    end if
 
                                 end if !for if(r400.le.lenlysismat) loop
 
@@ -1104,7 +1152,7 @@ DEALLOCATE(closeneigh)
 
                     else              !for if(r.le(1-q) statement. if r>1-q, i.e. if molecule j has the possibility to move
                         !check if molecule j can bind. adjusted 9/15/17 to account for waiting time
-                        if(bind(j).lt.t.and.bind(j).gt.0.and.degrade(V(1,j)).eq.0.and.t_wait(j).le.t) then
+                        if(bind(j).lt.t.and.bind(j).gt.0.and.t_degrade(V(1,j))>=t.and.t_wait(j).le.t) then
                         !i.e. if binding time is smaller than t AND bigger than 0  AND the edge hasn't already been degraded AND the waiting time is less than the current time.
                         !then the molecule could bind. To determine whether it binds or moves, draw a random number, r2.
                         !if r2.gt.(t-bind(j))/tstep, then movement happened before binding, so move the molecule rather than bind it
@@ -1167,11 +1215,11 @@ DEALLOCATE(closeneigh)
                                 
 !! BRAD 2023-01-31:
                                 if (verbose) then
-                                    write (*,'(A, I6, A, I5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' move before bind; using r = ', r2
-                                    write (*,'(A, I6, A, I5, A, I5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, I6, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' moving to f ', V(1,j)-1, '; using r = ', r
-                                    write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' binding time set to ', bind(j), '; using r = ', r1
 !                                    write (*,*) 't-dlog(r1)/(kon*bs)-tstep/2 = ',t,'-dlog(',r1,')/(',kon,'*',bs,')-',tstep,'/2'
                                 end if
@@ -1190,7 +1238,7 @@ DEALLOCATE(closeneigh)
 
                                 !put a 1 in entry equal to edge number. each second I'll sum up the number of 1 entries, which
                                 !will tell me the number of independent bindings (not necessarily successful ones) at each second
-!                               bind1(V(1,j))=1
+!                                bind1(V(1,j))=1
 
                                 !find the time that tPA will unbind:
                                 colr2=0
@@ -1210,13 +1258,15 @@ DEALLOCATE(closeneigh)
                                 t_leave(j) = t + ttPA - tstep/2 !time tPA leaves is current time plus leaving time drawn from distribution
                                                             !minus half a time step so we round to nearest timestep
 
+!! BRAD 2023-06-09:
+                                write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1
 !! BRAD 2023-01-31:
                                 if (verbose) then
-                                    write (*,'(A, I6, A, I5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' bind before move; using r = ', r2
-                                    write (*,'(A, I6, A, I5, A, I5)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, I6)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' binding to f ', V(1,j)-1
-                                    write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' leaving time set to ', t_leave(j), '; using r = ', r3
                                     write (*,'(F8.5, A, F8.5, A, F8.5)') ttPA, '; interpolated between ',tsec1(colr2),' and ',tsec1(colr2-1)
                                     !write (*,*) t, ttPA, tstep
@@ -1243,25 +1293,26 @@ DEALLOCATE(closeneigh)
                                         rmicro = (lysismat(r400,colr2-1)-(lysismat(r400,colr2-1)-lysismat(r400-1,colr2-1))*percent4)
                                     end if
                                     
+                                   
 !! BRAD 2023-01-31:
                                     if (verbose) then
-                                        if (t_degrade(V(1,j))==0.or.t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
-                                            write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
+                                        if (t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
+                                            write (*,'(A, I10, A, I5, A, F12.5, A, F5.4)') '-> ts ', count-1,&
                                                 ' -> f ', V(1,j)-1, ' degrade time set to ', t+rmicro-tstep/2,&
                                                 '; using r = ', r4
                                         end if
                                     end if
 
-
-                                    if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
-                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
+!! BRAD 2023-04-20:
+!                                    if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
+!                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
                                                                                  !the cutting time obtained from the lysis time function
                                                                                  !minus half a time step so we round to nearest time step
-!                                       countindep=countindep+1 !save the number of independent binding events
-                                    else               !if tPA has previously landed on this edge and dictated a degradation time,
+!                                        countindep=countindep+1 !save the number of independent binding events
+!                                    else               !if tPA has previously landed on this edge and dictated a degradation time,
                                         t_degrade(V(1,j)) = min(t_degrade(V(1,j)),(t+rmicro-tstep/2)) !choose the smallest time, because
                                                                                                       !that's what will happen first
-                                    end if
+!                                    end if
 
                                 end if !for if(r400.le.lenlysismat) loop
 
@@ -1274,7 +1325,7 @@ DEALLOCATE(closeneigh)
                                 temp_neighborc=0 !set temporary neighbor array to 0
                                 countij=0
                                 do ij=1,8 !loop over all 8 entries of neighborc vector
-                                    if(degrade(neighborc(ij,z))<0) then !if the edge has degraded or was a ghost edge, then it is available for diffusion
+                                    if(t_degrade(neighborc(ij,z))<t) then !if the edge has degraded or was a ghost edge, then it is available for diffusion
                                         countij=countij+1
                                         temp_neighborc(countij)=neighborc(ij,z) !set the next entry of temp_neighborc vector to be the edge # that's available for diffusion
                                     end if !end degrade(neighborc...) if statement
@@ -1299,7 +1350,7 @@ DEALLOCATE(closeneigh)
                                 
 !! BRAD 2023-01-31:
                                 if (verbose) then
-                                    write (*,'(A, I6, A, I5, A, I5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, I6, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' restriced moving to f ', V(1,j)-1, '; using r = ', r1
                                 end if
 
@@ -1359,9 +1410,9 @@ DEALLOCATE(closeneigh)
                                 
 !! BRAD 2023-01-31:
                                 if (verbose) then
-                                    write (*,'(A, I6, A, I5, A, I5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, I6, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' moving to f ', V(1,j)-1, '; using r = ', r
-                                    write (*,'(A, I6, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
+                                    write (*,'(A, I10, A, I5, A, F8.5, A, F5.4)') '-> ts ', count-1,&
                                         ' -> m ', j-1, ' binding time set to ', bind(j), '; using r = ', r1
 !                                    write (*,*) 't-dlog(r1)/(kon*bs)-tstep/2 = ',t,'-dlog(',r1,')/(',kon,'*',bs,')-',tstep,'/2'
                                 end if
@@ -1386,7 +1437,7 @@ DEALLOCATE(closeneigh)
                         
 !! BRAD 2023-01-31:
                         if (verbose) then
-                            write (*,'(A, I6, A, I5, A)') '-> ts ', count-1,&
+                            write (*,'(A, I10, A, I5, A)') '-> ts ', count-1,&
                                 ' -> m ', j-1, ' reached the back row for the first time'
                         end if
                         
@@ -1413,17 +1464,36 @@ DEALLOCATE(closeneigh)
             !!end if
 
             if(Ninteger>=Nsave) then !if the current time is the 1st past a new a 10 seconds, e.g. t=10.001, save degrade and V
-                write(degunit)    degrade(1:num)
+!! BRAD 2023-04-20: Count up degraded fibers
+                degraded_fibers = 0
+                !Degrade fiber before moving and binding/unbinding tPA:
+                do i=enoFB+1,num
+                    if(t_degrade(i)<t) then
+!! BRAD 2023-01-13:
+                        degraded_fibers = degraded_fibers + 1
+!                        last_degrade_time = t
+                        if (degraded_fibers==num-enoFB) all_fibers_degraded = .True.
+                        !write(*,*)'time=',t
+                        !write(*,*)'edge that degraded=',i
+
+
+                       !!end uncommentable part
+                    end if
+                end do
+            
+            
+!! BRAD 2023-04-20:           
+!                write(degunit)    degrade(1:num)
                 write(tunit)  t
 !! BRAD 2023-01-21:
                 write(t_degrade_unit) t_degrade(:)
                 write(m_location_unit) V(1,:)
                 write(m_bound_unit) V(2,:)
 
-                Nsave=Nsave+10
+                Nsave=Nsave+save_interval
                 cNsave=cNsave+1
-!               Vedgenext(cNsave+1,:) = V(1,:)
-!               Vboundnext(cNsave+1,:) = V(2,:)
+!                Vedgenext(cNsave+1,:) = V(1,:)
+!                Vboundnext(cNsave+1,:) = V(2,:)
 !                degnext(cNsave+1,:) = degrade(1:num)
 !                tsave(cNsave+1) = t
                 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
@@ -1435,7 +1505,7 @@ DEALLOCATE(closeneigh)
                 rounded_time = real(t)
                 degraded_percent = real(degraded_fibers)/(num-enoFB)*100
                 reached_back_row_percent = real(reached_back_row)/M*100
-                write(*,'(A,F7.2,A,I5,A,F5.1,A,I5,A,F5.1,A)')'After ',rounded_time,' sec, ',&
+                write(*,'(A,F7.0,A,I0,A,F5.1,A,I0,A,F5.1,A)')'After ',rounded_time,' sec, ',&
                 degraded_fibers,' fibers are degraded (',degraded_percent,'% of total) and ',&
                 reached_back_row,' molecules have reached the back row (',&
                 reached_back_row_percent,'% of total).'
@@ -1447,14 +1517,14 @@ DEALLOCATE(closeneigh)
             if (verbose) then
                 do j=1,M
                     if (V(2,j) == 0) then
-                        write (*,'(A, I6, A, I5, A, I5)') '-> ts ', count-1,&
+                        write (*,'(A, I10, A, I5, A, I6)') '-> ts ', count-1,&
                                         ' -> m ', j-1,  ' located on fiber ', V(1,j)-1
                     else
-                        write (*,'(A, I6, A, I5, A, I5)') '-> ts ', count-1,&
+                        write (*,'(A, I10, A, I5, A, I6)') '-> ts ', count-1,&
                                         ' -> m ', j-1,  ' bound to fiber ', V(1,j)-1
                     end if
                 end do
-                if (count > 3500) read (*,*)
+                read (*,*)
             end if
             
         end do !for time loop
@@ -1473,8 +1543,8 @@ DEALLOCATE(closeneigh)
         write(mfptunit) mfpt(:)
 
         Nsavevect(istat)=cNsave !CHANGED TO CNSAVE FROM NSAVE 12/17/14
-!       front=0
-!       degold=0
+!        front=0
+!        degold=0
 
         !NOW PROCESS THE DATA WE OBTAINED FROM THE ABOVE RUN
         nplt=Nsavevect(istat)+2 !+1 because I saved once at the beginning, and another +1 to account for the final time point
@@ -1983,7 +2053,7 @@ DEALLOCATE(closeneigh)
 
         write(*,*)'countmacrounbd=',countmacrounbd
         write(*,*)'countmicrounbd=',countmicrounbd
-!        countindepV(istat,tf)=countindep
+!         countindepV(istat,tf)=countindep
      enddo  !for stats loop
 
 write(*,*)'Nsavevect=',Nsavevect(:)
@@ -2007,7 +2077,7 @@ close(mfptunit)
         close(t_degrade_unit)
         close(m_location_unit)
         close(m_bound_unit)
-!        close(m_bind_time_unit)
+        close(m_bind_time_unit)
 
 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
 !close(degnextunit)
