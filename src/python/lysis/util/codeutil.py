@@ -70,7 +70,7 @@ class FortranMacro:
         command = self.exec_command()
         output_file_name = os.path.join(
             self.exp.os_path,
-            os.path.basename(self.executable) + self.out_file_code[:-3] + "txt",
+            "macro" + self.out_file_code[:-3] + "txt",
         )
         with open(output_file_name, "w") as file:
             result = subprocess.run(

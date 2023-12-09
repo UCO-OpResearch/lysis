@@ -222,15 +222,15 @@ integer :: m_bound_unit = 104
 character(80) :: m_bound_file
 integer :: m_bind_time_unit = 105
 
-!! BRAD 2023-06-09:
-!!      Format: simulation time (t), molecule index (j), new status (m_stat)
+!! BRAD 2023-12-04:
+!!      Format: simulation time (t), molecule index (j), new status (m_stat), molecule location (V(1,j))
 !!      m_stat = {
 !!          0 : unbound (V(2,j)==0 & t_wait(j)==0)
 !!          1 : bound to undegraded fiber (V(2,j)==1)
 !!          2 : bound to degraded fiber aka macro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==1)
 !!          3 : bound to fiber degradation product aka micro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==0)
 !!      }
-character(20) :: m_bind_time_format = '(f0.9, a, i0, a, i0)'
+character(30) :: m_bind_time_format = '(f0.9, a, i0, a, i0, a, i0)'
 
 
 !! BRAD 2023-02-02
@@ -959,7 +959,7 @@ write(*,*)'read neighbors.dat'
                     countmacrounbd=countmacrounbd+1 !count the total number of tPA molecules that are forced to unbind by macro-level degradation of a fiber
                     !write(*,*)'forced unbound by degradation=',j
 !! BRAD 2023-06-09:
-                    write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 2
+                    write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 2, ', ', V(1,j)
 !! BRAD 2023-01-31:
                     if (verbose) then
                         write (*,'(A,I10,A,I5,A,I6)') '-> ts ', count-1,&
@@ -991,7 +991,7 @@ write(*,*)'read neighbors.dat'
                             bind(j)=0
                             countmicrounbd=countmicrounbd+1
 !! BRAD 2023-06-09:
-                            write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 3
+                            write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 3, ', ', V(1,j)
 !! BRAD 2023-01-31:
                             if (verbose) then
                                 write (*,'(A,I10,A,I5,A,I6,A,F5.4)') '-> ts ', count-1,&
@@ -1001,7 +1001,7 @@ write(*,*)'read neighbors.dat'
                             end if
                         else
 !! BRAD 2023-06-09:
-                            write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
+                            write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0, ', ', V(1,j)
 !! BRAD 2023-01-31:
                             if (verbose) then
                                 write (*,'(A,I10,A,I5,A,I6,A,F5.4)') '-> ts ', count-1,&
@@ -1020,7 +1020,7 @@ write(*,*)'read neighbors.dat'
                         forcedunbdbydeg(j)=0
 !! BRAD 2023-06-09:
                         t_wait(j)=0
-                        write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
+                        write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0, ', ', V(1,j)
 !! BRAD 2023-01-31:
                         if (verbose) then
                             write (*,'(A,I10,A,I5,A)') '-> ts ', count-1,&
@@ -1030,7 +1030,7 @@ write(*,*)'read neighbors.dat'
 !! BRAD 2023-06-09:
                     if (0<t_wait(j) .and. t_wait(j)<=t .and. forcedunbdbydeg(j)==0) then
                         t_wait(j)=0
-                        write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
+                        write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0, ', ', V(1,j)
                     end if
                     
                     
@@ -1085,7 +1085,7 @@ write(*,*)'read neighbors.dat'
                                 t_leave(j) = t + ttPA - tstep/2 !time tPA leaves is current time plus leaving time drawn from distribution
                                                         !minus half a time step so we round to nearest timestep
 !! BRAD 2023-06-09:
-                                write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1
+                                write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1, ', ', V(1,j)
 !! BRAD 2023-01-31:
                                 if (verbose) then
                                     write (*,'(A,I10,A,I5,A,I6)') '-> ts ', count-1,&
@@ -1257,7 +1257,7 @@ write(*,*)'read neighbors.dat'
                                                             !minus half a time step so we round to nearest timestep
 
 !! BRAD 2023-06-09:
-                                write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1
+                                write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1, ', ', V(1,j)
 !! BRAD 2023-01-31:
                                 if (verbose) then
                                     write (*,'(A, I10, A, I5, A, F5.4)') '-> ts ', count-1,&
