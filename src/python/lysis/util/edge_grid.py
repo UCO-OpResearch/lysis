@@ -345,6 +345,32 @@ class EdgeGrid(object):
                     neighbor_i, neighbor_j, exp.macro_params.rows, exp.macro_params.cols
                 )
         return np.sort(fort_neighbors)
+    
+    @staticmethod
+    def get_spatial_coordinates(i: int, j: int):
+        x = j // 3
+        y = i
+        z = 0
+        match j % 3:
+            case 0:
+                y += 0.5
+            case 1:
+                z += 0.5
+            case 2:
+                x += 0.5
+        return x, y, z
+    
+    @staticmethod
+    def get_distance(exp: Experiment, a: Tuple[int, int], b: Tuple[int, int], metric: str = "euclidian"):
+        if metric == 'euclidian':
+            a_coord = EdgeGrid.get_spatial_coordinates(*a)
+            b_coord = EdgeGrid.get_spatial_coordinates(*b)
+            squares = sum((a_coord[k]-b_coord[k])**2 for k in range(3))
+            return exp.macro_params.grid_node_distance * squares**0.5
+        else:
+            raise AttributeError(f"{metric} metric not implemented yet.")
+            
+        
 
 
 def from_fortran_edge_index(
