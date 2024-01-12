@@ -38,7 +38,7 @@ __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = ""
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
@@ -114,6 +114,32 @@ class Experiment(object):
         # Call the formatter and return
         return dict_to_formatted_str(values)
 
+    def initialize_micro_param(self, params: Mapping[str, Any] = None) -> None:
+        """Creates the parameters for the Microscale model.
+
+        Parameters are set to the default values unless new values are passed
+        in the params dictionary.
+
+        This method is essentially a wrapper for the MicroParameters
+        constructor.
+
+        Args:
+            params: A dictionary of parameters that differ from the default
+                    values.
+
+                For example,
+                    >>> {'binding_rate': 10, 'pore_size': 3,}
+        """
+        if params is not None:
+            self.micro_params = MicroParameters(**params)
+        else:
+            self.micro_params = MicroParameters()
+
+        for data in self.micro_params.input_data:
+            if DataStatus.INITIALIZED not in self.data.status(data):
+                raise RuntimeError(f"'{data}' not initialized in DataStore.")
+           
+        
     def initialize_macro_param(self, params: Mapping[str, Any] = None) -> None:
         """Creates the parameters for the Macroscale model.
 
@@ -154,12 +180,12 @@ class Experiment(object):
         # Get the data filenames from the DataStore
         if self.data is not None:
             output["data_filenames"] = self.data.to_dict()
+        # Convert the Microscale parameters to a dictionary
+        if self.micro_params is not None:
+            output["micro_params"] = asdict(self.micro_params)
         # Convert the Macroscale parameters to a dictionary
         if self.macro_params is not None:
             output["macro_params"] = asdict(self.macro_params)
-        # Convert the Microscale parameters to a dictionary
-        # if self.micro_params is not None:
-        #     output["micro_params"] = asdict(self.macro_params)
         return output
 
     def to_file(self) -> None:
@@ -190,9 +216,35 @@ class Experiment(object):
             data_filenames = params.pop("data_filenames", None)
             if data_filenames is not None:
                 self.data = DataStore(self.os_path, data_filenames)
+                
+            # Remove the Microscale parameters from the dictionary (if it
+            # exists) and create a new MicroParameters object using its values
+            micro_params = params.pop("micro_params", None)
+            if micro_params is not None:
+                # We are checking here to make sure that saved, dependent
+                # parameters don't get passed to the MicroParameters
+                # constructor
+
+                # Find the parameters needed to initialize a new
+                # MicroParameters object
+                sig = inspect.signature(MicroParameters)
+                # Get the keys we read from the JSON
+                for key in list(micro_params.keys()):
+                    # If that key is not needed, then toss it
+                    if key not in sig.parameters:
+                        micro_params.pop(key)
+                # Now unpack whatever is left in the dict and pass it to the
+                # constructor
+                self.micro_params = MicroParameters(**micro_params)
+            else:
+                # If there were no parameters in the file, then we raise an error
+                raise RuntimeWarning("Experiment parameter file does not contain Microscale parameters. Using defaults.")
+                self.micro_params = MicroParameters()
+                
             # Remove the Macroscale parameters from the dictionary (if it
             # exists) and create a new MacroParameters object using its values
             macro_params = params.pop("macro_params", None)
+            macro_params["micro_params"] = self.micro_params
             if macro_params is not None:
                 # We are checking here to make sure that saved, dependent
                 # parameters don't get passed to the MacroParameters
@@ -236,6 +288,32 @@ class MicroParameters:
     #                   * The modification of the MacroParameters class to
     #                       derive the appropriate parameters from the
     #                       MicroParameters class
+    
+    #####################################
+    # Physical Parameters
+    #####################################
+    
+    #####################################
+    # Model Parameters
+    #####################################
+    
+    #####################################
+    # Experimental Parameters
+    #####################################
+    
+    simulations: int = 50000
+    """The number of independent trials run in the microscale model.
+    
+    :Units: trials
+    :Fortran: runs"""
+    
+    #####################################
+    # Data Parameters
+    #####################################
+    
+    #####################################
+    # Code Parameters
+    #####################################
     pass
 
 
@@ -409,16 +487,22 @@ class MacroParameters:
     #####################################
     # Experimental Parameters
     #####################################
+    
+    micro_params: MicroParameters = None
+    """The parameters from the matching microscale model.
+    
+    :Units: None
+    :Fortran: None"""
 
     # TODO(bpaynter): This value should derive from MicroParameters
-    microscale_runs: int = 50000
+    microscale_runs: int = field(init=False)
     """The number of independent trials run in the microscale model.
     
     :Units: trials
     :Fortran: nummicro"""
 
-    total_trials: int = 10
-    """The number of independent trials to be run
+    simulations: int = 10
+    """The number of independent simulations to be run
     
     :Units: trials
     :Fortran: stats"""
@@ -568,6 +652,9 @@ class MacroParameters:
         # index of the first fiber row.
         # The total edges in this region is one full row of edges for each row
         object.__setattr__(self, "last_empty_edge", self.full_row * self.empty_rows - 1)
+        
+        # Set the microscale runs from the microscale parameters
+        object.__setattr__(self, "microscale_runs", self.micro_params.simulations)
 
         # Equation (2.4) page 25 from Bannish, et. al. 2014
         # https://doi.org/10.1093/imammb/dqs029
