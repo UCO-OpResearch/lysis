@@ -66,7 +66,9 @@ FORT_MICRO = micro_rates.f90
 FORT_MACRO = macro_Q2_diffuse_into \
              macro_Q2_diffuse_along \
              macro_Q2_always_rebind \
-             macro_Q2_diffuse_into_and_along_fixed
+             macro_diffuse_into_and_along__internal \
+             macro_diffuse_into_and_along__external \
+             macro_diffuse_into_and_along_slow_micro__external
 
 #FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
@@ -111,12 +113,15 @@ shared: $(LIB_DIR)/kiss.so
 $(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
 
-$(BUILD_DIR)/macro_Q2_diffuse_into_and_along: $(FORT_SRC_DIR)/macro_Q2_diffuse_into_and_along.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into_and_along.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into_and_along
+$(BUILD_DIR)/macro_diffuse_into_and_along__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__external
     
-$(BUILD_DIR)/macro_Q2_diffuse_into_and_along_fixed: $(FORT_SRC_DIR)/macro_Q2_diffuse_into_and_along_fixed.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into_and_along_fixed.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into_and_along_fixed
+$(BUILD_DIR)/macro_diffuse_into_and_along_slow_micro__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along_slow_micro__external.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along_slow_micro__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along_slow_micro__external
     
+$(BUILD_DIR)/macro_diffuse_into_and_along__internal: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__internal
+        
 $(BUILD_DIR)/macro_Q2_diffuse_into: $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into
     
