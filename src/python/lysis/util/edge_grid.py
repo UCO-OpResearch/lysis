@@ -366,7 +366,19 @@ class EdgeGrid(object):
             a_coord = EdgeGrid.get_spatial_coordinates(*a)
             b_coord = EdgeGrid.get_spatial_coordinates(*b)
             squares = sum((a_coord[k]-b_coord[k])**2 for k in range(3))
-            return exp.macro_params.grid_node_distance * squares**0.5
+            # return exp.macro_params.grid_node_distance * squares**0.5
+            return exp.macro_params.pore_size * 10_000 * squares**0.5
+        elif metric in ['manhattan', 'taxicab']:
+            a_coord = EdgeGrid.get_spatial_coordinates(*a)
+            b_coord = EdgeGrid.get_spatial_coordinates(*b)
+            sides = sum(abs(a_coord[k]-b_coord[k]) for k in range(3))
+            return exp.macro_params.pore_size * 10_000 * sides
+        if metric == '2d_euclidian':
+            a_coord = EdgeGrid.get_spatial_coordinates(*a)
+            b_coord = EdgeGrid.get_spatial_coordinates(*b)
+            squares = sum((a_coord[k]-b_coord[k])**2 for k in range(2))
+            # return exp.macro_params.grid_node_distance * squares**0.5
+            return exp.macro_params.pore_size * 10_000 * squares**0.5
         else:
             raise AttributeError(f"{metric} metric not implemented yet.")
             
