@@ -282,7 +282,7 @@ class MacroParameters:
     diffusion_coeff: float = 5.0e-7
     """Diffusion coefficient
     
-    :Units: cm^2/s.
+    :Units: cm^2/s
     :Fortran: Diff"""
 
     # TODO(bpaynter): This value should derive from MicroParameters
@@ -300,6 +300,7 @@ class MacroParameters:
     :Fortran: frac_forced"""
 
     # TODO(bpaynter): This value should derive from MicroParameters
+    # TODO(bpaynter): Rename to average_bound_time
     average_bind_time: float = 27.8
     """this is the average time a tPA molecule stays bound to fibrin. 
     For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
@@ -326,11 +327,43 @@ class MacroParameters:
     :Units: nodes
     :Fortran: N"""
 
+    # TODO(bpaynter): 'rows' and 'fiber_rows' should be switched so that 
+    #                 'fiber_rows' is the independent variable.
     rows: int = 121
     """The number of lattice nodes in each (vertical) column
     
     :Units: nodes
     :Fortran: F"""
+    
+    fiber_rows: int = field(init=False)
+    """The number of rows containing fibrin
+    
+    :Units: nodes
+    :Fortran: Fhat"""
+    
+    empty_rows: int = 29 - 1
+    """The number of fibrin-free rows at the top of the grid.
+    
+    Equivalent to 'first_fiber_row', which is the 1st node in vertical 
+    direction containing fibers.
+    So if first_fiber_row = 10, then rows 0-9 have no fibers, there's one more 
+    row of fiber-free planar vertical edges, and then the row with index 
+    'first_fiber_row' (e.g. 11th) is a full row of fibers.
+    
+    
+    :Units: nodes
+    :Fortran: Ffree-1"""
+
+    # TODO(bpaynter): This should be changed to "Number of empty edges"
+    last_empty_edge: int = field(init=False)
+    """The 1-D index of the last edge without fibrin
+    
+    This is probably unnecessary when using a 2-D data structure, but is kept 
+    for historical reasons.
+    
+    
+    :Units: edges
+    :Fortran: enoFB-1"""
 
     full_row: int = field(init=False)
     """Edges in a full row of nodes
@@ -355,24 +388,6 @@ class MacroParameters:
 
     :Units: fibers
     :Fortran: None"""
-
-    empty_rows: int = 29 - 1
-    """1st node in vertical direction containing fibers.
-    So if first_fiber_row = 10, then rows 0-9 have no fibers, there's one more 
-    row of fiber-free planar vertical edges, and then the row with index 
-    'first_fiber_row' (e.g. 11th) is a full row of fibers
-    
-    :Units: nodes
-    :Fortran: Ffree-1"""
-
-    last_empty_edge: int = field(init=False)
-    """The 1-D index of the last edge without fibrin
-    
-    This is probably unnecessary when using a 2-D data structure, but is kept 
-    for historical reasons.
-    
-    :Units: edges
-    :Fortran: enoFB-1"""
 
     total_molecules: int = 43074
     """The total number of tPA molecules:
@@ -453,7 +468,7 @@ class MacroParameters:
     """How often to record data from the model.
     
     :Units: sec
-    :Fortran: None"""
+    :Fortran: save_interval"""
 
     number_of_saves: int = field(init=False)
     """The number of times data will be saved from the model.
@@ -528,6 +543,9 @@ class MacroParameters:
         # A full row of 'right' and 'out' edges is two per node, except the
         # last node which has no 'right' edge.
         object.__setattr__(self, "xz_row", 2 * self.cols - 1)
+        
+        # The number of fiber rows is the total rows minus the empty ones
+        object.__setattr__(self, "fiber_rows", self.rows - self.empty_rows)
 
         # The total number of edges in the grid is a full_row for each,
         # except the last row which has no 'up' edges.
@@ -590,6 +608,20 @@ class MacroParameters:
             if match[1] != "None":
                 names[match[0]] = match[1]
         return names
+    
+    @staticmethod
+    def units():
+        text = pkgutil.get_data(__name__, "parameters.py")
+        pattern = re.compile(
+            r"[\r\n]^\s{4}([a-z_]+):[^\"]*\"\"\"[^\"]*:Units:\s([^\n\r]+)[\r\n]",
+            re.M,
+        )
+        units = {}
+        matches = re.findall(pattern, text.decode("utf-8"))
+        for match in matches:
+            if match[1] != "None":
+                units[match[0]] = match[1]
+        return units
 
     def __str__(self) -> str:
         """Returns a human-readable, JSON-like string of all parameters."""

@@ -1,11 +1,14 @@
-import argparse
 import inspect
 import os
 import subprocess
 
 from dataclasses import asdict, dataclass
 from typing import AnyStr
+
+import numpy as np
+
 from .parameters import Experiment, MacroParameters
+from .edge_grid import EdgeGrid
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -30,8 +33,20 @@ class FortranMacro:
     executable: AnyStr = None
     in_file_code: AnyStr = ".dat"
     out_file_code: AnyStr = ".dat"
+    index: int = None
+    
+    def generate_neighborhoods(self):
+        fort_neighbors = EdgeGrid.generate_fortran_neighborhood_structure(self.exp) + 1
+        fort_neighbors.tofile(os.path.join(self.exp.os_path, "neighbors.dat"), sep=os.linesep)
 
     def exec_command(self):
+        params = asdict(self.exp.macro_params)
+        if self.index is not None:
+            stream = np.random.SeedSequence(params['seed'])
+            seeds = stream.generate_state(params['total_trials'])
+            params['total_trials'] = 1
+            params['seed'] = int(np.int32(seeds[self.index]))
+            self.out_file_code = self.out_file_code[:-4] + f"_{self.index:02}" + self.out_file_code[-4:]
         arguments = [
             "--expCode",
             self.exp.experiment_code,
@@ -40,7 +55,6 @@ class FortranMacro:
             "--outFileCode",
             self.out_file_code,
         ]
-        params = asdict(self.exp.macro_params)
         sig = inspect.signature(MacroParameters)
         fortran_names = MacroParameters.fortran_names()
         for key in sig.parameters:
@@ -52,10 +66,11 @@ class FortranMacro:
         return [self.executable] + arguments
 
     def run(self):
+        self.generate_neighborhoods()
         command = self.exec_command()
         output_file_name = os.path.join(
             self.exp.os_path,
-            os.path.basename(self.executable) + self.out_file_code[:-3] + "txt",
+            "macro" + self.out_file_code[:-3] + "txt",
         )
         with open(output_file_name, "w") as file:
             result = subprocess.run(
