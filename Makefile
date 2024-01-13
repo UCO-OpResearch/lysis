@@ -100,7 +100,7 @@ fort: fort-micro fort-macro
 
 c: c-macro
 
-fort-micro: $(BUILD_DIR)/micro_rates
+fort-micro: $(BUILD_DIR)/micro_rates $(BUILD_DIR)/micro_wrapped
 
 fort-macro: $(foreach file,$(FORT_MACRO),$(BUILD_DIR)/$(file))
 
@@ -112,6 +112,9 @@ shared: $(LIB_DIR)/kiss.so
 
 $(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
+    
+$(BUILD_DIR)/micro_wrapped: $(FORT_SRC_DIR)/micro_wrapped.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_wrapped.f90 -o $(BUILD_DIR)/micro_wrapped
 
 $(BUILD_DIR)/macro_diffuse_into_and_along__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__external

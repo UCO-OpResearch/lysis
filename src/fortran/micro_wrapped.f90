@@ -1,16 +1,16 @@
 program micromodel
 
 implicit none
-character(15) :: expCode = '2023-02-01-2200'
-character(6)  :: inFileCode = 'Q2.dat'
-character(40)   :: outFileCode = 'PLG2_tPA01_Q2.dat'
+character(15) :: expCode = '2024-01-13-0707'
+character(6)  :: inFileCode = 'Q4.dat'
+character(40)   :: outFileCode = 'PLG2_tPA01_Q4.dat'
 !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
 !!!! Lines 19-25 allow you to set the various dissociation constants, binding rates, and the concentration of free PLG
 !!!! This code treats degradation and exposure in the gillespie algorithm, rather than separately with 
 !!!! a degradation timer. It also allows PLi to degrade any exposed doublet at the same binding location, and 
 !!!! tPA to convert any PLG on the same binding location to PLi.
 
-integer, parameter  :: nodes = 7 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 5 for Q1 (57.4 nm), 7 for Q2 (72.7 nm), 8 for Q3 (81.3 nm)
+integer, parameter  :: nodes = 13 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 5 for Q1 (57.4 nm), 7 for Q2 (72.7 nm), 8 for Q3 (81.3 nm), 13 for Q4 (145.4 nm)
 integer, parameter  :: Nplginit=1 !number of exposed doublets initially - i.e. intact doublets - at each spatial location
 integer, parameter  :: Ninit=5*Nplginit !number of cryptic doublets at each spatial location
 integer, parameter  :: Ntot=Ninit+Nplginit !total number of doublets at each spatial location
@@ -37,6 +37,8 @@ integer, dimension(Ntot,nodes**2)  :: state, statetemp !matrices to save the sta
 double precision, dimension(nodes)  :: init_state, cumsuminit
 integer  :: init_entry
 integer, dimension(nodes**2,nodes**2)  :: Lat !matrix of the connections between nodes. For instance, if node 1 is not a direct neighbor of node 6, then there would be a 0 in the (1,6) and (6,1) entries of Lat
+!! BRAD 2024-01-13:
+! integer, dimension(nodes**2,nodes**2)  :: Lat_temp !matrix of the connections between nodes. For instance, if node 1 is not a direct neighbor of node 6, then there would be a 0 in the (1,6) and (6,1) entries of Lat
 
 double precision  :: r, rin, randdegexp
 integer  :: Tdoublets
@@ -298,7 +300,7 @@ double precision :: uf, urcw1
      uf = urcw1()
 
      !seed = mscw() !randomly generate seed
-     seed=981681759
+     seed=-34041038
      write(*,*),' seed=',seed
 
       stater(1) = 129281
@@ -318,35 +320,62 @@ double precision :: uf, urcw1
  if(nodes==5) then
      radius=0.02875      !radius of fiber, in microns, with diameter 57.5 nm
      !!!Read in LatQ1 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-     do i=1,nodes**2
-        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-     enddo
-     close(1)
+!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
+!     do i=1,nodes**2
+!        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
+!     enddo
+!     close(1)
  elseif(nodes==7) then
      radius=0.03635        !radius of fiber, in microns, with diameter 72.7 nm
      !!!Read in LatQ2 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-     do i=1,nodes**2
-     READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-     enddo
-     close(1)
+!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
+!     do i=1,nodes**2
+!     READ(1,*)(Lat(i,ii),ii=1,nodes**2)
+!     enddo
+!     close(1)
  elseif(nodes==8) then
      radius=0.04065        !radius of fiber, in microns, with diameter 81.3 nm
      !!!Read in LatQ3 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-     do i=1,nodes**2
-        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-     enddo
-     close(1)
+!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
+!     do i=1,nodes**2
+!        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
+!     enddo
+!     close(1)
+!! BRAD 2024-01-13:
+ elseif(nodes==13) then
+     radius=0.0727        !radius of fiber, in microns, with diameter 145.4 nm
+     !!!Read in LatQ4 matrix that I generated in matlab - this is matrix of connectivities
+!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
+!     do i=1,nodes**2
+!        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
+!     enddo
+!     close(1)
  else 
      write(*,*)' problem with node number. recalculate radius'
  end if
 
+!! BRAD 2024-01-13:
+!Lat_temp = 0
+do i = 1, nodes
+    do j = 1, nodes
+        Lat((i-1)*nodes + j, (i-1)*nodes + j) = 1 ! Put a 1 along the diagonal for (i, j) to itself
+        if (i/=1) Lat((i-1)*nodes + j, (i-2)*nodes + j) = 1 ! UP ! Put a 1 from (i, j) to (i-1, j)
+        if (j/=1) Lat((i-1)*nodes + j, (i-1)*nodes + j-1) = 1 ! RIGHT ! Put a 1 from (i, j) to (i, j-1)
+        if (i/=nodes) Lat((i-1)*nodes + j, (i)*nodes + j) = 1 ! DOWN ! Put a 1 from (i, j) to (i+1, j)
+        if (j/=nodes) Lat((i-1)*nodes + j, (i-1)*nodes + j+1) = 1 ! LEFT ! Put a 1 from (i, j) to (i+1, j)
+    end do
+end do
+
+!do i = 1, nodes**2
+!    do ii = 1, nodes**2
+!        if (Lat(i, ii) /= Lat_temp(i, ii)) error stop
+!    end do
+!end do
+
   Tdoublets=Ntot*nodes**2   !total number of doublets in system
 
 
-
+  write(*,*),'nodes=',nodes
   write(*,*),'KdtPAnoplg=',KdtPAnoplg
   write(*,*),'KdtPAyesplg=',KdtPAyesplg
   write(*,*),'KdPLGnicked=',KdPLGnicked

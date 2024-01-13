@@ -1,16 +1,16 @@
 program micromodel
 
 implicit none
-character(15) :: expCode = '2023-02-01-2200'
-character(6)  :: inFileCode = 'Q2.dat'
-character(40)   :: outFileCode = 'PLG2_tPA01_Q2.dat'
+character(15) :: expCode = '2024-01-13-0703'
+character(6)  :: inFileCode = 'Q4.dat'
+character(40)   :: outFileCode = 'PLG2_tPA01_Q4.dat'
 !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
 !!!! Lines 19-25 allow you to set the various dissociation constants, binding rates, and the concentration of free PLG
 !!!! This code treats degradation and exposure in the gillespie algorithm, rather than separately with 
 !!!! a degradation timer. It also allows PLi to degrade any exposed doublet at the same binding location, and 
 !!!! tPA to convert any PLG on the same binding location to PLi.
 
-integer, parameter  :: nodes = 7 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 5 for Q1 (57.4 nm), 7 for Q2 (72.7 nm), 8 for Q3 (81.3 nm)
+integer, parameter  :: nodes = 13 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 5 for Q1 (57.4 nm), 7 for Q2 (72.7 nm), 8 for Q3 (81.3 nm), 13 for Q4 (145.4 nm)
 integer, parameter  :: Nplginit=1 !number of exposed doublets initially - i.e. intact doublets - at each spatial location
 integer, parameter  :: Ninit=5*Nplginit !number of cryptic doublets at each spatial location
 integer, parameter  :: Ntot=Ninit+Nplginit !total number of doublets at each spatial location
@@ -298,7 +298,7 @@ double precision :: uf, urcw1
      uf = urcw1()
 
      !seed = mscw() !randomly generate seed
-     seed=981681759
+     seed=-34041038
      write(*,*),' seed=',seed
 
       stater(1) = 129281
@@ -339,6 +339,15 @@ double precision :: uf, urcw1
         READ(1,*)(Lat(i,ii),ii=1,nodes**2)
      enddo
      close(1)
+!! BRAD 2024-01-13:
+ elseif(nodes==13) then
+     radius=0.0727        !radius of fiber, in microns, with diameter 145.4 nm
+     !!!Read in LatQ4 matrix that I generated in matlab - this is matrix of connectivities
+     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
+     do i=1,nodes**2
+        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
+     enddo
+     close(1)
  else 
      write(*,*)' problem with node number. recalculate radius'
  end if
@@ -346,7 +355,7 @@ double precision :: uf, urcw1
   Tdoublets=Ntot*nodes**2   !total number of doublets in system
 
 
-
+  write(*,*),'nodes=',nodes
   write(*,*),'KdtPAnoplg=',KdtPAnoplg
   write(*,*),'KdtPAyesplg=',KdtPAyesplg
   write(*,*),'KdPLGnicked=',KdPLGnicked
