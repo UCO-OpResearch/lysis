@@ -26,6 +26,7 @@ import logging
 import os
 import pkgutil
 import re
+import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, List, Mapping, Tuple, Union
@@ -35,7 +36,7 @@ from .datastore import DataStore, DataStatus
 from .util import dict_to_formatted_str
 
 __author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish"
+__copyright__ = "Copyright 2024, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = ""
 __version__ = "0.2"
@@ -102,7 +103,7 @@ class Experiment(object):
         # TODO(bpaynter): Check if the parameters are already stored.
         #                 Don't allow parameters to be changed once stored.
         # Initialize the internal storage as empty
-        self.micro_params: Mapping[str, Any] | None = None
+        self.micro_params = None
         self.macro_params = None
         self.data = DataStore(self.os_path, default_filenames)
 
@@ -135,12 +136,7 @@ class Experiment(object):
         else:
             self.micro_params = MicroParameters()
 
-        for data in self.micro_params.input_data:
-            if DataStatus.INITIALIZED not in self.data.status(data):
-                raise RuntimeError(f"'{data}' not initialized in DataStore.")
-           
-        
-    def initialize_macro_param(self, params: Mapping[str, Any] = None) -> None:
+    def initialize_macro_param(self, params: dict[str, Any] = None) -> None:
         """Creates the parameters for the Macroscale model.
 
         Parameters are set to the default values unless new values are passed
@@ -156,10 +152,13 @@ class Experiment(object):
                 For example,
                     >>> {'binding_rate': 10, 'pore_size': 3,}
         """
+        if self.micro_params is None:
+            raise RuntimeError("No Microscale parameters.")
         if params is not None:
+            params["micro_params"] = self.micro_params
             self.macro_params = MacroParameters(**params)
         else:
-            self.macro_params = MacroParameters()
+            self.macro_params = MacroParameters(micro_params=self.micro_params)
 
         for data in self.macro_params.input_data:
             if DataStatus.INITIALIZED not in self.data.status(data):
@@ -216,7 +215,7 @@ class Experiment(object):
             data_filenames = params.pop("data_filenames", None)
             if data_filenames is not None:
                 self.data = DataStore(self.os_path, data_filenames)
-                
+
             # Remove the Microscale parameters from the dictionary (if it
             # exists) and create a new MicroParameters object using its values
             micro_params = params.pop("micro_params", None)
@@ -237,10 +236,15 @@ class Experiment(object):
                 # constructor
                 self.micro_params = MicroParameters(**micro_params)
             else:
-                # If there were no parameters in the file, then we raise an error
-                raise RuntimeWarning("Experiment parameter file does not contain Microscale parameters. Using defaults.")
+                # If there were no microscale parameters in the file, then
+                # we raise an error
+                warnings.warn(
+                    "Experiment parameter file does not contain Microscale parameters. "
+                    "Using defaults.",
+                    RuntimeWarning,
+                )
                 self.micro_params = MicroParameters()
-                
+
             # Remove the Macroscale parameters from the dictionary (if it
             # exists) and create a new MacroParameters object using its values
             macro_params = params.pop("macro_params", None)
@@ -288,33 +292,38 @@ class MicroParameters:
     #                   * The modification of the MacroParameters class to
     #                       derive the appropriate parameters from the
     #                       MicroParameters class
-    
+
     #####################################
     # Physical Parameters
     #####################################
-    
+
     #####################################
     # Model Parameters
     #####################################
-    
+
     #####################################
     # Experimental Parameters
     #####################################
-    
+
     simulations: int = 50000
     """The number of independent trials run in the microscale model.
     
     :Units: trials
     :Fortran: runs"""
-    
+
     #####################################
     # Data Parameters
     #####################################
-    
+
     #####################################
     # Code Parameters
     #####################################
-    pass
+
+    def __post_init__(self):
+        """This method calculates the dependent parameters once the
+        MacroParameters object is created. It is automatically called by the
+        DataClass.__init__()"""
+        pass
 
 
 @dataclass(frozen=True)
@@ -405,20 +414,20 @@ class MacroParameters:
     :Units: nodes
     :Fortran: N"""
 
-    # TODO(bpaynter): 'rows' and 'fiber_rows' should be switched so that 
+    # TODO(bpaynter): 'rows' and 'fiber_rows' should be switched so that
     #                 'fiber_rows' is the independent variable.
     rows: int = 121
     """The number of lattice nodes in each (vertical) column
     
     :Units: nodes
     :Fortran: F"""
-    
+
     fiber_rows: int = field(init=False)
     """The number of rows containing fibrin
     
     :Units: nodes
     :Fortran: Fhat"""
-    
+
     empty_rows: int = 29 - 1
     """The number of fibrin-free rows at the top of the grid.
     
@@ -487,7 +496,7 @@ class MacroParameters:
     #####################################
     # Experimental Parameters
     #####################################
-    
+
     micro_params: MicroParameters = None
     """The parameters from the matching microscale model.
     
@@ -627,7 +636,7 @@ class MacroParameters:
         # A full row of 'right' and 'out' edges is two per node, except the
         # last node which has no 'right' edge.
         object.__setattr__(self, "xz_row", 2 * self.cols - 1)
-        
+
         # The number of fiber rows is the total rows minus the empty ones
         object.__setattr__(self, "fiber_rows", self.rows - self.empty_rows)
 
@@ -652,7 +661,7 @@ class MacroParameters:
         # index of the first fiber row.
         # The total edges in this region is one full row of edges for each row
         object.__setattr__(self, "last_empty_edge", self.full_row * self.empty_rows - 1)
-        
+
         # Set the microscale runs from the microscale parameters
         object.__setattr__(self, "microscale_runs", self.micro_params.simulations)
 
@@ -695,7 +704,7 @@ class MacroParameters:
             if match[1] != "None":
                 names[match[0]] = match[1]
         return names
-    
+
     @staticmethod
     def units():
         text = pkgutil.get_data(__name__, "parameters.py")
