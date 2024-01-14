@@ -296,10 +296,23 @@ class MicroParameters:
     #####################################
     # Physical Parameters
     #####################################
+    
+    fiber_radius: int = 0.0365
+    """The radius of each fiber in the model.
+    
+    :Units: microns
+    :Fortran: radius"""
 
     #####################################
     # Model Parameters
     #####################################
+    
+    nodes_in_row: int = 7
+    """The number of protofibrils in one row of the lattice inside one
+    fiber.
+    
+    :Units: nodes
+    :Fortran: nodes"""
 
     #####################################
     # Experimental Parameters
@@ -360,6 +373,7 @@ class MacroParameters:
     :Units: (micromolar*sec)^-1
     :Fortran: kon"""
 
+    # TODO(bpaynter): Change to nm (or something standardized)
     pore_size: float = 1.0135e-4
     """Pore size (distance between fibers/nodes)
     
@@ -389,15 +403,13 @@ class MacroParameters:
     # TODO(bpaynter): This value should derive from MicroParameters
     # TODO(bpaynter): Rename to average_bound_time
     average_bind_time: float = 27.8
-    """this is the average time a tPA molecule stays bound to fibrin. 
+    """This is the average time a tPA molecule stays bound to fibrin. 
     For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
     
     :Units: seconds
     :Fortran: avgwait = 1/koff"""
 
-    # TODO(bpaynter): This value should derive from pore_size and
-    #                   MicroParameters['fiber_diameter']
-    grid_node_distance: float = 1.0862
+    grid_node_distance: float = field(init=False)
     """Distance from the start of one fiber to the next because distance 
     between nodes is 1.0135 micron and diameter of one fiber is 0.0727 micron.
     
@@ -505,10 +517,10 @@ class MacroParameters:
 
     # TODO(bpaynter): This value should derive from MicroParameters
     microscale_runs: int = field(init=False)
-    """The number of independent trials run in the microscale model.
+    """The number of independent simulations run in the microscale model.
     
     :Units: trials
-    :Fortran: nummicro"""
+    :Fortran: nummicro*100"""
 
     simulations: int = 10
     """The number of independent simulations to be run
@@ -664,6 +676,13 @@ class MacroParameters:
 
         # Set the microscale runs from the microscale parameters
         object.__setattr__(self, "microscale_runs", self.micro_params.simulations)
+        
+        # The grid_node_distance is the pore size (converted to microns)
+        # plus two times the fiber radius from the microscale parameters
+        object.__setattr__(
+            self, "grid_node_distance", 
+            self.pore_size*10^4 + 2*self.micro_params.fiber_radius
+        )
 
         # Equation (2.4) page 25 from Bannish, et. al. 2014
         # https://doi.org/10.1093/imammb/dqs029

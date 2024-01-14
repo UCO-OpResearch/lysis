@@ -61,6 +61,8 @@ class FortranMacro:
             if key in fortran_names and params[key] != sig.parameters[key].default:
                 if fortran_names[key][-2:] == "-1":
                     arguments += ["--" + fortran_names[key][:-2], str(params[key] + 1)]
+                elif fortran_names[key][-4:] == "*100":
+                    arguments += ["--" + fortran_names[key][:-4], str(params[key] // 100)]
                 else:
                     arguments += ["--" + fortran_names[key], str(params[key])]
         return [self.executable] + arguments

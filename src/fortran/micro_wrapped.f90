@@ -1,42 +1,47 @@
 program micromodel
 
+!! BRAD 2024-01-13: This code has been modified in the following ways:
+!!                  - Data folder is relative to git repository root
+!!                  - Data is stored in subfolders based on expCode
+!!                  - Data file codes are now set globally from the (in/out)FileCode variables
+
 implicit none
-character(15) :: expCode = '2024-01-13-0707'
-character(6)  :: inFileCode = 'Q4.dat'
-character(40)   :: outFileCode = 'PLG2_tPA01_Q4.dat'
+character(15) :: expCode = '2024-01-13-0708'
+character(6)  :: inFileCode = 'Q2.dat'
+character(40)   :: outFileCode = 'PLG2_tPA01_Q2.dat'
 !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
 !!!! Lines 19-25 allow you to set the various dissociation constants, binding rates, and the concentration of free PLG
 !!!! This code treats degradation and exposure in the gillespie algorithm, rather than separately with 
 !!!! a degradation timer. It also allows PLi to degrade any exposed doublet at the same binding location, and 
 !!!! tPA to convert any PLG on the same binding location to PLi.
 
-integer, parameter  :: nodes = 13 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 5 for Q1 (57.4 nm), 7 for Q2 (72.7 nm), 8 for Q3 (81.3 nm), 13 for Q4 (145.4 nm)
-integer, parameter  :: Nplginit=1 !number of exposed doublets initially - i.e. intact doublets - at each spatial location
+integer  :: nodes = 7 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 5 for Q1 (57.4 nm), 7 for Q2 (72.7 nm), 8 for Q3 (81.3 nm), 13 for Q4 (145.4 nm)
+integer, parameter :: Nplginit=1 !number of exposed doublets initially - i.e. intact doublets - at each spatial location
 integer, parameter  :: Ninit=5*Nplginit !number of cryptic doublets at each spatial location
 integer, parameter  :: Ntot=Ninit+Nplginit !total number of doublets at each spatial location
-integer, parameter  :: runs=50000 !How many independent simulations to run of the microscale model
+integer  :: runs=50000 !How many independent simulations to run of the microscale model
 integer, parameter  :: sV=26  !number of reactions, i.e. size of V
 integer          :: stats
 
 !Define the Kd's and on rates that will be used in the given run. These will be used to help define the off rates later.
-double precision, parameter  :: KdtPAyesplg = 0.02 !0.02 !units uM, tPA Kd in presence of PLG
-double precision, parameter  :: KdtPAnoplg = 0.36 !0.36 !units uM, tPA Kd in absence of PLG
-double precision, parameter  :: KdPLGintact = 38 !10 !units uM, PLG Kd to intact fibrin !38 in original model
-double precision, parameter  :: KdPLGnicked = 2.2 !1 !units uM, PLG Kd to nicked fibrin !2.2 in original model
-double precision, parameter  :: ktPAon = 0.1 !0.1 !units 1/(uM*s), tPA binding rate to fibrin !0.01 in original model
-double precision, parameter  :: kplgon = 0.1 !units 1/(uM*s), PLG bindind rate to fibrin
-double precision, parameter  :: freeplg = 2 !1.5 !units uM, concentration of free PLG
+double precision  :: KdtPAyesplg = 0.02 !0.02 !units uM, tPA Kd in presence of PLG
+double precision  :: KdtPAnoplg = 0.36 !0.36 !units uM, tPA Kd in absence of PLG
+double precision  :: KdPLGintact = 38 !10 !units uM, PLG Kd to intact fibrin !38 in original model
+double precision  :: KdPLGnicked = 2.2 !1 !units uM, PLG Kd to nicked fibrin !2.2 in original model
+double precision  :: ktPAon = 0.1 !0.1 !units 1/(uM*s), tPA binding rate to fibrin !0.01 in original model
+double precision  :: kplgon = 0.1 !units 1/(uM*s), PLG bindind rate to fibrin
+double precision  :: freeplg = 2 !1.5 !units uM, concentration of free PLG
 
 !double precision  :: prob_N02
 !double precision  :: prob_N00
 !double precision  :: prob_N22
-double precision  :: radius
+double precision  :: radius = 0.0365
 double precision, dimension(11,2)  :: param  !matrix that holds all the various parameter values we can use
 
-integer, dimension(Ntot,nodes**2)  :: state, statetemp !matrices to save the state of each doublet. There are 6 doublets at each node, and nodes^2 total nodes. recall: in fortran, columns are listed 1st, rows 2nd
-double precision, dimension(nodes)  :: init_state, cumsuminit
+integer, dimension(:,:), allocatable  :: state, statetemp !matrices to save the state of each doublet. There are 6 doublets at each node, and nodes^2 total nodes. recall: in fortran, columns are listed 1st, rows 2nd
+double precision, dimension(:), allocatable  :: init_state, cumsuminit
 integer  :: init_entry
-integer, dimension(nodes**2,nodes**2)  :: Lat !matrix of the connections between nodes. For instance, if node 1 is not a direct neighbor of node 6, then there would be a 0 in the (1,6) and (6,1) entries of Lat
+integer, dimension(:,:), allocatable  :: Lat !matrix of the connections between nodes. For instance, if node 1 is not a direct neighbor of node 6, then there would be a 0 in the (1,6) and (6,1) entries of Lat
 !! BRAD 2024-01-13:
 ! integer, dimension(nodes**2,nodes**2)  :: Lat_temp !matrix of the connections between nodes. For instance, if node 1 is not a direct neighbor of node 6, then there would be a 0 in the (1,6) and (6,1) entries of Lat
 
@@ -86,8 +91,8 @@ integer, dimension(1000000)  :: undegrade_new
 integer, dimension(1000000)  :: PLi_loc
 integer  :: temp
 
-integer, dimension(nodes**2,nodes**2)  :: num_degrade !I don't think this gets used anymore
-integer, dimension(nodes**2,nodes**2)  :: num_undegrade !I don't think this gets used anymore
+! integer, dimension(nodes**2,nodes**2)  :: num_degrade !I don't think this gets used anymore
+! integer, dimension(nodes**2,nodes**2)  :: num_undegrade !I don't think this gets used anymore
 double precision  :: tnext
 double precision  :: D
 double precision  :: vol3
@@ -168,15 +173,15 @@ integer  :: statetype
 integer, dimension(1000000)  :: reaction
 double precision  :: randPLi, rmpt
 
-integer, dimension(nodes**2*Ntot)  :: row2, col2
+integer, dimension(:), allocatable  :: row2, col2
 integer, dimension(2)  :: rowtPA, coltPA
-double precision, dimension(runs)  :: lysis_time
-double precision, dimension(runs)  :: tPA_time
-integer, dimension(runs)  :: tPAunbind, tPAPLiunbd, ltPA
-integer, dimension(runs)  :: Plasmin
-integer, dimension(runs)  :: max_Plg
-integer, dimension(runs)  :: lysiscomplete
-integer, dimension(runs)  :: countvect, PLGbd, PLGunbd
+double precision, dimension(:), allocatable  :: lysis_time
+double precision, dimension(:), allocatable  :: tPA_time
+integer, dimension(:), allocatable  :: tPAunbind, tPAPLiunbd, ltPA
+integer, dimension(:), allocatable  :: Plasmin
+integer, dimension(:), allocatable  :: max_Plg
+integer, dimension(:), allocatable  :: lysiscomplete
+integer, dimension(:), allocatable  :: countvect, PLGbd, PLGunbd
 double precision, dimension(100) :: PLitime
 integer  :: numN, numP1, numP1b, numP2, numP6, qconvert, colPLG, colPLGb, colPLGfind, ntest
 double precision, dimension(4) :: probnumP, cumprobnumP
@@ -189,7 +194,7 @@ integer  :: Nsave, Ninteger
 double precision, dimension(96)  :: tsave, persave !96 because I save every percent from 0 to 95
 
 integer :: countfp
-double precision, dimension(runs) :: firstPLi
+double precision, dimension(:), allocatable :: firstPLi
 
 integer  :: PLGbind,PLGunbind
 
@@ -283,8 +288,117 @@ character(80) :: fpfile
 !stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
 !is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
 external :: mscw, kiss32, urcw1
-integer :: kiss32, mscw, seed, stater(4), old_stater(4), ui
+integer :: seed = 981681759
+integer :: kiss32, mscw, stater(4), old_stater(4), ui
 double precision :: uf, urcw1
+
+
+
+
+!! BRAD 2024-01-13:
+
+integer :: cmd_count, param_i, param_len, param_val_len, cmd_status, io_status
+character(80) :: param_name, param_value
+
+cmd_count = command_argument_count ()
+write (*,*) 'number of command arguments = ', cmd_count
+
+param_i = 0
+do while (param_i<cmd_count)
+    param_i = param_i+1
+    call get_command_argument (param_i, param_name, param_len, cmd_status)
+    if (cmd_status .ne. 0) then
+        write (*,*) ' get_command_argument failed: status = ', cmd_status, ' arg = ', param_i
+        stop
+    end if
+    write (*,*) 'command arg ', param_i, ' = ', param_name (1:param_len)
+    param_i = param_i+1
+    call get_command_argument (param_i, param_value, param_val_len, cmd_status)
+    if (cmd_status .ne. 0) then
+        write (*,*) ' get_command_argument failed: status = ', cmd_status, ' arg = ', param_i
+        stop
+    end if
+    write (*,*) 'command arg ', param_i, ' = ', param_value (1:param_val_len)
+    select case (param_name(3:param_len))
+        case('expCode')
+            expCode = param_value (1:param_val_len)
+            write (*,*) 'Setting expCode = ', expCode
+        case ('inFileCode')
+            inFileCode = param_value (1:param_val_len)
+            write (*,*) 'Setting inFileCode = ', inFileCode
+        case ('outFileCode')
+            outFileCode = param_value (1:param_val_len)
+            write (*,*) 'Setting outFileCode = ', outFileCode
+        case ('nodes')
+            read(param_value,*,iostat=io_status)  nodes
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting nodes = ', nodes
+        case ('runs')
+            read(param_value,*,iostat=io_status)  runs
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting runs = ', runs
+        case ('radius')
+            read(param_value,*,iostat=io_status)  radius
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting radius = ', radius
+        case ('seed')
+            read(param_value,*,iostat=io_status)  seed
+            if (io_status .ne. 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting seed = ', seed
+        case default
+            write (*,*) 'Unrecognized parameter'
+            stop
+    end select
+end do
+
+write (*,*) 'command line processed'
+
+allocate(state(Ntot,nodes**2))
+allocate(statetemp(Ntot,nodes**2))
+allocate(init_state(nodes))
+allocate(cumsuminit(nodes))
+allocate(Lat(nodes**2,nodes**2))
+allocate(row2(nodes**2*Ntot))
+allocate(col2(nodes**2*Ntot))
+allocate(lysis_time(runs))
+allocate(tPA_time(runs))
+allocate(tPAunbind(runs))
+allocate(tPAPLiunbd(runs))
+allocate(ltPA(runs))
+allocate(Plasmin(runs))
+allocate(max_Plg(runs))
+allocate(lysiscomplete(runs))
+allocate(countvect(runs))
+allocate(PLGbd(runs))
+allocate(PLGunbd(runs))
+allocate(firstPLi(runs))
+
+
+
+!! BRAD 2024-01-13:
+do i = 1, nodes
+    do j = 1, nodes
+        Lat((i-1)*nodes + j, (i-1)*nodes + j) = 1 ! Put a 1 along the diagonal for (i, j) to itself
+        if (i/=1) Lat((i-1)*nodes + j, (i-2)*nodes + j) = 1 ! UP ! Put a 1 from (i, j) to (i-1, j)
+        if (j/=1) Lat((i-1)*nodes + j, (i-1)*nodes + j-1) = 1 ! RIGHT ! Put a 1 from (i, j) to (i, j-1)
+        if (i/=nodes) Lat((i-1)*nodes + j, (i)*nodes + j) = 1 ! DOWN ! Put a 1 from (i, j) to (i+1, j)
+        if (j/=nodes) Lat((i-1)*nodes + j, (i-1)*nodes + j+1) = 1 ! LEFT ! Put a 1 from (i, j) to (i+1, j)
+    end do
+end do
+
+!! END BRAD
 
   if( isBinary ) then
      !filetype = 'unformatted' !if you compile with gfortran or f95
@@ -299,8 +413,11 @@ double precision :: uf, urcw1
 
      uf = urcw1()
 
-     !seed = mscw() !randomly generate seed
-     seed=-34041038
+!! BRAD 2024-01-13:
+    if (seed == 0) seed = mscw()
+
+!     seed = mscw() !randomly generate seed
+!     seed=-34041038
      write(*,*),' seed=',seed
 
       stater(1) = 129281
@@ -313,67 +430,9 @@ double precision :: uf, urcw1
       !call vurcw1(rvect,M)
 
 
-      pi = ACOS(-1.0)
-      ones = 1
-
-
- if(nodes==5) then
-     radius=0.02875      !radius of fiber, in microns, with diameter 57.5 nm
-     !!!Read in LatQ1 matrix that I generated in matlab - this is matrix of connectivities
-!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-!     do i=1,nodes**2
-!        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-!     enddo
-!     close(1)
- elseif(nodes==7) then
-     radius=0.03635        !radius of fiber, in microns, with diameter 72.7 nm
-     !!!Read in LatQ2 matrix that I generated in matlab - this is matrix of connectivities
-!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-!     do i=1,nodes**2
-!     READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-!     enddo
-!     close(1)
- elseif(nodes==8) then
-     radius=0.04065        !radius of fiber, in microns, with diameter 81.3 nm
-     !!!Read in LatQ3 matrix that I generated in matlab - this is matrix of connectivities
-!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-!     do i=1,nodes**2
-!        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-!     enddo
-!     close(1)
-!! BRAD 2024-01-13:
- elseif(nodes==13) then
-     radius=0.0727        !radius of fiber, in microns, with diameter 145.4 nm
-     !!!Read in LatQ4 matrix that I generated in matlab - this is matrix of connectivities
-!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-!     do i=1,nodes**2
-!        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-!     enddo
-!     close(1)
- else 
-     write(*,*)' problem with node number. recalculate radius'
- end if
-
-!! BRAD 2024-01-13:
-!Lat_temp = 0
-do i = 1, nodes
-    do j = 1, nodes
-        Lat((i-1)*nodes + j, (i-1)*nodes + j) = 1 ! Put a 1 along the diagonal for (i, j) to itself
-        if (i/=1) Lat((i-1)*nodes + j, (i-2)*nodes + j) = 1 ! UP ! Put a 1 from (i, j) to (i-1, j)
-        if (j/=1) Lat((i-1)*nodes + j, (i-1)*nodes + j-1) = 1 ! RIGHT ! Put a 1 from (i, j) to (i, j-1)
-        if (i/=nodes) Lat((i-1)*nodes + j, (i)*nodes + j) = 1 ! DOWN ! Put a 1 from (i, j) to (i+1, j)
-        if (j/=nodes) Lat((i-1)*nodes + j, (i-1)*nodes + j+1) = 1 ! LEFT ! Put a 1 from (i, j) to (i+1, j)
-    end do
-end do
-
-!do i = 1, nodes**2
-!    do ii = 1, nodes**2
-!        if (Lat(i, ii) /= Lat_temp(i, ii)) error stop
-!    end do
-!end do
-
-  Tdoublets=Ntot*nodes**2   !total number of doublets in system
-
+Tdoublets=Ntot*nodes**2   !total number of doublets in system
+pi = ACOS(-1.0)
+ones = 1
 
   write(*,*),'nodes=',nodes
   write(*,*),'KdtPAnoplg=',KdtPAnoplg
@@ -661,9 +720,9 @@ prob_N22n = 0.5*freeplg/(KdPLGnicked*(1+(0.5*KdPLGnicked/freeplg)+(0.5*freeplg/K
 
   PLG(1) = countstate+(prob_N02i+2*prob_N22i)*countstate2 !the initial amount of PLG = (amount in states N12 and N23) + (amount in state Nplg)*(probability the doublet was N02 or N22)
   degrade_tot(1)=0          !we initially start with no degraded doublets
-  num_degrade=0
-  num_undegrade=0 !don't think this gets used anymore
-  num_undegrade(1,1:nodes**2)=Nplginit !don't think this gets used anymore
+!  num_degrade=0
+!  num_undegrade=0 !don't think this gets used anymore
+!  num_undegrade(1,1:nodes**2)=Nplginit !don't think this gets used anymore
   percent_degrade(1) = 0 !vector that saves the percentage of doublets that have been degraded at each time step
 
   D=10**(7)             !diffusion coefficient in units of nm^2/s
