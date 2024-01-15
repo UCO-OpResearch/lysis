@@ -31,9 +31,12 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, List, Mapping, Tuple, Union
 
-from .constants import default_filenames, ExpComponent
+from pint import Quantity
+
+from .constants import default_filenames, ExpComponent, ureg, Q_
 from .datastore import DataStore, DataStatus
 from .util import dict_to_formatted_str
+
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2024, Brittany Bannish"
@@ -177,9 +180,9 @@ class Experiment(object):
         else:
             self.macro_params = MacroParameters(micro_params=self.micro_params)
 
-        for data in self.macro_params.input_data:
-            if DataStatus.INITIALIZED not in self.data.status(data):
-                raise RuntimeError(f"'{data}' not initialized in DataStore.")
+        # for data in self.macro_params.input_data:
+        #     if DataStatus.INITIALIZED not in self.data.status(data):
+        #         raise RuntimeError(f"'{data}' not initialized in DataStore.")
 
     def to_dict(self) -> dict:
         """Returns the internally stored data as a dictionary.
@@ -315,110 +318,140 @@ class MicroParameters:
     # Physical Parameters
     #####################################
 
-    fiber_radius: int = 0.0365
+    fibrinogen_length: Quantity = Q_("45 nanometers")
+    """The length of a fibronogen molecule.
+    
+    :Units: microns
+    :Fortran: None"""
+
+    fibrinogen_radius: Quantity = Q_("5 nanometers")
+    """The radius of a fibronogen molecule.
+    
+    :Units: microns
+    :Fortran: None"""
+
+    fiber_radius: Quantity = Q_("72.7/2 nanometers")
     """The radius of each fiber in the model.
     
     :Units: microns
     :Fortran: radius"""
 
-    diss_const_tPA_wPLG: float = 0.02
+    protofibril_radius: Quantity = Q_("2.4 nanometers")
+    """The radius of a protofibril.
+    
+    :Units: microns
+    :Fortran: None"""
+
+    diss_const_tPA_wPLG: Quantity = Q_("0.02 micromolar")
     """The dissociation constant of tPA, :math:`k^D_\\text{tPA}`, to fibrin 
     in the presence of PLG.
     
     :Units: micromolar
     :Fortran: KdtPAyesplg"""
 
-    diss_const_tPA_woPLG: float = 0.36
+    diss_const_tPA_woPLG: Quantity = Q_("0.36 micromolar")
     """The dissociation constant of tPA, :math:`k^D_\\text{tPA}`, to fibrin
     in the absence of PLG.
 
     :Units: micromolar
     :Fortran: KdtPAnoplg"""
 
-    diss_const_PLG_intact: float = 38
+    diss_const_PLG_intact: Quantity = Q_("38 micromolar")
     """The dissociation constant of PLG, :math:`k^D_\\text{PLG}`, to intact fibrin.
 
     :Units: micromolar
     :Fortran: KdPLGintact"""
 
-    diss_const_PLG_nicked: float = 2.2
+    diss_const_PLG_nicked: Quantity = Q_("2.2 micromolar")
     """The dissociation constant of PLG, :math:`k^D_\\text{PLG}`, to nicked fibrin.
 
     :Units: micromolar
     :Fortran: KdPLGnicked"""
 
-    bind_rate_tPA: float = 0.1
+    bind_rate_tPA: Quantity = Q_("0.1 (micromolar*sec)^-1")
     """The binding rate of tPA, :math:`k^\\text{on}_\\text{tPA}`, to fibrin.
 
-    :Units: micromolar
+    :Units: (micromolar*sec)^-1
     :Fortran: ktPAon"""
 
-    bind_rate_PLG: float = 0.1
+    bind_rate_PLG: Quantity = Q_("0.1 (micromolar*sec)^-1")
     """The binding rate of PLG, :math:`k^\\text{on}_\\text{PLG}`, to fibrin.
 
-    :Units: micromolar
+    :Units: (micromolar*sec)^-1
     :Fortran: kPLGon"""
 
-    conc_free_PLG: float = 2
+    conc_free_PLG: Quantity = Q_("2 micromolar")
     """The concentration of free plasminogen.
     
     :Units: micromolar
     :Fortran: freeplg"""
 
-    deg_rate_fibrin: float = 5
+    deg_rate_fibrin: Quantity = Q_("5 sec^-1")
     """The plasmin-mediated rate of fibrin degradation.
     
     :Units: sec^-1
     :Fortran: kdeg"""
 
-    unbind_rate_PLG_intact: float = field(init=False)
+    unbind_rate_PLG_intact: Quantity = field(init=False)
     """The unbinding rate of PLG, :math:`k^\\text{off}_\\text{PLG}`, 
     from intact fibrin.
 
     :Units: sec^-1
     :Fortran: kplgoff"""
 
-    unbind_rate_PLG_nicked: float = field(init=False)
+    unbind_rate_PLG_nicked: Quantity = field(init=False)
     """The unbinding rate of PLG, :math:`k^\\text{off}_\\text{PLG}`, 
     from nicked fibrin.
 
-    :Units: (micromolar*sec)^-1
+    :Units: sec^-1
     :Fortran: kplgoffnick"""
 
-    unbind_rate_PLi: float = 57.6
+    unbind_rate_PLi: Quantity = Q_("57.6 sec^-1")
     """The unbinding rate of PLi, :math:`k^\\text{off}_\\text{PLi}`, 
     from fibrin.
 
     :Units: sec^-1
     :Fortran: kplioff"""
 
-    unbind_rate_tPA_wPLG: float = field(init=False)
+    unbind_rate_tPA_wPLG: Quantity = field(init=False)
     """The unbinding rate of tPA, :math:`k^\\text{off}_\\text{tPA}`, 
     from fibrin in the presence of PLG.
 
     :Units: sec^-1
     :Fortran: kaoff12"""
 
-    unbind_rate_tPA_woPLG: float = field(init=False)
+    unbind_rate_tPA_woPLG: Quantity = field(init=False)
     """The unbinding rate of tPA, :math:`k^\\text{off}_\\text{tPA}`, 
     from fibrin in the absence of PLG.
 
     :Units: sec^-1
     :Fortran: kaoff10"""
 
-    activation_rate_PLG: float = 0.1
+    activation_rate_PLG: Quantity = Q_("0.1 sec^-1")
     """The catalytic rate constant, :math:`k_\\text{cat}^\\text{ap}`, 
     for activation of PLG into PLI.
     
     :Units: sec^-1
     :Fortran: kapcat"""
 
-    exposure_rate_binding_site: float = 5
+    exposure_rate_binding_site: Quantity = Q_("5 sec^-1")
     """The catalytic rate constant, :math:`k_\\text{cat}^\\text{n}`, 
     for the PLi-mediated rate of exposure of new binding sites.
 
     :Units: sec^-1
     :Fortran: kncat"""
+
+    protein_per_fiber: Quantity = field(init=False)
+    """The fraction of protein in each fiber (by volume?)
+    
+    :Units: %
+    :Fortran: None"""
+
+    fibrin_conc_per_fiber: Quantity = field(init=False)
+    """The concentration of fibrin in each fiber
+
+    :Units: micromolar
+    :Fortran: None"""
 
     #####################################
     # Model Parameters
@@ -501,6 +534,33 @@ class MicroParameters:
             self.bind_rate_tPA * self.diss_const_tPA_woPLG,
         )
 
+        # The fraction of fiber which is protein
+        # Equation on page S2 from Bannish, et. al. 2017
+        # https://doi.org/10.1038/s41598-017-06383-w
+        object.__setattr__(
+            self,
+            "protein_per_fiber",
+            (
+                self.nodes_in_row**2
+                / (self.fibrinogen_length / 2 * ureg.pi * self.fiber_radius**2)
+                * (self.fibrinogen_length / 2)
+                * (ureg.pi * self.protofibril_radius**2)
+            ).to("%"),
+        )
+
+        # The fibrin concentration of each fiber
+        # Equation on page S2 from Bannish, et. al. 2017
+        # https://doi.org/10.1038/s41598-017-06383-w
+        object.__setattr__(
+            self,
+            "fibrin_conc_per_fiber",
+            (
+                self.nodes_in_row**2
+                / (self.fibrinogen_length / 2 * ureg.pi * self.fiber_radius**2)
+                / ureg.avogadro_constant
+            ).to("micromolar"),
+        )
+
 
 @dataclass(frozen=True)
 class MacroParameters:
@@ -529,27 +589,25 @@ class MacroParameters:
     # Physical Parameters
     #####################################
 
-    bind_rate_tPA: float = field(init=False)
+    bind_rate_tPA: Quantity = field(init=False)
     """The tPA binding rate.
     
     :Units: (micromolar*sec)^-1
     :Fortran: kon"""
 
-    # TODO(bpaynter): Change to nm (or something standardized)
-    pore_size: float = 1.0135e-4
+    pore_size: Quantity = Q_("1.0135 um")
     """Pore size (distance between fibers/nodes)
     
     :Units: centimeters
     :Fortran: delx"""
 
-    diffusion_coeff: float = 5.0e-7
+    diffusion_coeff: Quantity = Q_("5.0e-7 cm^2/s")
     """Diffusion coefficient
     
     :Units: cm^2/s
     :Fortran: Diff"""
 
-    # TODO(bpaynter): This value should derive from MicroParameters
-    binding_sites: int = 427
+    binding_sites: Quantity = field(init=False)  # int = 427
     """Concentration of binding sites.
      
     :Units: micromolar
@@ -571,7 +629,7 @@ class MacroParameters:
     :Units: seconds
     :Fortran: avgwait = 1/koff"""
 
-    grid_node_distance: float = field(init=False)
+    grid_node_distance: Quantity = field(init=False)
     """Distance from the start of one fiber to the next because distance 
     between nodes is 1.0135 micron and diameter of one fiber is 0.0727 micron.
     
@@ -677,7 +735,6 @@ class MacroParameters:
     :Units: None
     :Fortran: None"""
 
-    # TODO(bpaynter): This value should derive from MicroParameters
     microscale_runs: int = field(init=False)
     """The number of independent simulations run in the microscale model.
     
@@ -690,7 +747,7 @@ class MacroParameters:
     :Units: trials
     :Fortran: stats"""
 
-    total_time: int = 20 * 60
+    total_time: Quantity = Q_("20 min")
     """Total running time for model.
      
     :Units: seconds
@@ -731,7 +788,7 @@ class MacroParameters:
     output_data: List[str] = field(init=False)
     """The data output by the Macroscale model."""
 
-    save_interval: int = 10
+    save_interval: Quantity = Q_("10 sec")
     """How often to record data from the model.
     
     :Units: sec
@@ -807,6 +864,18 @@ class MacroParameters:
         # Get the tPA binding rate from the Microscale parameters
         object.__setattr__(self, "bind_rate_tPA", self.micro_params.bind_rate_tPA)
 
+        # Calculate the concentration of binding sites per fiber
+        # Calculation on page S3 from Bannish, et. al. 2017
+        # https://doi.org/10.1038/s41598-017-06383-w
+        object.__setattr__(
+            self,
+            "binding_sites",
+            4
+            * (self.micro_params.nodes_in_row - 1)
+            / self.micro_params.nodes_in_row**2
+            * self.micro_params.fibrin_conc_per_fiber,
+        )
+
         # A full row of the fiber grid contains a 'right', 'up', and 'out' edge
         # for each node, except the last node which contains no 'right' edge.
         object.__setattr__(self, "full_row", 3 * self.cols - 1)
@@ -848,7 +917,7 @@ class MacroParameters:
         object.__setattr__(
             self,
             "grid_node_distance",
-            self.pore_size * 10**4 + 2 * self.micro_params.fiber_radius,
+            self.pore_size + 2 * self.micro_params.fiber_radius,
         )
 
         # Equation (2.4) page 25 from Bannish, et. al. 2014
@@ -860,7 +929,7 @@ class MacroParameters:
                 self.moving_probability
                 * self.pore_size**2
                 / (12 * self.diffusion_coeff)
-            ),
+            ).to_reduced_units(),
         )
 
         # Total timesteps is total time divided by length of one timestep

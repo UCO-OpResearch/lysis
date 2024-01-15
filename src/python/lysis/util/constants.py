@@ -1,5 +1,8 @@
 from enum import Enum, IntEnum, unique, Flag
 
+from pint import UnitRegistry
+
+
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2023, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
@@ -8,6 +11,9 @@ __version__ = "0.2"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
+
+ureg = UnitRegistry()
+Q_ = ureg.Quantity
 
 default_filenames = {
     ## Microscale Out
@@ -32,14 +38,6 @@ default_filenames = {
 }
 
 ## Molecular constants
-#: Avogadro's number. The number of molecules in one mole
-avogadros_number = 6.023 * 10**23
-#: The length (in microns) of a fibronogen molecule
-fibrinogen_length = 0.045
-#: The radius (in microns) of a fibronogen molecule
-fibrinogen_radius = 0.005
-#: The radius (in microns) of a protofibril
-protofibril_radius = 0.0024
 
 
 class Const:
