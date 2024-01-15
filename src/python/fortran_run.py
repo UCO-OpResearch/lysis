@@ -37,7 +37,7 @@ def main():
     args = parse_arguments()
     e = Experiment(os.path.join(args.cwd, "data"), experiment_code=args.exp_code)
     e.read_file()
-    fort = FortranMacro(
+    fort_macro = FortranMacro(
         exp=e,
         cwd=args.cwd,
         executable=args.executable,
@@ -45,7 +45,7 @@ def main():
         out_file_code=args.out_code,
         index=args.index,
     )
-    fort.run()
+    fort_macro.run()
 
 
 if __name__ == "__main__":
