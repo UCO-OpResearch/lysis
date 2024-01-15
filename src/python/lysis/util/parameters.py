@@ -321,99 +321,99 @@ class MicroParameters:
     :Units: microns
     :Fortran: radius"""
 
-    tPA_diss_const_wPLG: float = 0.02
+    diss_const_tPA_wPLG: float = 0.02
     """The dissociation constant of tPA, :math:`k^D_\\text{tPA}`, to fibrin 
     in the presence of PLG.
     
     :Units: micromolar
     :Fortran: KdtPAyesplg"""
 
-    tPA_diss_const_woPLG: float = 0.36
+    diss_const_tPA_woPLG: float = 0.36
     """The dissociation constant of tPA, :math:`k^D_\\text{tPA}`, to fibrin
     in the absence of PLG.
 
     :Units: micromolar
     :Fortran: KdtPAnoplg"""
 
-    PLG_diss_const_intact: float = 38
+    diss_const_PLG_intact: float = 38
     """The dissociation constant of PLG, :math:`k^D_\\text{PLG}`, to intact fibrin.
 
     :Units: micromolar
     :Fortran: KdPLGintact"""
 
-    PLG_diss_const_nicked: float = 2.2
+    diss_const_PLG_nicked: float = 2.2
     """The dissociation constant of PLG, :math:`k^D_\\text{PLG}`, to nicked fibrin.
 
     :Units: micromolar
     :Fortran: KdPLGnicked"""
 
-    tPA_bind_rate: float = 0.1
+    bind_rate_tPA: float = 0.1
     """The binding rate of tPA, :math:`k^\\text{on}_\\text{tPA}`, to fibrin.
 
     :Units: micromolar
     :Fortran: ktPAon"""
 
-    PLG_bind_rate: float = 0.1
+    bind_rate_PLG: float = 0.1
     """The binding rate of PLG, :math:`k^\\text{on}_\\text{PLG}`, to fibrin.
 
     :Units: micromolar
     :Fortran: kPLGon"""
 
-    free_PLG_conc: float = 2
+    conc_free_PLG: float = 2
     """The concentration of free plasminogen.
     
     :Units: micromolar
     :Fortran: freeplg"""
 
-    fibrin_deg_rate: float = 5
+    deg_rate_fibrin: float = 5
     """The plasmin-mediated rate of fibrin degradation.
     
     :Units: sec^-1
     :Fortran: kdeg"""
 
-    PLG_unbind_rate_intact: float = field(init=False)
+    unbind_rate_PLG_intact: float = field(init=False)
     """The unbinding rate of PLG, :math:`k^\\text{off}_\\text{PLG}`, 
     from intact fibrin.
 
     :Units: sec^-1
     :Fortran: kplgoff"""
 
-    PLG_unbind_rate_nicked: float = field(init=False)
+    unbind_rate_PLG_nicked: float = field(init=False)
     """The unbinding rate of PLG, :math:`k^\\text{off}_\\text{PLG}`, 
     from nicked fibrin.
 
     :Units: (micromolar*sec)^-1
     :Fortran: kplgoffnick"""
 
-    PLi_unbind_rate: float = 57.6
+    unbind_rate_PLi: float = 57.6
     """The unbinding rate of PLi, :math:`k^\\text{off}_\\text{PLi}`, 
     from fibrin.
 
     :Units: sec^-1
     :Fortran: kplioff"""
 
-    tPA_unbind_rate_wPLG: float = field(init=False)
+    unbind_rate_tPA_wPLG: float = field(init=False)
     """The unbinding rate of tPA, :math:`k^\\text{off}_\\text{tPA}`, 
     from fibrin in the presence of PLG.
 
     :Units: sec^-1
     :Fortran: kaoff12"""
 
-    tPA_unbind_rate_woPLG: float = field(init=False)
+    unbind_rate_tPA_woPLG: float = field(init=False)
     """The unbinding rate of tPA, :math:`k^\\text{off}_\\text{tPA}`, 
     from fibrin in the absence of PLG.
 
     :Units: sec^-1
     :Fortran: kaoff10"""
 
-    PLG_activation_rate: float = 0.1
+    activation_rate_PLG: float = 0.1
     """The catalytic rate constant, :math:`k_\\text{cat}^\\text{ap}`, 
     for activation of PLG into PLI.
     
     :Units: sec^-1
     :Fortran: kapcat"""
 
-    binding_site_exposure_rate: float = 5
+    exposure_rate_binding_site: float = 5
     """The catalytic rate constant, :math:`k_\\text{cat}^\\text{n}`, 
     for the PLi-mediated rate of exposure of new binding sites.
 
@@ -454,7 +454,7 @@ class MicroParameters:
 
     def __post_init__(self):
         """This method calculates the dependent parameters once the
-        MacroParameters object is created. It is automatically called by the
+        MicroParameters object is created. It is automatically called by the
         DataClass.__init__()"""
 
         # These names must be elements of the Experiment's DataStore
@@ -472,7 +472,34 @@ class MicroParameters:
                 "first_PLi",  # Fortran: firstPLi
             ],
         )
-        pass
+
+        # The dissociation constant is the unbinding rate over the binding rate
+        object.__setattr__(
+            self,
+            "unbind_rate_PLG_intact",
+            self.bind_rate_PLG * self.diss_const_PLG_intact,
+        )
+
+        # The dissociation constant is the unbinding rate over the binding rate
+        object.__setattr__(
+            self,
+            "unbind_rate_PLG_nicked",
+            self.bind_rate_PLG * self.diss_const_PLG_nicked,
+        )
+
+        # The dissociation constant is the unbinding rate over the binding rate
+        object.__setattr__(
+            self,
+            "unbind_rate_tPA_wPLG",
+            self.bind_rate_tPA * self.diss_const_tPA_wPLG,
+        )
+
+        # The dissociation constant is the unbinding rate over the binding rate
+        object.__setattr__(
+            self,
+            "unbind_rate_tPA_woPLG",
+            self.bind_rate_tPA * self.diss_const_tPA_woPLG,
+        )
 
 
 @dataclass(frozen=True)
@@ -502,8 +529,7 @@ class MacroParameters:
     # Physical Parameters
     #####################################
 
-    # TODO(bpaynter): This value should derive from MicroParameters
-    binding_rate: float = 0.1
+    bind_rate_tPA: float = field(init=False)
     """The tPA binding rate.
     
     :Units: (micromolar*sec)^-1
@@ -777,6 +803,10 @@ class MacroParameters:
                 "save_time",  # Fortran: tsave
             ],
         )
+
+        # Get the tPA binding rate from the Microscale parameters
+        object.__setattr__(self, "bind_rate_tPA", self.micro_params.bind_rate_tPA)
+
         # A full row of the fiber grid contains a 'right', 'up', and 'out' edge
         # for each node, except the last node which contains no 'right' edge.
         object.__setattr__(self, "full_row", 3 * self.cols - 1)

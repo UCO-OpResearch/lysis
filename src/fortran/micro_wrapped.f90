@@ -6,7 +6,7 @@ program micromodel
 !!                  - Data file codes are now set globally from the (in/out)FileCode variables
 
 implicit none
-character(15) :: expCode = '2024-01-13-0709'
+character(15) :: expCode = '2024-01-13-0710'
 character(6)  :: inFileCode = 'Q2.dat'
 character(40)   :: outFileCode = 'PLG2_tPA01_Q2.dat'
 !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
@@ -316,14 +316,14 @@ param_i = 0
 do while (param_i<cmd_count)
     param_i = param_i+1
     call get_command_argument (param_i, param_name, param_len, cmd_status)
-    if (cmd_status .ne. 0) then
+    if (cmd_status /= 0) then
         write (*,*) ' get_command_argument failed: status = ', cmd_status, ' arg = ', param_i
         stop
     end if
     write (*,*) 'command arg ', param_i, ' = ', param_name (1:param_len)
     param_i = param_i+1
     call get_command_argument (param_i, param_value, param_val_len, cmd_status)
-    if (cmd_status .ne. 0) then
+    if (cmd_status /= 0) then
         write (*,*) ' get_command_argument failed: status = ', cmd_status, ' arg = ', param_i
         stop
     end if
@@ -340,35 +340,105 @@ do while (param_i<cmd_count)
             write (*,*) 'Setting outFileCode = ', outFileCode
         case ('nodes')
             read(param_value,*,iostat=io_status)  nodes
-            if (io_status .ne. 0) then
+            if (io_status /= 0) then
                 write (*,*) 'String conversion error'
                 stop
             end if
             write (*,*) 'Setting nodes = ', nodes
         case ('runs')
             read(param_value,*,iostat=io_status)  runs
-            if (io_status .ne. 0) then
+            if (io_status /= 0) then
                 write (*,*) 'String conversion error'
                 stop
             end if
             write (*,*) 'Setting runs = ', runs
         case ('radius')
             read(param_value,*,iostat=io_status)  radius
-            if (io_status .ne. 0) then
+            if (io_status /= 0) then
                 write (*,*) 'String conversion error'
                 stop
             end if
             write (*,*) 'Setting radius = ', radius
         case ('KdtPAyesplg')
             read(param_value,*,iostat=io_status)  KdtPAyesplg
-            if (io_status .ne. 0) then
+            if (io_status /= 0) then
                 write (*,*) 'String conversion error'
                 stop
             end if
             write (*,*) 'Setting KdtPAyesplg = ', KdtPAyesplg
+        case ('KdtPAnoplg')
+            read(param_value,*,iostat=io_status)  KdtPAnoplg
+            if (io_status /= 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting KdtPAnoplg = ', KdtPAnoplg
+        case ('KdPLGintact')
+            read(param_value,*,iostat=io_status)  KdPLGintact
+            if (io_status /= 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting KdPLGintact = ', KdPLGintact
+        case ('KdPLGnicked')
+            read(param_value,*,iostat=io_status)  KdPLGnicked
+            if (io_status /= 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting KdPLGnicked = ', KdPLGnicked
+        case ('ktPAon')
+            read(param_value,*,iostat=io_status)  ktPAon
+            if (io_status /= 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting ktPAon = ', ktPAon
+        case ('kplgon')
+            read(param_value,*,iostat=io_status)  kplgon
+            if (io_status /= 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting kplgon = ', kplgon
+        case ('freeplg')
+            read(param_value,*,iostat=io_status)  freeplg
+            if (io_status /= 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting freeplg = ', freeplg
+        case ('kdeg')
+            read(param_value,*,iostat=io_status)  kdeg
+            if (io_status /= 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting kdeg = ', kdeg
+        case ('kplioff')
+            read(param_value,*,iostat=io_status)  kplioff
+            if (io_status /= 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting kplioff = ', kplioff
+        case ('kapcat')
+            read(param_value,*,iostat=io_status)  kapcat
+            if (io_status /= 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting kapcat = ', kapcat
+        case ('kncat')
+            read(param_value,*,iostat=io_status)  kncat
+            if (io_status /= 0) then
+                write (*,*) 'String conversion error'
+                stop
+            end if
+            write (*,*) 'Setting kncat = ', kncat
         case ('seed')
             read(param_value,*,iostat=io_status)  seed
-            if (io_status .ne. 0) then
+            if (io_status /= 0) then
                 write (*,*) 'String conversion error'
                 stop
             end if
@@ -401,6 +471,7 @@ allocate(PLGbd(runs))
 allocate(PLGunbd(runs))
 allocate(firstPLi(runs))
 
+! Calculate dependent parameters
 kplgoff = kplgon*KdPLGintact !units 1/s, off rate for intact FB
 kplgoffnick = kplgon*KdPLGnicked !units 1/(s*uM), off rate for nicked FB
 kaoff12 = ktPAon*KdtPAyesplg    !units 1/s, off rate in presence of PLG
@@ -551,10 +622,10 @@ do stats = 1,runs
     tsave=0
 
 
-    if(stats.le.runs) then   !change back to 10000 when I change runs
+    if(stats<=runs) then   !change back to 10000 when I change runs
         !ipar=1 !says if stats<=50000, use the "case 1" parameters defined around line 357
 
-    !elseif(stats.le.20000.and.stats.gt.10000) then
+    !elseif(stats<=20000.and.stats.gt.10000) then
         !ipar=16
     endif
     
@@ -663,7 +734,7 @@ do stats = 1,runs
 
     call cumsum(init_state,nodes,cumsuminit)
     do i=1,nodes
-        if(cumsuminit(i).ge.rin) then
+        if(cumsuminit(i)>=rin) then
             init_entry = i !find the first entry in the cumsum vector that is >= random number, and have this be the doublet tPA starts on
             exit
         end if
@@ -678,7 +749,7 @@ do stats = 1,runs
                  ! less than prob_N02, make state be a 3" even though there's a small chance it is an N22, and therefore tPA
                  ! can't bind...I don't think it's an issue, because in the macroscale model I'm assuming tPA DOES bind, 
                  ! so it must have a site to bind to (i.e., not be N22)
-    if(r.le.prob_N02i) then
+    if(r<=prob_N02i) then
         state(1,init_entry) = 2 !set the state of the doublet to be N12
     else
         state(1,init_entry) = 3 !set the state of the double to be N10
@@ -822,7 +893,7 @@ do stats = 1,runs
 
             !!!uncomment below if tPA can convert any PLG at same binding location
             !if the doublet of interest has a tPA bound (i.e., state is 2, 3, or 4), find the number of PLG molecules on the current binding location
-            if(state(col(i),row(i)).ge.2.and.state(col(i),row(i)).le.4) then
+            if(state(col(i),row(i))>=2.and.state(col(i),row(i))<=4) then
                 call findint(state(:,row(i)),Ntot,2,numP2) !find number of N12
                 call findint(state(2:Ntot,row(i)),Ntot-1,1,numP1) !find number of exposed (or "nicked") Nplg
                 call findint(state(1,row(i)),1,1,numP1b) !find number of intact Nplg
@@ -835,7 +906,7 @@ do stats = 1,runs
             !!!end commentable section
 
             !if the doublet of interest has a PLi bound, find the number of exposed doublets of each type at the current binding location
-            if(state(col(i),row(i)).ge.4.and.state(col(i),row(i)).le.7.or.state(col(i),row(i)).eq.9) then
+            if(state(col(i),row(i))>=4.and.state(col(i),row(i))<=7.or.state(col(i),row(i))==9) then
                 call findint(state(:,row(i)),Ntot,2,n12) !find number of N12
                 call findint(state(:,row(i)),Ntot,3,n10) !find number of N10
                 call findint(state(:,row(i)),Ntot,4,n13) !find number of N13
@@ -902,7 +973,7 @@ do stats = 1,runs
             tau(i) = log(1/r)/asum(i)       !picks the next time an event will occur
             asum(i)=0
             do j=1,sV !loop over all possible reactions and choose the first one for which cumsumaa(j) is bigger than or equal to rin
-                if(cumsumaa(j).ge.rin) then
+                if(cumsumaa(j)>=rin) then
                     bigJ(i)  = j          !picks the next state by choosing which reaction happens next. j should be a number between 1 and 26
                     exit
                 endif
@@ -919,7 +990,7 @@ do stats = 1,runs
 
         !reset the unsused qstates and J's to 0. Reset the used qstate and bigJ to 0 after using them below
         do i=1,A
-            if(i.ne.place) then
+            if(i/=place) then
                 qstate(i,:)=0
                 bigJ(i)=0
             end if
@@ -1143,9 +1214,9 @@ do stats = 1,runs
             PLilocsmall(1)=PLilocation(1,loc)
             PLilocsmall(2)=PLilocation(2,loc)
             do iPLi2=1,countPLi
-                if(PLilocation(1,iPLi2)==PLilocsmall(1).and.PLilocation(2,iPLi2)==PLilocsmall(2).and.iPLi2.ne.loc) then
+                if(PLilocation(1,iPLi2)==PLilocsmall(1).and.PLilocation(2,iPLi2)==PLilocsmall(2).and.iPLi2/=loc) then
                     loc2b=iPLi2
-                    if(loc2b.ne.loc2) then
+                    if(loc2b/=loc2) then
                         write(*,*)'Problem: loc2 and loc2b not the same'
                         write(*,*)'loc2=',loc2
                         write(*,*)'loc2b=',loc2b
@@ -1337,7 +1408,7 @@ do stats = 1,runs
             if(countcurPLi==2) then
                 randPLi=urcw1()
 
-                if(randPLi.le.0.5) then
+                if(randPLi<=0.5) then
                     currentPLi=currentPLib(1)
                 else
                     currentPLi=currentPLib(2)
@@ -1371,7 +1442,7 @@ do stats = 1,runs
             !   end if
             !enddo
             !
-            !if(statetype.ne.4) then
+            !if(statetype/=4) then
             !  write(*,*)'Problem: here the only state should be N13'
             !  write(*,*)'statetype=',statetype
             !end if
@@ -1406,7 +1477,7 @@ do stats = 1,runs
 
             rP=urcw1()
             do j=1,4
-                if(rP.le.cumprobnumP(j)) then
+                if(rP<=cumprobnumP(j)) then
                     colPLGb=j
                     exit
                 end if
@@ -1447,13 +1518,13 @@ do stats = 1,runs
                 !if state of doublet is Nplg, new state is either statetype=6 or statetype=5 figure out which
                 rP=urcw1()
                 if(colPLG==1) then
-                    if(rP.le.prob_N02i/(prob_N02i+prob_N22i)) then
+                    if(rP<=prob_N02i/(prob_N02i+prob_N22i)) then
                         statetype =5
                     else
                         statetype =6
                     end if
                 else
-                    if(rP.le.prob_N02n/(prob_N02n+prob_N22n)) then
+                    if(rP<=prob_N02n/(prob_N02n+prob_N22n)) then
                         statetype =5
                     else
                         statetype =6
@@ -1580,7 +1651,7 @@ do stats = 1,runs
             countstate9=0
             do i=1,Ntot
                 do j=1,nodes**2
-                    if(state(i,j).ge.2.and.state(i,j).le.4) then
+                    if(state(i,j)>=2.and.state(i,j)<=4) then
                         countstate9=countstate9+1
                         rowtPA(countstate9) = j
                     end if
@@ -1597,19 +1668,19 @@ do stats = 1,runs
         countstate13=0
         do i=1,Ntot
             do j=1,nodes**2
-                if(state(i,j).eq.2.or.state(i,j).eq.6) countstate13=countstate13+1
+                if(state(i,j)==2.or.state(i,j)==6) countstate13=countstate13+1
             end do
         end do
 
         countstate14=0
         do j=1,nodes**2
-            if(state(1,j).eq.1) countstate14=countstate14+1
+            if(state(1,j)==1) countstate14=countstate14+1
         end do
 
         countstate15=0
         do i=2,Ntot
             do j=1,nodes**2
-                if(state(i,j).eq.1) countstate15=countstate15+1
+                if(state(i,j)==1) countstate15=countstate15+1
             end do
         end do
 
@@ -1621,7 +1692,7 @@ do stats = 1,runs
         countstate10=0
         do i=1,Ntot
             do j=1,nodes**2
-                if(state(i,j).ge.4.and.state(i,j).le.6) then
+                if(state(i,j)>=4.and.state(i,j)<=6) then
                     countstate10=countstate10+1
                     rowPLi(countstate10) = j
                     colPLi(countstate10) = i
@@ -1962,7 +2033,7 @@ subroutine randchoice(g,sizeg,numspec,loca)
         r=urcw1()
 
         do i=1,sizel
-            if(r.le.cumprob(i)) then
+            if(r<=cumprob(i)) then
                 loca=location(i)
                 exit
             end if
@@ -2008,7 +2079,7 @@ subroutine minvect(g,sizeg,minlocation)
 
     do i=1,sizeg
         g_temp=g(i)
-        if(g_temp.lt.g(g_old).and.g_temp.ne.0) then
+        if(g_temp.lt.g(g_old).and.g_temp/=0) then
             g_old=i
         end if
     end do
@@ -2076,11 +2147,11 @@ subroutine movetpa(Ntot,nodes,state,prob_N02i,prob_N00i,prob_N02n,prob_N00n,vol3
     !!!!! IF REBINDING PROB IS BIGGER THAN ZERO, THEN I NEED TO ADD A WHOLE SECTION HERE PERTAINING TO THE REBINDING.
     !!!!! I STARTED IT BELOW (MARKED WITH "!!") BUT STOPPED BECAUSE I DON'T NEED IT YET. IF I EVENTUALLY NEED IT,
     !!!!! I NEED TO ADD LINES 435-521 FROM MACRO_NEW/FINE/MICRO_CHANGEPLI_NEW.M    (8/13/10)
-    if(rr.le.p_rebind)then
+    if(rr<=p_rebind)then
         write(*,*)'Problem: random number smallerer than p_rebind. must add rebinding to code'
         !exit
     end if
-    !!             if(rr.le.p_rebind)then
+    !!             if(rr<=p_rebind)then
     !!                  !if random number is less than or equal to p_rebind, have tPA rebind to any available doublet.
     !!                   !1st have it choose which site to go to
     !!
@@ -2090,7 +2161,7 @@ subroutine movetpa(Ntot,nodes,state,prob_N02i,prob_N00i,prob_N02n,prob_N00n,vol3
     !!                      countlat2=0
     !!                      connect_ind2temp=0
     !!                      do j=nodes**2
-    !!                         if(Lat(j,connect_ind(i)).ne.0) then      !find sites 2 lengths away from node tPA unbound from
+    !!                         if(Lat(j,connect_ind(i))/=0) then      !find sites 2 lengths away from node tPA unbound from
     !!                            countlat2=countlat2+1
     !!                            connect_ind2temp(countlat2) = j
     !!                         end if
@@ -2172,7 +2243,7 @@ subroutine movepli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pro
     call cumsum(prob_sitePLi,6,cumprob)
     rin=urcw1()
     do j=1,6
-        if(rin.le.cumprob(j)) then
+        if(rin<=cumprob(j)) then
             newsite2=j
             exit
         end if
@@ -2194,7 +2265,7 @@ subroutine movepli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pro
     call cumsum(P,5,cumP)
     rin=urcw1()
     do j=1,5
-        if(rin.le.cumP(j)) then      !find the doublet PLi will move to
+        if(rin<=cumP(j)) then      !find the doublet PLi will move to
             newdoublet2=j
             exit
         end if
@@ -2219,7 +2290,7 @@ subroutine movepli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pro
         call cumsum(Pnsmall,2,cumPnsmall)
         rin=urcw1()
         do j=1,2
-            if(rin.le.cumPnsmall(j))then      !find the doublet PLi will move to
+            if(rin<=cumPnsmall(j))then      !find the doublet PLi will move to
                 temp=j
                 exit
             end if
@@ -2241,7 +2312,7 @@ subroutine movepli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pro
         rin=urcw1()
 
         do j=1,2
-            if(rin.le.cumPismall(j))then         !find the doublet PLi will move to
+            if(rin<=cumPismall(j))then         !find the doublet PLi will move to
                 temp=j
                 exit
             end if
@@ -2334,7 +2405,7 @@ subroutine move2pli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pr
     rin=urcw1()
 
     do j=1,6
-        if(rin.le.cumprob(j)) then
+        if(rin<=cumprob(j)) then
             newsite=j
             exit
         end if
@@ -2357,7 +2428,7 @@ subroutine move2pli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pr
     rin=urcw1()
 
     do j=1,5
-        if(rin.le.cumP(j)) then      !randomly chooses the doublet PLi will move to
+        if(rin<=cumP(j)) then      !randomly chooses the doublet PLi will move to
             newdoublet=j
             exit
         end if
@@ -2383,7 +2454,7 @@ subroutine move2pli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pr
         rin=urcw1()
 
         do j=1,2
-            if(rin.le.cumPnsmall(j)) then      !find the doublet PLi will move to
+            if(rin<=cumPnsmall(j)) then      !find the doublet PLi will move to
                 temp=j
                 exit
             end if
@@ -2405,7 +2476,7 @@ subroutine move2pli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pr
         rin=urcw1()
 
         do j=1,2
-            if(rin.le.cumPismall(j)) then         !find the doublet PLi will move to
+            if(rin<=cumPismall(j)) then         !find the doublet PLi will move to
                 temp=j
                 exit
             end if
@@ -2464,7 +2535,7 @@ subroutine move2pli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pr
     rin=urcw1()
 
     do j=1,6
-        if(rin.le.cumprob(j)) then
+        if(rin<=cumprob(j)) then
             newsite2=j
             exit
         end if
@@ -2487,7 +2558,7 @@ subroutine move2pli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pr
     rin=urcw1()
 
     do j=1,5
-        if(rin.le.cumP(j)) then      !find the doublet PLi will move to
+        if(rin<=cumP(j)) then      !find the doublet PLi will move to
             newdoublet2=j
             exit
         end if
@@ -2513,7 +2584,7 @@ subroutine move2pli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pr
         rin=urcw1()
 
         do j=1,2
-            if(rin.le.cumPnsmall(j)) then      !find the doublet PLi will move to
+            if(rin<=cumPnsmall(j)) then      !find the doublet PLi will move to
                 temp=j
                 exit
             end if
@@ -2535,7 +2606,7 @@ subroutine move2pli(Ntot,nodes,sizenonzero_connectind,state,connect_ind,alpha,pr
         rin=urcw1()
 
         do j=1,2
-            if(rin.le.cumPismall(j))then         !find the doublet PLi will move to
+            if(rin<=cumPismall(j))then         !find the doublet PLi will move to
                 temp=j
                 exit
             end if

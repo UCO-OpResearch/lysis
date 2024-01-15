@@ -31,6 +31,16 @@ default_filenames = {
     "save_time": "tsave",  # Fortran: tsave
 }
 
+## Molecular constants
+#: Avogadro's number. The number of molecules in one mole
+avogadros_number = 6.023 * 10**23
+#: The length (in microns) of a fibronogen molecule
+fibrinogen_length = 0.045
+#: The radius (in microns) of a fibronogen molecule
+fibrinogen_radius = 0.005
+#: The radius (in microns) of a protofibril
+protofibril_radius = 0.0024
+
 
 class Const:
     def __init__(self):
