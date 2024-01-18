@@ -323,8 +323,8 @@ class MicroParameters:
     
     :Units: microns
     :Fortran: None"""
-
-    fibrinogen_radius: Quantity = Q_("5 nanometers")
+    
+    fibrinogen_radius: Quantity = Q_("2.5 nanometers")
     """The radius of a fibronogen molecule.
     
     :Units: microns
@@ -336,7 +336,10 @@ class MicroParameters:
     :Units: microns
     :Fortran: radius"""
 
-    protofibril_radius: Quantity = Q_("2.4 nanometers")
+    # TODO(bpaynter): Change to 2* fibrinogen radius
+    # This was changed from 2.4 nm on 2024-01-17 to match physiological values
+    # Yeromonahos, 2010 doi: 10.1016/j.bpj.2010.04.059
+    protofibril_radius: Quantity = Q_("5 nanometers")
     """The radius of a protofibril.
     
     :Units: microns
