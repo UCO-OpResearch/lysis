@@ -10,7 +10,7 @@ program macrolysis
 !!                  - "passerby molecule" is corrected
 !!                  - Parameters have been moved to the top of the file
 !!
-!!                  - UNDONE!! Macro-unbound molecules have their wait time set to their remaining unbinding time
+!!                  - Macro-unbound molecules have their wait time set to their remaining unbinding time
 !!                  - Verbose output option added
 !!                  - Commented out unnecessary data variables
 !!
@@ -222,15 +222,15 @@ integer :: m_bound_unit = 104
 character(80) :: m_bound_file
 integer :: m_bind_time_unit = 105
 
-!! BRAD 2023-06-09:
-!!      Format: simulation time (t), molecule index (j), new status (m_stat)
+!! BRAD 2023-12-04:
+!!      Format: simulation time (t), molecule index (j), new status (m_stat), molecule location (V(1,j))
 !!      m_stat = {
 !!          0 : unbound (V(2,j)==0 & t_wait(j)==0)
 !!          1 : bound to undegraded fiber (V(2,j)==1)
 !!          2 : bound to degraded fiber aka macro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==1)
 !!          3 : bound to fiber degradation product aka micro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==0)
 !!      }
-character(20) :: m_bind_time_format = '(f0.9, a, i0, a, i0)'
+character(30) :: m_bind_time_format = '(f0.9, a, i0, a, i0, a, i0)'
 
 
 !! BRAD 2023-02-02
@@ -461,7 +461,7 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_diffuse_into_and_along__internal.f90 on data ',expCode
+write(*,*)' obtained using code macro_diffuse_into_and_along__external.f90 on data ',expCode
 !write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 ! Initialize the Random Number Generator
@@ -717,8 +717,8 @@ write(*,*)'read neighbors.dat'
 
 
 
-! lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
-! equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
+!lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
+!equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
     OPEN(unit=201,FILE=ADJUSTL('data/' // expCode // '/lysismat' // inFileCode))
     do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
@@ -726,7 +726,7 @@ write(*,*)'read neighbors.dat'
     enddo
     close(201)
 
-! lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
+!lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
     OPEN(unit=202,FILE=ADJUSTL('data/' // expCode // '/lenlysisvect' // inFileCode))
     do i=1,100
@@ -763,7 +763,7 @@ write(*,*)'read neighbors.dat'
         open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
         
 !! BRAD 2023-06-09:
-        ! open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form='formatted')
+        open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form='formatted')
 
 
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
@@ -857,6 +857,7 @@ write(*,*)'read neighbors.dat'
         
         !use the random numbers to decide where we start the tPAs
         
+
 !! BRAD 2023-04-13: Internal molecule start
 !            V(1,:) = enoFB + CEILING(rvect * (num - enoFB))
 !! BRAD 2023-07-14: External molecule start
@@ -951,13 +952,9 @@ write(*,*)'read neighbors.dat'
 !!                  Fixed 'passerby molecule' bug
                 if(V(2,j)==1.and.t_degrade(V(1,j))<t) then
                     V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
-
-!! BRAD 2023-11-24: Keep macro-unbound wait time as "average wait time". 
-                    t_wait(j)=t+avgwait-tstep/2
 !! BRAD 2023-04-13: Change macro-unbound wait time to remaining leave time. 
 !!                  That is, the molecule will be restricted in its movement and binding until it would have unbound (if the fiber hadn't degraded first)
-                    !! t_wait(j)=t_leave(j)
-
+                    t_wait(j)=t_leave(j)
                     t_leave(j)=0
                     !also find the new binding time for this molecule !FOLLOWING LINE ADDED 4/21/2011:
                     bind(j)=0  !because the molecule can never rebind to a degraded edge
@@ -965,7 +962,7 @@ write(*,*)'read neighbors.dat'
                     countmacrounbd=countmacrounbd+1 !count the total number of tPA molecules that are forced to unbind by macro-level degradation of a fiber
                     !write(*,*)'forced unbound by degradation=',j
 !! BRAD 2023-06-09:
-                    !write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 2
+                    write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 2, ', ', V(1,j)
 !! BRAD 2023-01-31:
                     if (verbose) then
                         write (*,'(A,I10,A,I5,A,I6)') '-> ts ', count-1,&
@@ -997,7 +994,7 @@ write(*,*)'read neighbors.dat'
                             bind(j)=0
                             countmicrounbd=countmicrounbd+1
 !! BRAD 2023-06-09:
-                            !write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 3
+                            write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 3, ', ', V(1,j)
 !! BRAD 2023-01-31:
                             if (verbose) then
                                 write (*,'(A,I10,A,I5,A,I6,A,F5.4)') '-> ts ', count-1,&
@@ -1007,7 +1004,7 @@ write(*,*)'read neighbors.dat'
                             end if
                         else
 !! BRAD 2023-06-09:
-                            !write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
+                            write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0, ', ', V(1,j)
 !! BRAD 2023-01-31:
                             if (verbose) then
                                 write (*,'(A,I10,A,I5,A,I6,A,F5.4)') '-> ts ', count-1,&
@@ -1026,7 +1023,7 @@ write(*,*)'read neighbors.dat'
                         forcedunbdbydeg(j)=0
 !! BRAD 2023-06-09:
                         t_wait(j)=0
-                        !write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
+                        write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0, ', ', V(1,j)
 !! BRAD 2023-01-31:
                         if (verbose) then
                             write (*,'(A,I10,A,I5,A)') '-> ts ', count-1,&
@@ -1036,7 +1033,7 @@ write(*,*)'read neighbors.dat'
 !! BRAD 2023-06-09:
                     if (0<t_wait(j) .and. t_wait(j)<=t .and. forcedunbdbydeg(j)==0) then
                         t_wait(j)=0
-                        !write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0
+                        write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 0, ', ', V(1,j)
                     end if
                     
                     
@@ -1091,7 +1088,7 @@ write(*,*)'read neighbors.dat'
                                 t_leave(j) = t + ttPA - tstep/2 !time tPA leaves is current time plus leaving time drawn from distribution
                                                         !minus half a time step so we round to nearest timestep
 !! BRAD 2023-06-09:
-                                !write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1
+                                write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1, ', ', V(1,j)
 !! BRAD 2023-01-31:
                                 if (verbose) then
                                     write (*,'(A,I10,A,I5,A,I6)') '-> ts ', count-1,&
@@ -1263,7 +1260,7 @@ write(*,*)'read neighbors.dat'
                                                             !minus half a time step so we round to nearest timestep
 
 !! BRAD 2023-06-09:
-                                !write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1
+                                write(m_bind_time_unit, m_bind_time_format) t, ', ', j, ', ', 1, ', ', V(1,j)
 !! BRAD 2023-01-31:
                                 if (verbose) then
                                     write (*,'(A, I10, A, I5, A, F5.4)') '-> ts ', count-1,&
@@ -1363,7 +1360,6 @@ write(*,*)'read neighbors.dat'
 
                             else   ! for t_wait(j)>t... if statement. if there's no waiting time, or the waiting time is less than the current time, or the molecule was forced to unbind on the microscale (so is on a "small" FDP that can diffuse through the clot), the molecule can move as normal
 
-
                                 if ((1-q).lt.r.and.r.le.((1-q)+q/8)) then
                                     V(1,j) = neighborc(1,z)
                                     r1=urcw1()
@@ -1412,7 +1408,7 @@ write(*,*)'read neighbors.dat'
                                     bind(j)=t-log(r1)/(kon*bs)-tstep/2 !random time chosen from exponential distribution at
                                                                      !which tPA will bind, minus half a time step so we round
                                 end if !(for diffusion part)
-
+                                
 !! BRAD 2023-01-31:
                                 if (verbose) then
                                     write (*,'(A, I10, A, I5, A, I6, A, F5.4)') '-> ts ', count-1,&
@@ -1423,8 +1419,7 @@ write(*,*)'read neighbors.dat'
                                 end if
 !! BRAD 2023-01-04:
                                 total_regular_moves = total_regular_moves + 1
-                                
-                            end if !end t_wait part
+                            endif !end t_wait part
 
                         end if !end bind(j) statement
                     end if !end r statement
@@ -2083,7 +2078,7 @@ close(mfptunit)
         close(t_degrade_unit)
         close(m_location_unit)
         close(m_bound_unit)
-        !close(m_bind_time_unit)
+        close(m_bind_time_unit)
 
 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
 !close(degnextunit)
