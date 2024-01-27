@@ -327,20 +327,20 @@ class MacroParameters:
     :Units: nodes
     :Fortran: N"""
 
-    # TODO(bpaynter): 'rows' and 'fiber_rows' should be switched so that 
+    # TODO(bpaynter): 'rows' and 'fiber_rows' should be switched so that
     #                 'fiber_rows' is the independent variable.
     rows: int = 121
     """The number of lattice nodes in each (vertical) column
     
     :Units: nodes
     :Fortran: F"""
-    
+
     fiber_rows: int = field(init=False)
     """The number of rows containing fibrin
     
     :Units: nodes
     :Fortran: Fhat"""
-    
+
     empty_rows: int = 29 - 1
     """The number of fibrin-free rows at the top of the grid.
     
@@ -543,7 +543,7 @@ class MacroParameters:
         # A full row of 'right' and 'out' edges is two per node, except the
         # last node which has no 'right' edge.
         object.__setattr__(self, "xz_row", 2 * self.cols - 1)
-        
+
         # The number of fiber rows is the total rows minus the empty ones
         object.__setattr__(self, "fiber_rows", self.rows - self.empty_rows)
 
@@ -608,7 +608,7 @@ class MacroParameters:
             if match[1] != "None":
                 names[match[0]] = match[1]
         return names
-    
+
     @staticmethod
     def units():
         text = pkgutil.get_data(__name__, "parameters.py")

@@ -20,6 +20,11 @@ default_filenames = {
     "save_time": "tsave.p.npy",  # Fortran: tsave
 }
 
+diameter_code = {
+    72.7: "Q2",
+    145.4: "Q4",
+}
+
 
 class Const:
     def __init__(self):
@@ -77,3 +82,11 @@ class FiberDirection(Enum):
     RIGHT = -2
     OUT = 3
     IN = -3
+
+
+@unique
+class MolStatus(IntEnum):
+    UNBOUND = 0
+    BOUND = 1
+    MACRO_UNBOUND = 2
+    MICRO_UNBOUND = 3
