@@ -865,7 +865,8 @@ write(*,*)'read neighbors.dat'
         
 !! BRAD 2023-04-13: Switching molecule starting locations to fiber edges
             V(1,:) = enoFB + CEILING(rvect * (num - enoFB))
-
+!! BRAD 2023-07-14: External molecule start
+!            V(1,:) = CEILING(rvect * enoFB)
 !        do i=1,M
 !            if (0.le.rvect(i).and.rvect(i).le.init_state(1)) V(1,i)=1 !init_entry(i)=1
 !            do j=1,enoFB
@@ -897,7 +898,7 @@ write(*,*)'read neighbors.dat'
         write(m_bound_unit) V(2,:)
         Nsave = save_interval
 
-        write(*,*)' save as deg',outFileCode
+        write(*,*)' save as f_deg_list',outFileCode
 
 
 !        Vedgenext(1,:)=V(1,:)
