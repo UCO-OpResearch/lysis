@@ -21,6 +21,7 @@ default_filenames = {
 }
 
 diameter_code = {
+    46: "Q0",
     72.7: "Q2",
     145.4: "Q4",
 }

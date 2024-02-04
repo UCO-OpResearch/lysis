@@ -57,9 +57,15 @@ class FortranData:
                 return False
             else:
                 for i in range(len(data)):
-                    if np.any(b[key][i] != data[i]):
+                    if b[key][i].dtype == np.float64:
+                        if np.any(abs(b[key][i] - data[i]) > 1e-8):
+                            return False
+                    elif np.any(b[key][i] != data[i]):
                         return False
         return True
+
+
+# def widen_t_degrade()
 
 
 # TODO(bpaynter): Reorganize using `Datastore` once the new `Experiment` framework is implemented.
@@ -101,7 +107,6 @@ def read_data(e: Experiment, file_code: str) -> FortranData:
 
     mol_location = []
     mol_status = []
-    mapped_deg = []
     for sim in range(e.macro_params.total_trials):
         raw_mol_location = np.fromfile(
             os.path.join(
@@ -128,14 +133,75 @@ def read_data(e: Experiment, file_code: str) -> FortranData:
             raw_mol_status.reshape(n_saves[sim], e.macro_params.total_molecules)
         )
 
-        raw_deg = np.fromfile(
+    mapped_deg = []
+    # # Code for storing the processed "wide" deg array if time is more important than storage
+    # filename = os.path.join(e.os_path, f"f_deg_time{file_code[:-4]}.npz")
+    # if os.path.isfile(filename):
+    #     deg_arrays = np.load(filename)
+    #     mapped_deg = [deg for deg in deg_arrays.values()]
+    # else:
+    for sim in range(e.macro_params.total_trials):
+        # If an old format (wide) deg array exists
+        if os.path.isfile(
             os.path.join(
                 e.os_path,
                 f"{sim:02}",
                 f"f_deg_time{file_code[:-4]}_{sim:02}{file_code[-4:]}",
             )
-        )
-        mapped_deg.append(raw_deg.reshape(n_saves[sim], e.macro_params.total_edges))
+        ):
+            # Read it in
+            raw_deg = np.fromfile(
+                os.path.join(
+                    e.os_path,
+                    f"{sim:02}",
+                    f"f_deg_time{file_code[:-4]}_{sim:02}{file_code[-4:]}",
+                )
+            )
+            # Reshape it appropriately and append it to the list
+            mapped_deg.append(raw_deg.reshape(n_saves[sim], e.macro_params.total_edges))
+        else:
+            # Assume a new format (long) deg array exists
+            # Read in the file to a Pandas DataFrame
+            raw_fiber_events = pd.read_csv(
+                os.path.join(
+                    e.os_path,
+                    f"{sim:02}",
+                    f"f_deg_list{file_code[:-4]}_{sim:02}{file_code[-4:]}",
+                ),
+                names=["Simulation Time", "Fiber Index", "Degrade Time"],
+            )
+
+            # Bin the events by save interval
+            raw_fiber_events["Save Interval"] = pd.cut(
+                raw_fiber_events["Simulation Time"],
+                tsave[sim] + (e.macro_params.time_step / 2),
+                labels=range(1, len(tsave[sim])),
+            )
+            # Drop any duplicates (more than one binding in a single save interval)
+            raw_fiber_events = raw_fiber_events.drop_duplicates(
+                subset=["Fiber Index", "Save Interval"], keep="last"
+            )
+            # Pivot the "long" table into a "wide" table
+            deg_df = raw_fiber_events.pivot(
+                index="Fiber Index", columns="Save Interval", values="Degrade Time"
+            )
+            # Add an initial value for each fiber (essentially infinite)
+            deg_df[0] = 9.9e100
+            # Add any save intervals that had no changes to degradation
+            for t in range(len(tsave[sim])):
+                if t not in deg_df.columns:
+                    deg_df[t] = np.nan
+            # Sort by save interval
+            deg_df = deg_df.sort_index(axis=1)
+            # Copy the degrade time through any save intervals where the degrade time didn't change
+            deg_df = deg_df.ffill(axis=1)
+            # Convert the DataFrame to a NumPy array and transpose
+            deg = deg_df.to_numpy().T
+            # Append to the list
+            mapped_deg.append(deg)
+        # # More code for storing the processed "wide" deg array
+        # deg_arrays = {f"f_deg_time_{sim:02}": deg for (sim, deg) in enumerate(mapped_deg)}
+        # np.savez_compressed(os.path.join(e.os_path, f"f_deg_time{file_code[:-4]}"), **deg_arrays)
 
     return FortranData(
         n_saves=n_saves,
@@ -147,19 +213,13 @@ def read_data(e: Experiment, file_code: str) -> FortranData:
     )
 
 
-def compare_data(e_new: Experiment, e_old: Experiment, file_code: str):
-    new_data = read_data(e_new, file_code)
+def compare_data(
+    e_new: Experiment, e_old: Experiment, file_code: str, new_data: FortranData = None
+):
+    if new_data is None:
+        new_data = read_data(e_new, file_code)
     old_data = read_data(e_old, file_code)
-    for key, data in new_data.items():
-        if old_data[key] is None:
-            return False
-        elif len(old_data[key]) != len(data):
-            return False
-        else:
-            for i in range(len(data)):
-                if old_data[key][i] != data[i]:
-                    return False
-    return True
+    return new_data == old_data
 
 
 def get_parameters(scenarios=dict[str, Experiment]) -> pd.DataFrame:

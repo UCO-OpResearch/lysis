@@ -1,5 +1,7 @@
 from .molecule import *
 from .np_macroscale import *
+import lysis.util
+import lysis.data_manage
 
 try:
     import cupy
