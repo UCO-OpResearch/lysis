@@ -229,11 +229,11 @@ integer :: f_deg_list_unit = 106
 !!          2 : bound to degraded fiber aka macro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==1)
 !!          3 : bound to fiber degradation product aka micro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==0)
 !!      }
-character(30) :: m_bind_time_format = '(f0.15, a, i0, a, i0, a, i0)'
+character(30) :: m_bind_time_format = '(f23.15, a, i0, a, i0, a, i0)'
 
 !! BRAD 2024-02-02:
 !!      Format: simulation time (t), fiber index (j), new degrade time (t_degrade)
-character(30) :: f_deg_list_format = '(f0.15, a, i0, a, f0.15)'
+character(30) :: f_deg_list_format = '(f23.15, a, i0, a, f23.15)'
 
 
 !! BRAD 2023-02-02
