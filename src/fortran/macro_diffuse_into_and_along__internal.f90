@@ -863,10 +863,11 @@ write(*,*)'read neighbors.dat'
         
         !use the random numbers to decide where we start the tPAs
         
-!! BRAD 2023-04-13: Switching molecule starting locations to fiber edges
+!! BRAD 2023-04-13: Internal molecule start
             V(1,:) = enoFB + CEILING(rvect * (num - enoFB))
 !! BRAD 2023-07-14: External molecule start
 !            V(1,:) = CEILING(rvect * enoFB)
+
 !        do i=1,M
 !            if (0.le.rvect(i).and.rvect(i).le.init_state(1)) V(1,i)=1 !init_entry(i)=1
 !            do j=1,enoFB
@@ -956,9 +957,11 @@ write(*,*)'read neighbors.dat'
 !!                  Fixed 'passerby molecule' bug
                 if(V(2,j)==1.and.t_degrade(V(1,j))<t) then
                     V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
+!! BRAD 2023-11-24: Keep macro-unbound wait time as "average wait time". 
+!                    t_wait(j)=t+avgwait-tstep/2
 !! BRAD 2023-04-13: Change macro-unbound wait time to remaining leave time. 
 !!                  That is, the molecule will be restricted in its movement and binding until it would have unbound (if the fiber hadn't degraded first)
-                    t_wait(j)=t_leave(j)
+                    t_wait(j)=t_leave(j)                    
                     t_leave(j)=0
                     !also find the new binding time for this molecule !FOLLOWING LINE ADDED 4/21/2011:
                     bind(j)=0  !because the molecule can never rebind to a degraded edge
