@@ -232,7 +232,7 @@ integer :: f_deg_list_unit = 106
 character(30) :: m_bind_time_format = '(f23.15, a, i0, a, i0, a, i0)'
 
 !! BRAD 2024-02-02:
-!!      Format: simulation time (t), fiber index (j), new degrade time (t_degrade)
+!!      Format: simulation time (t), location index (j), new degrade time (t_degrade)
 character(30) :: f_deg_list_format = '(f23.15, a, i0, a, f23.15)'
 
 

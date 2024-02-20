@@ -31,7 +31,8 @@ from datetime import datetime
 from typing import Any, List, Mapping, Tuple, Union
 
 from .constants import default_filenames
-from .datastore import DataStore, DataStatus
+
+# from .datastore import DataStore, DataStatus
 from .util import dict_to_formatted_str
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -104,7 +105,7 @@ class Experiment(object):
         # Initialize the internal storage as empty
         self.micro_params: Mapping[str, Any] | None = None
         self.macro_params = None
-        self.data = DataStore(self.os_path, default_filenames)
+        # self.data = DataStore(self.os_path, default_filenames)
 
     def __str__(self) -> str:
         """Gives a human-readable, formatted string of the current experimental
@@ -135,9 +136,9 @@ class Experiment(object):
         else:
             self.macro_params = MacroParameters()
 
-        for data in self.macro_params.input_data:
-            if DataStatus.INITIALIZED not in self.data.status(data):
-                raise RuntimeError(f"'{data}' not initialized in DataStore.")
+        # for data in self.macro_params.input_data:
+        #     if DataStatus.INITIALIZED not in self.data.status(data):
+        #         raise RuntimeError(f"'{data}' not initialized in DataStore.")
 
     def to_dict(self) -> dict:
         """Returns the internally stored data as a dictionary.
@@ -147,13 +148,13 @@ class Experiment(object):
         # Initialize a dictionary of the appropriate parameters
         output = {
             "experiment_code": self.experiment_code,
-            "data_filenames": None,
+            # "data_filenames": None,
             "micro_params": None,
             "macro_params": None,
         }
         # Get the data filenames from the DataStore
-        if self.data is not None:
-            output["data_filenames"] = self.data.to_dict()
+        # if self.data is not None:
+        #     output["data_filenames"] = self.data.to_dict()
         # Convert the Macroscale parameters to a dictionary
         if self.macro_params is not None:
             output["macro_params"] = asdict(self.macro_params)
@@ -188,8 +189,8 @@ class Experiment(object):
             # Use the JSON library to read in the parameters as a dictionary
             params = json.load(file)
             data_filenames = params.pop("data_filenames", None)
-            if data_filenames is not None:
-                self.data = DataStore(self.os_path, data_filenames)
+            # if data_filenames is not None:
+            #     self.data = DataStore(self.os_path, data_filenames)
             # Remove the Macroscale parameters from the dictionary (if it
             # exists) and create a new MacroParameters object using its values
             macro_params = params.pop("macro_params", None)
@@ -457,11 +458,11 @@ class MacroParameters:
     # Data Parameters
     #####################################
 
-    input_data: List[str] = field(init=False)
+    # input_data: List[str] = field(init=False)
     """The data (from the Microscale model) required to run the Macroscale 
     model."""
 
-    output_data: List[str] = field(init=False)
+    # output_data: List[str] = field(init=False)
     """The data output by the Macroscale model."""
 
     save_interval: int = 10
@@ -515,27 +516,27 @@ class MacroParameters:
         MacroParameters object is created. It is automatically called by the
         DataClass.__init__()"""
         # These names must be elements of the Experiment's DataStore
-        object.__setattr__(
-            self,
-            "input_data",
-            [
-                "unbinding_time",  # Fortran: tsec1
-                # 'leaving_time',           # Fortran: CDFtPA
-                "lysis_time",  # Fortran: lysismat
-                "total_lyses",  # Fortran: lenlysismat
-            ],
-        )
-        # These names must be elements of the Experiment's DataStore
-        object.__setattr__(
-            self,
-            "output_data",
-            [
-                "degradation_state",  # Fortran: degnext
-                "molecule_location",
-                "molecule_state",
-                "save_time",  # Fortran: tsave
-            ],
-        )
+        # object.__setattr__(
+        #     self,
+        #     "input_data",
+        #     [
+        #         "unbinding_time",  # Fortran: tsec1
+        #         # 'leaving_time',           # Fortran: CDFtPA
+        #         "lysis_time",  # Fortran: lysismat
+        #         "total_lyses",  # Fortran: lenlysismat
+        #     ],
+        # )
+        # # These names must be elements of the Experiment's DataStore
+        # object.__setattr__(
+        #     self,
+        #     "output_data",
+        #     [
+        #         "degradation_state",  # Fortran: degnext
+        #         "molecule_location",
+        #         "molecule_state",
+        #         "save_time",  # Fortran: tsave
+        #     ],
+        # )
         # A full row of the fiber grid contains a 'right', 'up', and 'out' edge
         # for each node, except the last node which contains no 'right' edge.
         object.__setattr__(self, "full_row", 3 * self.cols - 1)
@@ -574,11 +575,7 @@ class MacroParameters:
         object.__setattr__(
             self,
             "time_step",
-            (
-                self.moving_probability
-                * self.pore_size**2
-                / (12 * self.diffusion_coeff)
-            ),
+            (self.moving_probability * self.pore_size**2 / (12 * self.diffusion_coeff)),
         )
 
         # Total timesteps is total time divided by length of one timestep

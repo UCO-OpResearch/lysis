@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from ..util import Experiment
+from .DegStruct import DegStruct
 
 
 @dataclass(eq=False)
@@ -57,15 +58,10 @@ class FortranData:
                 return False
             else:
                 for i in range(len(data)):
-                    if b[key][i].dtype == np.float64:
-                        if np.any(abs(b[key][i] - data[i]) > 1e-8):
-                            return False
-                    elif np.any(b[key][i] != data[i]):
+                    print(type(data[i]), type(b[key][i]))
+                    if np.any(data[i] != b[key][i]):
                         return False
         return True
-
-
-# def widen_t_degrade()
 
 
 # TODO(bpaynter): Reorganize using `Datastore` once the new `Experiment` framework is implemented.
@@ -161,43 +157,15 @@ def read_data(e: Experiment, file_code: str) -> FortranData:
             mapped_deg.append(raw_deg.reshape(n_saves[sim], e.macro_params.total_edges))
         else:
             # Assume a new format (long) deg array exists
-            # Read in the file to a Pandas DataFrame
-            raw_fiber_events = pd.read_csv(
+            deg = DegStruct(
+                e,
                 os.path.join(
                     e.os_path,
                     f"{sim:02}",
                     f"f_deg_list{file_code[:-4]}_{sim:02}{file_code[-4:]}",
                 ),
-                names=["Simulation Time", "Fiber Index", "Degrade Time"],
+                tsave[sim],
             )
-
-            # Bin the events by save interval
-            raw_fiber_events["Save Interval"] = pd.cut(
-                raw_fiber_events["Simulation Time"],
-                tsave[sim] + (e.macro_params.time_step / 2),
-                labels=range(1, len(tsave[sim])),
-            )
-            # Drop any duplicates (more than one binding in a single save interval)
-            raw_fiber_events = raw_fiber_events.drop_duplicates(
-                subset=["Fiber Index", "Save Interval"], keep="last"
-            )
-            # Pivot the "long" table into a "wide" table
-            deg_df = raw_fiber_events.pivot(
-                index="Fiber Index", columns="Save Interval", values="Degrade Time"
-            )
-            # Add an initial value for each fiber (essentially infinite)
-            deg_df[0] = 9.9e100
-            # Add any save intervals that had no changes to degradation
-            for t in range(len(tsave[sim])):
-                if t not in deg_df.columns:
-                    deg_df[t] = np.nan
-            # Sort by save interval
-            deg_df = deg_df.sort_index(axis=1)
-            # Copy the degrade time through any save intervals where the degrade time didn't change
-            deg_df = deg_df.ffill(axis=1)
-            # Convert the DataFrame to a NumPy array and transpose
-            deg = deg_df.to_numpy().T
-            # Append to the list
             mapped_deg.append(deg)
         # # More code for storing the processed "wide" deg array
         # deg_arrays = {f"f_deg_time_{sim:02}": deg for (sim, deg) in enumerate(mapped_deg)}
