@@ -58,7 +58,6 @@ class FortranData:
                 return False
             else:
                 for i in range(len(data)):
-                    print(type(data[i]), type(b[key][i]))
                     if np.any(data[i] != b[key][i]):
                         return False
         return True
