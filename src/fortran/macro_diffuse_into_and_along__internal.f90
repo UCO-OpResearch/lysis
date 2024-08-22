@@ -21,9 +21,9 @@ program macrolysis
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15)   :: expCode
-character(80)   :: inFileCode
-character(80)   :: outFileCode
+character(:), allocatable   :: expCode
+character(:), allocatable   :: inFileCode
+character(:), allocatable   :: outFileCode
 logical         :: verbose = .False.!.True. !
 
 
@@ -80,12 +80,12 @@ double precision     :: rmicro, ttPA
 double precision     :: r, r1, r3, r2, r4, r5
 
 
-character(80) :: filetype,formatted
-character(80) :: filename1
-character(80) :: filename2
-character(90) :: filename3
-character(95) :: filename4
-character(80) :: filename6
+character(:), allocatable :: filetype,formatted
+character(:), allocatable :: filename1
+character(:), allocatable :: filename2
+character(:), allocatable :: filename3
+character(:), allocatable :: filename4
+character(:), allocatable :: filename6
 
 
 !integer*1, dimension(:, :), allocatable  :: closeneigh
@@ -114,10 +114,10 @@ integer       :: V2unit = 22
 integer       :: Nunit = 23
 integer       :: tunit = 24
 !character(80) :: degfile       ! degradation vector
-character(80) :: Vfile
-character(80) :: V2file
-character(80) :: Nfile
-character(80) :: tfile
+character(:), allocatable :: Vfile
+character(:), allocatable :: V2file
+character(:), allocatable :: Nfile
+character(:), allocatable :: tfile
 
 !stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
 !is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
@@ -158,7 +158,7 @@ integer       :: mfptunit = 42
 !character(80) :: degnextfile
 !character(80) :: Venextfile
 !character(80) :: Vbdnextfile
-character(80) :: mfptfile
+character(:), allocatable :: mfptfile
 
 !integer, dimension(:), allocatable  :: intact2
 integer  :: countintact2, lenintact2, counth, countv, countpv
@@ -229,11 +229,11 @@ integer :: f_deg_list_unit = 106
 !!          2 : bound to degraded fiber aka macro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==1)
 !!          3 : bound to fiber degradation product aka micro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==0)
 !!      }
-character(30) :: m_bind_time_format = '(f23.15, a, i0, a, i0, a, i0)'
+character(40) :: m_bind_time_format = '(f23.15, a, i0, a, i0, a, i0)'
 
 !! BRAD 2024-02-02:
 !!      Format: simulation time (t), fiber index (j), new degrade time (t_degrade)
-character(30) :: f_deg_list_format = '(f23.15, a, i0, a, f23.15)'
+character(40) :: f_deg_list_format = '(f23.15, a, i0, a, f23.15)'
 
 
 !! BRAD 2023-02-02
@@ -242,7 +242,7 @@ logical :: all_fibers_degraded
 logical :: most_molecules_passed
 
 integer :: cmd_count, param_i, param_len, param_val_len, cmd_status, io_status
-character(80) :: param, param_value
+character(32) :: param, param_value
 
 cmd_count = command_argument_count ()
 write (*,*) 'number of command arguments = ', cmd_count
@@ -1529,6 +1529,7 @@ write(*,*)'read neighbors.dat'
                 reached_back_row_percent,'% of total).'
                
                 if (all_fibers_degraded.and.most_molecules_passed) exit
+!                if (all_fibers_degraded) exit
             end if
 
 !! BRAD 2023-01-31:

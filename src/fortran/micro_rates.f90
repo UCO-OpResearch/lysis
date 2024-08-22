@@ -1,17 +1,27 @@
 program micromodel
 
 implicit none
-character(15) :: expCode = '2024-01-31-1502'
-character(6)  :: inFileCode = 'Q4.dat'
-character(40)   :: outFileCode = 'PLG2_tPA01_Q4.dat'
+character(15) :: expCode = '2024-04-16-1909'
+character(10)  :: inFileCode = 'TF-v.dat'
+character(40)   :: outFileCode = 'PLG2_tPA01_TF-v.dat'
 !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
 !!!! Lines 19-25 allow you to set the various dissociation constants, binding rates, and the concentration of free PLG
 !!!! This code treats degradation and exposure in the gillespie algorithm, rather than separately with 
 !!!! a degradation timer. It also allows PLi to degrade any exposed doublet at the same binding location, and 
 !!!! tPA to convert any PLG on the same binding location to PLi.
 
-integer, parameter  :: nodes = 13 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 5 for Q1 (57.4 nm), 7 for Q2 (72.7 nm), 8 for Q3 (81.3 nm)
-double precision, parameter  :: radius = 0.0727 ! in microns
+!! Q0      46 nm diameter fibers,     4 nodes per row,  fibrin concentration 710.78 uM, binding site concentration 355.390 uM
+!! Q1      57.4 nm diameter fibers,   5 nodes per row, 
+!! Q2      72.7 nm diameter fibers,   7 nodes per row, fibrin concentration 871.17 uM, binding site concentration 426.848 uM
+!! Q3      81.3 nm diameter fibers,   8 nodes per row
+!! TF-v    105.1 nm diameter fibers,  5 nodes per row, fibrin concentration 212.75 uM, binding site concentration 136.159 uM
+!! TF-vii  105.1 nm diameter fibers,  7 nodes per row, fibrin concentration 416.84 uM, binding site concentration 204.238 uM
+!! TF-x    105.1 nm diameter fibers, 10 nodes per row, fibrin concentration 850.69 uM, binding site concentration 306.357 uM
+!! TB-xi   123.0 nm diameter fibers, 11 nodes per row, fibrin concentration 751.54 uM, binding site concentration 248.531 uM
+!! Q4      145.4 nm diameter fibers, 13 nodes per row, fibrin concentration 751.16 uM, binding site concentration 213.0 uM
+!!
+integer, parameter  :: nodes = 5 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 
+double precision, parameter  :: radius = 105.1/2/1000 ! fiber bundle radius in microns !! MAKE SURE you enter this as a decimal, even if it ends in .0
 
 integer, parameter  :: Nplginit=1 !number of exposed doublets initially - i.e. intact doublets - at each spatial location
 integer, parameter  :: Ninit=5*Nplginit !number of cryptic doublets at each spatial location
@@ -285,6 +295,8 @@ external :: mscw, kiss32, urcw1
 integer :: kiss32, mscw, seed, stater(4), old_stater(4), ui
 double precision :: uf, urcw1
 
+write(*,*)'micro_rates.f90 -- Nodes in row: ', nodes, ', Fiber diameter: ', radius*2000, ' nm'
+
   if( isBinary ) then
      !filetype = 'unformatted' !if you compile with gfortran or f95
      filetype = 'binary'      !if you compile with ifort
@@ -298,9 +310,9 @@ double precision :: uf, urcw1
 
      uf = urcw1()
 
-     !seed = mscw() !randomly generate seed
+     seed = mscw() !randomly generate seed
      !seed=981681759
-     seed=-34041038
+     !seed=-34041038
      write(*,*),' seed=',seed
 
       stater(1) = 129281
@@ -1653,6 +1665,7 @@ ltPA(stats) = tPA(count)
   close(t2unit)
   close(tPAPLiunit)
   close(fpunit)
+  write(*,*)' stats=',stats
   write(*,*)' kncat=',param(11,ipar)
   write(*,*)' kapcat=',param(10,ipar)
   write(*,*)' ktPAon=',param(9,ipar)
