@@ -33,7 +33,7 @@ integer  :: Ffree=29!29 !3 !13 !1st node in vertical direction containing fibers
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
 integer  :: stats= 10 !! BRAD 2023-01-04: 10
-integer  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
+integer(8)  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
 integer  :: tf=20*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
 
 integer  :: nummicro=500 !if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
@@ -60,8 +60,8 @@ double precision :: tstep  !4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE 
 double precision :: num_t            !number of timesteps
 
 
-integer  :: i, istat
-integer  :: j, ij, newindex
+integer(8)  :: i, istat
+integer(8)  :: j, ij, newindex
 integer  :: k
 integer  :: ii 
 integer  :: Nsave, Ninteger, nplt, cNsave
@@ -206,7 +206,7 @@ integer(8) :: total_regular_moves
 integer(8) :: total_restricted_moves
 integer(8) :: total_binds
 integer :: degraded_fibers
-integer :: reached_back_row
+integer(8) :: reached_back_row
 real :: time_begin, time_end
 real :: rounded_time
 real :: degraded_percent
@@ -464,7 +464,7 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_diffuse_into_and_along__internal.f90 on data ',expCode
+write(*,*)' obtained using code macro_diffuse_into_and_along__external.f90 on data ',expCode
 !write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 ! Initialize the Random Number Generator
@@ -887,6 +887,7 @@ write(*,*)'read neighbors.dat'
 !        end do
         !    write(*,*)' V=',V  !for debugging 3/31/10
 
+! write(*,*) M
 
 !! BRAD 2023-04-20
 !        write(degunit) degrade(:)
@@ -1527,7 +1528,8 @@ write(*,*)'read neighbors.dat'
                 reached_back_row,' molecules have reached the back row (',&
                 reached_back_row_percent,'% of total).'
                
-                if (all_fibers_degraded.and.most_molecules_passed) exit
+!                if (all_fibers_degraded.and.most_molecules_passed) exit
+                if (all_fibers_degraded) exit
             end if
 
 !! BRAD 2023-01-31:
@@ -2128,7 +2130,7 @@ end subroutine concat
 !
 subroutine vurcw1(v, n)
         double precision v(*)
-        integer k, n
+        integer(8) k, n
 
         do k = 1, n
             v(k) = urcw1()
