@@ -10,7 +10,19 @@ character(40)   :: outFileCode = 'PLG2_tPA01_Q4.dat'
 !!!! a degradation timer. It also allows PLi to degrade any exposed doublet at the same binding location, and 
 !!!! tPA to convert any PLG on the same binding location to PLi.
 
-integer, parameter  :: nodes = 13 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 5 for Q1 (57.4 nm), 7 for Q2 (72.7 nm), 8 for Q3 (81.3 nm), 13 for Q4 (145.4 nm)
+!! Q0      46 nm diameter fibers,     4 nodes per row,  fibrin concentration 710.78 uM, binding site concentration 355.390 uM
+!! Q1      57.4 nm diameter fibers,   5 nodes per row, 
+!! Q2      72.7 nm diameter fibers,   7 nodes per row, fibrin concentration 871.17 uM, binding site concentration 426.848 uM
+!! Q3      81.3 nm diameter fibers,   8 nodes per row
+!! TF-v    105.1 nm diameter fibers,  5 nodes per row, fibrin concentration 212.75 uM, binding site concentration 136.159 uM
+!! TF-vii  105.1 nm diameter fibers,  7 nodes per row, fibrin concentration 416.84 uM, binding site concentration 204.238 uM
+!! TF-x    105.1 nm diameter fibers, 10 nodes per row, fibrin concentration 850.69 uM, binding site concentration 306.357 uM
+!! TB-xi   123.0 nm diameter fibers, 11 nodes per row, fibrin concentration 751.54 uM, binding site concentration 248.531 uM
+!! Q4      145.4 nm diameter fibers, 13 nodes per row, fibrin concentration 751.16 uM, binding site concentration 213.0 uM
+!!
+integer, parameter  :: nodes = 5 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 
+double precision, parameter  :: radius = 105.1/2/1000 ! fiber bundle radius in microns !! MAKE SURE you enter this as a decimal, even if it ends in .0
+
 integer, parameter  :: Nplginit=1 !number of exposed doublets initially - i.e. intact doublets - at each spatial location
 integer, parameter  :: Ninit=5*Nplginit !number of cryptic doublets at each spatial location
 integer, parameter  :: Ntot=Ninit+Nplginit !total number of doublets at each spatial location
@@ -30,7 +42,6 @@ double precision, parameter  :: freeplg = 2 !1.5 !units uM, concentration of fre
 !double precision  :: prob_N02
 !double precision  :: prob_N00
 !double precision  :: prob_N22
-double precision  :: radius
 double precision, dimension(11,2)  :: param  !matrix that holds all the various parameter values we can use
 
 integer, dimension(Ntot,nodes**2)  :: state, statetemp !matrices to save the state of each doublet. There are 6 doublets at each node, and nodes^2 total nodes. recall: in fortran, columns are listed 1st, rows 2nd
@@ -284,6 +295,8 @@ external :: mscw, kiss32, urcw1
 integer :: kiss32, mscw, seed, stater(4), old_stater(4), ui
 double precision :: uf, urcw1
 
+write(*,*)'micro_rates.f90 -- Nodes in row: ', nodes, ', Fiber diameter: ', radius*2000, ' nm'
+
   if( isBinary ) then
      !filetype = 'unformatted' !if you compile with gfortran or f95
      filetype = 'binary'      !if you compile with ifort
@@ -315,42 +328,45 @@ double precision :: uf, urcw1
       ones = 1
 
 
- if(nodes==5) then
-     radius=0.02875      !radius of fiber, in microns, with diameter 57.5 nm
-     !!!Read in LatQ1 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-     do i=1,nodes**2
-        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-     enddo
-     close(1)
- elseif(nodes==7) then
-     radius=0.03635        !radius of fiber, in microns, with diameter 72.7 nm
-     !!!Read in LatQ2 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-     do i=1,nodes**2
-     READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-     enddo
-     close(1)
- elseif(nodes==8) then
-     radius=0.04065        !radius of fiber, in microns, with diameter 81.3 nm
-     !!!Read in LatQ3 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-     do i=1,nodes**2
-        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-     enddo
-     close(1)
+! if(nodes==5) then
+!     radius=0.02875      !radius of fiber, in microns, with diameter 57.5 nm
+!     !!!Read in LatQ1 matrix that I generated in matlab - this is matrix of connectivities
+!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
+!     do i=1,nodes**2
+!        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
+!     enddo
+!     close(1)
+! elseif(nodes==7) then
+!     radius=0.03635        !radius of fiber, in microns, with diameter 72.7 nm
+!     !!!Read in LatQ2 matrix that I generated in matlab - this is matrix of connectivities
+!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
+!     do i=1,nodes**2
+!     READ(1,*)(Lat(i,ii),ii=1,nodes**2)
+!     enddo
+!     close(1)
+! elseif(nodes==8) then
+!     radius=0.04065        !radius of fiber, in microns, with diameter 81.3 nm
+!     !!!Read in LatQ3 matrix that I generated in matlab - this is matrix of connectivities
+!     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
+!     do i=1,nodes**2
+!        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
+!     enddo
+!     close(1)
+! else 
+!     write(*,*)' problem with node number. recalculate radius'
+! end if
+ 
 !! BRAD 2024-01-13:
- elseif(nodes==13) then
-     radius=0.0727        !radius of fiber, in microns, with diameter 145.4 nm
-     !!!Read in LatQ4 matrix that I generated in matlab - this is matrix of connectivities
-     OPEN(unit=1,FILE='data/' // expCode // '/Lat' // inFileCode)
-     do i=1,nodes**2
-        READ(1,*)(Lat(i,ii),ii=1,nodes**2)
-     enddo
-     close(1)
- else 
-     write(*,*)' problem with node number. recalculate radius'
- end if
+do i = 1, nodes
+    do j = 1, nodes
+        Lat((i-1)*nodes + j, (i-1)*nodes + j) = 1 ! Put a 1 along the diagonal for (i, j) to itself
+        if (i/=1) Lat((i-1)*nodes + j, (i-2)*nodes + j) = 1 ! UP ! Put a 1 from (i, j) to (i-1, j)
+        if (j/=1) Lat((i-1)*nodes + j, (i-1)*nodes + j-1) = 1 ! RIGHT ! Put a 1 from (i, j) to (i, j-1)
+        if (i/=nodes) Lat((i-1)*nodes + j, (i)*nodes + j) = 1 ! DOWN ! Put a 1 from (i, j) to (i+1, j)
+        if (j/=nodes) Lat((i-1)*nodes + j, (i-1)*nodes + j+1) = 1 ! LEFT ! Put a 1 from (i, j) to (i+1, j)
+    end do
+end do
+
 
   Tdoublets=Ntot*nodes**2   !total number of doublets in system
 
@@ -1648,6 +1664,7 @@ ltPA(stats) = tPA(count)
   close(t2unit)
   close(tPAPLiunit)
   close(fpunit)
+  write(*,*)' stats=',stats
   write(*,*)' kncat=',param(11,ipar)
   write(*,*)' kapcat=',param(10,ipar)
   write(*,*)' ktPAon=',param(9,ipar)

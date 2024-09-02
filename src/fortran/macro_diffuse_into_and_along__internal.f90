@@ -17,12 +17,13 @@ program macrolysis
 !!                  - Moved degraded fiber check into molecule loop
 !!                  - Removed "degrade" array and use "t_degrade" instead
 !!                  - Read in "neighborc" array generated in Python
+!!                  - Output fiber t_degrade changes instead of snapshots
 
 !This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, then we "remove" that tPA molecule from the simulation (it is no longer allowed to bind, but it can still diffuse, since we imagine it's attached to a FDP). These molecules attached to FDPs can diffuse INTO the clot (we assume that because tPA was forced to unbind on the microscale, it's on a smaller FDP). tPA that is released by a degrading fiber on the macroscale we only allow to diffuse away from or ALONG the clot front (not into the clot), because we assume that the FDPs are too big to diffuse into the clot. This code runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time
 implicit none
-character(15)   :: expCode
-character(80)   :: inFileCode
-character(80)   :: outFileCode
+character(:), allocatable   :: expCode
+character(:), allocatable   :: inFileCode
+character(:), allocatable   :: outFileCode
 logical         :: verbose = .False.!.True. !
 
 
@@ -79,12 +80,12 @@ double precision     :: rmicro, ttPA
 double precision     :: r, r1, r3, r2, r4, r5
 
 
-character(80) :: filetype,formatted
-character(80) :: filename1
-character(80) :: filename2
-character(90) :: filename3
-character(95) :: filename4
-character(80) :: filename6
+character(:), allocatable :: filetype,formatted
+character(:), allocatable :: filename1
+character(:), allocatable :: filename2
+character(:), allocatable :: filename3
+character(:), allocatable :: filename4
+character(:), allocatable :: filename6
 
 
 !integer*1, dimension(:, :), allocatable  :: closeneigh
@@ -113,10 +114,10 @@ integer       :: V2unit = 22
 integer       :: Nunit = 23
 integer       :: tunit = 24
 !character(80) :: degfile       ! degradation vector
-character(80) :: Vfile
-character(80) :: V2file
-character(80) :: Nfile
-character(80) :: tfile
+character(:), allocatable :: Vfile
+character(:), allocatable :: V2file
+character(:), allocatable :: Nfile
+character(:), allocatable :: tfile
 
 !stuff for the random # generator. I need to use the file kiss.o when I compile in order for this to work, and kiss.o
 !is obtained by compiling the file kiss.c by doing "cc -c kiss.c".
@@ -157,7 +158,7 @@ integer       :: mfptunit = 42
 !character(80) :: degnextfile
 !character(80) :: Venextfile
 !character(80) :: Vbdnextfile
-character(80) :: mfptfile
+character(:), allocatable :: mfptfile
 
 !integer, dimension(:), allocatable  :: intact2
 integer  :: countintact2, lenintact2, counth, countv, countpv
@@ -214,13 +215,11 @@ double precision :: last_degrade_time
 !real :: temp_len_lysis_mat
 integer :: save_interval = 10
 
-integer :: t_degrade_unit = 102
-character(80) :: t_degrade_file
+!integer :: t_degrade_unit = 102
 integer :: m_location_unit = 103
-character(80) :: m_location_file
 integer :: m_bound_unit = 104
-character(80) :: m_bound_file
 integer :: m_bind_time_unit = 105
+integer :: f_deg_list_unit = 106
 
 !! BRAD 2023-12-04:
 !!      Format: simulation time (t), molecule index (j), new status (m_stat), molecule location (V(1,j))
@@ -230,7 +229,11 @@ integer :: m_bind_time_unit = 105
 !!          2 : bound to degraded fiber aka macro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==1)
 !!          3 : bound to fiber degradation product aka micro-unbound (V(2,j)==0 & 0 < t_wait < t & forcedunbdbydeg(j)==0)
 !!      }
-character(30) :: m_bind_time_format = '(f0.9, a, i0, a, i0, a, i0)'
+character(40) :: m_bind_time_format = '(f23.15, a, i0, a, i0, a, i0)'
+
+!! BRAD 2024-02-02:
+!!      Format: simulation time (t), fiber index (j), new degrade time (t_degrade)
+character(40) :: f_deg_list_format = '(f23.15, a, i0, a, f23.15)'
 
 
 !! BRAD 2023-02-02
@@ -239,7 +242,7 @@ logical :: all_fibers_degraded
 logical :: most_molecules_passed
 
 integer :: cmd_count, param_i, param_len, param_val_len, cmd_status, io_status
-character(80) :: param, param_value
+character(32) :: param, param_value
 
 cmd_count = command_argument_count ()
 write (*,*) 'number of command arguments = ', cmd_count
@@ -758,12 +761,15 @@ write(*,*)'read neighbors.dat'
         open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
 
 !! BRAD 2023-01-21:
-        open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
+        !open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
         open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
         open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
         
 !! BRAD 2023-06-09:
         open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form='formatted')
+
+!! BRAD 2024-02-02:
+        open(f_deg_list_unit,file=ADJUSTL('data/' // expCode // '/f_deg_list' // outFileCode),form='formatted')
 
 
         !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
@@ -857,8 +863,10 @@ write(*,*)'read neighbors.dat'
         
         !use the random numbers to decide where we start the tPAs
         
-!! BRAD 2023-04-13: Switching molecule starting locations to fiber edges
+!! BRAD 2023-04-13: Internal molecule start
             V(1,:) = enoFB + CEILING(rvect * (num - enoFB))
+!! BRAD 2023-07-14: External molecule start
+!            V(1,:) = CEILING(rvect * enoFB)
 
 !        do i=1,M
 !            if (0.le.rvect(i).and.rvect(i).le.init_state(1)) V(1,i)=1 !init_entry(i)=1
@@ -886,12 +894,12 @@ write(*,*)'read neighbors.dat'
         write(tunit) t
 
 !! BRAD 2023-01-21:
-        write(t_degrade_unit) t_degrade(:)
+        !write(t_degrade_unit) t_degrade(:)
         write(m_location_unit) V(1,:)
         write(m_bound_unit) V(2,:)
         Nsave = save_interval
 
-        write(*,*)' save as deg',outFileCode
+        write(*,*)' save as f_deg_list',outFileCode
 
 
 !        Vedgenext(1,:)=V(1,:)
@@ -949,9 +957,11 @@ write(*,*)'read neighbors.dat'
 !!                  Fixed 'passerby molecule' bug
                 if(V(2,j)==1.and.t_degrade(V(1,j))<t) then
                     V(2,j)=0 !set the molecule's bound state to "unbound", even though we're imagining it still bound to FDP
+!! BRAD 2023-11-24: Keep macro-unbound wait time as "average wait time". 
+!                    t_wait(j)=t+avgwait-tstep/2
 !! BRAD 2023-04-13: Change macro-unbound wait time to remaining leave time. 
 !!                  That is, the molecule will be restricted in its movement and binding until it would have unbound (if the fiber hadn't degraded first)
-                    t_wait(j)=t_leave(j)
+                    t_wait(j)=t_leave(j)                    
                     t_leave(j)=0
                     !also find the new binding time for this molecule !FOLLOWING LINE ADDED 4/21/2011:
                     bind(j)=0  !because the molecule can never rebind to a degraded edge
@@ -1116,22 +1126,26 @@ write(*,*)'read neighbors.dat'
                                     
                                     
 !! BRAD 2023-01-31:
-                                    if (verbose) then
-                                        if (t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
+                                    if (t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
+                                        if (verbose) then
                                             write (*,'(A, I10, A, I5, A, F12.5, A, F5.4)') '-> ts ', count-1,&
                                                 ' -> f ', V(1,j)-1, ' degrade time set to ', t+rmicro-tstep/2,&
                                                 '; using r = ', r4
                                         end if
+                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
+                                                                           !the cutting time obtained from the lysis time function
+                                                                           !minus half a time step so we round to nearest time step
+!! BRAD 2024-02-02
+                                        write(f_deg_list_unit, f_deg_list_format) t, ', ', V(1,j), ', ', t_degrade(V(1,j))
+
                                     end if
 
 !! BRAD 2023-04-20:
 !                                    if(t_degrade(V(1,j))==0) then              !if no tPA has landed on this edge before
-!                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
-                                                                           !the cutting time obtained from the lysis time function
-                                                                           !minus half a time step so we round to nearest time step
+!                                        
 !                                        countindep=countindep+1 !save the number of independent binding events
 !                                    else               !if tPA has previously landed on this edge and dictated a degradation time,
-                                        t_degrade(V(1,j)) = min(t_degrade(V(1,j)),(t+rmicro-tstep/2)) !choose the smallest time, because
+                                        !t_degrade(V(1,j)) = min(t_degrade(V(1,j)),(t+rmicro-tstep/2)) !choose the smallest time, because
                                                                                                 !that's what will happen first
 !                                    end if
 
@@ -1293,12 +1307,18 @@ write(*,*)'read neighbors.dat'
                                     
                                    
 !! BRAD 2023-01-31:
-                                    if (verbose) then
-                                        if (t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
+                                    if (t_degrade(V(1,j))>(t+rmicro-tstep/2)) then
+                                        if (verbose) then
                                             write (*,'(A, I10, A, I5, A, F12.5, A, F5.4)') '-> ts ', count-1,&
                                                 ' -> f ', V(1,j)-1, ' degrade time set to ', t+rmicro-tstep/2,&
                                                 '; using r = ', r4
                                         end if
+                                        t_degrade(V(1,j)) = t + rmicro - tstep/2 !time at which degradation occurs is current time plus
+                                                                           !the cutting time obtained from the lysis time function
+                                                                           !minus half a time step so we round to nearest time step
+!! BRAD 2024-02-02
+                                        write(f_deg_list_unit, f_deg_list_format) t, ', ', V(1,j), ', ', t_degrade(V(1,j))
+
                                     end if
 
 !! BRAD 2023-04-20:
@@ -1308,7 +1328,7 @@ write(*,*)'read neighbors.dat'
                                                                                  !minus half a time step so we round to nearest time step
 !                                        countindep=countindep+1 !save the number of independent binding events
 !                                    else               !if tPA has previously landed on this edge and dictated a degradation time,
-                                        t_degrade(V(1,j)) = min(t_degrade(V(1,j)),(t+rmicro-tstep/2)) !choose the smallest time, because
+!                                        t_degrade(V(1,j)) = min(t_degrade(V(1,j)),(t+rmicro-tstep/2)) !choose the smallest time, because
                                                                                                       !that's what will happen first
 !                                    end if
 
@@ -1484,7 +1504,7 @@ write(*,*)'read neighbors.dat'
 !                write(degunit)    degrade(1:num)
                 write(tunit)  t
 !! BRAD 2023-01-21:
-                write(t_degrade_unit) t_degrade(:)
+                ! write(t_degrade_unit) t_degrade(:)
                 write(m_location_unit) V(1,:)
                 write(m_bound_unit) V(2,:)
 
@@ -1509,6 +1529,7 @@ write(*,*)'read neighbors.dat'
                 reached_back_row_percent,'% of total).'
                
                 if (all_fibers_degraded.and.most_molecules_passed) exit
+!                if (all_fibers_degraded) exit
             end if
 
 !! BRAD 2023-01-31:
@@ -2072,10 +2093,11 @@ close(tunit)
 !close(plotunit)
 close(mfptunit)
 !! BRAD 2023-01-21:
-        close(t_degrade_unit)
+        !close(t_degrade_unit)
         close(m_location_unit)
         close(m_bound_unit)
         close(m_bind_time_unit)
+        close(f_deg_list_unit)
 
 !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
 !close(degnextunit)
