@@ -107,7 +107,7 @@ class CudaMacroscaleRun:
         self.total_macro_unbinds += 1
         self.waiting_time[m] = (
             current_time
-            + self.exp.macro_params.average_bind_time
+            + self.exp.macro_params.average_bound_time
             - self.exp.macro_params.time_step / 2
         )
         self.binding_time[m] = float("inf")
@@ -123,7 +123,7 @@ class CudaMacroscaleRun:
         forced[m] = self.rng.random(count) <= self.exp.macro_params.forced_unbind
         self.waiting_time[m & forced] = (
             current_time
-            + self.exp.macro_params.average_bind_time
+            + self.exp.macro_params.average_bound_time
             - self.exp.macro_params.time_step / 2
         )
         self.binding_time[m & forced] = float("inf")

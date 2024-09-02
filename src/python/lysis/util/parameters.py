@@ -625,7 +625,7 @@ class MacroParameters:
 
     # TODO(bpaynter): This value should derive from MicroParameters
     # TODO(bpaynter): Rename to average_bound_time
-    average_bind_time: float = 27.8
+    average_bound_time: Quantity = Q_("27.8 sec")
     """This is the average time a tPA molecule stays bound to fibrin. 
     For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
     
@@ -676,16 +676,16 @@ class MacroParameters:
     :Units: nodes
     :Fortran: Ffree-1"""
 
-    # TODO(bpaynter): This should be changed to "Number of empty edges"
-    last_empty_edge: int = field(init=False)
-    """The 1-D index of the last edge without fibrin
+    empty_edges: int = field(init=False)
+    """The number of edges without fibrin.
+    Also the 1-D index of the last edge without fibrin when 1-indexing
     
     This is probably unnecessary when using a 2-D data structure, but is kept 
     for historical reasons.
     
     
     :Units: edges
-    :Fortran: enoFB-1"""
+    :Fortran: enoFB"""
 
     full_row: int = field(init=False)
     """Edges in a full row of nodes
@@ -906,11 +906,11 @@ class MacroParameters:
         )
 
         # The 1-D index of the last edge in the fibrin-free region is the total
-        # number of edges in the fibrin-free region -1.
+        # number of edges in the fibrin-free region.
         # The total rows in the fibrin-free region is equal to the (0-based)
         # index of the first fiber row.
         # The total edges in this region is one full row of edges for each row
-        object.__setattr__(self, "last_empty_edge", self.full_row * self.empty_rows - 1)
+        object.__setattr__(self, "empty_edges", self.full_row * self.empty_rows)
 
         # Set the microscale runs from the microscale parameters
         object.__setattr__(self, "microscale_runs", self.micro_params.simulations)
