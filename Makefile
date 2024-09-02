@@ -63,12 +63,12 @@ C_SRC_DIR = ./src/c
 CPP_SRC_DIR = ./src/cpp
 FORT_SRC_DIR = ./src/fortran
 FORT_MICRO = micro_rates.f90
-FORT_MACRO = macro_Q2_diffuse_into \
-             macro_Q2_diffuse_along \
-             macro_Q2_always_rebind \
-             macro_diffuse_into_and_along__internal \
+FORT_MACRO = macro_diffuse_into_and_along__internal \
              macro_diffuse_into_and_along__external \
-             macro_diffuse_into_and_along_slow_micro__external
+            #  macro_Q2_diffuse_into \
+            #  macro_Q2_diffuse_along \
+            #  macro_Q2_always_rebind \
+            #  macro_diffuse_into_and_along_slow_micro__external
 
 #FILES =  ${FOLDER}macro_Q2.cpp  ${FOLDER}kiss.h
 
@@ -100,7 +100,7 @@ fort: fort-micro fort-macro
 
 c: c-macro
 
-fort-micro: $(BUILD_DIR)/micro_rates $(BUILD_DIR)/micro_wrapped
+fort-micro: $(BUILD_DIR)/micro_rates # $(BUILD_DIR)/micro_wrapped
 
 fort-macro: $(foreach file,$(FORT_MACRO),$(BUILD_DIR)/$(file))
 
@@ -113,32 +113,32 @@ shared: $(LIB_DIR)/kiss.so
 $(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
     
-$(BUILD_DIR)/micro_wrapped: $(FORT_SRC_DIR)/micro_wrapped.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_wrapped.f90 -o $(BUILD_DIR)/micro_wrapped
+# $(BUILD_DIR)/micro_wrapped: $(FORT_SRC_DIR)/micro_wrapped.f90 $(BUILD_DIR)/kiss.o
+# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_wrapped.f90 -o $(BUILD_DIR)/micro_wrapped
 
 $(BUILD_DIR)/macro_diffuse_into_and_along__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__external
     
-$(BUILD_DIR)/macro_diffuse_into_and_along_slow_micro__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along_slow_micro__external.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along_slow_micro__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along_slow_micro__external
+# $(BUILD_DIR)/macro_diffuse_into_and_along_slow_micro__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along_slow_micro__external.f90 $(BUILD_DIR)/kiss.o
+# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along_slow_micro__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along_slow_micro__external
     
 $(BUILD_DIR)/macro_diffuse_into_and_along__internal: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__internal
         
-$(BUILD_DIR)/macro_Q2_diffuse_into: $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into
+# $(BUILD_DIR)/macro_Q2_diffuse_into: $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 $(BUILD_DIR)/kiss.o
+# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into
     
-$(BUILD_DIR)/macro_Q2_diffuse_along: $(FORT_SRC_DIR)/macro_Q2_diffuse_along.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_along.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_along
+# $(BUILD_DIR)/macro_Q2_diffuse_along: $(FORT_SRC_DIR)/macro_Q2_diffuse_along.f90 $(BUILD_DIR)/kiss.o
+# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_along.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_along
     
-$(BUILD_DIR)/macro_Q2_always_rebind: $(FORT_SRC_DIR)/macro_Q2_always_rebind.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_always_rebind.f90 -o $(BUILD_DIR)/macro_Q2_always_rebind
+# $(BUILD_DIR)/macro_Q2_always_rebind: $(FORT_SRC_DIR)/macro_Q2_always_rebind.f90 $(BUILD_DIR)/kiss.o
+# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_always_rebind.f90 -o $(BUILD_DIR)/macro_Q2_always_rebind
     
-$(BUILD_DIR)/macro-normal: $(FORT_SRC_DIR)/macro_brad_scratch.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_brad_scratch.f90 -o $(BUILD_DIR)/macro-normal
+# $(BUILD_DIR)/macro-normal: $(FORT_SRC_DIR)/macro_brad_scratch.f90 $(BUILD_DIR)/kiss.o
+# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_brad_scratch.f90 -o $(BUILD_DIR)/macro-normal
     
-$(BUILD_DIR)/macro-array: $(FORT_SRC_DIR)/macro_rng_array.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_rng_array.f90 -o $(BUILD_DIR)/macro-array
+# $(BUILD_DIR)/macro-array: $(FORT_SRC_DIR)/macro_rng_array.f90 $(BUILD_DIR)/kiss.o
+# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_rng_array.f90 -o $(BUILD_DIR)/macro-array
     
 cpp: $(BUILD_DIR)/cpp_macro_Q2
 

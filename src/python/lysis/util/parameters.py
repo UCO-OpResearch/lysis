@@ -34,7 +34,7 @@ from typing import Any, List, Mapping, Tuple, Union
 from pint import Quantity
 
 from .constants import default_filenames, ExpComponent, ureg, Q_
-from .datastore import DataStore, DataStatus
+from .datastore import DataStore
 from .util import dict_to_formatted_str
 
 
@@ -336,10 +336,9 @@ class MicroParameters:
     :Units: microns
     :Fortran: radius"""
 
-    # TODO(bpaynter): Change to 2* fibrinogen radius
     # This was changed from 2.4 nm on 2024-01-17 to match physiological values
     # Yeromonahos, 2010 doi: 10.1016/j.bpj.2010.04.059
-    protofibril_radius: Quantity = Q_("5 nanometers")
+    protofibril_radius: Quantity = field(init=False)
     """The radius of a protofibril.
     
     :Units: microns
@@ -471,7 +470,7 @@ class MicroParameters:
     # Experimental Parameters
     #####################################
 
-    simulations: int = 50000
+    simulations: int = 50_000
     """The number of independent trials run in the microscale model.
     
     :Units: trials
@@ -509,6 +508,13 @@ class MicroParameters:
             ],
         )
 
+        # The dissociation constant is the unbinding rate over the binding rate
+        object.__setattr__(
+            self,
+            "protofibril_radius",
+            2 * self.fibrinogen_radius,
+        )
+        
         # The dissociation constant is the unbinding rate over the binding rate
         object.__setattr__(
             self,
@@ -563,6 +569,42 @@ class MicroParameters:
                 / ureg.avogadro_constant
             ).to("micromolar"),
         )
+    
+    @staticmethod
+    def units():
+        text = pkgutil.get_data(__name__, "parameters.py")
+        pattern = re.compile(
+            r"[\r\n]^\s{4}([a-z_]+):[^\"]*\"\"\"[^\"]*:Units:\s([^\n\r]+)[\r\n]",
+            re.M,
+        )
+        units = {}
+        matches = re.findall(pattern, text.decode("utf-8"))
+        for match in matches:
+            if match[1] != "None":
+                units[match[0]] = match[1]
+        return units
+
+    @staticmethod
+    def fortran_names():
+        text = pkgutil.get_data(__name__, "parameters.py")
+        pattern = re.compile(
+            r"[\r\n]+^\s{4}([a-z_]+):[^\"]*\"\"\"[^\"]*:Fortran:\s([\w_]+(-1)?)(\s=[^\"]*)?\"\"\"",
+            re.M,
+        )
+        names = {}
+        matches = re.findall(pattern, text.decode("utf-8"))
+        for match in matches:
+            if match[1] != "None":
+                names[match[0]] = match[1]
+        return names
+    
+    @staticmethod
+    def print_default_values() -> str:
+        """Returns the default parameters for the Macroscale model."""
+        # Create a new MacroParameters object with the default values
+        default_micro_params = MicroParameters()
+        # Convert to a dict, then to a formatted string, and return
+        return str(default_micro_params)
 
 
 @dataclass(frozen=True)

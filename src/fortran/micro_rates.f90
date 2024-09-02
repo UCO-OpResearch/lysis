@@ -15,7 +15,20 @@ program micromodel
     !!!! a degradation timer. It also allows PLi to degrade any exposed doublet at the same binding location, and
     !!!! tPA to convert any PLG on the same binding location to PLi.
 
+
+    !! Q0      46 nm diameter fibers,     4 nodes per row,  fibrin concentration 710.78 uM, binding site concentration 355.390 uM
+    !! Q1      57.4 nm diameter fibers,   5 nodes per row, 
+    !! Q2      72.7 nm diameter fibers,   7 nodes per row, fibrin concentration 871.17 uM, binding site concentration 426.848 uM
+    !! Q3      81.3 nm diameter fibers,   8 nodes per row
+    !! TF-v    105.1 nm diameter fibers,  5 nodes per row, fibrin concentration 212.75 uM, binding site concentration 136.159 uM
+    !! TF-vii  105.1 nm diameter fibers,  7 nodes per row, fibrin concentration 416.84 uM, binding site concentration 204.238 uM
+    !! TF-x    105.1 nm diameter fibers, 10 nodes per row, fibrin concentration 850.69 uM, binding site concentration 306.357 uM
+    !! TB-xi   123.0 nm diameter fibers, 11 nodes per row, fibrin concentration 751.54 uM, binding site concentration 248.531 uM
+    !! Q4      145.4 nm diameter fibers, 13 nodes per row, fibrin concentration 751.16 uM, binding site concentration 213.0 uM
+    !!
+
     integer  :: nodes = 7 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 5 for Q1 (57.4 nm), 7 for Q2 (72.7 nm), 8 for Q3 (81.3 nm), 13 for Q4 (145.4 nm)
+    double precision  :: radius = radius = 72.7/2/1000 ! fiber bundle radius in microns !! MAKE SURE you enter this as a decimal, even if it ends in .0
     integer, parameter :: Nplginit = 1 !number of exposed doublets initially - i.e. intact doublets - at each spatial location
     integer, parameter  :: Ninit = 5*Nplginit !number of cryptic doublets at each spatial location
     integer, parameter  :: Ntot = Ninit + Nplginit !total number of doublets at each spatial location
@@ -45,7 +58,6 @@ program micromodel
     !double precision  :: prob_N02
     !double precision  :: prob_N00
     !double precision  :: prob_N22
-    double precision  :: radius = 0.0365
 
     !! BRAD 2024-01-14: Change default to zero later
     integer :: seed = 981681759

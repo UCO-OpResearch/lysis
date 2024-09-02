@@ -32,7 +32,7 @@ program macrolysis
     ! have no fibers, there's one more row of fiber-free planar veritcal edges, and then
     ! the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers
     integer  :: stats = 10 !! BRAD 2023-01-04: 10
-    integer  :: M = 43074 ! total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
+    integer(8)  :: M = 43074 ! total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
     integer  :: tf = 20*60 !! BRAD 2023-01-06: 20*60! 15*60 ! final time in sec
 
     integer  :: nummicro = 500 ! if the number of microscale runs was 50,000, take nummicro=500; if it was 10,000, take nummicro=100
