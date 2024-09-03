@@ -28,7 +28,7 @@ program micromodel
     !!
 
     integer  :: nodes = 7 !total number of nodes in one row of the lattice. This is the only difference between thin and thick runs, so it is the only change that must be made. 5 for Q1 (57.4 nm), 7 for Q2 (72.7 nm), 8 for Q3 (81.3 nm), 13 for Q4 (145.4 nm)
-    double precision  :: radius = radius = 72.7/2/1000 ! fiber bundle radius in microns !! MAKE SURE you enter this as a decimal, even if it ends in .0
+    double precision  :: radius = 72.7/2/1000 ! fiber bundle radius in microns !! MAKE SURE you enter this as a decimal, even if it ends in .0
     integer, parameter :: Nplginit = 1 !number of exposed doublets initially - i.e. intact doublets - at each spatial location
     integer, parameter  :: Ninit = 5*Nplginit !number of cryptic doublets at each spatial location
     integer, parameter  :: Ntot = Ninit + Nplginit !total number of doublets at each spatial location
@@ -60,7 +60,7 @@ program micromodel
     !double precision  :: prob_N22
 
     !! BRAD 2024-01-14: Change default to zero later
-    integer :: seed = 981681759
+    integer :: seed = 0 ! 981681759
 
     !double precision, dimension(11,2)  :: param  !matrix that holds all the various parameter values we can use
 

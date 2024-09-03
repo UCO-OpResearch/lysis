@@ -347,7 +347,10 @@ class MicroParameters:
     :Units: microns
     :Fortran: None"""
     
-    fibrinogen_radius: Quantity = Q_('2.5 nanometers')
+    # NOTE: Currently set to 1.7 nanometers to match the legacy 2.4nm protofibril radius.
+    # This should be changed to 2.5 nanometers once verification is complete to match
+    # Yeromonahos, 2010 doi: 10.1016/j.bpj.2010.04.059
+    fibrinogen_radius: Quantity = Q_('1.2 nanometers')
     """The radius of a fibronogen molecule.
     
     :Units: microns
@@ -499,6 +502,12 @@ class MicroParameters:
     :Units: trials
     :Fortran: runs"""
 
+    seed: int = 0
+    """Seed for the random number generator
+    
+    :Units: None
+    :Fortran: seed"""
+
     #####################################
     # Data Parameters
     #####################################
@@ -531,7 +540,7 @@ class MicroParameters:
             ],
         )
 
-        # The dissociation constant is the unbinding rate over the binding rate
+        # One protofibril is two fibrinogens
         object.__setattr__(
             self,
             "protofibril_radius",
@@ -833,7 +842,7 @@ class MacroParameters:
     :Units: timesteps
     :Fortran: num_t"""
 
-    seed: int = -2137354075
+    seed: int = 0 # -2137354075
     """Seed for the random number generator
     
     :Units: None

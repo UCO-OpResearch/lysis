@@ -49,7 +49,7 @@ program macrolysis
     integer          :: bs = 427              ! concentration of binding sites in micromolar
     double precision :: dist = 1.0862d+00 ! microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
 
-    integer  :: seed = -2137354075
+    integer  :: seed = 0 ! -2137354075
 
     integer  :: num
     integer  :: enoFB ! the last edge number without fibrin
