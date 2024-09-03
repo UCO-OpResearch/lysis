@@ -106,26 +106,26 @@ class Experiment(object):
         # TODO(bpaynter): Check if the parameters are already stored.
         #                 Don't allow parameters to be changed once stored.
         # Initialize the internal storage as empty
-        self.sequence: ExpComponent = ExpComponent.NONE
+        # self.sequence: ExpComponent = ExpComponent.NONE
         self.micro_params = None
         self.macro_params = None
         self.data = DataStore(self.os_path, default_filenames)
 
-    def set_components(self, sequence: ExpComponent) -> None:
-        if self.macro_params is None or self.micro_params is None:
-            if sequence in ExpComponent.MACRO:
-                raise ValueError("Cannot execute Macroscale model without parameters.")
-            if sequence in ExpComponent.MACRO_POSTPROCESSING:
-                raise ValueError(
-                    "Cannot process Macroscale results without parameters."
-                )
-        if self.micro_params is None:
-            if sequence in ExpComponent.MICRO:
-                raise ValueError("Cannot execute Microscale model without parameters.")
-            if sequence in ExpComponent.MACRO_POSTPROCESSING:
-                raise ValueError(
-                    "Cannot process Microscale results without parameters."
-                )
+    # def set_components(self, sequence: ExpComponent) -> None:
+    #     if self.macro_params is None or self.micro_params is None:
+    #         if sequence in ExpComponent.MACRO:
+    #             raise ValueError("Cannot execute Macroscale model without parameters.")
+    #         if sequence in ExpComponent.MACRO_POSTPROCESSING:
+    #             raise ValueError(
+    #                 "Cannot process Macroscale results without parameters."
+    #             )
+    #     if self.micro_params is None:
+    #         if sequence in ExpComponent.MICRO:
+    #             raise ValueError("Cannot execute Microscale model without parameters.")
+    #         if sequence in ExpComponent.MACRO_POSTPROCESSING:
+    #             raise ValueError(
+    #                 "Cannot process Microscale results without parameters."
+    #             )
 
     def __str__(self) -> str:
         """Gives a human-readable, formatted string of the current experimental
@@ -192,7 +192,7 @@ class Experiment(object):
         # Initialize a dictionary of the appropriate parameters
         output = {
             "experiment_code": self.experiment_code,
-            "sequence": self.sequence,
+            # "sequence": self.sequence,
             "data_filenames": None,
             "micro_params": None,
             "macro_params": None,
@@ -202,10 +202,25 @@ class Experiment(object):
             output["data_filenames"] = self.data.to_dict()
         # Convert the Microscale parameters to a dictionary
         if self.micro_params is not None:
-            output["micro_params"] = asdict(self.micro_params)
+            units = self.micro_params.units()
+            output["micro_params"] = {}
+            for k, v in asdict(self.micro_params).items():
+                if isinstance(v, Quantity):
+                    output["micro_params"][k] = str(v.to(units[k]))
+                else:
+                    output["micro_params"][k] = v
+            
         # Convert the Macroscale parameters to a dictionary
         if self.macro_params is not None:
-            output["macro_params"] = asdict(self.macro_params)
+            units = self.macro_params.units()
+            output["macro_params"] = {}
+            for k, v in asdict(self.macro_params).items():
+                if k == "micro_params": 
+                    continue
+                if isinstance(v, Quantity):
+                    output["macro_params"][k] = str(v.to(units[k]))
+                else:
+                    output["macro_params"][k] = v
         return output
 
     def to_file(self) -> None:
@@ -291,6 +306,14 @@ class Experiment(object):
                 # object null.
                 self.macro_params = None
 
+################################
+###  NOTE:
+###  In the following dataclass definitions, do not use double-quotes (")
+###  Except for the docstrings below each definition.
+###  Otherwise it will mess up the units() and fortran() regexes
+###
+################################
+
 
 @dataclass(frozen=True)
 class MicroParameters:
@@ -318,19 +341,19 @@ class MicroParameters:
     # Physical Parameters
     #####################################
 
-    fibrinogen_length: Quantity = Q_("45 nanometers")
+    fibrinogen_length: Quantity = Q_('45 nanometers')
     """The length of a fibronogen molecule.
     
     :Units: microns
     :Fortran: None"""
     
-    fibrinogen_radius: Quantity = Q_("2.5 nanometers")
+    fibrinogen_radius: Quantity = Q_('2.5 nanometers')
     """The radius of a fibronogen molecule.
     
     :Units: microns
     :Fortran: None"""
 
-    fiber_radius: Quantity = Q_("72.7/2 nanometers")
+    fiber_radius: Quantity = Q_('72.7/2 nanometers')
     """The radius of each fiber in the model.
     
     :Units: microns
@@ -344,51 +367,51 @@ class MicroParameters:
     :Units: microns
     :Fortran: None"""
 
-    diss_const_tPA_wPLG: Quantity = Q_("0.02 micromolar")
+    diss_const_tPA_wPLG: Quantity = Q_('0.02 micromolar')
     """The dissociation constant of tPA, :math:`k^D_\\text{tPA}`, to fibrin 
     in the presence of PLG.
     
     :Units: micromolar
     :Fortran: KdtPAyesplg"""
 
-    diss_const_tPA_woPLG: Quantity = Q_("0.36 micromolar")
+    diss_const_tPA_woPLG: Quantity = Q_('0.36 micromolar')
     """The dissociation constant of tPA, :math:`k^D_\\text{tPA}`, to fibrin
     in the absence of PLG.
 
     :Units: micromolar
     :Fortran: KdtPAnoplg"""
 
-    diss_const_PLG_intact: Quantity = Q_("38 micromolar")
+    diss_const_PLG_intact: Quantity = Q_('38 micromolar')
     """The dissociation constant of PLG, :math:`k^D_\\text{PLG}`, to intact fibrin.
 
     :Units: micromolar
     :Fortran: KdPLGintact"""
 
-    diss_const_PLG_nicked: Quantity = Q_("2.2 micromolar")
+    diss_const_PLG_nicked: Quantity = Q_('2.2 micromolar')
     """The dissociation constant of PLG, :math:`k^D_\\text{PLG}`, to nicked fibrin.
 
     :Units: micromolar
     :Fortran: KdPLGnicked"""
 
-    bind_rate_tPA: Quantity = Q_("0.1 (micromolar*sec)^-1")
+    bind_rate_tPA: Quantity = Q_('0.1 (micromolar*sec)^-1')
     """The binding rate of tPA, :math:`k^\\text{on}_\\text{tPA}`, to fibrin.
 
     :Units: (micromolar*sec)^-1
     :Fortran: ktPAon"""
 
-    bind_rate_PLG: Quantity = Q_("0.1 (micromolar*sec)^-1")
+    bind_rate_PLG: Quantity = Q_('0.1 (micromolar*sec)^-1')
     """The binding rate of PLG, :math:`k^\\text{on}_\\text{PLG}`, to fibrin.
 
     :Units: (micromolar*sec)^-1
     :Fortran: kPLGon"""
 
-    conc_free_PLG: Quantity = Q_("2 micromolar")
+    conc_free_PLG: Quantity = Q_('2 micromolar')
     """The concentration of free plasminogen.
     
     :Units: micromolar
     :Fortran: freeplg"""
 
-    deg_rate_fibrin: Quantity = Q_("5 sec^-1")
+    deg_rate_fibrin: Quantity = Q_('5 sec^-1')
     """The plasmin-mediated rate of fibrin degradation.
     
     :Units: sec^-1
@@ -408,7 +431,7 @@ class MicroParameters:
     :Units: sec^-1
     :Fortran: kplgoffnick"""
 
-    unbind_rate_PLi: Quantity = Q_("57.6 sec^-1")
+    unbind_rate_PLi: Quantity = Q_('57.6 sec^-1')
     """The unbinding rate of PLi, :math:`k^\\text{off}_\\text{PLi}`, 
     from fibrin.
 
@@ -429,14 +452,14 @@ class MicroParameters:
     :Units: sec^-1
     :Fortran: kaoff10"""
 
-    activation_rate_PLG: Quantity = Q_("0.1 sec^-1")
+    activation_rate_PLG: Quantity = Q_('0.1 sec^-1')
     """The catalytic rate constant, :math:`k_\\text{cat}^\\text{ap}`, 
     for activation of PLG into PLI.
     
     :Units: sec^-1
     :Fortran: kapcat"""
 
-    exposure_rate_binding_site: Quantity = Q_("5 sec^-1")
+    exposure_rate_binding_site: Quantity = Q_('5 sec^-1')
     """The catalytic rate constant, :math:`k_\\text{cat}^\\text{n}`, 
     for the PLi-mediated rate of exposure of new binding sites.
 
@@ -574,7 +597,7 @@ class MicroParameters:
     def units():
         text = pkgutil.get_data(__name__, "parameters.py")
         pattern = re.compile(
-            r"[\r\n]^\s{4}([a-z_]+):[^\"]*\"\"\"[^\"]*:Units:\s([^\n\r]+)[\r\n]",
+            r"[\r\n]^\s{4}([a-zA-Z0-9_]+):[^\"]*\"\"\"[^\"]*:Units:\s([^\n\r]+)[\r\n]",
             re.M,
         )
         units = {}
@@ -588,7 +611,7 @@ class MicroParameters:
     def fortran_names():
         text = pkgutil.get_data(__name__, "parameters.py")
         pattern = re.compile(
-            r"[\r\n]+^\s{4}([a-z_]+):[^\"]*\"\"\"[^\"]*:Fortran:\s([\w_]+(-1)?)(\s=[^\"]*)?\"\"\"",
+            r"[\r\n]+^\s{4}([a-zA-Z0-9_]+):[^\"]*\"\"\"[^\"]*:Fortran:\s([\w_]+(-1)?)(\s=[^\"]*)?\"\"\"",
             re.M,
         )
         names = {}
@@ -640,13 +663,13 @@ class MacroParameters:
     :Units: (micromolar*sec)^-1
     :Fortran: kon"""
 
-    pore_size: Quantity = Q_("1.0135 um")
+    pore_size: Quantity = Q_('1.0135 um')
     """Pore size (distance between fibers/nodes)
     
     :Units: centimeters
     :Fortran: delx"""
 
-    diffusion_coeff: Quantity = Q_("5.0e-7 cm^2/s")
+    diffusion_coeff: Quantity = Q_('5.0e-7 cm^2/s')
     """Diffusion coefficient
     
     :Units: cm^2/s
@@ -667,7 +690,7 @@ class MacroParameters:
 
     # TODO(bpaynter): This value should derive from MicroParameters
     # TODO(bpaynter): Rename to average_bound_time
-    average_bound_time: Quantity = Q_("27.8 sec")
+    average_bound_time: Quantity = Q_('27.8 sec')
     """This is the average time a tPA molecule stays bound to fibrin. 
     For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
     
@@ -792,7 +815,7 @@ class MacroParameters:
     :Units: trials
     :Fortran: stats"""
 
-    total_time: Quantity = Q_("20 min")
+    total_time: Quantity = Q_('20 min')
     """Total running time for model.
      
     :Units: seconds
@@ -833,7 +856,7 @@ class MacroParameters:
     output_data: List[str] = field(init=False)
     """The data output by the Macroscale model."""
 
-    save_interval: Quantity = Q_("10 sec")
+    save_interval: Quantity = Q_('10 sec')
     """How often to record data from the model.
     
     :Units: sec
@@ -995,7 +1018,7 @@ class MacroParameters:
     def fortran_names():
         text = pkgutil.get_data(__name__, "parameters.py")
         pattern = re.compile(
-            r"[\r\n]+^\s{4}([a-z_]+):[^\"]*\"\"\"[^\"]*:Fortran:\s([\w_]+(-1)?)(\s=[^\"]*)?\"\"\"",
+            r"[\r\n]+^\s{4}([a-zA-Z0-9_]+):[^\"]*\"\"\"[^\"]*:Fortran:\s([\w_]+(-1)?)(\s=[^\"]*)?\"\"\"",
             re.M,
         )
         names = {}
@@ -1009,7 +1032,7 @@ class MacroParameters:
     def units():
         text = pkgutil.get_data(__name__, "parameters.py")
         pattern = re.compile(
-            r"[\r\n]^\s{4}([a-z_]+):[^\"]*\"\"\"[^\"]*:Units:\s([^\n\r]+)[\r\n]",
+            r"[\r\n]^\s{4}([a-zA-Z0-9_]+):[^\"]*\"\"\"[^\"]*:Units:\s([^\n\r]+)[\r\n]",
             re.M,
         )
         units = {}
