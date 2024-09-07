@@ -1,5 +1,5 @@
 =========================
-Data Specification v1.9.0
+Data Specification v1.7.0
 =========================
 
 Folder root
@@ -40,7 +40,7 @@ Microscale files
     Plain text
 
 ``micro.txt``
-  Output log for the run.
+  Output log for microscale simulation.
 
   :Data Type: 
     Plain text
@@ -132,11 +132,29 @@ Microscale files
     1 x ``micro_params.simulations``
 
 
+Macroscale files
+++++++++++++++++
+
+``macro.f90``
+  Fortran source code for the macroscale model.
+  This is the code that was used in this run.
+
+  :Data Type: 
+    Plain text
+
+
+
 Subfolders
 ----------
 :Purpose:
-  Stores all files related to a macroscale simulation
+  Stores all files related to an individual macroscale simulation
 
 :Name: 
   A two-digit number giving the macroscale simulations's position
   in the run array
+
+``macro.txt``
+  Output log for the macroscale simulation.
+
+  :Data Type: 
+    Plain text
