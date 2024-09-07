@@ -2,9 +2,8 @@ import argparse
 import os
 
 from dataclasses import dataclass
-from typing import AnyStr
 
-from lysis.util import EdgeGrid, Experiment, FortranMacro
+from lysis.util import Experiment, FortranMacro, FortranMicro
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -37,15 +36,25 @@ def main():
     args = parse_arguments()
     e = Experiment(os.path.join(args.cwd, "data"), experiment_code=args.exp_code)
     e.read_file()
-    fort_macro = FortranMacro(
+    if os.path.basename(args.executable)[:5] == "micro":
+        fort = FortranMicro(
         exp=e,
         cwd=args.cwd,
         executable=args.executable,
-        in_file_code=args.in_code,
         out_file_code=args.out_code,
-        index=args.index,
-    )
-    fort_macro.run()
+        )
+    elif os.path.basename(args.executable)[:5] == "macro":
+        fort = FortranMacro(
+            exp=e,
+            cwd=args.cwd,
+            executable=args.executable,
+            in_file_code=args.in_code,
+            out_file_code=args.out_code,
+            index=args.index,
+        )
+    else:
+        raise ValueError(f"Wrong executable type: {args.executable}")
+    fort.run()
 
 
 if __name__ == "__main__":

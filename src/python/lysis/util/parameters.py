@@ -15,7 +15,7 @@ Typical usage example:
     >>> exp = Experiment('path/to/data', '2022_12_27_1100')
     >>> exp.read_file()
     >>> # Access a parameter
-    >>> exp.macro_params['pore_size']
+    >>> exp.macro_params.pore_size
     >>> # Access data
     >>> exp.data.lysis_time[4][18]
 """
@@ -33,7 +33,7 @@ from typing import Any, List, Mapping, Tuple, Union
 
 from pint import Quantity
 
-from .constants import default_filenames, ExpComponent, ureg, Q_
+from .constants import default_filenames, ureg, Q_
 from .datastore import DataStore
 from .util import dict_to_formatted_str
 
@@ -111,22 +111,6 @@ class Experiment(object):
         self.macro_params = None
         self.data = DataStore(self.os_path, default_filenames)
 
-    # def set_components(self, sequence: ExpComponent) -> None:
-    #     if self.macro_params is None or self.micro_params is None:
-    #         if sequence in ExpComponent.MACRO:
-    #             raise ValueError("Cannot execute Macroscale model without parameters.")
-    #         if sequence in ExpComponent.MACRO_POSTPROCESSING:
-    #             raise ValueError(
-    #                 "Cannot process Macroscale results without parameters."
-    #             )
-    #     if self.micro_params is None:
-    #         if sequence in ExpComponent.MICRO:
-    #             raise ValueError("Cannot execute Microscale model without parameters.")
-    #         if sequence in ExpComponent.MACRO_POSTPROCESSING:
-    #             raise ValueError(
-    #                 "Cannot process Microscale results without parameters."
-    #             )
-
     def __str__(self) -> str:
         """Gives a human-readable, formatted string of the current experimental
         parameters."""
@@ -172,17 +156,15 @@ class Experiment(object):
                 For example,
                     >>> {'binding_rate': 10, 'pore_size': 3,}
         """
+        # The macroscale model is dependent on the parameters and results of the
+        # microscale model. If no microscale parameters are supplied, the macroscale
+        # model cannot be initialized.
         if self.micro_params is None:
             raise RuntimeError("No Microscale parameters.")
         if params is not None:
-            params["micro_params"] = self.micro_params
             self.macro_params = MacroParameters(**params)
         else:
             self.macro_params = MacroParameters(micro_params=self.micro_params)
-
-        # for data in self.macro_params.input_data:
-        #     if DataStatus.INITIALIZED not in self.data.status(data):
-        #         raise RuntimeError(f"'{data}' not initialized in DataStore.")
 
     def to_dict(self) -> dict:
         """Returns the internally stored data as a dictionary.
@@ -192,7 +174,6 @@ class Experiment(object):
         # Initialize a dictionary of the appropriate parameters
         output = {
             "experiment_code": self.experiment_code,
-            # "sequence": self.sequence,
             "data_filenames": None,
             "micro_params": None,
             "macro_params": None,
@@ -202,25 +183,32 @@ class Experiment(object):
             output["data_filenames"] = self.data.to_dict()
         # Convert the Microscale parameters to a dictionary
         if self.micro_params is not None:
-            units = self.micro_params.units()
+            # Get units
+            units = MacroParameters.units()
             output["micro_params"] = {}
+            # Loop through the parameters
             for k, v in asdict(self.micro_params).items():
+                # If the parameter is stored as a Quantity, convert it to standard units
+                # and output as a string. Else, pass it as-is
                 if isinstance(v, Quantity):
                     output["micro_params"][k] = str(v.to(units[k]))
                 else:
                     output["micro_params"][k] = v
-            
+
         # Convert the Macroscale parameters to a dictionary
         if self.macro_params is not None:
-            units = self.macro_params.units()
+            # Get units
+            units = MacroParameters.units()
             output["macro_params"] = {}
+            # Loop through the parameters
             for k, v in asdict(self.macro_params).items():
-                if k == "micro_params": 
-                    continue
+                # If the parameter is stored as a Quantity, convert it to standard units
+                # and output as a string. Else, pass it as-is
                 if isinstance(v, Quantity):
                     output["macro_params"][k] = str(v.to(units[k]))
                 else:
                     output["macro_params"][k] = v
+
         return output
 
     def to_file(self) -> None:
@@ -248,6 +236,7 @@ class Experiment(object):
         with open(self.os_param_file, "r") as file:
             # Use the JSON library to read in the parameters as a dictionary
             params = json.load(file)
+            # Initialize a datastore
             data_filenames = params.pop("data_filenames", None)
             if data_filenames is not None:
                 self.data = DataStore(self.os_path, data_filenames)
@@ -259,21 +248,27 @@ class Experiment(object):
                 # We are checking here to make sure that saved, dependent
                 # parameters don't get passed to the MicroParameters
                 # constructor
-
+                out_micro_params = {}
+                units = MicroParameters.units()
                 # Find the parameters needed to initialize a new
                 # MicroParameters object
                 sig = inspect.signature(MicroParameters)
                 # Get the keys we read from the JSON
-                for key in list(micro_params.keys()):
+                for k, v in micro_params.items():
                     # If that key is not needed, then toss it
-                    if key not in sig.parameters:
-                        micro_params.pop(key)
+                    if k not in sig.parameters:
+                        continue
+                    # If the parameter has units, parse it with Pint
+                    if k in units:
+                        out_micro_params[k] = Q_(v)
+                    else:
+                        out_micro_params[k] = v
                 # Now unpack whatever is left in the dict and pass it to the
                 # constructor
-                self.micro_params = MicroParameters(**micro_params)
+                self.micro_params = MicroParameters(**out_micro_params)
             else:
                 # If there were no microscale parameters in the file, then
-                # we raise an error
+                # we raise a warning.
                 warnings.warn(
                     "Experiment parameter file does not contain Microscale parameters. "
                     "Using defaults.",
@@ -284,27 +279,34 @@ class Experiment(object):
             # Remove the Macroscale parameters from the dictionary (if it
             # exists) and create a new MacroParameters object using its values
             macro_params = params.pop("macro_params", None)
-            macro_params["micro_params"] = self.micro_params
             if macro_params is not None:
                 # We are checking here to make sure that saved, dependent
                 # parameters don't get passed to the MacroParameters
                 # constructor
 
+                out_macro_params = {}
+                units = MacroParameters.units()
                 # Find the parameters needed to initialize a new
-                # MacroParameters object
+                # MicroParameters object
                 sig = inspect.signature(MacroParameters)
                 # Get the keys we read from the JSON
-                for key in list(macro_params.keys()):
+                for k, v in macro_params.items():
                     # If that key is not needed, then toss it
-                    if key not in sig.parameters:
-                        macro_params.pop(key)
+                    if k not in sig.parameters:
+                        continue
+                    # If the parameter has units, parse it with Pint
+                    if k in units:
+                        out_macro_params[k] = Q_(v)
+                    else:
+                        out_macro_params[k] = v
                 # Now unpack whatever is left in the dict and pass it to the
                 # constructor
-                self.macro_params = MacroParameters(**macro_params)
+                self.macro_params = MacroParameters(**out_macro_params)
             else:
                 # If there were no parameters in the file, then we leave the
                 # object null.
                 self.macro_params = None
+
 
 ################################
 ###  NOTE:
@@ -312,51 +314,57 @@ class Experiment(object):
 ###  Except for the docstrings below each definition.
 ###  Otherwise it will mess up the units() and fortran() regexes
 ###
+### TODO: Fix the regexes so that this is no longer a problem
 ################################
 
 
 @dataclass(frozen=True)
 class MicroParameters:
     """This will contain the parameters for the Microscale model.
-    This will need to be implemented and the Fortran microscale code modified
-    to work with it.
 
-    Once implemented, many Macroscale parameters will need to be redefined so
-    that they derive from the appropriate
-    Microscale parameters.
+    Parameters can be accessed as attributes.
+    Independent parameters should only be set at initialization.
+    Dependent parameters should never be set manually, but are automatically
+    calculated by internal code.
+
+    Should only be used inside an Experiment object.
+
+
+    Example:
+        >>> # Initialize using the default values
+        >>> micro_params_default = MicroParameters()
+        >>> # Get parameter value
+        >>> micro_params_default.fibrinogen_length
+        45 nanometers
+        >>> # Initialize overriding some default values
+        >>> p = {'fibrinogen_radius': "10 nm", 'fiber_radius': "3 um"}
+        >>> micro_params_override = MicroParameters(**p)
     """
 
-    # TODO(bpaynter): Needs to be implemented. This implementation should
-    #                 include:
-    #                   * Standard Microscale parameters
+    # TODO(bpaynter): Potential future features:
     #                   * The inclusion of standard sets of Microscale
     #                       parameters (i.e., Q2, CaseA-D, etc.)
-    #                   * The modification of the Microscale Fortran code to
-    #                       read/write JSON parameters
-    #                   * The modification of the MacroParameters class to
-    #                       derive the appropriate parameters from the
-    #                       MicroParameters class
 
     #####################################
     # Physical Parameters
     #####################################
 
-    fibrinogen_length: Quantity = Q_('45 nanometers')
+    fibrinogen_length: Quantity = Q_("45 nanometers")
     """The length of a fibronogen molecule.
     
     :Units: microns
     :Fortran: None"""
-    
+
     # NOTE: Currently set to 1.7 nanometers to match the legacy 2.4nm protofibril radius.
     # This should be changed to 2.5 nanometers once verification is complete to match
     # Yeromonahos, 2010 doi: 10.1016/j.bpj.2010.04.059
-    fibrinogen_radius: Quantity = Q_('1.2 nanometers')
+    fibrinogen_radius: Quantity = Q_("1.2 nanometers")
     """The radius of a fibronogen molecule.
     
     :Units: microns
     :Fortran: None"""
 
-    fiber_radius: Quantity = Q_('72.7/2 nanometers')
+    fiber_radius: Quantity = Q_("72.7/2 nanometers")
     """The radius of each fiber in the model.
     
     :Units: microns
@@ -370,51 +378,51 @@ class MicroParameters:
     :Units: microns
     :Fortran: None"""
 
-    diss_const_tPA_wPLG: Quantity = Q_('0.02 micromolar')
+    diss_const_tPA_wPLG: Quantity = Q_("0.02 micromolar")
     """The dissociation constant of tPA, :math:`k^D_\\text{tPA}`, to fibrin 
     in the presence of PLG.
     
     :Units: micromolar
     :Fortran: KdtPAyesplg"""
 
-    diss_const_tPA_woPLG: Quantity = Q_('0.36 micromolar')
+    diss_const_tPA_woPLG: Quantity = Q_("0.36 micromolar")
     """The dissociation constant of tPA, :math:`k^D_\\text{tPA}`, to fibrin
     in the absence of PLG.
 
     :Units: micromolar
     :Fortran: KdtPAnoplg"""
 
-    diss_const_PLG_intact: Quantity = Q_('38 micromolar')
+    diss_const_PLG_intact: Quantity = Q_("38 micromolar")
     """The dissociation constant of PLG, :math:`k^D_\\text{PLG}`, to intact fibrin.
 
     :Units: micromolar
     :Fortran: KdPLGintact"""
 
-    diss_const_PLG_nicked: Quantity = Q_('2.2 micromolar')
+    diss_const_PLG_nicked: Quantity = Q_("2.2 micromolar")
     """The dissociation constant of PLG, :math:`k^D_\\text{PLG}`, to nicked fibrin.
 
     :Units: micromolar
     :Fortran: KdPLGnicked"""
 
-    bind_rate_tPA: Quantity = Q_('0.1 (micromolar*sec)^-1')
+    bind_rate_tPA: Quantity = Q_("0.1 (micromolar*sec)^-1")
     """The binding rate of tPA, :math:`k^\\text{on}_\\text{tPA}`, to fibrin.
 
     :Units: (micromolar*sec)^-1
     :Fortran: ktPAon"""
 
-    bind_rate_PLG: Quantity = Q_('0.1 (micromolar*sec)^-1')
+    bind_rate_PLG: Quantity = Q_("0.1 (micromolar*sec)^-1")
     """The binding rate of PLG, :math:`k^\\text{on}_\\text{PLG}`, to fibrin.
 
     :Units: (micromolar*sec)^-1
     :Fortran: kPLGon"""
 
-    conc_free_PLG: Quantity = Q_('2 micromolar')
+    conc_free_PLG: Quantity = Q_("2 micromolar")
     """The concentration of free plasminogen.
     
     :Units: micromolar
     :Fortran: freeplg"""
 
-    deg_rate_fibrin: Quantity = Q_('5 sec^-1')
+    deg_rate_fibrin: Quantity = Q_("5 sec^-1")
     """The plasmin-mediated rate of fibrin degradation.
     
     :Units: sec^-1
@@ -434,7 +442,7 @@ class MicroParameters:
     :Units: sec^-1
     :Fortran: kplgoffnick"""
 
-    unbind_rate_PLi: Quantity = Q_('57.6 sec^-1')
+    unbind_rate_PLi: Quantity = Q_("57.6 sec^-1")
     """The unbinding rate of PLi, :math:`k^\\text{off}_\\text{PLi}`, 
     from fibrin.
 
@@ -455,14 +463,14 @@ class MicroParameters:
     :Units: sec^-1
     :Fortran: kaoff10"""
 
-    activation_rate_PLG: Quantity = Q_('0.1 sec^-1')
+    activation_rate_PLG: Quantity = Q_("0.1 sec^-1")
     """The catalytic rate constant, :math:`k_\\text{cat}^\\text{ap}`, 
     for activation of PLG into PLI.
     
     :Units: sec^-1
     :Fortran: kapcat"""
 
-    exposure_rate_binding_site: Quantity = Q_('5 sec^-1')
+    exposure_rate_binding_site: Quantity = Q_("5 sec^-1")
     """The catalytic rate constant, :math:`k_\\text{cat}^\\text{n}`, 
     for the PLi-mediated rate of exposure of new binding sites.
 
@@ -481,6 +489,12 @@ class MicroParameters:
     :Units: micromolar
     :Fortran: None"""
 
+    binding_sites: Quantity = field(init=False)  # int = 427
+    """Concentration of binding sites.
+     
+    :Units: micromolar
+    :Fortran: bs"""
+
     #####################################
     # Model Parameters
     #####################################
@@ -489,7 +503,7 @@ class MicroParameters:
     """The number of protofibrils in one row of the lattice inside one
     fiber.
     
-    :Units: nodes
+    :Units: None
     :Fortran: nodes"""
 
     #####################################
@@ -499,7 +513,7 @@ class MicroParameters:
     simulations: int = 50_000
     """The number of independent trials run in the microscale model.
     
-    :Units: trials
+    :Units: None
     :Fortran: runs"""
 
     seed: int = 0
@@ -518,6 +532,15 @@ class MicroParameters:
     #####################################
     # Code Parameters
     #####################################
+
+    micro_version: str = "micro_rates"
+    """A string identifying which version of the Microscale model is being run."""
+
+    log_lvl: int = logging.WARNING
+    """How much debugging information to write out to the console
+
+    :Units: None
+    :Fortran: None"""
 
     def __post_init__(self):
         """This method calculates the dependent parameters once the
@@ -546,7 +569,7 @@ class MicroParameters:
             "protofibril_radius",
             2 * self.fibrinogen_radius,
         )
-        
+
         # The dissociation constant is the unbinding rate over the binding rate
         object.__setattr__(
             self,
@@ -601,39 +624,95 @@ class MicroParameters:
                 / ureg.avogadro_constant
             ).to("micromolar"),
         )
-    
+
+        # Calculate the concentration of binding sites per fiber
+        # Calculation on page S3 from Bannish, et. al. 2017
+        # https://doi.org/10.1038/s41598-017-06383-w
+        object.__setattr__(
+            self,
+            "binding_sites",
+            4
+            * (self.nodes_in_row - 1)
+            / self.nodes_in_row**2
+            * self.fibrin_conc_per_fiber,
+        )
+
     @staticmethod
     def units():
+        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
+        that have units. The values in the dictionary are those units.
+        These values are parsed from the docstrings in this file.
+        """
+        # Get the text of this source code file
         text = pkgutil.get_data(__name__, "parameters.py")
+        # Initialize the regex for finding :Units: tags in the docstrings
         pattern = re.compile(
-            r"[\r\n]^\s{4}([a-zA-Z0-9_]+):[^\"]*\"\"\"[^\"]*:Units:\s([^\n\r]+)[\r\n]",
+            r"[\r\n]"  # The start of a line
+            + r"^\s{4}"  # four spaces (one tab)
+            + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
+            + r":.*[\r\n]*"  # the rest of that line
+            + r".*\"\"\""  # a triple-quote
+            + r"[^\"]*"  # text that is not a douple-quote
+            + r":Units:\s"  # the units tag
+            + r"([^\n\r]+)"  # Second capture group, the units
+            + r"[\r\n]",  # A line break
             re.M,
         )
         units = {}
+        # Find all matches
         matches = re.findall(pattern, text.decode("utf-8"))
+
+        # Check that the units are not none.
         for match in matches:
             if match[1] != "None":
                 units[match[0]] = match[1]
+
         return units
 
     @staticmethod
     def fortran_names():
+        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
+        that have equivalents in Fortran. The values in the dictionary are the names of the equivalent
+        Fortran variable names.
+        These values are parsed from the docstrings in this file.
+        """
+        # Get the text of this source code file
         text = pkgutil.get_data(__name__, "parameters.py")
+        # Initialize the regex for finding :Units: tags in the docstrings
         pattern = re.compile(
-            r"[\r\n]+^\s{4}([a-zA-Z0-9_]+):[^\"]*\"\"\"[^\"]*:Fortran:\s([\w_]+(-1)?)(\s=[^\"]*)?\"\"\"",
+            r"[\r\n]+"  # The start of a line
+            + r"^\s{4}"  # four spaces (one tab)
+            + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
+            + r":.*[\r\n]*"  # the rest of that line
+            + r".*\"\"\""  # a triple-quote
+            + r"[^\"]*"  # text that is not a douple-quote
+            + r":Fortran:\s"  # the Fortran tag
+            + r"([\w_]+(-1)?)"  # Second capture group, the fortran name, possibly with a -1
+            + r"(\s=[^\"]*)?"  # Third capture group (optional), a formula for the parameter in Fortran
+            + r"\"\"\"",  # A line break
             re.M,
         )
         names = {}
+        # Find all matches
         matches = re.findall(pattern, text.decode("utf-8"))
+        # Check that the units are not none.
         for match in matches:
             if match[1] != "None":
                 names[match[0]] = match[1]
+
         return names
-    
+
+    def __str__(self) -> str:
+        """Returns a human-readable, JSON-like string of all parameters."""
+        # Convert the internal parameters into one dictionary
+        values = asdict(self)
+        # Format the dictionary and return
+        return dict_to_formatted_str(values)
+
     @staticmethod
     def print_default_values() -> str:
-        """Returns the default parameters for the Macroscale model."""
-        # Create a new MacroParameters object with the default values
+        """Returns the default parameters for the Microscale model."""
+        # Create a new MicroParameters object with the default values
         default_micro_params = MicroParameters()
         # Convert to a dict, then to a formatted string, and return
         return str(default_micro_params)
@@ -666,29 +745,17 @@ class MacroParameters:
     # Physical Parameters
     #####################################
 
-    bind_rate_tPA: Quantity = field(init=False)
-    """The tPA binding rate.
-    
-    :Units: (micromolar*sec)^-1
-    :Fortran: kon"""
-
-    pore_size: Quantity = Q_('1.0135 um')
+    pore_size: Quantity = Q_("1.0135 um")
     """Pore size (distance between fibers/nodes)
     
     :Units: centimeters
     :Fortran: delx"""
 
-    diffusion_coeff: Quantity = Q_('5.0e-7 cm^2/s')
+    diffusion_coeff: Quantity = Q_("5.0e-7 cm^2/s")
     """Diffusion coefficient
     
     :Units: cm^2/s
     :Fortran: Diff"""
-
-    binding_sites: Quantity = field(init=False)  # int = 427
-    """Concentration of binding sites.
-     
-    :Units: micromolar
-    :Fortran: bs"""
 
     # TODO(bpaynter): This value should derive from MicroParameters
     forced_unbind: float = 0.0852
@@ -699,19 +766,12 @@ class MacroParameters:
 
     # TODO(bpaynter): This value should derive from MicroParameters
     # TODO(bpaynter): Rename to average_bound_time
-    average_bound_time: Quantity = Q_('27.8 sec')
+    average_bound_time: Quantity = Q_("27.8 sec")
     """This is the average time a tPA molecule stays bound to fibrin. 
     For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
     
     :Units: seconds
     :Fortran: avgwait = 1/koff"""
-
-    grid_node_distance: Quantity = field(init=False)
-    """Distance from the start of one fiber to the next because distance 
-    between nodes is 1.0135 micron and diameter of one fiber is 0.0727 micron.
-    
-    :Units: microns
-    :Fortran: dist"""
 
     #####################################
     # Model Parameters
@@ -720,7 +780,7 @@ class MacroParameters:
     cols: int = 93
     """The number of lattice nodes in each (horizontal) row
     
-    :Units: nodes
+    :Units: None
     :Fortran: N"""
 
     # TODO(bpaynter): 'rows' and 'fiber_rows' should be switched so that
@@ -728,13 +788,13 @@ class MacroParameters:
     rows: int = 121
     """The number of lattice nodes in each (vertical) column
     
-    :Units: nodes
+    :Units: None
     :Fortran: F"""
 
     fiber_rows: int = field(init=False)
     """The number of rows containing fibrin
     
-    :Units: nodes
+    :Units: None
     :Fortran: Fhat"""
 
     empty_rows: int = 29 - 1
@@ -747,7 +807,7 @@ class MacroParameters:
     'first_fiber_row' (e.g. 11th) is a full row of fibers.
     
     
-    :Units: nodes
+    :Units: None
     :Fortran: Ffree-1"""
 
     empty_edges: int = field(init=False)
@@ -758,31 +818,31 @@ class MacroParameters:
     for historical reasons.
     
     
-    :Units: edges
+    :Units: None
     :Fortran: enoFB"""
 
     full_row: int = field(init=False)
     """Edges in a full row of nodes
     
-    :Units: edges
+    :Units: None
     :Fortran: None"""
 
     xz_row: int = field(init=False)
     """Number of all x- and z-edges in a row
     
-    :Units: edges
+    :Units: None
     :Fortran: None"""
 
     total_edges: int = field(init=False)
     """The total number of edges in the model
     
-    :Units: edges
+    :Units: None
     :Fortran: num"""
 
     total_fibers: int = field(init=False)
     """The total number of fibers in the model
 
-    :Units: fibers
+    :Units: None
     :Fortran: None"""
 
     total_molecules: int = 43074
@@ -791,7 +851,7 @@ class MacroParameters:
         * 43074 is Colin's [tPA]=0.6 nM
         * 86148 is Colin's [tPA]=1.2 nM
         
-    :Units: molecules
+    :Units: None
     :Fortran: M"""
 
     moving_probability: float = 0.2
@@ -806,25 +866,13 @@ class MacroParameters:
     # Experimental Parameters
     #####################################
 
-    micro_params: MicroParameters = None
-    """The parameters from the matching microscale model.
-    
-    :Units: None
-    :Fortran: None"""
-
-    microscale_runs: int = field(init=False)
-    """The number of independent simulations run in the microscale model.
-    
-    :Units: trials
-    :Fortran: nummicro*100"""
-
     simulations: int = 10
     """The number of independent simulations to be run
     
-    :Units: trials
+    :Units: None
     :Fortran: stats"""
 
-    total_time: Quantity = Q_('20 min')
+    total_time: Quantity = Q_("20 min")
     """Total running time for model.
      
     :Units: seconds
@@ -839,10 +887,10 @@ class MacroParameters:
     total_time_steps: int = field(init=False)
     """The total number of timesteps.
     
-    :Units: timesteps
+    :Units: None
     :Fortran: num_t"""
 
-    seed: int = 0 # -2137354075
+    seed: int = 0  # -2137354075
     """Seed for the random number generator
     
     :Units: None
@@ -865,7 +913,7 @@ class MacroParameters:
     output_data: List[str] = field(init=False)
     """The data output by the Macroscale model."""
 
-    save_interval: Quantity = Q_('10 sec')
+    save_interval: Quantity = Q_("10 sec")
     """How often to record data from the model.
     
     :Units: sec
@@ -938,21 +986,6 @@ class MacroParameters:
             ],
         )
 
-        # Get the tPA binding rate from the Microscale parameters
-        object.__setattr__(self, "bind_rate_tPA", self.micro_params.bind_rate_tPA)
-
-        # Calculate the concentration of binding sites per fiber
-        # Calculation on page S3 from Bannish, et. al. 2017
-        # https://doi.org/10.1038/s41598-017-06383-w
-        object.__setattr__(
-            self,
-            "binding_sites",
-            4
-            * (self.micro_params.nodes_in_row - 1)
-            / self.micro_params.nodes_in_row**2
-            * self.micro_params.fibrin_conc_per_fiber,
-        )
-
         # A full row of the fiber grid contains a 'right', 'up', and 'out' edge
         # for each node, except the last node which contains no 'right' edge.
         object.__setattr__(self, "full_row", 3 * self.cols - 1)
@@ -986,17 +1019,6 @@ class MacroParameters:
         # The total edges in this region is one full row of edges for each row
         object.__setattr__(self, "empty_edges", self.full_row * self.empty_rows)
 
-        # Set the microscale runs from the microscale parameters
-        object.__setattr__(self, "microscale_runs", self.micro_params.simulations)
-
-        # The grid_node_distance is the pore size (converted to microns)
-        # plus two times the fiber radius from the microscale parameters
-        object.__setattr__(
-            self,
-            "grid_node_distance",
-            self.pore_size + 2 * self.micro_params.fiber_radius,
-        )
-
         # Equation (2.4) page 25 from Bannish, et. al. 2014
         # https://doi.org/10.1093/imammb/dqs029
         object.__setattr__(
@@ -1024,32 +1046,69 @@ class MacroParameters:
         )
 
     @staticmethod
-    def fortran_names():
-        text = pkgutil.get_data(__name__, "parameters.py")
-        pattern = re.compile(
-            r"[\r\n]+^\s{4}([a-zA-Z0-9_]+):[^\"]*\"\"\"[^\"]*:Fortran:\s([\w_]+(-1)?)(\s=[^\"]*)?\"\"\"",
-            re.M,
-        )
-        names = {}
-        matches = re.findall(pattern, text.decode("utf-8"))
-        for match in matches:
-            if match[1] != "None":
-                names[match[0]] = match[1]
-        return names
-
-    @staticmethod
     def units():
+        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
+        that have units. The values in the dictionary are those units.
+        These values are parsed from the docstrings in this file.
+        """
+        # Get the text of this source code file
         text = pkgutil.get_data(__name__, "parameters.py")
+        # Initialize the regex for finding :Units: tags in the docstrings
         pattern = re.compile(
-            r"[\r\n]^\s{4}([a-zA-Z0-9_]+):[^\"]*\"\"\"[^\"]*:Units:\s([^\n\r]+)[\r\n]",
+            r"[\r\n]"  # The start of a line
+            + r"^\s{4}"  # four spaces (one tab)
+            + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
+            + r":.*[\r\n]*"  # the rest of that line
+            + r".*\"\"\""  # a triple-quote
+            + r"[^\"]*"  # text that is not a douple-quote
+            + r":Units:\s"  # the units tag
+            + r"([^\n\r]+)"  # Second capture group, the units
+            + r"[\r\n]",  # A line break
             re.M,
         )
         units = {}
+        # Find all matches
         matches = re.findall(pattern, text.decode("utf-8"))
+
+        # Check that the units are not none.
         for match in matches:
             if match[1] != "None":
                 units[match[0]] = match[1]
+
         return units
+
+    @staticmethod
+    def fortran_names():
+        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
+        that have equivalents in Fortran. The values in the dictionary are the names of the equivalent
+        Fortran variable names.
+        These values are parsed from the docstrings in this file.
+        """
+        # Get the text of this source code file
+        text = pkgutil.get_data(__name__, "parameters.py")
+        # Initialize the regex for finding :Units: tags in the docstrings
+        pattern = re.compile(
+            r"[\r\n]+"  # The start of a line
+            + r"^\s{4}"  # four spaces (one tab)
+            + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
+            + r":.*[\r\n]*"  # the rest of that line
+            + r".*\"\"\""  # a triple-quote
+            + r"[^\"]*"  # text that is not a douple-quote
+            + r":Fortran:\s"  # the Fortran tag
+            + r"([\w_]+(-1)?)"  # Second capture group, the fortran name, possibly with a -1
+            + r"(\s=[^\"]*)?"  # Third capture group (optional), a formula for the parameter in Fortran
+            + r"\"\"\"",  # A line break
+            re.M,
+        )
+        names = {}
+        # Find all matches
+        matches = re.findall(pattern, text.decode("utf-8"))
+        # Check that the units are not none.
+        for match in matches:
+            if match[1] != "None":
+                names[match[0]] = match[1]
+
+        return names
 
     def __str__(self) -> str:
         """Returns a human-readable, JSON-like string of all parameters."""
