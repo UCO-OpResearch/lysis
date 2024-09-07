@@ -12,14 +12,6 @@ Subpackages
 Submodules
 ----------
 
-lysis.edge_grid module
------------------------
-
-.. automodule:: lysis.edge_grid
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Module contents
 ---------------
 

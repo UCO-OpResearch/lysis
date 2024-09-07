@@ -1,92 +1,50 @@
-
-
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
+<html class="writer-html5" lang="en" data-content_root="./">
 <head>
-  <meta charset="utf-8" />
-  <meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  
   <title>lysis package &mdash; Lysis  documentation</title>
-  
-
-  
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-
-  
-  
-
-  
-  
-
-  
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
 
   
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-    
-      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
-        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
-        <script src="_static/doctools.js"></script>
-        <script src="_static/sphinx_highlight.js"></script>
-    
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-
-    
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=5929fcd5"></script>
+        <script src="_static/doctools.js?v=9a2dae69"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="lysis.util package" href="lysis.util.html" />
     <link rel="prev" title="lysis" href="modules.html" /> 
 </head>
 
-<body class="wy-body-for-nav">
-
-   
+<body class="wy-body-for-nav"> 
   <div class="wy-grid-for-nav">
-    
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-          
 
           
-            <a href="index.html" class="icon icon-home"> Lysis
           
-
-          
+          <a href="index.html" class="icon icon-home">
+            Lysis
           </a>
-
-          
-            
-            
-          
-
-          
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
-
-          
-        </div>
-
-        
-        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-          
-            
-            
-              
-            
-            
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="reference internal" href="modules.html">lysis</a><ul class="current">
@@ -96,12 +54,6 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#submodules">Submodules</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#module-lysis.edge_grid">lysis.edge_grid module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#lysis.edge_grid.EdgeGrid"><code class="docutils literal notranslate"><span class="pre">EdgeGrid</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#lysis.edge_grid.from_fortran_edge_index"><code class="docutils literal notranslate"><span class="pre">from_fortran_edge_index()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#lysis.edge_grid.to_fortran_edge_index"><code class="docutils literal notranslate"><span class="pre">to_fortran_edge_index()</span></code></a></li>
-</ul>
-</li>
 <li class="toctree-l3"><a class="reference internal" href="#module-lysis">Module contents</a></li>
 </ul>
 </li>
@@ -109,77 +61,35 @@
 </li>
 </ul>
 
-            
-          
         </div>
-        
       </div>
     </nav>
 
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
-
-      
-      <nav class="wy-nav-top" aria-label="top navigation">
-        
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
           <a href="index.html">Lysis</a>
-        
       </nav>
 
-
       <div class="wy-nav-content">
-        
         <div class="rst-content">
-        
-          
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<div role="navigation" aria-label="breadcrumbs navigation">
-
+          <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-    
-      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-        
-          <li><a href="modules.html">lysis</a> &raquo;</li>
-        
-      <li>lysis package</li>
-    
-    
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="modules.html">lysis</a></li>
+      <li class="breadcrumb-item active">lysis package</li>
       <li class="wy-breadcrumbs-aside">
-        
-          
             <a href="_sources/lysis.rst.txt" rel="nofollow"> View page source</a>
-          
-        
       </li>
-    
   </ul>
-
-  
   <hr/>
 </div>
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
-            
+             
   <section id="lysis-package">
-<h1>lysis package<a class="headerlink" href="#lysis-package" title="Permalink to this heading">¶</a></h1>
+<h1>lysis package<a class="headerlink" href="#lysis-package" title="Link to this heading"></a></h1>
 <section id="subpackages">
-<h2>Subpackages<a class="headerlink" href="#subpackages" title="Permalink to this heading">¶</a></h2>
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="lysis.util.html">lysis.util package</a><ul>
@@ -201,6 +111,15 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.Const"><code class="docutils literal notranslate"><span class="pre">Const</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.ExpComponent"><code class="docutils literal notranslate"><span class="pre">ExpComponent</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.ExpComponent.ALL"><code class="docutils literal notranslate"><span class="pre">ExpComponent.ALL</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.ExpComponent.MACRO"><code class="docutils literal notranslate"><span class="pre">ExpComponent.MACRO</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.ExpComponent.MACRO_POSTPROCESSING"><code class="docutils literal notranslate"><span class="pre">ExpComponent.MACRO_POSTPROCESSING</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.ExpComponent.MICRO"><code class="docutils literal notranslate"><span class="pre">ExpComponent.MICRO</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.ExpComponent.MICRO_POSTPROCESSING"><code class="docutils literal notranslate"><span class="pre">ExpComponent.MICRO_POSTPROCESSING</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.ExpComponent.NONE"><code class="docutils literal notranslate"><span class="pre">ExpComponent.NONE</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.FiberDirection"><code class="docutils literal notranslate"><span class="pre">FiberDirection</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.FiberDirection.DOWN"><code class="docutils literal notranslate"><span class="pre">FiberDirection.DOWN</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.FiberDirection.IN"><code class="docutils literal notranslate"><span class="pre">FiberDirection.IN</span></code></a></li>
@@ -211,9 +130,27 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.Neighbors"><code class="docutils literal notranslate"><span class="pre">Neighbors</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw"><code class="docutils literal notranslate"><span class="pre">RandomDraw</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.BINDING_TIME_WHEN_MOVING"><code class="docutils literal notranslate"><span class="pre">RandomDraw.BINDING_TIME_WHEN_MOVING</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.BINDING_TIME_WHEN_UNBINDING"><code class="docutils literal notranslate"><span class="pre">RandomDraw.BINDING_TIME_WHEN_UNBINDING</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.CONFLICT_RESOLUTION"><code class="docutils literal notranslate"><span class="pre">RandomDraw.CONFLICT_RESOLUTION</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.LYSIS_TIME"><code class="docutils literal notranslate"><span class="pre">RandomDraw.LYSIS_TIME</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.MICRO_UNBIND"><code class="docutils literal notranslate"><span class="pre">RandomDraw.MICRO_UNBIND</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.MOVE"><code class="docutils literal notranslate"><span class="pre">RandomDraw.MOVE</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.RESTRICTED_MOVE"><code class="docutils literal notranslate"><span class="pre">RandomDraw.RESTRICTED_MOVE</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.constants.RandomDraw.UNBINDING_TIME"><code class="docutils literal notranslate"><span class="pre">RandomDraw.UNBINDING_TIME</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="lysis.util.html#module-lysis.util.datastore">lysis.util.datastore module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStatus"><code class="docutils literal notranslate"><span class="pre">DataStatus</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStatus.INITIALIZED"><code class="docutils literal notranslate"><span class="pre">DataStatus.INITIALIZED</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStatus.LOADED"><code class="docutils literal notranslate"><span class="pre">DataStatus.LOADED</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStatus.NONE"><code class="docutils literal notranslate"><span class="pre">DataStatus.NONE</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStatus.SAVED"><code class="docutils literal notranslate"><span class="pre">DataStatus.SAVED</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStore"><code class="docutils literal notranslate"><span class="pre">DataStore</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStore.append"><code class="docutils literal notranslate"><span class="pre">DataStore.append()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStore.delete"><code class="docutils literal notranslate"><span class="pre">DataStore.delete()</span></code></a></li>
@@ -225,18 +162,13 @@
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.DataStore.to_dict"><code class="docutils literal notranslate"><span class="pre">DataStore.to_dict()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.Status"><code class="docutils literal notranslate"><span class="pre">Status</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.Status.INITIALIZED"><code class="docutils literal notranslate"><span class="pre">Status.INITIALIZED</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.Status.LOADED"><code class="docutils literal notranslate"><span class="pre">Status.LOADED</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.Status.NONE"><code class="docutils literal notranslate"><span class="pre">Status.NONE</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.Status.SAVED"><code class="docutils literal notranslate"><span class="pre">Status.SAVED</span></code></a></li>
-</ul>
-</li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.datastore.identity"><code class="docutils literal notranslate"><span class="pre">identity()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="lysis.util.html#module-lysis.util.kiss">lysis.util.kiss module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator.getstate"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator.getstate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator.integers"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator.integers()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator.kiss32"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator.kiss32()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator.mscw"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator.mscw()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.kiss.KissRandomGenerator.random"><code class="docutils literal notranslate"><span class="pre">KissRandomGenerator.random()</span></code></a></li>
@@ -252,42 +184,81 @@
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.os_path"><code class="docutils literal notranslate"><span class="pre">Experiment.os_path</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.macro_params"><code class="docutils literal notranslate"><span class="pre">Experiment.macro_params</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.initialize_macro_param"><code class="docutils literal notranslate"><span class="pre">Experiment.initialize_macro_param()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.initialize_micro_param"><code class="docutils literal notranslate"><span class="pre">Experiment.initialize_micro_param()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.read_file"><code class="docutils literal notranslate"><span class="pre">Experiment.read_file()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.to_dict"><code class="docutils literal notranslate"><span class="pre">Experiment.to_dict()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment.to_file"><code class="docutils literal notranslate"><span class="pre">Experiment.to_file()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters"><code class="docutils literal notranslate"><span class="pre">MacroParameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.average_bind_time"><code class="docutils literal notranslate"><span class="pre">MacroParameters.average_bind_time</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.binding_rate"><code class="docutils literal notranslate"><span class="pre">MacroParameters.binding_rate</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.binding_sites"><code class="docutils literal notranslate"><span class="pre">MacroParameters.binding_sites</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.average_bound_time"><code class="docutils literal notranslate"><span class="pre">MacroParameters.average_bound_time</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.cols"><code class="docutils literal notranslate"><span class="pre">MacroParameters.cols</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.data_required"><code class="docutils literal notranslate"><span class="pre">MacroParameters.data_required</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.diffusion_coeff"><code class="docutils literal notranslate"><span class="pre">MacroParameters.diffusion_coeff</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.duplicate_fortran"><code class="docutils literal notranslate"><span class="pre">MacroParameters.duplicate_fortran</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.first_fiber_row"><code class="docutils literal notranslate"><span class="pre">MacroParameters.first_fiber_row</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.empty_edges"><code class="docutils literal notranslate"><span class="pre">MacroParameters.empty_edges</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.empty_rows"><code class="docutils literal notranslate"><span class="pre">MacroParameters.empty_rows</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.fiber_rows"><code class="docutils literal notranslate"><span class="pre">MacroParameters.fiber_rows</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.forced_unbind"><code class="docutils literal notranslate"><span class="pre">MacroParameters.forced_unbind</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.fortran_names"><code class="docutils literal notranslate"><span class="pre">MacroParameters.fortran_names()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.full_row"><code class="docutils literal notranslate"><span class="pre">MacroParameters.full_row</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.grid_node_distance"><code class="docutils literal notranslate"><span class="pre">MacroParameters.grid_node_distance</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.last_ghost_edge"><code class="docutils literal notranslate"><span class="pre">MacroParameters.last_ghost_edge</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.input_data"><code class="docutils literal notranslate"><span class="pre">MacroParameters.input_data</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.log_lvl"><code class="docutils literal notranslate"><span class="pre">MacroParameters.log_lvl</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.macro_version"><code class="docutils literal notranslate"><span class="pre">MacroParameters.macro_version</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.moving_probability"><code class="docutils literal notranslate"><span class="pre">MacroParameters.moving_probability</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.number_of_saves"><code class="docutils literal notranslate"><span class="pre">MacroParameters.number_of_saves</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.output_data"><code class="docutils literal notranslate"><span class="pre">MacroParameters.output_data</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.pore_size"><code class="docutils literal notranslate"><span class="pre">MacroParameters.pore_size</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.print_default_values"><code class="docutils literal notranslate"><span class="pre">MacroParameters.print_default_values()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.processing_library"><code class="docutils literal notranslate"><span class="pre">MacroParameters.processing_library</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.rows"><code class="docutils literal notranslate"><span class="pre">MacroParameters.rows</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.save_interval"><code class="docutils literal notranslate"><span class="pre">MacroParameters.save_interval</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.seed"><code class="docutils literal notranslate"><span class="pre">MacroParameters.seed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.simulations"><code class="docutils literal notranslate"><span class="pre">MacroParameters.simulations</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.state"><code class="docutils literal notranslate"><span class="pre">MacroParameters.state</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.time_step"><code class="docutils literal notranslate"><span class="pre">MacroParameters.time_step</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_edges"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_edges</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_fibers"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_fibers</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_molecules"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_molecules</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_time"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_time</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_time_steps"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_time_steps</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.total_trials"><code class="docutils literal notranslate"><span class="pre">MacroParameters.total_trials</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.units"><code class="docutils literal notranslate"><span class="pre">MacroParameters.units()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MacroParameters.xz_row"><code class="docutils literal notranslate"><span class="pre">MacroParameters.xz_row</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters"><code class="docutils literal notranslate"><span class="pre">MicroParameters</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters"><code class="docutils literal notranslate"><span class="pre">MicroParameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.activation_rate_PLG"><code class="docutils literal notranslate"><span class="pre">MicroParameters.activation_rate_PLG</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.bind_rate_PLG"><code class="docutils literal notranslate"><span class="pre">MicroParameters.bind_rate_PLG</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.bind_rate_tPA"><code class="docutils literal notranslate"><span class="pre">MicroParameters.bind_rate_tPA</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.binding_sites"><code class="docutils literal notranslate"><span class="pre">MicroParameters.binding_sites</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.conc_free_PLG"><code class="docutils literal notranslate"><span class="pre">MicroParameters.conc_free_PLG</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.deg_rate_fibrin"><code class="docutils literal notranslate"><span class="pre">MicroParameters.deg_rate_fibrin</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.diss_const_PLG_intact"><code class="docutils literal notranslate"><span class="pre">MicroParameters.diss_const_PLG_intact</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.diss_const_PLG_nicked"><code class="docutils literal notranslate"><span class="pre">MicroParameters.diss_const_PLG_nicked</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.diss_const_tPA_wPLG"><code class="docutils literal notranslate"><span class="pre">MicroParameters.diss_const_tPA_wPLG</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.diss_const_tPA_woPLG"><code class="docutils literal notranslate"><span class="pre">MicroParameters.diss_const_tPA_woPLG</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.exposure_rate_binding_site"><code class="docutils literal notranslate"><span class="pre">MicroParameters.exposure_rate_binding_site</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.fiber_radius"><code class="docutils literal notranslate"><span class="pre">MicroParameters.fiber_radius</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.fibrin_conc_per_fiber"><code class="docutils literal notranslate"><span class="pre">MicroParameters.fibrin_conc_per_fiber</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.fibrinogen_length"><code class="docutils literal notranslate"><span class="pre">MicroParameters.fibrinogen_length</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.fibrinogen_radius"><code class="docutils literal notranslate"><span class="pre">MicroParameters.fibrinogen_radius</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.fortran_names"><code class="docutils literal notranslate"><span class="pre">MicroParameters.fortran_names()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.log_lvl"><code class="docutils literal notranslate"><span class="pre">MicroParameters.log_lvl</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.micro_version"><code class="docutils literal notranslate"><span class="pre">MicroParameters.micro_version</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.nodes_in_row"><code class="docutils literal notranslate"><span class="pre">MicroParameters.nodes_in_row</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.output_data"><code class="docutils literal notranslate"><span class="pre">MicroParameters.output_data</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.print_default_values"><code class="docutils literal notranslate"><span class="pre">MicroParameters.print_default_values()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.protein_per_fiber"><code class="docutils literal notranslate"><span class="pre">MicroParameters.protein_per_fiber</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.protofibril_radius"><code class="docutils literal notranslate"><span class="pre">MicroParameters.protofibril_radius</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.seed"><code class="docutils literal notranslate"><span class="pre">MicroParameters.seed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.simulations"><code class="docutils literal notranslate"><span class="pre">MicroParameters.simulations</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.unbind_rate_PLG_intact"><code class="docutils literal notranslate"><span class="pre">MicroParameters.unbind_rate_PLG_intact</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.unbind_rate_PLG_nicked"><code class="docutils literal notranslate"><span class="pre">MicroParameters.unbind_rate_PLG_nicked</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.unbind_rate_PLi"><code class="docutils literal notranslate"><span class="pre">MicroParameters.unbind_rate_PLi</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.unbind_rate_tPA_wPLG"><code class="docutils literal notranslate"><span class="pre">MicroParameters.unbind_rate_tPA_wPLG</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.unbind_rate_tPA_woPLG"><code class="docutils literal notranslate"><span class="pre">MicroParameters.unbind_rate_tPA_woPLG</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.MicroParameters.units"><code class="docutils literal notranslate"><span class="pre">MicroParameters.units()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="lysis.util.html#module-lysis.util.util">lysis.util.util module</a><ul>
@@ -301,340 +272,42 @@
 </div>
 </section>
 <section id="submodules">
-<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this heading">¶</a></h2>
-</section>
-<section id="module-lysis.edge_grid">
-<span id="lysis-edge-grid-module"></span><h2>lysis.edge_grid module<a class="headerlink" href="#module-lysis.edge_grid" title="Permalink to this heading">¶</a></h2>
-<dl class="py class">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">lysis.edge_grid.</span></span><span class="sig-name descname"><span class="pre">EdgeGrid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="lysis.util.html#lysis.util.parameters.Experiment" title="lysis.util.parameters.Experiment"><span class="pre">Experiment</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">thisgrid_rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thisgrid_starting_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary_conditions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryCondition" title="lysis.util.constants.BoundaryCondition"><span class="pre">BoundaryCondition</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="lysis.util.html#lysis.util.constants.BoundaryCondition" title="lysis.util.constants.BoundaryCondition"><span class="pre">BoundaryCondition</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_fiber_status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">inf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>The main class containing a 3-D grid of edges. This represents an xy-planar slice, one edge high, of a clot.</p>
-<p>Co-ordinate arrangement:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s1">&#39;         {        /           /           /           /           /</span>
-<span class="s1">&#39;   Row 3 {       1           4           7           10          13</span>
-<span class="s1">&#39;         {      /           /           /           /           /</span>
-<span class="s1">&#39;         {     +-----2-----+-----5-----+-----8-----+-----11----+</span>
-<span class="s1">&#39;              /|          /|          /|          /|          /|</span>
-<span class="s1">&#39;             / |         / |         / |         / |         / |</span>
-<span class="s1">&#39;         {     0  /        3  /        6  /        9  /       12  /</span>
-<span class="s1">&#39;   Row 2 {     | 1         | 4         | 7         | 10        | 13</span>
-<span class="s1">&#39;         {     |/          |/          |/          |/          |/</span>
-<span class="s1">&#39;         {     +-----2-----+-----5-----+-----8-----+-----11----+</span>
-<span class="s1">&#39;              /|          /|          /|          /|          /|</span>
-<span class="s1">&#39;             / |         / |         / |         / |         / |</span>
-<span class="s1">&#39;         {     0  /        3  /        6  /        9  /       12  /</span>
-<span class="s1">&#39;   Row 1 {     | 1         | 4         | 7         | 10        | 13</span>
-<span class="s1">&#39;         {     |/          |/          |/          |/          |/</span>
-<span class="s1">&#39;         {     +-----2-----+-----5-----+-----8-----+-----11----+</span>
-<span class="s1">&#39;              /|          /|          /|          /|          /|</span>
-<span class="s1">&#39;             / |         / |         / |         / |         / |</span>
-<span class="s1">&#39;         {     0  /        3  /        6  /        9  /       12  /</span>
-<span class="s1">&#39;   Row 0 {     | 1         | 4         | 7         | 10        | 13</span>
-<span class="s1">&#39;         {     |/          |/          |/          |/          |/</span>
-<span class="s1">&#39;         {     +-----2-----+-----5-----+-----8-----+-----11----+</span>
-<span class="s1">&#39;              /           /           /           /           /</span>
-<span class="s1">&#39;             /           /           /           /           /</span>
-</pre></div>
-</div>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.fiber_status">
-<span class="sig-name descname"><span class="pre">fiber_status</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.fiber_status" title="Permalink to this definition">¶</a></dt>
-<dd><p>The status of the fibers in this EdgeGrid. This is essentially the degrade time of the fiber.
-If degrade time &lt; current time, the fiber is degraded.
-e.g., self.fiber_status[60, 25] is the status of the fiber located along edge [60, 25].</p>
-<p>Supports two-dimensional slicing.</p>
-<p>Note that the location should be given in reference to the entire grid, not just this EdgeGrid.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>np.ndarray</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.molecules">
-<span class="sig-name descname"><span class="pre">molecules</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.molecules" title="Permalink to this definition">¶</a></dt>
-<dd><p>A structure containing the indices of the molecules currently
-located at each edge of this EdgeGrid.
-e.g., self.molecules[60, 25] is a list of molecules currently located at edge [60, 25].</p>
-<p>Supports slicing in one dimension only.</p>
-<p>Note that the location should be given in reference to the entire grid, not just this EdgeGrid.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>List[List[List]]</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.move_molecule">
-<span class="sig-name descname"><span class="pre">move_molecule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.move_molecule" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.neighbor">
-<span class="sig-name descname"><span class="pre">neighbor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">j</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.neighbor" title="Permalink to this definition">¶</a></dt>
-<dd><p>Finds the co-ordinates of a neighboring edge.</p>
-<p>Given the co-ordinates of an edge, and the index (in the neighborhood) of a neighboring edge,
-this method will find the co-ordinates of the requested neighbor,
-taking appropriate boundary conditions into account.</p>
-<p>Neighborhoods each contain eight other edges and are constructed as in the following examples
-(without boundary conditions). Note that in each situation, the generating edge is labelled “(i,j)”
-and the members of the neighborhood are labelled “k:(i+p,j+q)” where (p,q) is the vector from the
-generating edge to the neighbor.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">*</span> <span class="n">x</span><span class="o">-</span><span class="n">edge</span> <span class="n">neighborhood</span><span class="p">::</span>
-
-    <span class="s1">&#39;        2:(i,j-2)     3:(i,j+1)</span>
-    <span class="s1">&#39;            |             |</span>
-    <span class="s1">&#39;            |  /          |  /</span>
-    <span class="s1">&#39;            | 5:(i,j-1)   | 7:(i,j+2)</span>
-    <span class="s1">&#39;            |/            |/</span>
-    <span class="s1">&#39;            +----(i,j)----+</span>
-    <span class="s1">&#39;          / |            /|</span>
-    <span class="s1">&#39; 4:(i,j-1)  |   6:(i,j+2) |</span>
-    <span class="s1">&#39;        /   |          /  |</span>
-    <span class="s1">&#39;            |             |</span>
-    <span class="s1">&#39;      0:(i-1,j-2)   1:(i-1,j+1)</span>
-
-<span class="o">*</span> <span class="n">y</span><span class="o">-</span><span class="n">edge</span> <span class="n">neighborhood</span><span class="p">::</span>
-
-    <span class="s1">&#39;                    /</span>
-    <span class="s1">&#39;                   3:(i+1,j+1)</span>
-    <span class="s1">&#39;                  /</span>
-    <span class="s1">&#39; 5:(i+1,j-1)-----+-----7:(i+1,j+2)</span>
-    <span class="s1">&#39;                /|</span>
-    <span class="s1">&#39;     2:(i+1,j+1) |</span>
-    <span class="s1">&#39;              /  |</span>
-    <span class="s1">&#39;               (i,j)</span>
-    <span class="s1">&#39;                 |  /</span>
-    <span class="s1">&#39;                 | 1:(i,j+1)</span>
-    <span class="s1">&#39;                 |/</span>
-    <span class="s1">&#39;   4:(i,j-1)-----+-----6:(i,j+2)</span>
-    <span class="s1">&#39;                /</span>
-    <span class="s1">&#39;       0:(i,j+1)</span>
-    <span class="s1">&#39;              /</span>
-
-<span class="o">*</span> <span class="n">z</span><span class="o">-</span><span class="n">edge</span> <span class="n">neighborhood</span><span class="p">::</span>
-
-    <span class="s1">&#39;                         |</span>
-    <span class="s1">&#39;               3:(i+1,j-1)</span>
-    <span class="s1">&#39;                         |</span>
-    <span class="s1">&#39;         5:(i+1,j-2)-----+-----7:(i+1,j+1)</span>
-    <span class="s1">&#39;                        /|</span>
-    <span class="s1">&#39;                       / 1:(i,j-1)</span>
-    <span class="s1">&#39;                      /  |</span>
-    <span class="s1">&#39;                   (i,j)</span>
-    <span class="s1">&#39;                 |  /</span>
-    <span class="s1">&#39;       2:(i+1,j-1) /</span>
-    <span class="s1">&#39;                 |/</span>
-    <span class="s1">&#39; 4:(i+1,j-2)-----+-----6:(i+1,j+1)</span>
-    <span class="s1">&#39;                 |</span>
-    <span class="s1">&#39;                 0:(i,j-1)</span>
-    <span class="s1">&#39;                 |</span>
-</pre></div>
-</div>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>i</strong> – The row of the generating edge.</p></li>
-<li><p><strong>j</strong> – The index of the generating edge within its row.</p></li>
-<li><p><strong>k</strong> – The index of the neighbor in the neighborhood (i.e., the (k+1)st neighbor)</p></li>
-</ul>
-</dd>
-</dl>
-<p>Returns: The pair of co-ordinates (in the EdgeGrid) of the requested neighbor.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.nodes_in_row">
-<span class="sig-name descname"><span class="pre">nodes_in_row</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.nodes_in_row" title="Permalink to this definition">¶</a></dt>
-<dd><p>The number of nodes (not edges) in each row of this EdgeGrid.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.place_molecule_row">
-<span class="sig-name descname"><span class="pre">place_molecule_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.place_molecule_row" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.pop_molecule_row">
-<span class="sig-name descname"><span class="pre">pop_molecule_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.pop_molecule_row" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.thisgrid_empty_rows">
-<span class="sig-name descname"><span class="pre">thisgrid_empty_rows</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.thisgrid_empty_rows" title="Permalink to this definition">¶</a></dt>
-<dd><p>Number of empty rows in this EdgeGrid. If they exist they are
-“Row thisgrid_starting_row” through “Row max(thisgrid_starting_row, total_empty_rows)-1”
-If a top and/or bottom “shadow” row exists, it is NOT counted in this number.
-This row is always treated as empty because, even if it does have fibrin,
-those fibers exist in a different EdgeGrid.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.total_empty_rows">
-<span class="sig-name descname"><span class="pre">total_empty_rows</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.total_empty_rows" title="Permalink to this definition">¶</a></dt>
-<dd><p>The number of empty (fibrin-free) rows in the entire grid.
-There are only empty rows in this EdgeGrid if total_empty_rows &gt; thisgrid_starting_row.
-These will always be the bottom rows of the grid (i.e., “Row 0” through “Row empty_rows-1”)</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="lysis.edge_grid.EdgeGrid.total_rows">
-<span class="sig-name descname"><span class="pre">total_rows</span></span><a class="headerlink" href="#lysis.edge_grid.EdgeGrid.total_rows" title="Permalink to this definition">¶</a></dt>
-<dd><p>The total number of rows in the entire grid (of which this EdgeGrid is either a part or the whole).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="lysis.edge_grid.from_fortran_edge_index">
-<span class="sig-prename descclassname"><span class="pre">lysis.edge_grid.</span></span><span class="sig-name descname"><span class="pre">from_fortran_edge_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes_in_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#lysis.edge_grid.from_fortran_edge_index" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts a 1-dimensional index of an edge to its 2-dimensional index.</p>
-<p>Converts from the index for an edge used in the “Macro” Fortran data structures and data files
-into the (i, j) index used by this package.</p>
-<p><strong>NOTE</strong>: All indices in this method are zero-indexed.
-They will need to be incremented by one if used in Fortran code.</p>
-<p>This method exists to aid with compatability with the Fortran “Macro” code during the transition phase.
-It should be depreciated once the Python code is complete.</p>
-<p>For an example of the 2-dimensional index, see the DocString for the EdgeGrid class.
-The 1-dimensional index arrangement for the same setup is as follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s1">&#39;        /           /           /           /           /</span>
-<span class="s1">&#39;      42          44          46           48          50</span>
-<span class="s1">&#39;      /           /           /           /           /</span>
-<span class="s1">&#39;     +-----43----+-----45----+-----47----+-----49----+</span>
-<span class="s1">&#39;    /|          /|          /|          /|          /|</span>
-<span class="s1">&#39;   / |         / |         / |         / |         / |</span>
-<span class="s1">&#39;    37  /       38  /       39  /       40  /       41  /</span>
-<span class="s1">&#39;     | 28        | 30        | 32        | 34        | 36</span>
-<span class="s1">&#39;     |/          |/          |/          |/          |/</span>
-<span class="s1">&#39;     +-----29----+-----31----+-----33----+-----35----+</span>
-<span class="s1">&#39;    /|          /|          /|          /|          /|</span>
-<span class="s1">&#39;   / |         / |         / |         / |         / |</span>
-<span class="s1">&#39;    23  /       24  /       25  /       26  /       27  /</span>
-<span class="s1">&#39;     | 14        | 16        | 18        | 20        | 22</span>
-<span class="s1">&#39;     |/          |/          |/          |/          |/</span>
-<span class="s1">&#39;     +-----15----+-----17----+-----19----+-----21----+</span>
-<span class="s1">&#39;    /|          /|          /|          /|          /|</span>
-<span class="s1">&#39;   / |         / |         / |         / |         / |</span>
-<span class="s1">&#39;     9  /       10  /       11  /       12  /       13  /</span>
-<span class="s1">&#39;     | 0         | 2         | 4         | 6         | 8</span>
-<span class="s1">&#39;     |/          |/          |/          |/          |/</span>
-<span class="s1">&#39;     +-----1-----+-----3-----+-----5-----+-----7-----+</span>
-<span class="s1">&#39;    /           /           /           /           /</span>
-<span class="s1">&#39;   /           /           /           /           /</span>
-</pre></div>
-</div>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>index</strong> – The index of an edge in the 1-dimensional system</p></li>
-<li><p><strong>rows</strong> – The number of rows in the grid</p></li>
-<li><p><strong>nodes_in_row</strong> – The number of nodes each row of the grid</p></li>
-</ul>
-</dd>
-</dl>
-<p>Returns: The pair of co-ordinates for the edge in the 2-dimensional system.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="lysis.edge_grid.to_fortran_edge_index">
-<span class="sig-prename descclassname"><span class="pre">lysis.edge_grid.</span></span><span class="sig-name descname"><span class="pre">to_fortran_edge_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">j</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes_in_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#lysis.edge_grid.to_fortran_edge_index" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts a 2-dimensional index of an edge to its 1-dimensional index.</p>
-<p>Converts from the (i, j) index for an edge used by this package into the index used in
-“Macro” Fortran data structures and data files.</p>
-<p><strong>NOTE</strong>: All indices in this method are zero-indexed.
-They will need to be incremented by one if used in Fortran code.</p>
-<p>This method exists to aid with compatability with the Fortran “Macro” code during the transition phase.
-It should be depreciated once the Python code is complete.</p>
-<p>For an example of the 2-dimensional index, see the DocString for the EdgeGrid class.
-For a matching example of the 1-dimensional index, see the DocString for the from_fortran_edge_index() method.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>i</strong> – The index of the edge’s row.</p></li>
-<li><p><strong>j</strong> – The index of the edge within its row.</p></li>
-<li><p><strong>rows</strong> – The number of rows in the grid.</p></li>
-<li><p><strong>nodes_in_row</strong> – The number of nodes in each row of the grid.</p></li>
-</ul>
-</dd>
-</dl>
-<p>Returns: A zero-indexed address of the edge in the Fortran Macro structure.</p>
-</dd></dl>
-
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
 </section>
 <section id="module-lysis">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-lysis" title="Permalink to this heading">¶</a></h2>
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-lysis" title="Link to this heading"></a></h2>
 </section>
 </section>
 
 
            </div>
-           
           </div>
-          <footer>
-    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-        <a href="lysis.util.html" class="btn btn-neutral float-right" title="lysis.util package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="modules.html" class="btn btn-neutral float-left" title="lysis" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="lysis.util.html" class="btn btn-neutral float-right" title="lysis.util package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>
-        &#169; Copyright 2022, Brittany Bannish &lt;bbannish@uco.edu&gt; &amp; Brad Paynter &lt;bpaynter@uco.edu&gt;.
-
-    </p>
+    <p>&#169; Copyright 2022, Brittany Bannish &lt;bbannish@uco.edu&gt; &amp; Brad Paynter &lt;bpaynter@uco.edu&gt;.</p>
   </div>
-    
-    
-    
-    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
-    
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
     <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    
-    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
 
 </footer>
         </div>
       </div>
-
     </section>
-
   </div>
-  
-
-  <script type="text/javascript">
+  <script>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script>
-
-  
-  
-    
-   
+  </script> 
 
 </body>
 </html>
