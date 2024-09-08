@@ -1098,7 +1098,8 @@ program macrolysis
                                         rmicro = lysismat(r400 - 1, colr2 - 1)! tseclys(r400)-tseclys(r400)*percent4
                                     else
                                         percent4 = r400 - 1 - r4*nummicro
-                         rmicro = (lysismat(r400, colr2 - 1) - (lysismat(r400, colr2 - 1) - lysismat(r400 - 1, colr2 - 1))*percent4)
+                                        rmicro = (lysismat(r400, colr2 - 1) - (lysismat(r400, colr2 - 1) &
+                                                                            - lysismat(r400 - 1, colr2 - 1))*percent4)
                                     end if
 
                                     !! BRAD 2023-01-31:
