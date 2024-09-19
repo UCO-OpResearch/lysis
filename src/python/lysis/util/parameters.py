@@ -47,7 +47,7 @@ __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
-
+# TODO: Rename this object to Run
 class Experiment(object):
     """Houses all information about a given experimental run.
 
@@ -355,7 +355,7 @@ class MicroParameters:
     :Units: microns
     :Fortran: None"""
 
-    # NOTE: Currently set to 1.7 nanometers to match the legacy 2.4nm protofibril radius.
+    # NOTE: Currently set to 1.2 nanometers to match the legacy 2.4nm protofibril radius.
     # This should be changed to 2.5 nanometers once verification is complete to match
     # Yeromonahos, 2010 doi: 10.1016/j.bpj.2010.04.059
     fibrinogen_radius: Quantity = Q_("1.2 nanometers")
