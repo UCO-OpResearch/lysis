@@ -1,0 +1,300 @@
+lysis package
+*************
+
+
+Subpackages
+===========
+
+* lysis.util package
+
+  * Submodules
+
+  * lysis.util.constants module
+
+    * "BoundaryCondition"
+
+      * "BoundaryCondition.CONTINUING"
+
+      * "BoundaryCondition.PERIODIC"
+
+      * "BoundaryCondition.REFLECTING"
+
+    * "BoundaryDirection"
+
+      * "BoundaryDirection.BACK"
+
+      * "BoundaryDirection.BOTTOM"
+
+      * "BoundaryDirection.FRONT"
+
+      * "BoundaryDirection.LEFT"
+
+      * "BoundaryDirection.RIGHT"
+
+      * "BoundaryDirection.TOP"
+
+    * "Const"
+
+    * "ExpComponent"
+
+      * "ExpComponent.ALL"
+
+      * "ExpComponent.MACRO"
+
+      * "ExpComponent.MACRO_POSTPROCESSING"
+
+      * "ExpComponent.MICRO"
+
+      * "ExpComponent.MICRO_POSTPROCESSING"
+
+      * "ExpComponent.NONE"
+
+    * "FiberDirection"
+
+      * "FiberDirection.DOWN"
+
+      * "FiberDirection.IN"
+
+      * "FiberDirection.LEFT"
+
+      * "FiberDirection.OUT"
+
+      * "FiberDirection.RIGHT"
+
+      * "FiberDirection.UP"
+
+    * "Neighbors"
+
+    * "RandomDraw"
+
+      * "RandomDraw.BINDING_TIME_WHEN_MOVING"
+
+      * "RandomDraw.BINDING_TIME_WHEN_UNBINDING"
+
+      * "RandomDraw.CONFLICT_RESOLUTION"
+
+      * "RandomDraw.LYSIS_TIME"
+
+      * "RandomDraw.MICRO_UNBIND"
+
+      * "RandomDraw.MOVE"
+
+      * "RandomDraw.RESTRICTED_MOVE"
+
+      * "RandomDraw.UNBINDING_TIME"
+
+  * lysis.util.datastore module
+
+    * "DataStatus"
+
+      * "DataStatus.INITIALIZED"
+
+      * "DataStatus.LOADED"
+
+      * "DataStatus.NONE"
+
+      * "DataStatus.SAVED"
+
+    * "DataStore"
+
+      * "DataStore.append()"
+
+      * "DataStore.delete()"
+
+      * "DataStore.load_from_disk()"
+
+      * "DataStore.new()"
+
+      * "DataStore.overwrite()"
+
+      * "DataStore.save_to_disk()"
+
+      * "DataStore.status()"
+
+      * "DataStore.to_dict()"
+
+    * "identity()"
+
+  * lysis.util.kiss module
+
+    * "KissRandomGenerator"
+
+      * "KissRandomGenerator.getstate()"
+
+      * "KissRandomGenerator.integers()"
+
+      * "KissRandomGenerator.kiss32()"
+
+      * "KissRandomGenerator.mscw()"
+
+      * "KissRandomGenerator.random()"
+
+      * "KissRandomGenerator.seed()"
+
+      * "KissRandomGenerator.setstate()"
+
+  * lysis.util.parameters module
+
+    * "Experiment"
+
+      * "Experiment.experiment_code"
+
+      * "Experiment.os_path"
+
+      * "Experiment.macro_params"
+
+      * "Experiment.initialize_macro_param()"
+
+      * "Experiment.initialize_micro_param()"
+
+      * "Experiment.read_file()"
+
+      * "Experiment.to_dict()"
+
+      * "Experiment.to_file()"
+
+    * "MacroParameters"
+
+      * "MacroParameters.average_bound_time"
+
+      * "MacroParameters.cols"
+
+      * "MacroParameters.diffusion_coeff"
+
+      * "MacroParameters.duplicate_fortran"
+
+      * "MacroParameters.empty_edges"
+
+      * "MacroParameters.empty_rows"
+
+      * "MacroParameters.fiber_rows"
+
+      * "MacroParameters.forced_unbind"
+
+      * "MacroParameters.fortran_names()"
+
+      * "MacroParameters.full_row"
+
+      * "MacroParameters.input_data"
+
+      * "MacroParameters.log_lvl"
+
+      * "MacroParameters.macro_version"
+
+      * "MacroParameters.moving_probability"
+
+      * "MacroParameters.number_of_saves"
+
+      * "MacroParameters.output_data"
+
+      * "MacroParameters.pore_size"
+
+      * "MacroParameters.print_default_values()"
+
+      * "MacroParameters.processing_library"
+
+      * "MacroParameters.rows"
+
+      * "MacroParameters.save_interval"
+
+      * "MacroParameters.seed"
+
+      * "MacroParameters.simulations"
+
+      * "MacroParameters.state"
+
+      * "MacroParameters.time_step"
+
+      * "MacroParameters.total_edges"
+
+      * "MacroParameters.total_fibers"
+
+      * "MacroParameters.total_molecules"
+
+      * "MacroParameters.total_time"
+
+      * "MacroParameters.total_time_steps"
+
+      * "MacroParameters.units()"
+
+      * "MacroParameters.xz_row"
+
+    * "MicroParameters"
+
+      * "MicroParameters.activation_rate_PLG"
+
+      * "MicroParameters.bind_rate_PLG"
+
+      * "MicroParameters.bind_rate_tPA"
+
+      * "MicroParameters.binding_sites"
+
+      * "MicroParameters.conc_free_PLG"
+
+      * "MicroParameters.deg_rate_fibrin"
+
+      * "MicroParameters.diss_const_PLG_intact"
+
+      * "MicroParameters.diss_const_PLG_nicked"
+
+      * "MicroParameters.diss_const_tPA_wPLG"
+
+      * "MicroParameters.diss_const_tPA_woPLG"
+
+      * "MicroParameters.exposure_rate_binding_site"
+
+      * "MicroParameters.fiber_radius"
+
+      * "MicroParameters.fibrin_conc_per_fiber"
+
+      * "MicroParameters.fibrinogen_length"
+
+      * "MicroParameters.fibrinogen_radius"
+
+      * "MicroParameters.fortran_names()"
+
+      * "MicroParameters.log_lvl"
+
+      * "MicroParameters.micro_version"
+
+      * "MicroParameters.nodes_in_row"
+
+      * "MicroParameters.output_data"
+
+      * "MicroParameters.print_default_values()"
+
+      * "MicroParameters.protein_per_fiber"
+
+      * "MicroParameters.protofibril_radius"
+
+      * "MicroParameters.seed"
+
+      * "MicroParameters.simulations"
+
+      * "MicroParameters.snap_proportion"
+
+      * "MicroParameters.unbind_rate_PLG_intact"
+
+      * "MicroParameters.unbind_rate_PLG_nicked"
+
+      * "MicroParameters.unbind_rate_PLi"
+
+      * "MicroParameters.unbind_rate_tPA_wPLG"
+
+      * "MicroParameters.unbind_rate_tPA_woPLG"
+
+      * "MicroParameters.units()"
+
+  * lysis.util.util module
+
+    * "dict_to_formatted_str()"
+
+  * Module contents
+
+
+Submodules
+==========
+
+
+Module contents
+===============

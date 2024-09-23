@@ -337,13 +337,13 @@ program micromodel
         write (*, *) 'command arg ', param_i, ' = ', param_value(1:param_val_len)
         select case (param_name(3:param_len))
         case ('expCode')
-            expCode = param_value(1:param_val_len)
+            expCode = trim(param_value)
             write (*, *) 'Setting expCode = ', expCode
         ! case ('inFileCode')
         !     inFileCode = param_value(1:param_val_len)
         !     write (*, *) 'Setting inFileCode = ', inFileCode
         case ('outFileCode')
-            outFileCode = param_value(1:param_val_len)
+            outFileCode = trim(param_value)
             write (*, *) 'Setting outFileCode = ', outFileCode
         case ('nodes')
             read (param_value, *, iostat=io_status) nodes
@@ -633,6 +633,7 @@ program micromodel
         end if
 
         if (stats == 1) then
+            write (*, *) 'data/'//expCode//'/lysis_'//outFileCode
             write (lysfile, '(58a)') 'data/'//expCode//'/lysis_'//outFileCode
             write (tPAfile, '(61a)') 'data/'//expCode//'/tPA_time_'//outFileCode
             write (PLifile, '(56a)') 'data/'//expCode//'/PLi_'//outFileCode
