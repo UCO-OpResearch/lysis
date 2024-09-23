@@ -506,6 +506,13 @@ class MicroParameters:
     :Units: None
     :Fortran: nodes"""
 
+    snap_proportion: float = 2.0/3.0
+    """The proportion of doublets that need to be degraded before the
+    fiber snaps.
+    
+    :Units: None
+    :Fortran: snap_proportion"""
+
     #####################################
     # Experimental Parameters
     #####################################

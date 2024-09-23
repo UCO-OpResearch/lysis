@@ -59,6 +59,9 @@ program micromodel
     !double precision  :: prob_N00
     !double precision  :: prob_N22
 
+    !! BRAD 2024-09-23
+    double precision :: snap_proportion = 2.0/3.0 ! The proportion of doublets that need to be degraded before the fiber snaps.
+
     !! BRAD 2024-01-14: Change default to zero later
     integer :: seed = 0 ! 981681759
 
@@ -440,6 +443,13 @@ program micromodel
                 stop
             end if
             write (*, *) 'Setting kncat = ', kncat
+        case ('snap_proportion')
+            read (param_value, *, iostat=io_status) snap_proportion
+            if (io_status /= 0) then
+                write (*, *) 'String conversion error'
+                stop
+            end if
+            write (*, *) 'Setting snap_proportion = ', snap_proportion
         case ('seed')
             read (param_value, *, iostat=io_status) seed
             if (io_status /= 0) then
@@ -1721,8 +1731,9 @@ program micromodel
             !tsave(Nsave+1) = t
             !end if
             !!!!!!!
-
-            if (percent_degrade(count) > 2.0/3.0) then
+            !! BRAD 2024-09-23
+            ! if (percent_degrade(count) > 2.0/3.0) then
+            if (percent_degrade(count) > snap_proportion) then
                 lysiscomplete(stats) = 1
                 exit    !if more than 2/3 of the total number of doublets have been
                 !degraded, stop the algorithm because we consider this to be lysis
