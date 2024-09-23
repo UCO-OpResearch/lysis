@@ -6,7 +6,7 @@ program micromodel
     !!                  - Data file codes are now set globally from the (in/out)FileCode variables
 
     implicit none
-    character(15) :: expCode = '2024-01-13-0710'
+    character(40) :: expCode = '2024-01-13-0710'
     ! character(6)  :: inFileCode = 'Q2.dat'
     character(40)   :: outFileCode = 'PLG2_tPA01_Q2.dat'
     !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
