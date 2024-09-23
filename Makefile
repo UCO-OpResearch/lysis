@@ -54,7 +54,7 @@ CCADMIN=CCadmin
 GFORT = gfortran -mcmodel=medium -fbacktrace
 IFORT = ifort -r8 -mcmodel medium -traceback -diag-disable=10448
 FORT = $(IFORT)
-C = gcc
+C = gcc -std=c99
 CPP = g++
 
 BUILD_DIR = ./bin
