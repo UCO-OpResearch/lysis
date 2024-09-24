@@ -15,8 +15,8 @@ module load oneapi/compiler
 
 ### Setup
 # Replace these values MAKE SURE THERE ARE NO SPACES
-LYSIS_ROOT=~/git/UCO-OpResearch/lysis/
-RUN_CODE=test_run
+LYSIS_ROOT=
+RUN_CODE=
 
 
 ### Run
@@ -30,6 +30,6 @@ make
 bin/micro_rates \
     --expCode $RUN_CODE \
     --outFileCode $RUN_CODE.dat \
-    --snap_proportion 0.3 \
+    --nodes 5 \
     > data/$RUN_CODE/micro_$RUN_CODE.txt
 
