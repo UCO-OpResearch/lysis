@@ -89,7 +89,7 @@ Running a job
    - Add a space after the name of the parameter, then type the value of
       the parameter without units.
 
-   - Finally, place a `\` at the end of each line.
+   - Finally, place a `\\` at the end of each line.
 
    - There must *NOT* be any blank lines between parameters, 
       or between the parameters and the line that starts `> data`.
@@ -123,7 +123,7 @@ Physical Parameters
 
 :KdtPAyesplg:
    
-   :Description: The dissociation constant of tPA, :math:`k^D_\\text{tPA}`, to fibrin 
+   :Description: The dissociation constant of tPA, :math:`k^D_\text{tPA}`, to fibrin 
       in the presence of PLG.
 
    :Default Value: 0.02 micromolar
@@ -132,8 +132,7 @@ Physical Parameters
 
 :KdtPAnoplg:
 
-diss_const_tPA_woPLG: Quantity = Q_("")
-   :Description: The dissociation constant of tPA, :math:`k^D_\\text{tPA}`, to fibrin
+   :Description: The dissociation constant of tPA, :math:`k^D_\text{tPA}`, to fibrin
       in the absence of PLG.
 
    :Default Value: 0.36 micromolar
@@ -142,139 +141,119 @@ diss_const_tPA_woPLG: Quantity = Q_("")
 
 
 :KdPLGintact:
-diss_const_PLG_intact: Quantity = Q_("38 micromolar")
-"""The dissociation constant of PLG, :math:`k^D_\\text{PLG}`, to intact fibrin.
 
-:Units: micromolar
-:Fortran: """
+   :Description: The dissociation constant of PLG, :math:`k^D_\text{PLG}`, to intact fibrin.
 
-diss_const_PLG_nicked: Quantity = Q_("2.2 micromolar")
-"""The dissociation constant of PLG, :math:`k^D_\\text{PLG}`, to nicked fibrin.
+   :Default Value: 38 micromolar
 
-:Units: micromolar
-:Fortran: KdPLGnicked"""
+   :Units: micromolar
 
-bind_rate_tPA: Quantity = Q_("0.1 (micromolar*sec)^-1")
-"""The binding rate of tPA, :math:`k^\\text{on}_\\text{tPA}`, to fibrin.
+:KdPLGnicked:
 
-:Units: (micromolar*sec)^-1
-:Fortran: ktPAon"""
+   :Description: The dissociation constant of PLG, :math:`k^D_\text{PLG}`, to nicked fibrin.
 
-bind_rate_PLG: Quantity = Q_("0.1 (micromolar*sec)^-1")
-"""The binding rate of PLG, :math:`k^\\text{on}_\\text{PLG}`, to fibrin.
+   :Default Value: 2.2 micromolar
 
-:Units: (micromolar*sec)^-1
-:Fortran: kPLGon"""
+   :Units: micromolar
 
-conc_free_PLG: Quantity = Q_("2 micromolar")
-"""The concentration of free plasminogen.
+:ktPAon:
 
-:Units: micromolar
-:Fortran: freeplg"""
+   :Description: The binding rate of tPA, :math:`k^\text{on}_\text{tPA}`, to fibrin.
+   
+   :Default Value: 0.1 (micromolar*sec)^-1
 
-deg_rate_fibrin: Quantity = Q_("5 sec^-1")
-"""The plasmin-mediated rate of fibrin degradation.
+   :Units: (micromolar*sec)^-1
 
-:Units: sec^-1
-:Fortran: kdeg"""
+:kPLGon:
 
-unbind_rate_PLG_intact: Quantity = field(init=False)
-"""The unbinding rate of PLG, :math:`k^\\text{off}_\\text{PLG}`, 
-from intact fibrin.
+   :Description: The binding rate of PLG, :math:`k^\text{on}_\text{PLG}`, to fibrin.
 
-:Units: sec^-1
-:Fortran: kplgoff"""
+   :Default Value: 0.1 (micromolar*sec)^-1
+   
+   :Units: (micromolar*sec)^-1
 
-unbind_rate_PLG_nicked: Quantity = field(init=False)
-"""The unbinding rate of PLG, :math:`k^\\text{off}_\\text{PLG}`, 
-from nicked fibrin.
+:freeplg:
 
-:Units: sec^-1
-:Fortran: kplgoffnick"""
+   :Description: The concentration of free plasminogen.
 
-unbind_rate_PLi: Quantity = Q_("57.6 sec^-1")
-"""The unbinding rate of PLi, :math:`k^\\text{off}_\\text{PLi}`, 
-from fibrin.
+   :Default Value: 2 micromolar
+   
+   :Units: micromolar
 
-:Units: sec^-1
-:Fortran: kplioff"""
+:kdeg:
 
-unbind_rate_tPA_wPLG: Quantity = field(init=False)
-"""The unbinding rate of tPA, :math:`k^\\text{off}_\\text{tPA}`, 
-from fibrin in the presence of PLG.
+   :Description: The plasmin-mediated rate of fibrin degradation.
 
-:Units: sec^-1
-:Fortran: kaoff12"""
+   :Default Value: 5 sec^-1
+   
+   :Units: sec^-1
 
-unbind_rate_tPA_woPLG: Quantity = field(init=False)
-"""The unbinding rate of tPA, :math:`k^\\text{off}_\\text{tPA}`, 
-from fibrin in the absence of PLG.
 
-:Units: sec^-1
-:Fortran: kaoff10"""
+:kplioff:
 
-activation_rate_PLG: Quantity = Q_("0.1 sec^-1")
-"""The catalytic rate constant, :math:`k_\\text{cat}^\\text{ap}`, 
-for activation of PLG into PLI.
+   :Description: The unbinding rate of PLi, :math:`k^\text{off}_\text{PLi}`, 
+      from fibrin.
 
-:Units: sec^-1
-:Fortran: kapcat"""
+   :Default Value: 57.6 sec^-1
+   
+   :Units: sec^-1
 
-exposure_rate_binding_site: Quantity = Q_("5 sec^-1")
-"""The catalytic rate constant, :math:`k_\\text{cat}^\\text{n}`, 
-for the PLi-mediated rate of exposure of new binding sites.
+:kapcat:
 
-:Units: sec^-1
-:Fortran: kncat"""
+   :Description: The catalytic rate constant, :math:`k_\text{cat}^\text{ap}`, 
+      for activation of PLG into PLI.
 
-protein_per_fiber: Quantity = field(init=False)
-"""The fraction of protein in each fiber (by volume?)
+   :Default Value: 0.1 sec^-1
+   
+   :Units: sec^-1
 
-:Units: %
-:Fortran: None"""
+:kncat:
 
-fibrin_conc_per_fiber: Quantity = field(init=False)
-"""The concentration of fibrin in each fiber
+   :Description: The catalytic rate constant, :math:`k_\text{cat}^\text{n}`, 
+      for the PLi-mediated rate of exposure of new binding sites.
 
-:Units: micromolar
-:Fortran: None"""
+   :Default Value: 5 sec^-1
+   
+   :Units: sec^-1
 
-binding_sites: Quantity = field(init=False)  # int = 427
-"""Concentration of binding sites.
 
-:Units: micromolar
-:Fortran: bs"""
 
-#####################################
-# Model Parameters
+Model Parameters
 #####################################
 
-nodes_in_row: int = 7
-"""The number of protofibrils in one row of the lattice inside one
-fiber.
+:nodes:
 
-:Units: None
-:Fortran: nodes"""
+   :Description: The number of protofibrils in one row of the lattice inside one
+      fiber.
 
-snap_proportion: float = 2.0/3.0
-"""The proportion of doublets that need to be degraded before the
-fiber snaps.
+   :Default Value: 7
+   
+   :Units: None
 
-:Units: None
-:Fortran: snap_proportion"""
+:snap_proportion:
 
+   :Description: The proportion of doublets that need to be degraded before the
+      fiber snaps.
+
+   :Default Value: 0.6666666666667
+   
+   :Units: None
+
+Experimental Parameters
 #####################################
-# Experimental Parameters
-#####################################
 
-simulations: int = 50_000
-"""The number of independent trials run in the microscale model.
+:runs:
 
-:Units: None
-:Fortran: runs"""
+   :Description: The number of independent trials run in the microscale model.
 
-seed: int = 0
-"""Seed for the random number generator
+   :Default Value: 50_000
+   
+   :Units: None
 
-:Units: None
-:Fortran: seed"""
+:seed:
+
+   :Description: Seed for the random number generator
+
+   :Default Value: 0 (randomly drawn)
+   
+   :Units: None
