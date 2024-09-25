@@ -26,8 +26,9 @@ First-time setup
    
    `git clone https://github.com/UCO-OpResearch/lysis.git`
     
+#. Run the command `git checkout micro-wrapper`.
 
-#. When the `git clone` command finishes without error, 
+#. When the `git` command finishes without error, 
    type `exit` and hit enter.
 
 #. Return to the tab with your files on it

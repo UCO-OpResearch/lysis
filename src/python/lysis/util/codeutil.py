@@ -76,7 +76,7 @@ class FortranMacro:
                     arguments += ["--" + fortran_names[key], str(params[key])]
         return [self.executable] + arguments
 
-    def go(self):
+    def exec(self):
         self.generate_neighborhoods()
         command = self.exec_command()
         output_file_name = os.path.join(
@@ -132,7 +132,7 @@ class FortranMicro:
                     arguments += ["--" + fortran_names[key], str(params[key])]
         return [self.executable] + arguments
 
-    def go(self):
+    def exec(self):
         command = self.exec_command()
         output_file_name = os.path.join(
             self.run.os_path,

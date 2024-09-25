@@ -54,7 +54,7 @@ def main():
         )
     else:
         raise ValueError(f"Wrong executable type: {args.executable}")
-    fort.go()
+    fort.exec()
 
 
 if __name__ == "__main__":

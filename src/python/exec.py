@@ -10,7 +10,7 @@ import lysis
 import lysis.util
 
 
-def go(run: lysis.util.Run, timestamp: AnyStr):
+def exec(run: lysis.util.Run, timestamp: AnyStr):
     if __name__ == "__main__":
         logger = logging.getLogger("lysis")
     else:
@@ -37,7 +37,7 @@ def go(run: lysis.util.Run, timestamp: AnyStr):
     filename = "macro_pstats_" + timestamp + ".sts"
 
     cProfile.runctx(
-        "macro.go()",
+        "macro.exec()",
         globals(),
         locals(),
         filename=os.path.join(run.os_path, "macro_pstats", filename),
@@ -47,10 +47,10 @@ def go(run: lysis.util.Run, timestamp: AnyStr):
 
 
 def main():
-    e = lysis.util.Run(r"../../data", run_code="2023-04-15-1803")
+    run = lysis.util.Run(r"../../data", run_code="2023-04-15-1803")
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    os.makedirs(os.path.join(e.os_path, "log"), exist_ok=True)
-    logfile = os.path.join(e.os_path, "log", "lysis-py-" + timestamp + ".log")
+    os.makedirs(os.path.join(run.os_path, "log"), exist_ok=True)
+    logfile = os.path.join(run.os_path, "log", "lysis-py-" + timestamp + ".log")
     logging.basicConfig(filename=logfile, level=logging.DEBUG)
 
     formatter = logging.Formatter(
@@ -69,7 +69,7 @@ def main():
     stderr.setFormatter(formatter)
     logger.addHandler(stderr)
 
-    go(run, timestamp)
+    exec(run, timestamp)
 
 
 if __name__ == "__main__":
