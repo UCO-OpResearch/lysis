@@ -2,6 +2,7 @@
 #SBATCH --job-name=micro_rates
 #SBATCH --output=micro_rates_%j.out
 #SBATCH --nodes=1
+#SBATCH --exclusive=user 
 
 ### Usage
 # 1. Fill out the folders in Setup
