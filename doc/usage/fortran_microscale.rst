@@ -7,7 +7,7 @@ Fortran Script Usage
 First-time setup
 +++++++++++++++++
 
-#. Open a web browser, go to buddy.uco.edu, and log in.
+#. Open a web browser, go to https://buddy.uco.edu, and log in.
 
 #. Click on "Files" and then "Home Directory"
 
@@ -61,7 +61,7 @@ First-time setup
    folder that you copied earier. Make sure there are no spaces that line.
    If your path has spaces, put double-quotes around it.
 
-#. Click the "Save" button in the top right and close the tab.
+#. Click the "Save" button in the top left and close the tab.
 
 Running a job
 +++++++++++++++++
@@ -89,7 +89,7 @@ Running a job
    - Add a space after the name of the parameter, then type the value of
       the parameter without units.
 
-   - Finally, place a `\\` at the end of each line.
+   - Finally, place a `\` at the end of each line.
 
    - There must *NOT* be any blank lines between parameters, 
       or between the parameters and the line that starts `> data`.
