@@ -457,6 +457,8 @@ program micromodel
                 stop
             end if
             write (*, *) 'Setting seed = ', seed
+        case ('\')
+            write(*,*) '\'
         case default
             write (*, *) 'Unrecognized parameter'
             stop
