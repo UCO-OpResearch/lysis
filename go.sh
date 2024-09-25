@@ -9,4 +9,4 @@ homedir="/home/bpaynter/git/UCO-OpResearch/lysis"
 workdir="${homedir}"
 
 cd "${homedir}/src/python"
-python -u fortran_run.py     --in_code ${in_code}     --out_code ${out_code}.dat     -n 0     --cwd ${workdir}     ${workdir}/${fort_executable}     ${exp_code}
+python -u fortran_go.py     --in_code ${in_code}     --out_code ${out_code}.dat     -n 0     --cwd ${workdir}     ${workdir}/${fort_executable}     ${run_code}

@@ -1,18 +1,18 @@
-"""Code for holding, storing, and reading information about an experiment
+"""Code for holding, storing, and reading information about a Run
 
 This module gives a uniform way to handle the data and parameters of a given 
-experiment. It contains classes to house these and make them accessible to the 
+run. It contains classes to house these and make them accessible to the 
 rest of the code. It also handles the storing and reading of parameters and 
 data to/from disk.
 
 Typical usage example:
-    >>> # Create a new experiment
-    >>> exp = Experiment('path/to/data')
+    >>> # Create a new run
+    >>> exp = Run('path/to/data')
     >>> param = {'override_parameter': 2.54, 'another_new_parameter': 32}
     >>> exp.initialize_macro_param(param)
     >>> exp.to_file()
-    >>> # Load an existing experiment
-    >>> exp = Experiment('path/to/data', '2022_12_27_1100')
+    >>> # Load an existing run
+    >>> exp = Run('path/to/data', '2022_12_27_1100')
     >>> exp.read_file()
     >>> # Access a parameter
     >>> exp.macro_params.pore_size
@@ -49,14 +49,14 @@ __status__ = "Development"
 
 
 # TODO: Rename this object to Run
-class Experiment(object):
+class Run(object):
     """Houses all information about a given experimental run.
 
     This object contains:
 
     * Data location
-    * Experiment parameters
-    * Experiment data
+    * Run parameters
+    * Run data
 
     It includes methods for
 
@@ -68,16 +68,16 @@ class Experiment(object):
 
     Args:
         data_root: The path of the folder containing datasets
-        experiment_code: The code number of the experiment.
+        run_code: The code number of the run.
             This will be the name of the folder containing the data specific to
-            this experiment.
+            this run.
             This should be a date and time in 'YYYY-MM-DD-hhmm' format
             If no code is given, one will be generated from the current date
             and time.
 
     Attributes:
-        experiment_code (str): The code number of the experiment.
-        os_path (str): The path to the folder containing this experiment's data
+        run_code (str): The code number of the run.
+        os_path (str): The path to the folder containing this run's data
         macro_params (DataClass): A dictionary of
 
 
@@ -85,22 +85,20 @@ class Experiment(object):
         RuntimeError: An invalid data folder was given.
     """
 
-    def __init__(
-        self, data_root: Union[str, bytes, os.PathLike], experiment_code: str = None
-    ):
+    def __init__(self, data_root: Union[str, bytes, os.PathLike], run_code: str = None):
         # Check if the data folder path is valid
         if not os.path.isdir(data_root):
             raise RuntimeError("Data folder not found.", data_root)
         self.os_data_root = data_root
-        # If no experiment code was given, create a new one from the current
+        # If no run code was given, create a new one from the current
         # date and time.
-        if experiment_code is None:
-            self.experiment_code = datetime.now().strftime("%Y-%m-%d-%H%M")
+        if run_code is None:
+            self.run_code = datetime.now().strftime("%Y-%m-%d-%H%M")
         else:
-            self.experiment_code = experiment_code
+            self.run_code = run_code
 
-        # Generate the path to the experiment folder and the parameters file
-        self.os_path = os.path.join(data_root, str(self.experiment_code))
+        # Generate the path to the run folder and the parameters file
+        self.os_path = os.path.join(data_root, str(self.run_code))
         os.makedirs(self.os_path, exist_ok=True)
         self.os_param_file = os.path.join(self.os_path, "params.json")
 
@@ -113,7 +111,7 @@ class Experiment(object):
         self.data = DataStore(self.os_path, default_filenames)
 
     def __str__(self) -> str:
-        """Gives a human-readable, formatted string of the current experimental
+        """Gives a human-readable, formatted string of the current run's
         parameters."""
         # Convert internal storage to a dictionary
         values = self.to_dict()
@@ -174,7 +172,7 @@ class Experiment(object):
         """
         # Initialize a dictionary of the appropriate parameters
         output = {
-            "experiment_code": self.experiment_code,
+            "run_code": self.run_code,
             "data_filenames": None,
             "micro_params": None,
             "macro_params": None,
@@ -213,10 +211,10 @@ class Experiment(object):
         return output
 
     def to_file(self) -> None:
-        """Stores the experiment parameters to disk.
+        """Stores the run parameters to disk.
 
-        Creates or overwrites the params.json file in the experiment's data
-        folder. This file will contain the current experiment parameters
+        Creates or overwrites the params.json file in the run's data
+        folder. This file will contain the current run parameters
         (including any micro- and macroscale parameters) in JSON format.
         """
         with open(self.os_param_file, "w") as file:
@@ -225,14 +223,14 @@ class Experiment(object):
             json.dump(self.to_dict(), file)
 
     def read_file(self) -> None:
-        """Load the experiment parameters from disk.
+        """Load the run parameters from disk.
 
         Raises:
-            RuntimeError: No parameter file is available for this experiment.
+            RuntimeError: No parameter file is available for this run.
         """
-        # Determine whether the parameter file exists for this experiment
+        # Determine whether the parameter file exists for this run
         if not os.path.isfile(self.os_param_file):
-            raise RuntimeError("Experiment parameter file not found.")
+            raise RuntimeError("Run parameter file not found.")
         # Open the file
         with open(self.os_param_file, "r") as file:
             # Use the JSON library to read in the parameters as a dictionary
@@ -271,7 +269,7 @@ class Experiment(object):
                 # If there were no microscale parameters in the file, then
                 # we raise a warning.
                 warnings.warn(
-                    "Experiment parameter file does not contain Microscale parameters. "
+                    "Run parameter file does not contain Microscale parameters. "
                     "Using defaults.",
                     RuntimeWarning,
                 )
@@ -328,7 +326,7 @@ class MicroParameters:
     Dependent parameters should never be set manually, but are automatically
     calculated by internal code.
 
-    Should only be used inside an Experiment object.
+    Should only be used inside a Run object.
 
 
     Example:
@@ -515,7 +513,7 @@ class MicroParameters:
     :Fortran: snap_proportion"""
 
     #####################################
-    # Experimental Parameters
+    # Mechanism Parameters
     #####################################
 
     simulations: int = 50_000
@@ -555,7 +553,7 @@ class MicroParameters:
         MicroParameters object is created. It is automatically called by the
         DataClass.__init__()"""
 
-        # These names must be elements of the Experiment's DataStore
+        # These names must be elements of the Run's DataStore
         object.__setattr__(
             self,
             "output_data",
@@ -735,7 +733,7 @@ class MacroParameters:
     Dependent parameters should never be set manually, but are automatically
     calculated by internal code.
 
-    Should only be used inside an Experiment object.
+    Should only be used inside a Run object.
 
 
     Example:
@@ -871,7 +869,7 @@ class MacroParameters:
     :Fortran: q"""
 
     #####################################
-    # Experimental Parameters
+    # Mechanism Parameters
     #####################################
 
     simulations: int = 10
@@ -971,7 +969,7 @@ class MacroParameters:
         """This method calculates the dependent parameters once the
         MacroParameters object is created. It is automatically called by the
         DataClass.__init__()"""
-        # These names must be elements of the Experiment's DataStore
+        # These names must be elements of the Run's DataStore
         object.__setattr__(
             self,
             "input_data",
@@ -982,7 +980,7 @@ class MacroParameters:
                 "total_lyses",  # Fortran: lenlysismat
             ],
         )
-        # These names must be elements of the Experiment's DataStore
+        # These names must be elements of the Run's DataStore
         object.__setattr__(
             self,
             "output_data",

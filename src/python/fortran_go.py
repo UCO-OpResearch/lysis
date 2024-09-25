@@ -3,7 +3,7 @@ import os
 
 from dataclasses import dataclass
 
-from lysis.util import Experiment, FortranMacro, FortranMicro
+from lysis.util import Run, FortranMacro, FortranMicro
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -20,7 +20,7 @@ def parse_arguments():
     parser.add_argument(
         "executable", type=str, help="The name of the compiled fortran executable."
     )
-    parser.add_argument("exp_code", type=str)
+    parser.add_argument("run_code", type=str)
     parser.add_argument("--in_code", type=str, default=".dat")
     parser.add_argument("--out_code", type=str, default=".dat")
     parser.add_argument(
@@ -34,18 +34,18 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
-    e = Experiment(os.path.join(args.cwd, "data"), experiment_code=args.exp_code)
-    e.read_file()
+    run = Run(os.path.join(args.cwd, "data"), run_code=args.run_code)
+    run.read_file()
     if os.path.basename(args.executable)[:5] == "micro":
         fort = FortranMicro(
-        exp=e,
-        cwd=args.cwd,
-        executable=args.executable,
-        out_file_code=args.out_code,
+            run=run,
+            cwd=args.cwd,
+            executable=args.executable,
+            out_file_code=args.out_code,
         )
     elif os.path.basename(args.executable)[:5] == "macro":
         fort = FortranMacro(
-            exp=e,
+            run=run,
             cwd=args.cwd,
             executable=args.executable,
             in_file_code=args.in_code,
@@ -54,7 +54,7 @@ def main():
         )
     else:
         raise ValueError(f"Wrong executable type: {args.executable}")
-    fort.run()
+    fort.go()
 
 
 if __name__ == "__main__":

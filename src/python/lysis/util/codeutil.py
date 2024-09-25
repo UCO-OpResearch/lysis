@@ -9,7 +9,7 @@ import numpy as np
 
 from pint import Quantity
 
-from .parameters import Experiment, MacroParameters, MicroParameters
+from .parameters import Run, MacroParameters, MicroParameters
 from .edge_grid import EdgeGrid
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -29,29 +29,33 @@ kiss = "kiss.o"
 
 @dataclass
 class FortranMacro:
-    exp: Experiment = None
+    run: Run = None
     cwd: AnyStr = "."
     #    source: AnyStr = None
     executable: AnyStr = None
     in_file_code: AnyStr = ".dat"
     out_file_code: AnyStr = ".dat"
     index: int = None
-    
+
     def generate_neighborhoods(self):
-        fort_neighbors = EdgeGrid.generate_fortran_neighborhood_structure(self.exp) + 1
-        fort_neighbors.tofile(os.path.join(self.exp.os_path, "neighbors.dat"), sep=os.linesep)
+        fort_neighbors = EdgeGrid.generate_fortran_neighborhood_structure(self.run) + 1
+        fort_neighbors.tofile(
+            os.path.join(self.run.os_path, "neighbors.dat"), sep=os.linesep
+        )
 
     def exec_command(self):
-        params = asdict(self.exp.macro_params)
+        params = asdict(self.run.macro_params)
         if self.index is not None:
-            stream = np.random.SeedSequence(params['seed'])
-            seeds = stream.generate_state(params['total_trials'])
-            params['total_trials'] = 1
-            params['seed'] = int(np.int32(seeds[self.index]))
-            self.out_file_code = self.out_file_code[:-4] + f"_{self.index:02}" + self.out_file_code[-4:]
+            stream = np.random.SeedSequence(params["seed"])
+            seeds = stream.generate_state(params["total_trials"])
+            params["total_trials"] = 1
+            params["seed"] = int(np.int32(seeds[self.index]))
+            self.out_file_code = (
+                self.out_file_code[:-4] + f"_{self.index:02}" + self.out_file_code[-4:]
+            )
         arguments = [
             "--runCode",
-            self.exp.experiment_code,
+            self.run.run_code,
             "--inFileCode",
             self.in_file_code,
             "--outFileCode",
@@ -64,16 +68,19 @@ class FortranMacro:
                 if fortran_names[key][-2:] == "-1":
                     arguments += ["--" + fortran_names[key][:-2], str(params[key] + 1)]
                 elif fortran_names[key][-4:] == "*100":
-                    arguments += ["--" + fortran_names[key][:-4], str(params[key] // 100)]
+                    arguments += [
+                        "--" + fortran_names[key][:-4],
+                        str(params[key] // 100),
+                    ]
                 else:
                     arguments += ["--" + fortran_names[key], str(params[key])]
         return [self.executable] + arguments
 
-    def run(self):
+    def go(self):
         self.generate_neighborhoods()
         command = self.exec_command()
         output_file_name = os.path.join(
-            self.exp.os_path,
+            self.run.os_path,
             "macro" + self.out_file_code[:-3] + "txt",
         )
         with open(output_file_name, "w") as file:
@@ -86,15 +93,15 @@ class FortranMacro:
 
 @dataclass
 class FortranMicro:
-    exp: Experiment = None
+    run: Run = None
     cwd: AnyStr = "."
     #    source: AnyStr = None
     executable: AnyStr = None
     out_file_code: AnyStr = ".dat"
     index: int = None
-    
+
     def exec_command(self):
-        params = asdict(self.exp.micro_params)
+        params = asdict(self.run.micro_params)
         # if self.index is not None:
         #     stream = np.random.SeedSequence(params['seed'])
         #     seeds = stream.generate_state(params['total_trials'])
@@ -103,7 +110,7 @@ class FortranMicro:
         #     self.out_file_code = self.out_file_code[:-4] + f"_{self.index:02}" + self.out_file_code[-4:]
         arguments = [
             "--runCode",
-            self.exp.experiment_code,
+            self.run.run_code,
             "--outFileCode",
             self.out_file_code,
         ]
@@ -117,15 +124,18 @@ class FortranMicro:
                 if fortran_names[key][-2:] == "-1":
                     arguments += ["--" + fortran_names[key][:-2], str(params[key] + 1)]
                 elif fortran_names[key][-4:] == "*100":
-                    arguments += ["--" + fortran_names[key][:-4], str(params[key] // 100)]
+                    arguments += [
+                        "--" + fortran_names[key][:-4],
+                        str(params[key] // 100),
+                    ]
                 else:
                     arguments += ["--" + fortran_names[key], str(params[key])]
         return [self.executable] + arguments
 
-    def run(self):
+    def go(self):
         command = self.exec_command()
         output_file_name = os.path.join(
-            self.exp.os_path,
+            self.run.os_path,
             "micro" + self.out_file_code[:-3] + "txt",
         )
         with open(output_file_name, "w") as file:
