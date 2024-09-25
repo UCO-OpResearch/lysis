@@ -242,7 +242,7 @@ Model Parameters
 Experimental Parameters
 #####################################
 
-:runs:
+:simulations:
 
    :Description: The number of independent trials run in the microscale model.
 

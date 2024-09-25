@@ -28,7 +28,7 @@ make
 # Put parameters here on their own lines between --outFileCode and > data
 # The format should be --param_name param_value \
 bin/micro_rates \
-    --expCode $RUN_CODE \
+    --runCode $RUN_CODE \
     --outFileCode $RUN_CODE.dat \
     --nodes 5 \
     > data/$RUN_CODE/micro_$RUN_CODE.txt

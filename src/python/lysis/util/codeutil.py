@@ -50,7 +50,7 @@ class FortranMacro:
             params['seed'] = int(np.int32(seeds[self.index]))
             self.out_file_code = self.out_file_code[:-4] + f"_{self.index:02}" + self.out_file_code[-4:]
         arguments = [
-            "--expCode",
+            "--runCode",
             self.exp.experiment_code,
             "--inFileCode",
             self.in_file_code,
@@ -102,7 +102,7 @@ class FortranMicro:
         #     params['seed'] = int(np.int32(seeds[self.index]))
         #     self.out_file_code = self.out_file_code[:-4] + f"_{self.index:02}" + self.out_file_code[-4:]
         arguments = [
-            "--expCode",
+            "--runCode",
             self.exp.experiment_code,
             "--outFileCode",
             self.out_file_code,

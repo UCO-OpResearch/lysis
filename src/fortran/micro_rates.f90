@@ -2,11 +2,11 @@ program micromodel
 
     !! BRAD 2024-01-13: This code has been modified in the following ways:
     !!                  - Data folder is relative to git repository root
-    !!                  - Data is stored in subfolders based on expCode
+    !!                  - Data is stored in subfolders based on runCode
     !!                  - Data file codes are now set globally from the (in/out)FileCode variables
 
     implicit none
-    character(40) :: expCode = '2024-01-13-0710'
+    character(40) :: runCode = '2024-01-13-0710'
     ! character(6)  :: inFileCode = 'Q2.dat'
     character(40) :: outFileCode = 'PLG2_tPA01_Q2.dat'
     !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
@@ -32,7 +32,7 @@ program micromodel
     integer, parameter :: Nplginit = 1 !number of exposed doublets initially - i.e. intact doublets - at each spatial location
     integer, parameter  :: Ninit = 5*Nplginit !number of cryptic doublets at each spatial location
     integer, parameter  :: Ntot = Ninit + Nplginit !total number of doublets at each spatial location
-    integer  :: runs = 50000 !How many independent simulations to run of the microscale model
+    integer  :: simulations = 50000 !How many independent simulations to run of the microscale model
     integer, parameter  :: sV = 26  !number of reactions, i.e. size of V
     integer          :: stats
 
@@ -336,9 +336,9 @@ program micromodel
         end if
         write (*, *) 'command arg ', param_i, ' = ', param_value(1:param_val_len)
         select case (param_name(3:param_len))
-        case ('expCode')
-            expCode = trim(param_value)
-            write (*, *) 'Setting expCode = ', expCode
+        case ('runCode')
+            runCode = trim(param_value)
+            write (*, *) 'Setting runCode = ', runCode
         ! case ('inFileCode')
         !     inFileCode = param_value(1:param_val_len)
         !     write (*, *) 'Setting inFileCode = ', inFileCode
@@ -352,13 +352,13 @@ program micromodel
                 stop
             end if
             write (*, *) 'Setting nodes = ', nodes
-        case ('runs')
-            read (param_value, *, iostat=io_status) runs
+        case ('simulations')
+            read (param_value, *, iostat=io_status) simulations
             if (io_status /= 0) then
                 write (*, *) 'String conversion error'
                 stop
             end if
-            write (*, *) 'Setting runs = ', runs
+            write (*, *) 'Setting simulations = ', simulations
         case ('radius')
             read (param_value, *, iostat=io_status) radius
             if (io_status /= 0) then
@@ -472,18 +472,18 @@ program micromodel
     allocate (Lat(nodes**2, nodes**2))
     allocate (row2(nodes**2*Ntot))
     allocate (col2(nodes**2*Ntot))
-    allocate (lysis_time(runs))
-    allocate (tPA_time(runs))
-    allocate (tPAunbind(runs))
-    allocate (tPAPLiunbd(runs))
-    allocate (ltPA(runs))
-    allocate (Plasmin(runs))
-    allocate (max_Plg(runs))
-    allocate (lysiscomplete(runs))
-    allocate (countvect(runs))
-    allocate (PLGbd(runs))
-    allocate (PLGunbd(runs))
-    allocate (firstPLi(runs))
+    allocate (lysis_time(simulations))
+    allocate (tPA_time(simulations))
+    allocate (tPAunbind(simulations))
+    allocate (tPAPLiunbd(simulations))
+    allocate (ltPA(simulations))
+    allocate (Plasmin(simulations))
+    allocate (max_Plg(simulations))
+    allocate (lysiscomplete(simulations))
+    allocate (countvect(simulations))
+    allocate (PLGbd(simulations))
+    allocate (PLGunbd(simulations))
+    allocate (firstPLi(simulations))
 
     ! Calculate dependent parameters
     kplgoff = kplgon*KdPLGintact !units 1/s, off rate for intact FB
@@ -615,17 +615,17 @@ program micromodel
     firstPLi = 0
     countfp = 0
 
-    write (*, *) 'runs=', runs
+    write (*, *) 'simulations=', simulations
 
-    !below starts the big loop where we do 50000 independent simulations ("do stats=1,runs")
-    do stats = 1, runs
+    !below starts the big loop where we do 50000 independent simulations ("do stats=1,simulations")
+    do stats = 1, simulations
         if (MODULO(stats, 1000) == 0) write (*, *) ' stats=', stats
 
         Nsave = 0
         persave = 0
         tsave = 0
 
-        if (stats <= runs) then   !change back to 10000 when I change runs
+        if (stats <= simulations) then   !change back to 10000 when I change simulations
             !ipar=1 !says if stats<=50000, use the "case 1" parameters defined around line 357
 
             !elseif(stats<=20000.and.stats.gt.10000) then
@@ -633,23 +633,23 @@ program micromodel
         end if
 
         if (stats == 1) then
-            write (*, *) 'data/'//trim(expCode)//'/lysis_'//outFileCode
-            write (lysfile, '(58a)') 'data/'//trim(expCode)//'/lysis_'//outFileCode
-            write (tPAfile, '(61a)') 'data/'//trim(expCode)//'/tPA_time_'//outFileCode
-            write (PLifile, '(56a)') 'data/'//trim(expCode)//'/PLi_'//outFileCode
-            write (endfile, '(64a)') 'data/'//trim(expCode)//'/lyscomplete_'//outFileCode
-            !write(plgfile,'(56a)' ) 'data/' // expCode // '/PLG_' // outFileCode
-            !write(ctfile,'(58a)' ) 'data/' // expCode // '/count_' // outFileCode
-            !write(plgbdfile,'(27a)') 'data/' // expCode // '/PLGunbindPLG2_tPA01_Q2.dat'
-            !write(plgunbdfile,'(29a)') 'data/' // expCode // '/PLGbindPLG2_tPA01_Q2.dat'
-            !write(plitimefile,'(63a)') 'data/' // expCode // '/PLitime_' // outFileCode
-            write (tPAPLifile, '(63a)') 'data/'//trim(expCode)//'/tPAPLiunbd_'//outFileCode
-            !write(sfile,'(28a)' ) 'data/' // expCode // '/statetPAPLG2_tPA01_Q2.dat'
-            !write(profile,'(23a)' ) 'data/' // expCode // '/ersavePLG2_tPA01_Q2.dat'
-            !write(t2file,'(23a)' ) 'data/' // expCode // '/tsavePLG2_tPA01_Q2.dat'
-            write (tPAunbdfile, '(61a)') 'data/'//trim(expCode)//'/tPAunbind_'//outFileCode
-            write (s2file, '(67a)') 'data/'//trim(expCode)//'/lasttPA_'//outFileCode
-            write (fpfile, '(77a)') 'data/'//trim(expCode)//'/firstPLi_'//outFileCode
+            write (*, *) 'data/'//trim(runCode)//'/lysis_'//outFileCode
+            write (lysfile, '(58a)') 'data/'//trim(runCode)//'/lysis_'//outFileCode
+            write (tPAfile, '(61a)') 'data/'//trim(runCode)//'/tPA_time_'//outFileCode
+            write (PLifile, '(56a)') 'data/'//trim(runCode)//'/PLi_'//outFileCode
+            write (endfile, '(64a)') 'data/'//trim(runCode)//'/lyscomplete_'//outFileCode
+            !write(plgfile,'(56a)' ) 'data/' // runCode // '/PLG_' // outFileCode
+            !write(ctfile,'(58a)' ) 'data/' // runCode // '/count_' // outFileCode
+            !write(plgbdfile,'(27a)') 'data/' // runCode // '/PLGunbindPLG2_tPA01_Q2.dat'
+            !write(plgunbdfile,'(29a)') 'data/' // runCode // '/PLGbindPLG2_tPA01_Q2.dat'
+            !write(plitimefile,'(63a)') 'data/' // runCode // '/PLitime_' // outFileCode
+            write (tPAPLifile, '(63a)') 'data/'//trim(runCode)//'/tPAPLiunbd_'//outFileCode
+            !write(sfile,'(28a)' ) 'data/' // runCode // '/statetPAPLG2_tPA01_Q2.dat'
+            !write(profile,'(23a)' ) 'data/' // runCode // '/ersavePLG2_tPA01_Q2.dat'
+            !write(t2file,'(23a)' ) 'data/' // runCode // '/tsavePLG2_tPA01_Q2.dat'
+            write (tPAunbdfile, '(61a)') 'data/'//trim(runCode)//'/tPAunbind_'//outFileCode
+            write (s2file, '(67a)') 'data/'//trim(runCode)//'/lasttPA_'//outFileCode
+            write (fpfile, '(77a)') 'data/'//trim(runCode)//'/firstPLi_'//outFileCode
             open (lysunit, file=lysfile, form=filetype)
             open (tPAunit, file=tPAfile, form=filetype)
             open (PLiunit, file=PLifile, form=filetype)
@@ -1717,7 +1717,7 @@ program micromodel
 
             Tdoublets2 = 6.0*nodes**2 !total number of doublets is 6*nodes^2 because there are 6 doublets at each node
             percent_degrade(count) = 1 - countstate12/Tdoublets2 !the percent of doublets that have been degraded is 1 minus the fraction of undegraded doublets
-            if (mod(count, runs) == 0) then
+            if (mod(count, simulations) == 0) then
                 write (*, *) 'percent_degrade=', percent_degrade(count)
                 write (*, *) 't=', t
             end if
@@ -1761,7 +1761,7 @@ program micromodel
         tPAPLiunbd(stats) = reaction3
         ltPA(stats) = tPA(count)
 
-        if (stats == runs) then   !change back to 10000 when I change runs
+        if (stats == simulations) then   !change back to 10000 when I change simulations
             write (lysunit) lysis_time(1:stats)  !writes the lysis_time to file
             write (tPAunit) tPA_time(1:stats)
             write (PLiunit) Plasmin(1:stats)

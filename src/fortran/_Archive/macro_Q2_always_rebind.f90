@@ -2,7 +2,7 @@ program macrolysis
 
 !! BRAD 2023-01-24: This code has been modified in the following ways:
 !!                  - Data folder is relative to git repository root
-!!                  - Data is stored in subfolders based on expCode
+!!                  - Data is stored in subfolders based on runCode
 !!                  - Data file codes are now set globally from the (in/out)FileCode variables
 !!                  - "passerby molecule" is corrected
 !!                  - More console output during runs
@@ -12,7 +12,7 @@ program macrolysis
 
 !Runs the macroscale model in a clot with 72.7 nm diameter fibers and pore size. 1.0135 uM. FB conc. = 8.8 uM. This code allows tPA that is forced to unbind by plasmin-mediated degradation of fibrin to immediately rebind. THIS CODE ACCOUNTS FOR MICRO RUNS IN WHICH 50,000 OR 10,000 INDEPENDENT SIMULATIONS WERE DONE. CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro runs were completed. This code also computes mean first passage time, so it's like a combination of macro_Q2.f90 and macro_Q2_mfpt.f90.
 implicit none
-character(15)   :: expCode
+character(15)   :: runCode
 character(80)   :: inFileCode
 character(80)   :: outFileCode
 
@@ -21,7 +21,7 @@ integer  :: F=121!121 !71 !81  !# of lattice nodes in one column in the vertical
 integer  :: Ffree=29!29 !3 !13 !1st node in vertical direction containing fibers. so if Ffree=10, then rows 1-9
                                !have no fibers, there's one more row of fiber-free planar veritcal edges, and then
                                !the row starting with the Ffree-th (e.g. 10th) vertical node is a full row of fibers 
-integer  :: stats= 10 !! BRAD 2023-01-04: 10
+integer  :: simulations= 10 !! BRAD 2023-01-04: 10
 integer  :: M=43074 !total number of tPA molecules: 21588 is Colin's [tPA]=0.3 nM; 43074 is Colin's [tPA]=0.6 nM; 86148 is Colin's [tPA]=1.2 nM;
 integer  :: tf=20*60 !! BRAD 2023-01-06: 20*60!15*60 !final time in sec
 
@@ -235,9 +235,9 @@ do while (param_i<cmd_count)
     end if
     write (*,*) 'command arg ', param_i, ' = ', param_value (1:param_val_len)
     select case (param(3:param_len))
-        case('expCode')
-            expCode = param_value (1:param_val_len)
-            write (*,*) 'Setting expCode = ', expCode
+        case('runCode')
+            runCode = param_value (1:param_val_len)
+            write (*,*) 'Setting runCode = ', runCode
         case ('inFileCode')
             inFileCode = param_value (1:param_val_len)
             write (*,*) 'Setting inFileCode = ', inFileCode
@@ -265,13 +265,13 @@ do while (param_i<cmd_count)
                 stop
             end if
             write (*,*) 'Setting Ffree = ', Ffree
-        case ('stats')
-            read(param_value,*,iostat=io_status)  stats
+        case ('simulations')
+            read(param_value,*,iostat=io_status)  simulations
             if (io_status .ne. 0) then
                 write (*,*) 'String conversion error'
                 stop
             end if
-            write (*,*) 'Setting stats = ', stats
+            write (*,*) 'Setting simulations = ', simulations
         case ('M')
             read(param_value,*,iostat=io_status)  M
             if (io_status .ne. 0) then
@@ -381,7 +381,7 @@ allocate (t_degrade(num))
 allocate (t_leave(M))
 allocate (t_wait(M))
 allocate (bind(M))
-allocate (Nsavevect(stats))
+allocate (Nsavevect(simulations))
 allocate (rvect(M))
 allocate (degnext(tf+1,num))
 allocate (Vedgenext(tf+1,M))
@@ -393,7 +393,7 @@ allocate (tsave(tf+1))
 allocate (front(tf,N))
 allocate (firstdeg(N))
 allocate (deglast(N))
-allocate (lastmove(N,stats))
+allocate (lastmove(N,simulations))
 allocate (move(N,N))
 allocate (plotstuff(N,N), totmove(N,N),time2plot(N,N))
 allocate (plotstuff2(N,N))
@@ -403,7 +403,7 @@ allocate (X2plot(2,N*(F-1)), Y2plot(2,N*(F-1)))
 allocate (Xvplot(N*F), Yvplot(N*F))
 allocate (bdtPA(2,M), freetPA(2,M))
 allocate (lysismat(nummicro,100))!(100,100) if only did 10,000 micro runs, (500,100) if did 50,000
-allocate (countbindV(stats,tf), countindepV(stats,tf), bind1V(stats,tf))
+allocate (countbindV(simulations,tf), countindepV(simulations,tf), bind1V(simulations,tf))
 allocate (bind1(num))
 allocate (forcedunbdbydeg(M))
 allocate (mfpt(M)) !vector I'll use to save the first passage times of each tPA molecule
@@ -427,7 +427,7 @@ write(*,*)' F=',F
 write(*,*)' Ffree=',Ffree
 write(*,*)' num=',num
 write(*,*)' M=',M
-write(*,*)' obtained using code macro_Q2_always_rebind.f90 on data ',expCode
+write(*,*)' obtained using code macro_Q2_always_rebind.f90 on data ',runCode
 !write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
 
@@ -642,14 +642,14 @@ end do
 
 
 
-open(200,file=ADJUSTL('data/' // expCode // '/tPAleave' // inFileCode))
+open(200,file=ADJUSTL('data/' // runCode // '/tPAleave' // inFileCode))
 do i=1,101
     read(200,*)CDFtPA(i)
 end do
 close(200)
 write(*,*)'read tPAleave.dat'
 
-open(300,file=ADJUSTL('data/' // expCode // '/tsectPA' // inFileCode))
+open(300,file=ADJUSTL('data/' // runCode // '/tsectPA' // inFileCode))
 do i=1,101
     read(300,*)tsec1(i)
 end do
@@ -661,7 +661,7 @@ write(*,*)'read tsectPA.dat'
 !lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
 !equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
 !lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro runs) tPA leaving times
-OPEN(unit=201,FILE=ADJUSTL('data/' // expCode // '/lysismat' // inFileCode))
+OPEN(unit=201,FILE=ADJUSTL('data/' // runCode // '/lysismat' // inFileCode))
 do i=1,nummicro  !100 if only did 10,000 micro runs, 500 if did 50,000
     READ(201,*)(lysismat(i,ii),ii=1,100)
 enddo
@@ -669,7 +669,7 @@ close(201)
 
 !lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
 !did not occur, i.e. the first entry there's a 6000
-OPEN(unit=202,FILE=ADJUSTL('data/' // expCode // '/lenlysisvect' // inFileCode))
+OPEN(unit=202,FILE=ADJUSTL('data/' // runCode // '/lenlysisvect' // inFileCode))
 do i=1,100
     READ(202,*)lenlysismat(i)
 end do
@@ -690,19 +690,19 @@ write(*,*)'enoFB=',enoFB
     !write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     !write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     !write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    open(degunit,file=ADJUSTL('data/' // expCode // '/deg' // outFileCode),form=filetype)
-    open(Nunit,file=ADJUSTL('data/' // expCode // '/Nsave' // outFileCode),form=filetype)
-    open(tunit,file=ADJUSTL('data/' // expCode // '/tsave' // outFileCode),form=filetype)
-    open(moveunit,file=ADJUSTL('data/' // expCode // '/move' // outFileCode),form=filetype)
-    open(lastmoveunit,file=ADJUSTL('data/' // expCode // '/lastmove' // outFileCode),form=filetype)
-    open(plotunit,file=ADJUSTL('data/' // expCode // '/plot' // outFileCode),form=filetype)
-    open(mfptunit,file=ADJUSTL('data/' // expCode // '/mfpt' // outFileCode),form=filetype)
+    open(degunit,file=ADJUSTL('data/' // runCode // '/deg' // outFileCode),form=filetype)
+    open(Nunit,file=ADJUSTL('data/' // runCode // '/Nsave' // outFileCode),form=filetype)
+    open(tunit,file=ADJUSTL('data/' // runCode // '/tsave' // outFileCode),form=filetype)
+    open(moveunit,file=ADJUSTL('data/' // runCode // '/move' // outFileCode),form=filetype)
+    open(lastmoveunit,file=ADJUSTL('data/' // runCode // '/lastmove' // outFileCode),form=filetype)
+    open(plotunit,file=ADJUSTL('data/' // runCode // '/plot' // outFileCode),form=filetype)
+    open(mfptunit,file=ADJUSTL('data/' // runCode // '/mfpt' // outFileCode),form=filetype)
 
 !! BRAD 2023-01-21:
-    open(t_degrade_unit,file=ADJUSTL('data/' // expCode // '/f_deg_time' // outFileCode),form=filetype)
-    open(m_location_unit,file=ADJUSTL('data/' // expCode // '/m_loc' // outFileCode),form=filetype)
-    open(m_bound_unit,file=ADJUSTL('data/' // expCode // '/m_bound' // outFileCode),form=filetype)
-!   open(m_bind_time_unit,file=ADJUSTL('data/' // expCode // '/m_bind_t' // outFileCode),form=filetype)
+    open(t_degrade_unit,file=ADJUSTL('data/' // runCode // '/f_deg_time' // outFileCode),form=filetype)
+    open(m_location_unit,file=ADJUSTL('data/' // runCode // '/m_loc' // outFileCode),form=filetype)
+    open(m_bound_unit,file=ADJUSTL('data/' // runCode // '/m_bound' // outFileCode),form=filetype)
+!   open(m_bind_time_unit,file=ADJUSTL('data/' // runCode // '/m_bind_t' // outFileCode),form=filetype)
 
 
     !!!!!COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
@@ -718,8 +718,8 @@ write(*,*)'enoFB=',enoFB
 !yesfpt=0 !initialize yesfpt to 0, and change individual entries to 1's when that tPA molecule hits the back row of the clot
 !mfpt=0
 
-!!!!!! DO "STATS" RUNS OF THE MACRO MODEL
-stats_loop: do istat=1,stats
+!!!!!! DO "simulations" RUNS OF THE MACRO MODEL
+simulations_loop: do istat=1,simulations
 
     write(*,*)' run number=',istat
 
@@ -1443,12 +1443,12 @@ stats_loop: do istat=1,stats
     !      end do
     !    end do  !for jj loop
     !
-    !            open(x1unit,file=ADJUSTL('data/' // expCode // '/X1plot' // outFileCode),form=filetype)
-    !            open(x2unit,file=ADJUSTL('data/' // expCode // '/X2plot' // outFileCode),form=filetype)
-    !            open(y1unit,file=ADJUSTL('data/' // expCode // '/Y1plot' // outFileCode),form=filetype)
-    !            open(y2unit,file=ADJUSTL('data/' // expCode // '/Y2plot' // outFileCode),form=filetype)
-    !            open(xvunit,file=ADJUSTL('data/' // expCode // '/Xvplot' // outFileCode),form=filetype)
-    !            open(yvunit,file=ADJUSTL('data/' // expCode // '/Yvplot' // outFileCode),form=filetype)
+    !            open(x1unit,file=ADJUSTL('data/' // runCode // '/X1plot' // outFileCode),form=filetype)
+    !            open(x2unit,file=ADJUSTL('data/' // runCode // '/X2plot' // outFileCode),form=filetype)
+    !            open(y1unit,file=ADJUSTL('data/' // runCode // '/Y1plot' // outFileCode),form=filetype)
+    !            open(y2unit,file=ADJUSTL('data/' // runCode // '/Y2plot' // outFileCode),form=filetype)
+    !            open(xvunit,file=ADJUSTL('data/' // runCode // '/Xvplot' // outFileCode),form=filetype)
+    !            open(yvunit,file=ADJUSTL('data/' // runCode // '/Yvplot' // outFileCode),form=filetype)
     !
     !write(x1unit) X1plot
     !write(x2unit) X2plot
@@ -1537,8 +1537,8 @@ stats_loop: do istat=1,stats
     !     end do
     !
     !
-    !            open(tPAbdunit,file=ADJUSTL('data/' // expCode // '/tPAbd' // outFileCode),form=filetype)
-    !            open(tPAfreeunit,file=ADJUSTL('data/' // expCode // '/tPAfree' // outFileCode),form=filetype)
+    !            open(tPAbdunit,file=ADJUSTL('data/' // runCode // '/tPAbd' // outFileCode),form=filetype)
+    !            open(tPAfreeunit,file=ADJUSTL('data/' // runCode // '/tPAfree' // outFileCode),form=filetype)
     !
     !write(tPAbdunit) bdtPA
     !write(tPAfreeunit) freetPA
@@ -1737,7 +1737,7 @@ stats_loop: do istat=1,stats
 
 
     countindepV(istat,tf)=countindep
-end do stats_loop !for stats loop
+end do simulations_loop !for simulations loop
 
 write(*,*)'Nsavevect=',Nsavevect(:)
 

@@ -47,6 +47,7 @@ __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
+
 # TODO: Rename this object to Run
 class Experiment(object):
     """Houses all information about a given experimental run.
@@ -506,7 +507,7 @@ class MicroParameters:
     :Units: None
     :Fortran: nodes"""
 
-    snap_proportion: float = 2.0/3.0
+    snap_proportion: float = 2.0 / 3.0
     """The proportion of doublets that need to be degraded before the
     fiber snaps.
     
@@ -521,7 +522,7 @@ class MicroParameters:
     """The number of independent trials run in the microscale model.
     
     :Units: None
-    :Fortran: runs"""
+    :Fortran: simulations"""
 
     seed: int = 0
     """Seed for the random number generator
@@ -877,7 +878,7 @@ class MacroParameters:
     """The number of independent simulations to be run
     
     :Units: None
-    :Fortran: stats"""
+    :Fortran: simulations"""
 
     total_time: Quantity = Q_("20 min")
     """Total running time for model.
