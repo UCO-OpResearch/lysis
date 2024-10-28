@@ -166,7 +166,7 @@ Physical Parameters
 
    :Units: (micromolar*sec)^-1
 
-:kPLGon:
+:kplgon:
 
    :Description: The binding rate of PLG, :math:`k^\text{on}_\text{PLG}`, to fibrin.
 
