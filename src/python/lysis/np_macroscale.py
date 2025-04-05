@@ -5,49 +5,56 @@ from functools import partial
 import numpy as np
 from tqdm.auto import tqdm
 
-from .util import Experiment, KissRandomGenerator, RandomDraw, EdgeGrid, from_fortran_edge_index, to_fortran_edge_index
+from .util import (
+    Run,
+    KissRandomGenerator,
+    RandomDraw,
+    EdgeGrid,
+    from_fortran_edge_index,
+    to_fortran_edge_index,
+)
 
 
-class MacroscaleRun:
-    def __init__(self, exp: Experiment, instance: int = None, seed: int = None):
-        self.exp = exp
-        assert self.exp.macro_params is not None
+class MacroscaleSim:
+    def __init__(self, run: Run, instance: int = None, seed: int = None):
+        self.run = run
+        assert self.run.macro_params is not None
 
         self.logger = logging.getLogger(__name__)
-        self.logger.debug(f"Initializing MacroscaleRun")
+        self.logger.debug(f"Initializing MacroscaleSim")
         if seed is None:
-            seed = exp.macro_params.seed
-        if exp.macro_params.duplicate_fortran:
+            seed = run.macro_params.seed
+        if run.macro_params.duplicate_fortran:
             self.rng = KissRandomGenerator(seed)
         else:
             self.rng = np.random.default_rng(seed=abs(seed))
 
-        self.binding_time_factory = self._BindingTimeFactory(self.exp, self.rng)
+        self.binding_time_factory = self._BindingTimeFactory(self.run, self.rng)
 
         self.edge_lookup = partial(
             np.ravel_multi_index,
-            dims=(exp.macro_params.rows, exp.macro_params.full_row),
+            dims=(run.macro_params.rows, run.macro_params.full_row),
         )
 
         self.fiber_status = np.full(
-            self.exp.macro_params.rows * self.exp.macro_params.full_row,
+            self.run.macro_params.rows * self.run.macro_params.full_row,
             float("inf"),
             dtype=np.float_,
         )
         self.real_fiber = np.full(
-            self.exp.macro_params.rows * self.exp.macro_params.full_row,
+            self.run.macro_params.rows * self.run.macro_params.full_row,
             True,
             dtype=np.bool_,
         )
         for i, j in np.ndindex(
-            self.exp.macro_params.empty_rows, self.exp.macro_params.full_row
+            self.run.macro_params.empty_rows, self.run.macro_params.full_row
         ):
             self.real_fiber[self.edge_lookup((i, j))] = False
-        for j in range(exp.macro_params.cols):
+        for j in range(run.macro_params.cols):
             self.real_fiber[
                 self.edge_lookup(
                     (
-                        self.exp.macro_params.rows - 1,
+                        self.run.macro_params.rows - 1,
                         3 * j,
                     )
                 )
@@ -55,23 +62,23 @@ class MacroscaleRun:
         self.fiber_status[~self.real_fiber] = 0
 
         self.logger.debug(f"Precalculating neighbors.")
-        self.neighbors = EdgeGrid.generate_neighborhood_structure(exp)
+        self.neighbors = EdgeGrid.generate_neighborhood_structure(run)
 
-        if exp.macro_params.duplicate_fortran:
+        if run.macro_params.duplicate_fortran:
             perm = np.array(
                 [
                     from_fortran_edge_index(
-                        k, exp.macro_params.rows, exp.macro_params.cols
+                        k, run.macro_params.rows, run.macro_params.cols
                     )
-                    for k in range(exp.macro_params.total_edges)
+                    for k in range(run.macro_params.total_edges)
                 ]
             )
             perm = np.ravel_multi_index(
                 (perm[:, 0], perm[:, 1]),
-                dims=(exp.macro_params.rows, exp.macro_params.full_row),
+                dims=(run.macro_params.rows, run.macro_params.full_row),
             )
             inv_perm = []
-            for k in range(exp.macro_params.rows * exp.macro_params.full_row):
+            for k in range(run.macro_params.rows * run.macro_params.full_row):
                 p = np.argwhere(perm == k)
                 if p.size > 0:
                     inv_perm.append(p[0, 0])
@@ -84,34 +91,34 @@ class MacroscaleRun:
             )
 
         self.logger.info(f"Placing molecules on empty edges.")
-        if exp.macro_params.duplicate_fortran:
-            location = self.rng.random(exp.macro_params.total_molecules)
+        if run.macro_params.duplicate_fortran:
+            location = self.rng.random(run.macro_params.total_molecules)
             location = (
-                exp.macro_params.empty_rows * exp.macro_params.full_row * location
+                run.macro_params.empty_rows * run.macro_params.full_row * location
             )
             location = location.astype(int, copy=False)
-            location_i = np.empty(exp.macro_params.total_molecules, dtype=np.int_)
-            location_j = np.empty(exp.macro_params.total_molecules, dtype=np.int_)
+            location_i = np.empty(run.macro_params.total_molecules, dtype=np.int_)
+            location_j = np.empty(run.macro_params.total_molecules, dtype=np.int_)
             for m in range(len(location)):
                 location_i[m], location_j[m] = from_fortran_edge_index(
-                    location[m], exp.macro_params.rows, exp.macro_params.cols
+                    location[m], run.macro_params.rows, run.macro_params.cols
                 )
         else:
             location_i = self.rng.integers(
-                exp.macro_params.empty_rows,
-                size=exp.macro_params.total_molecules,
+                run.macro_params.empty_rows,
+                size=run.macro_params.total_molecules,
                 dtype=np.short,
             )
             location_j = self.rng.integers(
-                exp.macro_params.full_row,
-                size=exp.macro_params.total_molecules,
+                run.macro_params.full_row,
+                size=run.macro_params.total_molecules,
                 dtype=np.short,
             )
 
         self.location = self.edge_lookup((location_i, location_j))
 
         m_location_ij = np.unravel_index(
-            self.location, (self.exp.macro_params.rows, self.exp.macro_params.full_row)
+            self.location, (self.run.macro_params.rows, self.run.macro_params.full_row)
         )
 
         f_location = np.array(
@@ -119,30 +126,30 @@ class MacroscaleRun:
                 to_fortran_edge_index(
                     m_location_ij[0][k],
                     m_location_ij[1][k],
-                    self.exp.macro_params.rows,
-                    self.exp.macro_params.cols,
+                    self.run.macro_params.rows,
+                    self.run.macro_params.cols,
                 )
-                for k in range(self.exp.macro_params.total_molecules)
+                for k in range(self.run.macro_params.total_molecules)
             ]
         )
 
         self.m_fiber_status = None
 
-        self.bound = np.full(exp.macro_params.total_molecules, False, dtype=np.bool_)
+        self.bound = np.full(run.macro_params.total_molecules, False, dtype=np.bool_)
         self.waiting_time = np.full(
-            exp.macro_params.total_molecules, 0, dtype=np.float_
+            run.macro_params.total_molecules, 0, dtype=np.float_
         )
         self.binding_time = np.full(
-            exp.macro_params.total_molecules, float("inf"), dtype=np.float_
+            run.macro_params.total_molecules, float("inf"), dtype=np.float_
         )
         self.unbound_by_degradation = np.full(
-            exp.macro_params.total_molecules, 0, dtype=np.bool_
+            run.macro_params.total_molecules, 0, dtype=np.bool_
         )
         self.time_to_reach_back_row = np.full(
-            exp.macro_params.total_molecules, float("inf"), dtype=np.float_
+            run.macro_params.total_molecules, float("inf"), dtype=np.float_
         )
         self.reached_back_row = np.full(
-            exp.macro_params.total_molecules, False, dtype=np.bool_
+            run.macro_params.total_molecules, False, dtype=np.bool_
         )
         self.xp = np.arange(101)
         self.random_numbers = None
@@ -159,29 +166,29 @@ class MacroscaleRun:
 
         self.current_save_interval = 0
 
-        self.exp.data.degradation_state = np.empty(
+        self.run.data.degradation_state = np.empty(
             (
-                self.exp.macro_params.number_of_saves,
-                self.exp.macro_params.rows * self.exp.macro_params.full_row,
+                self.run.macro_params.number_of_saves,
+                self.run.macro_params.rows * self.run.macro_params.full_row,
             ),
             dtype=np.float_,
         )
-        self.exp.data.molecule_location = np.empty(
+        self.run.data.molecule_location = np.empty(
             (
-                self.exp.macro_params.number_of_saves,
-                self.exp.macro_params.total_molecules,
+                self.run.macro_params.number_of_saves,
+                self.run.macro_params.total_molecules,
             ),
             dtype=np.int_,
         )
-        self.exp.data.molecule_state = np.empty(
+        self.run.data.molecule_state = np.empty(
             (
-                self.exp.macro_params.number_of_saves,
-                self.exp.macro_params.total_molecules,
+                self.run.macro_params.number_of_saves,
+                self.run.macro_params.total_molecules,
             ),
             dtype=np.bool_,
         )
-        self.exp.data.save_time = np.empty(
-            (self.exp.macro_params.number_of_saves,),
+        self.run.data.save_time = np.empty(
+            (self.run.macro_params.number_of_saves,),
             dtype=np.float_,
         )
 
@@ -198,17 +205,17 @@ class MacroscaleRun:
         many smaller ones, we are able to achieve better amortized performance.
 
         Args:
-            exp: The Experiment object that this model is a part of
+            run: The Run object that this model is a part of
             rng: A generator of random numbers. This should be the same
                     generator object that the rest of the model is using to
                     prevent overlap issues.
         """
 
-        def __init__(self, exp: Experiment, rng: np.random.Generator):
+        def __init__(self, run: Run, rng: np.random.Generator):
             # The size of the internal list
-            self.period = max(1000000, 10 * exp.macro_params.total_molecules)
-            # The experiment this object is a part of
-            self.exp = exp
+            self.period = max(1000000, 10 * run.macro_params.total_molecules)
+            # The run this object is a part of
+            self.run = run
             # The random number generator to be used
             self.rng = rng
             # Initialize the list. It starts empty and will be filled the first
@@ -268,7 +275,7 @@ class MacroscaleRun:
             # Since the denominator is the same for all terms, it is better to
             # calculate this once and re-use it.
             denominator = (
-                self.exp.macro_params.binding_rate * self.exp.macro_params.binding_sites
+                self.run.macro_params.binding_rate * self.run.macro_params.binding_sites
             )
             # Use the vectorized, in-place divide function for the middle term
             binding_time_list = np.divide(
@@ -279,7 +286,7 @@ class MacroscaleRun:
             # each 'ln(X)' term by -1. Don't know if this makes a performance
             # difference or not.
             binding_time_list = np.subtract(
-                -self.exp.macro_params.time_step / 2,
+                -self.run.macro_params.time_step / 2,
                 binding_time_list,
                 out=binding_time_list,
             )
@@ -354,8 +361,8 @@ class MacroscaleRun:
         # plus the average bind time, minus half a timestep
         self.waiting_time[m] = (
             current_time
-            + self.exp.macro_params.average_bound_time
-            - self.exp.macro_params.time_step / 2
+            + self.run.macro_params.average_bound_time
+            - self.run.macro_params.time_step / 2
         )
         # Set the binding/unbinding time of the selected molecules to infinite
         # The fiber in their current location just degraded, so they can never
@@ -378,40 +385,41 @@ class MacroscaleRun:
             return
         self.bound = self.bound & ~m
         self.unbound_by_degradation = self.unbound_by_degradation & ~m
-        forced = np.full(self.exp.macro_params.total_molecules, False, dtype=np.bool_)
-        if self.exp.macro_params.duplicate_fortran:
+        forced = np.full(self.run.macro_params.total_molecules, False, dtype=np.bool_)
+        if self.run.macro_params.duplicate_fortran:
             forced[m] = (
                 self.random_numbers[RandomDraw.MICRO_UNBIND][m]
-                <= self.exp.macro_params.forced_unbind
+                <= self.run.macro_params.forced_unbind
             )
         else:
-            forced[m] = self.rng.random(count) <= self.exp.macro_params.forced_unbind
+            forced[m] = self.rng.random(count) <= self.run.macro_params.forced_unbind
         self.waiting_time[forced] = (
             current_time
-            + self.exp.macro_params.average_bound_time
-            - self.exp.macro_params.time_step / 2
+            + self.run.macro_params.average_bound_time
+            - self.run.macro_params.time_step / 2
         )
         self.binding_time[forced] = float("inf")
         num_forced = np.count_nonzero(forced)
         self.total_micro_unbinds += num_forced
         if num_forced < count:
-            if self.exp.macro_params.duplicate_fortran:
-                self.binding_time[
-                    m & ~forced
-                ] = current_time + self.binding_time_factory.fill_list(
-                    self.random_numbers[RandomDraw.BINDING_TIME_WHEN_UNBINDING][
-                        m & ~forced
-                    ]
+            if self.run.macro_params.duplicate_fortran:
+                self.binding_time[m & ~forced] = (
+                    current_time
+                    + self.binding_time_factory.fill_list(
+                        self.random_numbers[RandomDraw.BINDING_TIME_WHEN_UNBINDING][
+                            m & ~forced
+                        ]
+                    )
                 )
             else:
-                self.binding_time[
-                    m & ~forced
-                ] = current_time + self.binding_time_factory.next(count - num_forced)
+                self.binding_time[m & ~forced] = (
+                    current_time + self.binding_time_factory.next(count - num_forced)
+                )
 
     def find_unbinding_time(
         self, unbinding_time_bin: np.ndarray, current_time: float
     ) -> np.ndarray:
-        """Find the experiment time at which the tPA molecule will unbind
+        """Find the simulation time at which the tPA molecule will unbind
 
         If we think of the binding_time matrix as a function f(x) where
         binding_time[100*x] = f(x), we want to draw uniformly from the range of
@@ -430,8 +438,8 @@ class MacroscaleRun:
         if i is an integer such that 100i < 100r < 100(i+1) and
         lambda is such that 100i + lambda = 100r,
         then f(r) ~ (1-lambda)*f(i/100) + lambda*f( (i+1)/100 )"""
-        interp = np.interp(unbinding_time_bin, self.xp, self.exp.data.unbinding_time)
-        return interp + (current_time - self.exp.macro_params.time_step / 2)
+        interp = np.interp(unbinding_time_bin, self.xp, self.run.data.unbinding_time)
+        return interp + (current_time - self.run.macro_params.time_step / 2)
 
     def find_lysis_time(
         self,
@@ -440,14 +448,14 @@ class MacroscaleRun:
         current_time: float,
         count: int,
     ) -> np.ndarray:
-        if self.exp.macro_params.duplicate_fortran:
+        if self.run.macro_params.duplicate_fortran:
             lysis_time_bin = self.random_numbers[RandomDraw.LYSIS_TIME][m]
         else:
             lysis_time_bin = self.rng.random(count)
-        lysis_time_bin = lysis_time_bin * (self.exp.macro_params.microscale_runs / 100)
+        lysis_time_bin = lysis_time_bin * (self.run.macro_params.microscale_runs / 100)
         interp = np.full(count, float("inf"), dtype=np.double)
         unbinding_time_bin = unbinding_time_bin.astype(int)
-        total_lyses = self.exp.data.total_lyses[unbinding_time_bin] - 1
+        total_lyses = self.run.data.total_lyses[unbinding_time_bin] - 1
         lysis_happens = lysis_time_bin < total_lyses
         interp[~lysis_happens] = float("inf")
 
@@ -457,9 +465,9 @@ class MacroscaleRun:
             interp[i] = np.interp(
                 lysis_time_bin[i],
                 np.arange(total_lyses[i]),
-                self.exp.data.lysis_time[unbinding_time_bin[i], : total_lyses[i]],
+                self.run.data.lysis_time[unbinding_time_bin[i], : total_lyses[i]],
             )
-        return interp + (current_time - self.exp.macro_params.time_step / 2)
+        return interp + (current_time - self.run.macro_params.time_step / 2)
 
     def bind(self, m: np.ndarray, current_time: float):
         count = np.count_nonzero(m)
@@ -470,7 +478,7 @@ class MacroscaleRun:
         self.waiting_time[m] = 0
         self.total_binds += count
 
-        if self.exp.macro_params.duplicate_fortran:
+        if self.run.macro_params.duplicate_fortran:
             unbinding_time_bin = self.random_numbers[RandomDraw.UNBINDING_TIME][m] * 100
         else:
             unbinding_time_bin = self.rng.random(count) * 100
@@ -511,7 +519,7 @@ class MacroscaleRun:
             current_locations.reshape(count, 1), valid_neighborhoods, axis=1
         )
         num_valid_neighbors = np.count_nonzero(valid_neighbors, axis=1)
-        if self.exp.macro_params.duplicate_fortran:
+        if self.run.macro_params.duplicate_fortran:
             neighbor = self.random_numbers[RandomDraw.RESTRICTED_MOVE][m] * (
                 num_valid_neighbors + 1
             )
@@ -525,10 +533,10 @@ class MacroscaleRun:
         return (self.waiting_time > current_time) & self.unbound_by_degradation & m
 
     def unrestricted_move(self, free_to_move: np.ndarray, current_time: float):
-        if self.exp.macro_params.duplicate_fortran:
+        if self.run.macro_params.duplicate_fortran:
             neighbor = self.random_numbers[RandomDraw.MOVE][free_to_move]
-            neighbor = neighbor - (1 - self.exp.macro_params.moving_probability)
-            neighbor = neighbor / self.exp.macro_params.moving_probability
+            neighbor = neighbor - (1 - self.run.macro_params.moving_probability)
+            neighbor = neighbor / self.run.macro_params.moving_probability
             neighbor = neighbor * 8
             neighbor = neighbor.astype(int, copy=False)
         else:
@@ -543,18 +551,19 @@ class MacroscaleRun:
 
         num_move_to_fiber = np.count_nonzero(free_to_move)
         if num_move_to_fiber > 0:
-            if self.exp.macro_params.duplicate_fortran:
-                self.binding_time[
-                    free_to_move
-                ] = current_time + self.binding_time_factory.fill_list(
-                    self.random_numbers[RandomDraw.BINDING_TIME_WHEN_MOVING][
-                        free_to_move
-                    ]
+            if self.run.macro_params.duplicate_fortran:
+                self.binding_time[free_to_move] = (
+                    current_time
+                    + self.binding_time_factory.fill_list(
+                        self.random_numbers[RandomDraw.BINDING_TIME_WHEN_MOVING][
+                            free_to_move
+                        ]
+                    )
                 )
             else:
-                self.binding_time[
-                    free_to_move
-                ] = current_time + self.binding_time_factory.next(num_move_to_fiber)
+                self.binding_time[free_to_move] = (
+                    current_time + self.binding_time_factory.next(num_move_to_fiber)
+                )
 
     def move(self, m: np.ndarray, current_time: float):
         still_stuck_to_fiber = self.find_still_stuck(m, current_time)
@@ -564,48 +573,48 @@ class MacroscaleRun:
 
         self.unrestricted_move(free_to_move, current_time)
 
-        if self.number_reached_back_row < self.exp.macro_params.total_molecules:
+        if self.number_reached_back_row < self.run.macro_params.total_molecules:
             first_time = ~self.reached_back_row & (
                 self.location
-                > (self.exp.macro_params.rows - 1) * self.exp.macro_params.full_row - 1
+                > (self.run.macro_params.rows - 1) * self.run.macro_params.full_row - 1
             )
             self.time_to_reach_back_row[first_time] = current_time
             self.reached_back_row = self.reached_back_row | first_time
             self.number_reached_back_row += np.count_nonzero(first_time)
 
     def save_data(self, current_time):
-        self.exp.data.degradation_state[self.current_save_interval] = self.fiber_status
-        self.exp.data.molecule_location[self.current_save_interval] = self.location
-        self.exp.data.molecule_state[self.current_save_interval] = self.bound
-        self.exp.data.save_time[self.current_save_interval] = current_time
+        self.run.data.degradation_state[self.current_save_interval] = self.fiber_status
+        self.run.data.molecule_location[self.current_save_interval] = self.location
+        self.run.data.molecule_state[self.current_save_interval] = self.bound
+        self.run.data.save_time[self.current_save_interval] = current_time
         self.current_save_interval += 1
 
     def record_data_to_disk(self):
         self.logger.info(f"Saving data to disk.")
-        self.exp.data.save_to_disk("degradation_state")
-        self.exp.data.save_to_disk("molecule_location")
-        self.exp.data.save_to_disk("molecule_state")
-        self.exp.data.save_to_disk("save_time")
+        self.run.data.save_to_disk("degradation_state")
+        self.run.data.save_to_disk("molecule_location")
+        self.run.data.save_to_disk("molecule_state")
+        self.run.data.save_to_disk("save_time")
 
-    def run(self):
+    def go(self):
         self.save_data(0)
         for ts in tqdm(
-            np.arange(self.exp.macro_params.total_time_steps), mininterval=2
+            np.arange(self.run.macro_params.total_time_steps), mininterval=2
         ):
-            current_time = ts * self.exp.macro_params.time_step
-            if self.exp.macro_params.duplicate_fortran:
-                current_time += self.exp.macro_params.time_step
+            current_time = ts * self.run.macro_params.time_step
+            if self.run.macro_params.duplicate_fortran:
+                current_time += self.run.macro_params.time_step
 
             if ts == 23:
                 pass
 
-            if self.exp.macro_params.duplicate_fortran:
+            if self.run.macro_params.duplicate_fortran:
                 self.random_numbers = np.empty(
-                    (8, self.exp.macro_params.total_molecules), np.float_
+                    (8, self.run.macro_params.total_molecules), np.float_
                 )
                 for i in range(8):
                     self.random_numbers[i] = self.rng.random(
-                        self.exp.macro_params.total_molecules
+                        self.run.macro_params.total_molecules
                     )
 
             self.m_fiber_status = self.fiber_status[self.location]
@@ -623,15 +632,15 @@ class MacroscaleRun:
                 & (self.m_fiber_status > current_time)
                 & (self.waiting_time < current_time)
             )
-            if self.exp.macro_params.duplicate_fortran:
+            if self.run.macro_params.duplicate_fortran:
                 move_chance = self.random_numbers[RandomDraw.MOVE]
                 should_move = (
-                    move_chance > 1 - self.exp.macro_params.moving_probability
+                    move_chance > 1 - self.run.macro_params.moving_probability
                 ) & ~self.bound
             else:
-                move_chance = self.rng.random(self.exp.macro_params.total_molecules)
+                move_chance = self.rng.random(self.run.macro_params.total_molecules)
                 should_move = (
-                    move_chance < self.exp.macro_params.moving_probability
+                    move_chance < self.run.macro_params.moving_probability
                 ) & ~self.bound
 
             # TODO(bpaynter): Since these are all boolean vectors, I should be
@@ -639,8 +648,8 @@ class MacroscaleRun:
             conflict = should_bind & should_move
             threshold = (
                 current_time - self.binding_time[conflict]
-            ) / self.exp.macro_params.time_step
-            if self.exp.macro_params.duplicate_fortran:
+            ) / self.run.macro_params.time_step
+            if self.run.macro_params.duplicate_fortran:
                 should_bind[conflict] = (
                     self.random_numbers[RandomDraw.CONFLICT_RESOLUTION][conflict]
                     <= threshold
@@ -656,7 +665,7 @@ class MacroscaleRun:
 
             if (
                 current_time
-                >= self.exp.macro_params.save_interval * self.current_save_interval
+                >= self.run.macro_params.save_interval * self.current_save_interval
             ):
                 self.save_data(current_time)
 
@@ -671,22 +680,22 @@ class MacroscaleRun:
                     break
                 else:
                     unlysed_fiber_percent = (
-                        100 - unlysed_fibers / self.exp.macro_params.total_fibers * 100
+                        100 - unlysed_fibers / self.run.macro_params.total_fibers * 100
                     )
                     reached_back_row_percent = (
                         self.number_reached_back_row
-                        / self.exp.macro_params.total_molecules
+                        / self.run.macro_params.total_molecules
                         * 100
                     )
                     self.logger.info(
                         f"After {current_time:.2f} sec, "
-                        f"{self.exp.macro_params.total_fibers - unlysed_fibers:,} "
+                        f"{self.run.macro_params.total_fibers - unlysed_fibers:,} "
                         f"fibers are degraded ({unlysed_fiber_percent:.1f}% of total) "
                         f"and {self.number_reached_back_row:,} molecules have reached "
                         f"the back row {reached_back_row_percent:.1f}% of total)."
                     )
 
-        self.save_data(self.exp.macro_params.total_time)
+        self.save_data(self.run.macro_params.total_time)
         self.record_data_to_disk()
 
         self.logger.info(f"Total binds: {self.total_binds:,}")

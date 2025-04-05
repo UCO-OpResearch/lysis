@@ -99,7 +99,7 @@ class FiberDirection(Enum):
 
 
 @unique
-class ExpComponent(Flag):
+class RunComponent(Flag):
     NONE = 0
     MICRO = 1
     MICRO_POSTPROCESSING = 2

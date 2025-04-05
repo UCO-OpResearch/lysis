@@ -7,8 +7,8 @@ import numpy as np
 import nvtx
 from tqdm import tqdm
 
-from .util import Experiment
-from .edge_grid import EdgeGrid
+from .util import Run
+from .util.edge_grid import EdgeGrid
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -21,51 +21,51 @@ __status__ = "Development"
 
 
 class CudaMacroscaleRun:
-    def __init__(self, exp: Experiment):
-        self.exp = exp
-        assert self.exp.macro_params is not None
+    def __init__(self, run: Run):
+        self.run = run
+        assert self.run.macro_params is not None
 
-        self.rng = cp.random.default_rng(seed=abs(exp.macro_params.seed))
+        self.rng = cp.random.default_rng(seed=abs(run.macro_params.seed))
 
-        self.binding_time_factory = self._BindingTimeFactory(self.exp, self.rng)
+        self.binding_time_factory = self._BindingTimeFactory(self.run, self.rng)
 
         edge_lookup = partial(
             np.ravel_multi_index,
-            dims=(exp.macro_params.rows, exp.macro_params.full_row),
+            dims=(run.macro_params.rows, run.macro_params.full_row),
         )
 
         self.fiber_status = cp.full(
-            self.exp.macro_params.rows * self.exp.macro_params.full_row,
+            self.run.macro_params.rows * self.run.macro_params.full_row,
             float("inf"),
             dtype=cp.float_,
         )
         for i, j in np.ndindex(
-            self.exp.macro_params.empty_rows, self.exp.macro_params.full_row
+            self.run.macro_params.empty_rows, self.run.macro_params.full_row
         ):
             self.fiber_status[edge_lookup((i, j))] = 0
-        for j in range(exp.macro_params.cols):
+        for j in range(run.macro_params.cols):
             self.fiber_status[
                 edge_lookup(
                     (
-                        self.exp.macro_params.rows - 1,
+                        self.run.macro_params.rows - 1,
                         3 * j,
                     )
                 )
             ] = 0
 
-        self.neighbors = cp.array(EdgeGrid.generate_neighborhood_structure(exp))
+        self.neighbors = cp.array(EdgeGrid.generate_neighborhood_structure(run))
 
         location_i = cp.asnumpy(
             self.rng.integers(
-                exp.macro_params.empty_rows,
-                size=exp.macro_params.total_molecules,
+                run.macro_params.empty_rows,
+                size=run.macro_params.total_molecules,
                 dtype=cp.short,
             )
         )
         location_j = cp.asnumpy(
             self.rng.integers(
-                exp.macro_params.full_row,
-                size=exp.macro_params.total_molecules,
+                run.macro_params.full_row,
+                size=run.macro_params.total_molecules,
                 dtype=cp.short,
             )
         )
@@ -75,18 +75,18 @@ class CudaMacroscaleRun:
         self.m_fiber_status = None
         self.had_macro_degrade = False
 
-        self.bound = cp.full(exp.macro_params.total_molecules, False, dtype=cp.bool_)
+        self.bound = cp.full(run.macro_params.total_molecules, False, dtype=cp.bool_)
         self.waiting_time = cp.full(
-            exp.macro_params.total_molecules, 0, dtype=cp.float_
+            run.macro_params.total_molecules, 0, dtype=cp.float_
         )
         self.binding_time = cp.full(
-            exp.macro_params.total_molecules, float("inf"), dtype=cp.float_
+            run.macro_params.total_molecules, float("inf"), dtype=cp.float_
         )
         self.unbound_by_degradation = cp.full(
-            exp.macro_params.total_molecules, 0, dtype=cp.bool_
+            run.macro_params.total_molecules, 0, dtype=cp.bool_
         )
         self.time_to_reach_back_row = cp.full(
-            exp.macro_params.total_molecules, float("inf"), dtype=cp.float_
+            run.macro_params.total_molecules, float("inf"), dtype=cp.float_
         )
         self.xp = cp.arange(101)
 
@@ -107,8 +107,8 @@ class CudaMacroscaleRun:
         self.total_macro_unbinds += 1
         self.waiting_time[m] = (
             current_time
-            + self.exp.macro_params.average_bound_time
-            - self.exp.macro_params.time_step / 2
+            + self.run.macro_params.average_bound_time
+            - self.run.macro_params.time_step / 2
         )
         self.binding_time[m] = float("inf")
         self.had_macro_degrade = True
@@ -119,16 +119,16 @@ class CudaMacroscaleRun:
         if count == 0:
             return None
         self.bound[m] = False
-        forced = cp.full(self.exp.macro_params.total_molecules, False, dtype=cp.bool_)
-        forced[m] = self.rng.random(count) <= self.exp.macro_params.forced_unbind
+        forced = cp.full(self.run.macro_params.total_molecules, False, dtype=cp.bool_)
+        forced[m] = self.rng.random(count) <= self.run.macro_params.forced_unbind
         self.waiting_time[m & forced] = (
             current_time
-            + self.exp.macro_params.average_bound_time
-            - self.exp.macro_params.time_step / 2
+            + self.run.macro_params.average_bound_time
+            - self.run.macro_params.time_step / 2
         )
         self.binding_time[m & forced] = float("inf")
         self.total_micro_unbinds += int(
-            cp.count_nonzero(m & (forced <= self.exp.macro_params.forced_unbind))
+            cp.count_nonzero(m & (forced <= self.run.macro_params.forced_unbind))
         )
         self.binding_time[m & ~forced] = self.find_binding_time(
             current_time, int(cp.count_nonzero(m & ~forced))
@@ -147,11 +147,11 @@ class CudaMacroscaleRun:
         self.binding_time[m] = self.find_unbinding_time(r, current_time)
 
         lysis_time = self.find_lysis_time(r, current_time, count)
-        lysis = cp.full(self.exp.macro_params.total_molecules, False, dtype=cp.bool_)
+        lysis = cp.full(self.run.macro_params.total_molecules, False, dtype=cp.bool_)
         lysis[m] = lysis_time < float("inf")
 
         new_lysis = cp.full(
-            self.exp.macro_params.total_molecules, False, dtype=cp.bool_
+            self.run.macro_params.total_molecules, False, dtype=cp.bool_
         )
         new_lysis[m] = lysis[m] & (self.m_fiber_status[m] == float("inf"))
         new_lysis_fibers = self.location[new_lysis]
@@ -168,14 +168,14 @@ class CudaMacroscaleRun:
     def move_to_empty_edge(
         self, m: cp.ndarray, move_chance: cp.ndarray, current_time: float
     ):
-        for n in cp.arange(self.exp.macro_params.total_molecules)[m]:
+        for n in cp.arange(self.run.macro_params.total_molecules)[m]:
             neighborhood = [(self.neighbors[self.location[n], k]) for k in range(8)]
             # neighborhood.append(self.location[n])
             while len(neighborhood) > 0:
                 neighborhood_index = int(
                     (len(neighborhood) + 1)
                     * move_chance[n]
-                    / self.exp.macro_params.moving_probability
+                    / self.run.macro_params.moving_probability
                 )
                 if neighborhood_index == len(neighborhood):
                     break
@@ -191,12 +191,12 @@ class CudaMacroscaleRun:
         self, m: cp.ndarray, move_chance: cp.ndarray, current_time: float
     ) -> cp.ndarray:
         still_stuck_to_fiber = cp.full(
-            self.exp.macro_params.total_molecules, False, dtype=cp.bool_
+            self.run.macro_params.total_molecules, False, dtype=cp.bool_
         )
         if self.had_macro_degrade:
             still_stuck_to_fiber[m] = self.waiting_time[m] > current_time
             just_degraded = cp.full(
-                self.exp.macro_params.total_molecules, False, dtype=cp.bool_
+                self.run.macro_params.total_molecules, False, dtype=cp.bool_
             )
             just_degraded[still_stuck_to_fiber] = (
                 self.unbound_by_degradation[still_stuck_to_fiber] == current_time
@@ -220,7 +220,7 @@ class CudaMacroscaleRun:
         self, free_to_move: cp.ndarray, move_chance: cp.ndarray
     ) -> cp.ndarray:
         neighbor = move_chance[free_to_move] * (
-            8 / self.exp.macro_params.moving_probability
+            8 / self.run.macro_params.moving_probability
         )
         neighbor = neighbor.astype(int)
         return neighbor
@@ -233,12 +233,12 @@ class CudaMacroscaleRun:
         self.total_moves += int(cp.count_nonzero(free_to_move))
 
     def check_back_row(self, m: cp.ndarray, current_time: float):
-        reached_rear = cp.full(self.exp.macro_params.total_molecules, False)
+        reached_rear = cp.full(self.run.macro_params.total_molecules, False)
         reached_rear[m] = (
             self.location[m]
-            > (self.exp.macro_params.rows - 2) * self.exp.macro_params.full_row
+            > (self.run.macro_params.rows - 2) * self.run.macro_params.full_row
         )
-        first_time = cp.full(self.exp.macro_params.total_molecules, False)
+        first_time = cp.full(self.run.macro_params.total_molecules, False)
         first_time[reached_rear] = (
             current_time < self.time_to_reach_back_row[reached_rear]
         )
@@ -266,9 +266,9 @@ class CudaMacroscaleRun:
         self.check_back_row(m, current_time)
 
     class _BindingTimeFactory:
-        def __init__(self, exp: Experiment, rng: cp.random.Generator):
-            self.period = max(1000000, 10 * exp.macro_params.total_molecules)
-            self.exp = exp
+        def __init__(self, run: Run, rng: cp.random.Generator):
+            self.period = max(1000000, 10 * run.macro_params.total_molecules)
+            self.run = run
             self.rng = rng
             self.pointer = self.period
             self.list = cp.empty((self.period,), dtype=cp.double)
@@ -277,10 +277,10 @@ class CudaMacroscaleRun:
             self.rng.random(dtype=cp.double, out=self.list)
             cp.log(self.list, out=self.list)
             denominator = (
-                self.exp.macro_params.binding_rate * self.exp.macro_params.binding_sites
+                self.run.macro_params.binding_rate * self.run.macro_params.binding_sites
             )
             cp.divide(self.list, denominator, out=self.list)
-            cp.subtract(-self.exp.macro_params.time_step / 2, self.list, out=self.list)
+            cp.subtract(-self.run.macro_params.time_step / 2, self.list, out=self.list)
             # print(f"Refilled BindingTimeFactory list.")
 
         def next(self, count: int = 1):
@@ -313,7 +313,7 @@ class CudaMacroscaleRun:
             return None
 
     def find_unbinding_time(self, r: cp.ndarray, current_time: float) -> cp.ndarray:
-        """Find the experiment time at which the tPA molecule will unbind
+        """Find the simulation time at which the tPA molecule will unbind
 
         If we think of the binding_time matrix as a function f(x) where
         binding_time[100*x] = f(x) we want to draw uniformly from the range of
@@ -331,27 +331,27 @@ class CudaMacroscaleRun:
         if i is an integer such that 100i < 100r < 100(i+1) and
         lambda is such that 100i + lambda = 100r,
         then f(r) ~ (1-lambda)*f(i/100) + lambda*f( (i+1)/100 )"""
-        interp = cp.interp(r, self.xp, self.exp.data.cp_unbinding_time)
-        return interp + (current_time - self.exp.macro_params.time_step / 2)
+        interp = cp.interp(r, self.xp, self.run.data.cp_unbinding_time)
+        return interp + (current_time - self.run.macro_params.time_step / 2)
 
     def find_lysis_time(
         self, r: cp.ndarray, current_time: float, count: int
     ) -> cp.ndarray:
         lysis_r = self.rng.random(count, dtype=cp.double) * (
-            self.exp.macro_params.microscale_runs / 100
+            self.run.macro_params.microscale_runs / 100
         )
         interp = cp.full(count, float("inf"), dtype=cp.double)
         r_idx = r.astype(int)
-        total_lyses = self.exp.data.cp_total_lyses[r_idx] - 1
+        total_lyses = self.run.data.cp_total_lyses[r_idx] - 1
         lysis_happens = lysis_r < total_lyses
         interp[~lysis_happens] = float("inf")
         for i in cp.arange(count)[lysis_happens]:
             interp[i] = cp.interp(
                 lysis_r[i],
                 cp.arange(total_lyses[i]),
-                self.exp.data.cp_lysis_time[r_idx[i], : total_lyses[i]],
+                self.run.data.cp_lysis_time[r_idx[i], : total_lyses[i]],
             )
-        interp = interp + (current_time - self.exp.macro_params.time_step / 2)
+        interp = interp + (current_time - self.run.macro_params.time_step / 2)
 
         return interp
 
@@ -367,10 +367,10 @@ class CudaMacroscaleRun:
         )
         return should_bind
 
-    def run(self):
-        for ts in tqdm(cp.arange(self.exp.macro_params.total_time_steps)):
+    def go(self):
+        for ts in tqdm(cp.arange(self.run.macro_params.total_time_steps)):
             # cp.cuda.nvtx.RangePush(f"Iteration {ts:,}")
-            current_time = ts * self.exp.macro_params.time_step
+            current_time = ts * self.run.macro_params.time_step
 
             self.m_fiber_status = self.find_molecule_fiber_status()
             self.had_macro_degrade = False
@@ -385,19 +385,19 @@ class CudaMacroscaleRun:
             should_bind = self.find_should_bind(current_time)
 
             move_chance = cp.ones(
-                self.exp.macro_params.total_molecules, dtype=cp.double
+                self.run.macro_params.total_molecules, dtype=cp.double
             )
             move_chance[~self.bound] = self.rng.random(
                 int(cp.count_nonzero(~self.bound)), dtype=cp.double
             )
-            should_move = move_chance < self.exp.macro_params.moving_probability
+            should_move = move_chance < self.run.macro_params.moving_probability
             conflict = should_bind & should_move
             threshold = cp.full(
-                self.exp.macro_params.total_molecules, -1, dtype=cp.double
+                self.run.macro_params.total_molecules, -1, dtype=cp.double
             )
             threshold[conflict] = (
                 current_time - self.binding_time[conflict]
-            ) / self.exp.macro_params.time_step
+            ) / self.run.macro_params.time_step
             should_bind[conflict] = (
                 self.rng.random(int(cp.count_nonzero(conflict))) <= threshold[conflict]
             )
@@ -417,12 +417,12 @@ class CudaMacroscaleRun:
                     # break
                 else:
                     degraded_fiber_percent = (
-                        100 - unlysed_fibers / self.exp.macro_params.total_fibers * 100
+                        100 - unlysed_fibers / self.run.macro_params.total_fibers * 100
                     )
                     print()
                     print(
                         f"After {current_time:.2f} sec, "
-                        f"{self.exp.macro_params.total_fibers - unlysed_fibers:,} "
+                        f"{self.run.macro_params.total_fibers - unlysed_fibers:,} "
                         f"fibers are degraded."
                     )
                     print(

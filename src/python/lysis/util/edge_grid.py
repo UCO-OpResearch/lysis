@@ -4,7 +4,7 @@ from typing import Tuple
 import numpy as np
 
 from .constants import Const, BoundaryCondition
-from .parameters import Experiment
+from .parameters import Run
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -54,28 +54,28 @@ class EdgeGrid(object):
 
     def __init__(
         self,
-        exp: Experiment,
+        run: Run,
         boundary_conditions: Tuple[BoundaryCondition, BoundaryCondition] | None = None,
         initial_fiber_status: float = float("inf"),
     ):
         """Initializes an EdgeGrid.
 
         Args:
-            exp: The experiment that this EdgeGrid is a part of.
+            run: The run that this EdgeGrid is a part of.
                  This structure passes many of the parameters used to set up
-                 the experiment.
+                 the run.
             boundary_conditions: A tuple that maps boundaries from CONST.BOUND
                 to conditions from CONST.BOUND_COND.
             initial_fiber_status: The initial value of the fiber status.
                 This should generally be an infinite degrade time
-                (degrade time > experiment length).
+                (degrade time > simulation length).
         """
 
-        self.total_rows = exp.macro_params.rows
+        self.total_rows = run.macro_params.rows
         """int: The total number of rows in the grid."""
-        self.nodes_in_row = exp.macro_params.cols
+        self.nodes_in_row = run.macro_params.cols
         """int: The number of nodes (not edges) in each row of this EdgeGrid."""
-        self.empty_rows = exp.macro_params.empty_rows
+        self.empty_rows = run.macro_params.empty_rows
         """int: The number of empty (fibrin-free) rows in the grid."""
         # Set the appropriate boundary conditions
         if boundary_conditions is not None:
@@ -260,7 +260,7 @@ class EdgeGrid(object):
         # The top boundary of the grid.
         # Note that, if the edge generating the neighborhood is a y-edge,
         # then its neighborhood only involves fibers on its own row, or the row
-        # above. But, if this row is the top of the entire experiment
+        # above. But, if this row is the top of the entire simulation
         # (REFLECTING) then there are no y-edges on this row. If this row is
         # the top of one slice (CONTINUING) then this row represents the bottom
         # row of the next slice and should not be processed here
@@ -287,8 +287,8 @@ class EdgeGrid(object):
         return neighbor_i, neighbor_j
 
     @staticmethod
-    def generate_neighborhood_structure(exp: Experiment):
-        # edge_grid = EdgeGrid(exp)
+    def generate_neighborhood_structure(run: Run):
+        # edge_grid = EdgeGrid(run)
         # neighbor_i = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=np.short)
         # neighbor_j = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=np.short)
         # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
@@ -301,7 +301,7 @@ class EdgeGrid(object):
         #         neighbor_j[i, j, k] = n_j
         # return neighbor_i, neighbor_j
 
-        # edge_grid = EdgeGrid(exp)
+        # edge_grid = EdgeGrid(run)
         # neighbors = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8, 2), dtype=np.short)
         # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
         #     if i == edge_grid.total_rows - 1 and j % 3 == 0:
@@ -312,11 +312,11 @@ class EdgeGrid(object):
 
         edge_lookup = partial(
             np.ravel_multi_index,
-            dims=(exp.macro_params.rows, exp.macro_params.full_row),
+            dims=(run.macro_params.rows, run.macro_params.full_row),
         )
-        edge_grid = EdgeGrid(exp)
+        edge_grid = EdgeGrid(run)
         neighbors = np.empty(
-            (exp.macro_params.rows * exp.macro_params.full_row, 8), dtype=np.ushort
+            (run.macro_params.rows * run.macro_params.full_row, 8), dtype=np.ushort
         )
         for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
             if i == edge_grid.total_rows - 1 and j % 3 == 0:
@@ -332,20 +332,20 @@ class EdgeGrid(object):
         return neighbors
 
     @staticmethod
-    def generate_fortran_neighborhood_structure(exp: Experiment):
-        edge_grid = EdgeGrid(exp)
-        fort_neighbors = np.empty((exp.macro_params.total_edges, 8), dtype="int")
-        for f in range(exp.macro_params.total_edges):
+    def generate_fortran_neighborhood_structure(run: Run):
+        edge_grid = EdgeGrid(run)
+        fort_neighbors = np.empty((run.macro_params.total_edges, 8), dtype="int")
+        for f in range(run.macro_params.total_edges):
             i, j = from_fortran_edge_index(
-                f, exp.macro_params.rows, exp.macro_params.cols
+                f, run.macro_params.rows, run.macro_params.cols
             )
             for k in range(8):
                 neighbor_i, neighbor_j = edge_grid.neighbor(i, j, k)
                 fort_neighbors[f, k] = to_fortran_edge_index(
-                    neighbor_i, neighbor_j, exp.macro_params.rows, exp.macro_params.cols
+                    neighbor_i, neighbor_j, run.macro_params.rows, run.macro_params.cols
                 )
         return np.sort(fort_neighbors)
-    
+
     @staticmethod
     def get_spatial_coordinates(i: int, j: int):
         x = j // 3
@@ -359,30 +359,30 @@ class EdgeGrid(object):
             case 2:
                 x += 0.5
         return x, y, z
-    
+
     @staticmethod
-    def get_distance(exp: Experiment, a: Tuple[int, int], b: Tuple[int, int], metric: str = "euclidian"):
-        if metric == 'euclidian':
+    def get_distance(
+        run: Run, a: Tuple[int, int], b: Tuple[int, int], metric: str = "euclidian"
+    ):
+        if metric == "euclidian":
             a_coord = EdgeGrid.get_spatial_coordinates(*a)
             b_coord = EdgeGrid.get_spatial_coordinates(*b)
-            squares = sum((a_coord[k]-b_coord[k])**2 for k in range(3))
-            # return exp.macro_params.grid_node_distance * squares**0.5
-            return exp.macro_params.pore_size * 10_000 * squares**0.5
-        elif metric in ['manhattan', 'taxicab']:
+            squares = sum((a_coord[k] - b_coord[k]) ** 2 for k in range(3))
+            # return run.macro_params.grid_node_distance * squares**0.5
+            return run.macro_params.pore_size * 10_000 * squares**0.5
+        elif metric in ["manhattan", "taxicab"]:
             a_coord = EdgeGrid.get_spatial_coordinates(*a)
             b_coord = EdgeGrid.get_spatial_coordinates(*b)
-            sides = sum(abs(a_coord[k]-b_coord[k]) for k in range(3))
-            return exp.macro_params.pore_size * 10_000 * sides
-        if metric == '2d_euclidian':
+            sides = sum(abs(a_coord[k] - b_coord[k]) for k in range(3))
+            return run.macro_params.pore_size * 10_000 * sides
+        if metric == "2d_euclidian":
             a_coord = EdgeGrid.get_spatial_coordinates(*a)
             b_coord = EdgeGrid.get_spatial_coordinates(*b)
-            squares = sum((a_coord[k]-b_coord[k])**2 for k in range(2))
-            # return exp.macro_params.grid_node_distance * squares**0.5
-            return exp.macro_params.pore_size * 10_000 * squares**0.5
+            squares = sum((a_coord[k] - b_coord[k]) ** 2 for k in range(2))
+            # return run.macro_params.grid_node_distance * squares**0.5
+            return run.macro_params.pore_size * 10_000 * squares**0.5
         else:
             raise AttributeError(f"{metric} metric not implemented yet.")
-            
-        
 
 
 def from_fortran_edge_index(

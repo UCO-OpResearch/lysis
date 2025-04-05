@@ -72,7 +72,6 @@ Microscale files
     (``micro_params.simulations``,)
   :Fortran name:
     ``lasttPA``
-    
 ``fiber_degraded``
   Whether or not lysis is complete at the end of the simulation. That
   is, at least :math:`\frac{2}{3}` of binding doublets were degraded.

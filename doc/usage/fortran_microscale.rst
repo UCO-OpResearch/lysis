@@ -7,7 +7,7 @@ Fortran Script Usage
 First-time setup
 +++++++++++++++++
 
-#. Open a web browser, go to buddy.uco.edu, and log in.
+#. Open a web browser, go to https://buddy.uco.edu, and log in.
 
 #. Click on "Files" and then "Home Directory"
 
@@ -26,8 +26,10 @@ First-time setup
    
    `git clone https://github.com/UCO-OpResearch/lysis.git`
     
+#. Type `cd lysis` and hit enter, 
+   then run the command `git checkout micro-wrapper`.
 
-#. When the `git clone` command finishes without error, 
+#. When the `git` command finishes without error, 
    type `exit` and hit enter.
 
 #. Return to the tab with your files on it
@@ -61,7 +63,7 @@ First-time setup
    folder that you copied earier. Make sure there are no spaces that line.
    If your path has spaces, put double-quotes around it.
 
-#. Click the "Save" button in the top right and close the tab.
+#. Click the "Save" button in the top left and close the tab.
 
 Running a job
 +++++++++++++++++
@@ -89,7 +91,7 @@ Running a job
    - Add a space after the name of the parameter, then type the value of
       the parameter without units.
 
-   - Finally, place a `\\` at the end of each line.
+   - Finally, place a `\` at the end of each line.
 
    - There must *NOT* be any blank lines between parameters, 
       or between the parameters and the line that starts `> data`.
@@ -164,7 +166,7 @@ Physical Parameters
 
    :Units: (micromolar*sec)^-1
 
-:kPLGon:
+:kplgon:
 
    :Description: The binding rate of PLG, :math:`k^\text{on}_\text{PLG}`, to fibrin.
 
@@ -242,7 +244,7 @@ Model Parameters
 Experimental Parameters
 #####################################
 
-:runs:
+:simulations:
 
    :Description: The number of independent trials run in the microscale model.
 
