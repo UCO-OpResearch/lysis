@@ -259,7 +259,14 @@ class Run(object):
                         continue
                     # If the parameter has units, parse it with Pint
                     if k in units:
-                        out_micro_params[k] = Q_(v)
+                        if isinstance(v, int) or isinstance(v, float):
+                            warnings.warn(
+                                f"Parameter {k} has no units. Assuming {units[k]}.",
+                                RuntimeWarning,
+                            )
+                            out_micro_params[k] = Q_(v, units[k])
+                        else:
+                            out_micro_params[k] = Q_(v)
                     else:
                         out_micro_params[k] = v
                 # Now unpack whatever is left in the dict and pass it to the
@@ -295,7 +302,14 @@ class Run(object):
                         continue
                     # If the parameter has units, parse it with Pint
                     if k in units:
-                        out_macro_params[k] = Q_(v)
+                        if isinstance(v, int) or isinstance(v, float):
+                            warnings.warn(
+                                f"Parameter {k} has no units. Assuming {units[k]}.",
+                                RuntimeWarning,
+                            )
+                            out_macro_params[k] = Q_(v, units[k])
+                        else:
+                            out_macro_params[k] = Q_(v)
                     else:
                         out_macro_params[k] = v
                 # Now unpack whatever is left in the dict and pass it to the
