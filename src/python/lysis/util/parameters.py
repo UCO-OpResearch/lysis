@@ -108,7 +108,7 @@ class Run(object):
         # self.sequence: ExpComponent = ExpComponent.NONE
         self.micro_params = None
         self.macro_params = None
-        self.data = DataStore(self.os_path, default_filenames)
+        # self.data = DataStore(self.os_path, default_filenames)
 
     def __str__(self) -> str:
         """Gives a human-readable, formatted string of the current run's
@@ -238,7 +238,8 @@ class Run(object):
             # Initialize a datastore
             data_filenames = params.pop("data_filenames", None)
             if data_filenames is not None:
-                self.data = DataStore(self.os_path, data_filenames)
+                # self.data = DataStore(self.os_path, data_filenames)
+                pass
 
             # Remove the Microscale parameters from the dictionary (if it
             # exists) and create a new MicroParameters object using its values
