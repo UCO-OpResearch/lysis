@@ -115,3 +115,6 @@ class MolStatus(IntEnum):
     BOUND = 1
     MACRO_UNBOUND = 2
     MICRO_UNBOUND = 3
+
+
+CONST = Const()

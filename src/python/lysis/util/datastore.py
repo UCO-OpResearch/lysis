@@ -4,6 +4,8 @@ from typing import Any, AnyStr, List, Mapping, Union
 import numpy as np
 import h5py
 
+from .constants import CONST
+
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
@@ -12,6 +14,29 @@ __version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
+
+
+tpa_molecule_status = h5py.enum_dtype(
+    {i.name: i.value for i in CONST.MOL_STATUS}, basetype="u1"
+)
+
+tpa_bind_event_type = np.dtype(
+    [
+        ("Simulation Time Elapsed", np.float64),
+        ("tPA Molecule Index", np.int64),
+        ("Molecule New Status", tpa_molecule_status),
+        ("Grid Location Index", np.int16),
+    ]
+)
+
+fiber_degrade_event_type = np.dtype(
+    [
+        ("Simulation Time Elapsed", np.float64),
+        ("Grid Location Index", np.int32),
+        ("Fiber New Degrade Time", np.float64),
+    ]
+)
+
 
 @unique
 class DataStatus(Flag):
@@ -31,7 +56,8 @@ class DataStore:
         Initialize the DataStore with an optional run parameter.
         :param run: The experimental run associated with the data store.
         """
-        pass
+        self.run_code = run
+        self.status = DataStatus.NONE
 
     def import_fortran_micro_data(self, filecode=None):
         """
