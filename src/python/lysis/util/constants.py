@@ -46,6 +46,7 @@ class Const:
         self.BOUND_COND = BoundaryCondition
         self.DIR = FiberDirection
         self.NEIGHBORHOOD = Neighbors()
+        self.MOL_STATUS = MolStatus
 
 
 class Neighbors:
@@ -106,3 +107,11 @@ class RunComponent(Flag):
     MACRO = 4
     MACRO_POSTPROCESSING = 8
     ALL = MICRO | MICRO_POSTPROCESSING | MACRO | MACRO_POSTPROCESSING
+
+
+@unique
+class MolStatus(IntEnum):
+    UNBOUND = 0
+    BOUND = 1
+    MACRO_UNBOUND = 2
+    MICRO_UNBOUND = 3
