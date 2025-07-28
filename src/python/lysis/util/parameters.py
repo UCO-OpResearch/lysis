@@ -1,8 +1,8 @@
 """Code for holding, storing, and reading information about a Run
 
-This module gives a uniform way to handle the data and parameters of a given 
-run. It contains classes to house these and make them accessible to the 
-rest of the code. It also handles the storing and reading of parameters and 
+This module gives a uniform way to handle the data and parameters of a given
+run. It contains classes to house these and make them accessible to the
+rest of the code. It also handles the storing and reading of parameters and
 data to/from disk.
 
 Typical usage example:
@@ -183,7 +183,7 @@ class Run(object):
         # Convert the Microscale parameters to a dictionary
         if self.micro_params is not None:
             # Get units
-            units = MacroParameters.units()
+            units = MicroParameters.units()
             output["micro_params"] = {}
             # Loop through the parameters
             for k, v in asdict(self.micro_params).items():
