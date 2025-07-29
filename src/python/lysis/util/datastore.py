@@ -49,7 +49,7 @@ class DataStatus(Flag):
     FILLED = auto()
 
 
-def h5_tree(val: h5py.Dataset, pre: AnyStr = ""):
+def h5_tree(val: h5py.Dataset, pre: AnyStr = "") -> str:
     """Recursively prints the tree of an HDF5 file's contents.
 
     Copied from https://stackoverflow.com/questions/61133916/is-there-in-python-a-single-function-that-shows-the-full-structure-of-a-hdf5-fi
@@ -58,28 +58,30 @@ def h5_tree(val: h5py.Dataset, pre: AnyStr = ""):
         val: The item in the HDF5 to print
         pre: The current indentation
     """
+    output = ""
     items = len(val)
     for key, val in val.items():
         items -= 1
         if items == 0:
             # the last item
             if type(val) == h5py._hl.group.Group:
-                print(pre + "└── " + key)
-                h5_tree(val, pre + "    ")
+                output += pre + "└── " + key + os.linesep
+                output += h5_tree(val, pre + "    ")
             else:
                 try:
-                    print(pre + "└── " + key + " (%d)" % len(val))
+                    output += pre + "└── " + key + f" {val.shape}" + os.linesep
                 except TypeError:
-                    print(pre + "└── " + key + " (scalar)")
+                    output += pre + "└── " + key + " (scalar)" + os.linesep
         else:
             if type(val) == h5py._hl.group.Group:
-                print(pre + "├── " + key)
-                h5_tree(val, pre + "│   ")
+                output += pre + "├── " + key + os.linesep
+                output += h5_tree(val, pre + "│   ")
             else:
                 try:
-                    print(pre + "├── " + key + " (%d)" % len(val))
+                    output += pre + "├── " + key + f" {val.shape}" + os.linesep
                 except TypeError:
-                    print(pre + "├── " + key + " (scalar)")
+                    output += pre + "├── " + key + " (scalar)" + os.linesep
+    return output
 
 
 class DataStore:
@@ -98,7 +100,7 @@ class DataStore:
         "mode",
     ]
 
-    def __init__(self, run_code: AnyStr, path: AnyStr, mode: str = "r"):
+    def __init__(self, run_code: AnyStr, path: AnyStr, mode: str = "r") -> None:
         """
         Initialize the DataStore with an optional run parameter.
 
@@ -155,26 +157,32 @@ class DataStore:
         # TODO: Add code here to check if there is actually data stored in this HDF5
         #       and if it matches the current data specification
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Print the datastore in human-readable format."""
         return h5_tree(self._data)
 
+    def __repr__(self) -> str:
+        """Print the datastore in human-readable format."""
+        return self._path + r"/" + self._run_code + ".h5: " + str(self._status)
+
     def import_fortran_micro_data(
-        self, filecode: AnyStr = None, data_version: AnyStr = "current"
-    ):
+        self, path: AnyStr = None, filecode: AnyStr = None, data_version: AnyStr = "current"
+    ) -> None:
         """
         Import data from a Fortran Microscale run into the HDF5 storage.
 
         :param filecode: The file code associated with the Microscale run being imported.
             This file code should include any leading underscores, but NOT the file extension.
         """
+        if path is None:
+            path = self._path
         if self._mode == "r":
             raise os.UnsupportedOperation("Data is open in read-only mode.")
         if self._mode == "a" and self._status["micro"] == DataStatus.INITIALIZED:
             raise os.UnsupportedOperation("Existing data cannot be overwritten.")
         micro_data = self._data.create_group("micro_data")
 
-    def import_fortran_macro_data(self, filecode=None):
+    def import_fortran_macro_data(self, filecode=None) -> None:
         """
         Import data from a Fortran Macroscale run into the HDF5 storage.
 
@@ -183,15 +191,20 @@ class DataStore:
         """
         pass
 
-    def export_fortran_micro_data(self, filecode=None):
+    def export_fortran_micro_data(
+        self, path: AnyStr = None, filecode: str = None
+    ) -> None:
         """
         Export Microscale data from the HDF5 storage to disk for use by a Fortran Macroscale run.
 
         See the "Macro to Micro files" section of the Data Specification for more information.
 
+        :param path: The location to which the micro to macro data should be exported.
         :param filecode: The file code associated with the Microscale run being exported.
             This file code should include any leading underscores, but NOT the file extension.
         """
+        if path is None:
+            path = self._path
         # TODO: Add code to check if microscale data exists
         # Get the microscale data
         micro_data = self._data["micro_data"]
@@ -201,7 +214,7 @@ class DataStore:
         # This is really just a list of edgepoints from the bins for tPA leaving time
         # These bins are evenly distributed along the interval [0, 1]
         tPAleave = np.append(np.arange(0, 1, 0.01), [1.0])
-        np.savetxt(os.path.join(self._path, f"tPAleave{filecode}.dat"), tPAleave)
+        np.savetxt(os.path.join(path, f"tPAleave{filecode}.dat"), tPAleave)
 
         # The remaining data will be arranged into 100 bins
         # according to the time tPA left the simulation.
@@ -211,7 +224,7 @@ class DataStore:
         tsectPA = np.append(
             [0], micro_data["tpa_leaving_time"][:][indices[bin_size - 1 :: bin_size]]
         )
-        np.savetxt(os.path.join(self._path, f"tsectPA{filecode}.dat"), tsectPA)
+        np.savetxt(os.path.join(path, f"tsectPA{filecode}.dat"), tsectPA)
 
         # Identify which simulations had the fiber fully degraded
         lysis_complete = micro_data["fiber_degraded"][:]
@@ -231,14 +244,12 @@ class DataStore:
                 for i in range(100)
             ]
         ).T
-        np.savetxt(os.path.join(self._path, f"lysismat{filecode}.dat"), lysismat)
+        np.savetxt(os.path.join(path, f"lysismat{filecode}.dat"), lysismat)
 
         # Find the location of the first '6000' entry in each column of the ``lysismat`` matrix
         # Then convert to 1-indexing.
         lenlysisvect = lysismat.argmax(axis=1) + 1
-        np.savetxt(
-            os.path.join(self._path, f"lenlysisvect{filecode}.dat"), lenlysisvect
-        )
+        np.savetxt(os.path.join(path, f"lenlysisvect{filecode}.dat"), lenlysisvect)
 
     def __getattr__(self, key: AnyStr) -> np.ndarray:
         """
@@ -253,7 +264,7 @@ class DataStore:
         # Replace with actual logic to access HDF5 file
         pass
 
-    def __setattr__(self, key: AnyStr, value: np.ndarray):
+    def __setattr__(self, key: AnyStr, value: np.ndarray) -> None:
         """
         Set data in the data store.
         :param key: The table name to set.
@@ -261,7 +272,7 @@ class DataStore:
         """
         pass
 
-    def status(self, key: AnyStr) -> DataStatus:
+    def status(self, key: AnyStr) -> dict[str, DataStatus]:
         """
         Get the status of the data in the data store.
         :param key: The table name to check.
@@ -270,32 +281,6 @@ class DataStore:
         # Check if the table exists in the HDF5 file
         # If it does, return the status
         # If it doesn't, return DataStatus.NONE
-        # This is a placeholder implementation
-        # Replace with actual logic to access HDF5 file
-        pass
-
-    def _set_status(self, key: AnyStr, status: DataStatus):
-        """
-        Set the status of the data in the data store.
-        :param key: The table name to set the status for.
-        :param status: The status to set.
-        """
-        # Check if the table exists in the HDF5 file
-        # If it does, set the status
-        # If it doesn't, raise an AttributeError
-        # This is a placeholder implementation
-        # Replace with actual logic to access HDF5 file
-        pass
-
-    def _unset_status(self, key: AnyStr, status: DataStatus):
-        """
-        Unset the status of the data in the data store.
-        :param key: The table name to unset the status for.
-        :param status: The status to unset.
-        """
-        # Check if the attribute exists in the HDF5 file
-        # If it does, unset the status
-        # If it doesn't, raise an AttributeError
         # This is a placeholder implementation
         # Replace with actual logic to access HDF5 file
         pass
