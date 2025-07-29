@@ -33,8 +33,8 @@ class FortranMacro:
     cwd: AnyStr = "."
     #    source: AnyStr = None
     executable: AnyStr = None
-    in_file_code: AnyStr = ".dat"
-    out_file_code: AnyStr = ".dat"
+    in_file_code: AnyStr = ""
+    out_file_code: AnyStr = ""
     index: int = None
 
     def generate_neighborhoods(self):
@@ -50,9 +50,7 @@ class FortranMacro:
             seeds = stream.generate_state(params["total_trials"])
             params["total_trials"] = 1
             params["seed"] = int(np.int32(seeds[self.index]))
-            self.out_file_code = (
-                self.out_file_code[:-4] + f"_{self.index:02}" + self.out_file_code[-4:]
-            )
+            self.out_file_code = self.out_file_code + f"__{self.index:02}"
         arguments = [
             "--runCode",
             self.run.run_code,
@@ -81,7 +79,7 @@ class FortranMacro:
         command = self.exec_command()
         output_file_name = os.path.join(
             self.run.os_path,
-            "macro" + self.out_file_code[:-3] + "txt",
+            "macro" + self.out_file_code + ".txt",
         )
         with open(output_file_name, "w") as file:
             result = subprocess.run(
@@ -97,7 +95,7 @@ class FortranMicro:
     cwd: AnyStr = "."
     #    source: AnyStr = None
     executable: AnyStr = None
-    out_file_code: AnyStr = ".dat"
+    out_file_code: AnyStr = ""
     index: int = None
 
     def exec_command(self):
@@ -107,7 +105,7 @@ class FortranMicro:
         #     seeds = stream.generate_state(params['total_trials'])
         #     params['total_trials'] = 1
         #     params['seed'] = int(np.int32(seeds[self.index]))
-        #     self.out_file_code = self.out_file_code[:-4] + f"_{self.index:02}" + self.out_file_code[-4:]
+        #     self.out_file_code = self.out_file_code + f"_{self.index:02}"
         arguments = [
             "--runCode",
             self.run.run_code,
@@ -136,7 +134,7 @@ class FortranMicro:
         command = self.exec_command()
         output_file_name = os.path.join(
             self.run.os_path,
-            "micro" + self.out_file_code[:-3] + "txt",
+            "micro" + self.out_file_code + ".txt",
         )
         with open(output_file_name, "w") as file:
             result = subprocess.run(

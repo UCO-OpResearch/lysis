@@ -21,8 +21,18 @@ def parse_arguments():
         "executable", type=str, help="The name of the compiled fortran executable."
     )
     parser.add_argument("run_code", type=str)
-    parser.add_argument("--in_code", type=str, default=".dat")
-    parser.add_argument("--out_code", type=str, default=".dat")
+    parser.add_argument(
+        "--in_code",
+        type=str,
+        default="",
+        help="The code to add to all input filenames (should include any leading underscores, but NOT the file extension).",
+    )
+    parser.add_argument(
+        "--out_code",
+        type=str,
+        default="",
+        help="The code to add to all output filenames (should include any leading underscores, but NOT the file extension).",
+    )
     parser.add_argument(
         "-n", "--index", type=int, help="The index of this simulation in this run."
     )

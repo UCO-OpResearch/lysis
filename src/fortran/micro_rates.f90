@@ -7,8 +7,9 @@ program micromodel
 
     implicit none
     character(40) :: runCode = '2024-01-13-0710'
-    ! character(6)  :: inFileCode = 'Q2.dat'
-    character(40) :: outFileCode = 'PLG2_tPA01_Q2.dat'
+    ! File codes should include any leading underscores, but NOT a file extension.
+    ! character(6)  :: inFileCode = '_Q2'
+    character(40) :: outFileCode = '_PLG2_tPA01_Q2'
     !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
     !!!! Lines 19-25 allow you to set the various dissociation constants, binding rates, and the concentration of free PLG
     !!!! This code treats degradation and exposure in the gillespie algorithm, rather than separately with
@@ -635,23 +636,23 @@ program micromodel
         end if
 
         if (stats == 1) then
-            write (*, *) 'data/'//trim(runCode)//'/lysis_'//outFileCode
-            write (lysfile, '(58a)') 'data/'//trim(runCode)//'/lysis_'//outFileCode
-            write (tPAfile, '(61a)') 'data/'//trim(runCode)//'/tPA_time_'//outFileCode
-            write (PLifile, '(56a)') 'data/'//trim(runCode)//'/PLi_'//outFileCode
-            write (endfile, '(64a)') 'data/'//trim(runCode)//'/lyscomplete_'//outFileCode
-            !write(plgfile,'(56a)' ) 'data/' // runCode // '/PLG_' // outFileCode
-            !write(ctfile,'(58a)' ) 'data/' // runCode // '/count_' // outFileCode
-            !write(plgbdfile,'(27a)') 'data/' // runCode // '/PLGunbindPLG2_tPA01_Q2.dat'
-            !write(plgunbdfile,'(29a)') 'data/' // runCode // '/PLGbindPLG2_tPA01_Q2.dat'
-            !write(plitimefile,'(63a)') 'data/' // runCode // '/PLitime_' // outFileCode
-            write (tPAPLifile, '(63a)') 'data/'//trim(runCode)//'/tPAPLiunbd_'//outFileCode
-            !write(sfile,'(28a)' ) 'data/' // runCode // '/statetPAPLG2_tPA01_Q2.dat'
-            !write(profile,'(23a)' ) 'data/' // runCode // '/ersavePLG2_tPA01_Q2.dat'
-            !write(t2file,'(23a)' ) 'data/' // runCode // '/tsavePLG2_tPA01_Q2.dat'
-            write (tPAunbdfile, '(61a)') 'data/'//trim(runCode)//'/tPAunbind_'//outFileCode
-            write (s2file, '(67a)') 'data/'//trim(runCode)//'/lasttPA_'//outFileCode
-            write (fpfile, '(77a)') 'data/'//trim(runCode)//'/firstPLi_'//outFileCode
+            write (*, *) 'data/'//trim(runCode)//'/lysis'//outFileCode//'.dat'
+            write (lysfile, '(58a)') 'data/'//trim(runCode)//'/lysis'//outFileCode//'.dat'
+            write (tPAfile, '(61a)') 'data/'//trim(runCode)//'/tPA_time'//outFileCode//'.dat'
+            write (PLifile, '(56a)') 'data/'//trim(runCode)//'/PLi'//outFileCode//'.dat'
+            write (endfile, '(64a)') 'data/'//trim(runCode)//'/lyscomplete'//outFileCode//'.dat'
+            !write(plgfile,'(56a)' ) 'data/' // runCode // '/PLG' // outFileCode//'.dat'
+            !write(ctfile,'(58a)' ) 'data/' // runCode // '/count' // outFileCode//'.dat'
+            !write(plgbdfile,'(27a)') 'data/' // runCode // '/PLGunbindPLG2//outFileCode//'.dat'
+            !write(plgunbdfile,'(29a)') 'data/' // runCode // '/PLGbindPLG2//outFileCode//'.dat'
+            !write(plitimefile,'(63a)') 'data/' // runCode // '/PLitime' // outFileCode//'.dat'
+            write (tPAPLifile, '(63a)') 'data/'//trim(runCode)//'/tPAPLiunbd'//outFileCode//'.dat'
+            !write(sfile,'(28a)' ) 'data/' // runCode // '/statetPAPLG2//outFileCode//'.dat'
+            !write(profile,'(23a)' ) 'data/' // runCode // '/ersavePLG2//outFileCode//'.dat'
+            !write(t2file,'(23a)' ) 'data/' // runCode // '/tsavePLG2//outFileCode//'.dat'
+            write (tPAunbdfile, '(61a)') 'data/'//trim(runCode)//'/tPAunbind'//outFileCode//'.dat'
+            write (s2file, '(67a)') 'data/'//trim(runCode)//'/lasttPA'//outFileCode//'.dat'
+            write (fpfile, '(77a)') 'data/'//trim(runCode)//'/firstPLi'//outFileCode//'.dat'
             open (lysunit, file=lysfile, form=filetype)
             open (tPAunit, file=tPAfile, form=filetype)
             open (PLiunit, file=PLifile, form=filetype)

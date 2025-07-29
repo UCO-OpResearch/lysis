@@ -33,6 +33,7 @@ program macrolysis
 
     implicit none
     character(:), allocatable   :: runCode
+    ! File Codes should include any leading underscores, but NOT a file extension.
     character(:), allocatable   :: inFileCode
     character(:), allocatable   :: outFileCode
     logical         :: verbose = .False.!.True. !
@@ -700,14 +701,14 @@ program macrolysis
     ! read in the data from the micro model, which we obtained from /micro.f90
     ! READ IN VECTORS FROM MATLAB
 
-    open (200, file=ADJUSTL('data/'//runCode//'/tPAleave'//inFileCode))
+    open (200, file=ADJUSTL('data/'//runCode//'/tPAleave'//inFileCode//'.dat'))
     do i = 1, 101
         read (200, *) CDFtPA(i)
     end do
     close (200)
     write (*, *) 'read tPAleave.dat'
 
-    open (300, file=ADJUSTL('data/'//runCode//'/tsectPA'//inFileCode))
+    open (300, file=ADJUSTL('data/'//runCode//'/tsectPA'//inFileCode//'.dat'))
     do i = 1, 101
         read (300, *) tsec1(i)
     end do
@@ -717,7 +718,7 @@ program macrolysis
     ! lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
     ! equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
     ! lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro simulations) tPA leaving times
-    OPEN (unit=201, FILE=ADJUSTL('data/'//runCode//'/lysismat'//inFileCode))
+    OPEN (unit=201, FILE=ADJUSTL('data/'//runCode//'/lysismat'//inFileCode//'.dat'))
     do i = 1, nummicro  ! 100 if only did 10,000 micro simulations, 500 if did 50,000
         READ (201, *) (lysismat(i, ii), ii=1, 100)
     end do
@@ -725,7 +726,7 @@ program macrolysis
 
     ! lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
     ! did not occur, i.e. the first entry there's a 6000
-    OPEN (unit=202, FILE=ADJUSTL('data/'//runCode//'/lenlysisvect'//inFileCode))
+    OPEN (unit=202, FILE=ADJUSTL('data/'//runCode//'/lenlysisvect'//inFileCode//'.dat'))
     do i = 1, 100
         READ (202, *) lenlysismat(i)
     end do
@@ -745,24 +746,24 @@ program macrolysis
     ! write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     ! write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     ! write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    ! open(degunit,file=ADJUSTL('data/' // runCode // '/deg' // outFileCode),form=filetype)
-    open (Nunit, file=ADJUSTL('data/'//runCode//'/Nsave'//outFileCode), form=filetype)
-    open (tunit, file=ADJUSTL('data/'//runCode//'/tsave'//outFileCode), form=filetype)
-    ! open(moveunit,file=ADJUSTL('data/' // runCode // '/move' // outFileCode),form=filetype)
-    ! open(lastmoveunit,file=ADJUSTL('data/' // runCode // '/lastmove' // outFileCode),form=filetype)
-    ! open(plotunit,file=ADJUSTL('data/' // runCode // '/plot' // outFileCode),form=filetype)
-    open (mfptunit, file=ADJUSTL('data/'//runCode//'/mfpt'//outFileCode), form=filetype)
+    ! open(degunit,file=ADJUSTL('data/' // runCode // '/deg' // outFileCode//'.dat'),form=filetype)
+    open (Nunit, file=ADJUSTL('data/'//runCode//'/Nsave'//outFileCode//'.dat'), form=filetype)
+    open (tunit, file=ADJUSTL('data/'//runCode//'/tsave'//outFileCode//'.dat'), form=filetype)
+    ! open(moveunit,file=ADJUSTL('data/' // runCode // '/move' // outFileCode//'.dat'),form=filetype)
+    ! open(lastmoveunit,file=ADJUSTL('data/' // runCode // '/lastmove' // outFileCode//'.dat'),form=filetype)
+    ! open(plotunit,file=ADJUSTL('data/' // runCode // '/plot' // outFileCode//'.dat'),form=filetype)
+    open (mfptunit, file=ADJUSTL('data/'//runCode//'/mfpt'//outFileCode//'.dat'), form=filetype)
 
     !! BRAD 2023-01-21:
-    ! open(t_degrade_unit,file=ADJUSTL('data/' // runCode // '/f_deg_time' // outFileCode),form=filetype)
-    open (m_location_unit, file=ADJUSTL('data/'//runCode//'/m_loc'//outFileCode), form=filetype)
-    open (m_bound_unit, file=ADJUSTL('data/'//runCode//'/m_bound'//outFileCode), form=filetype)
+    ! open(t_degrade_unit,file=ADJUSTL('data/' // runCode // '/f_deg_time' // outFileCode//'.dat'),form=filetype)
+    open (m_location_unit, file=ADJUSTL('data/'//runCode//'/m_loc'//outFileCode//'.dat'), form=filetype)
+    open (m_bound_unit, file=ADJUSTL('data/'//runCode//'/m_bound'//outFileCode//'.dat'), form=filetype)
 
     !! BRAD 2023-06-09:
-    open (m_bind_time_unit, file=ADJUSTL('data/'//runCode//'/m_bind_t'//outFileCode), form='formatted')
+    open (m_bind_time_unit, file=ADJUSTL('data/'//runCode//'/m_bind_t'//outFileCode//'.dat'), form='formatted')
 
     !! BRAD 2024-02-02:
-    open (f_deg_list_unit, file=ADJUSTL('data/'//runCode//'/f_deg_list'//outFileCode), form='formatted')
+    open (f_deg_list_unit, file=ADJUSTL('data/'//runCode//'/f_deg_list'//outFileCode//'.dat'), form='formatted')
 
     !!!!! COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     ! open(degnextunit,file=degnextfile,form=filetype)
@@ -890,7 +891,7 @@ program macrolysis
         write (m_bound_unit) V(2, :)
         Nsave = save_interval
 
-        write (*, *) ' save as f_deg_list', outFileCode
+        write (*, *) ' save as f_deg_list', outFileCode, '.dat'
 
         ! Vedgenext(1,:)=V(1,:)
         ! Vboundnext(1,:)=V(2,:)
@@ -1764,12 +1765,12 @@ program macrolysis
         !         end do
         !     end do  ! for jj loop
 
-        !     open(x1unit,file=ADJUSTL('data/' // runCode // '/X1plot' // outFileCode),form=filetype)
-        !     open(x2unit,file=ADJUSTL('data/' // runCode // '/X2plot' // outFileCode),form=filetype)
-        !     open(y1unit,file=ADJUSTL('data/' // runCode // '/Y1plot' // outFileCode),form=filetype)
-        !     open(y2unit,file=ADJUSTL('data/' // runCode // '/Y2plot' // outFileCode),form=filetype)
-        !     open(xvunit,file=ADJUSTL('data/' // runCode // '/Xvplot' // outFileCode),form=filetype)
-        !     open(yvunit,file=ADJUSTL('data/' // runCode // '/Yvplot' // outFileCode),form=filetype)
+        !     open(x1unit,file=ADJUSTL('data/' // runCode // '/X1plot' // outFileCode//'.dat'),form=filetype)
+        !     open(x2unit,file=ADJUSTL('data/' // runCode // '/X2plot' // outFileCode//'.dat'),form=filetype)
+        !     open(y1unit,file=ADJUSTL('data/' // runCode // '/Y1plot' // outFileCode//'.dat'),form=filetype)
+        !     open(y2unit,file=ADJUSTL('data/' // runCode // '/Y2plot' // outFileCode//'.dat'),form=filetype)
+        !     open(xvunit,file=ADJUSTL('data/' // runCode // '/Xvplot' // outFileCode//'.dat'),form=filetype)
+        !     open(yvunit,file=ADJUSTL('data/' // runCode // '/Yvplot' // outFileCode//'.dat'),form=filetype)
 
         !     write(x1unit) X1plot
         !     write(x2unit) X2plot
@@ -1858,8 +1859,8 @@ program macrolysis
         !     end do
 
 
-        !     open(tPAbdunit,file=ADJUSTL('data/' // runCode // '/tPAbd' // outFileCode),form=filetype)
-        !     open(tPAfreeunit,file=ADJUSTL('data/' // runCode // '/tPAfree' // outFileCode),form=filetype)
+        !     open(tPAbdunit,file=ADJUSTL('data/' // runCode // '/tPAbd' // outFileCode//'.dat'),form=filetype)
+        !     open(tPAfreeunit,file=ADJUSTL('data/' // runCode // '/tPAfree' // outFileCode//'.dat'),form=filetype)
 
         !     write(tPAbdunit) bdtPA
         !     write(tPAfreeunit) freetPA

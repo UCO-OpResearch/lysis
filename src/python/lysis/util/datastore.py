@@ -166,6 +166,7 @@ class DataStore:
         Import data from a Fortran Microscale run into the HDF5 storage.
 
         :param filecode: The file code associated with the Microscale run being imported.
+            This file code should include any leading underscores, but NOT the file extension.
         """
         if self._mode == "r":
             raise os.UnsupportedOperation("Data is open in read-only mode.")
@@ -178,6 +179,7 @@ class DataStore:
         Import data from a Fortran Macroscale run into the HDF5 storage.
 
         :param filecode: The file code associated with the Macroscale run being imported.
+            This file code should include any leading underscores, but NOT the file extension.
         """
         pass
 
@@ -188,6 +190,7 @@ class DataStore:
         See the "Macro to Micro files" section of the Data Specification for more information.
 
         :param filecode: The file code associated with the Microscale run being exported.
+            This file code should include any leading underscores, but NOT the file extension.
         """
         # TODO: Add code to check if microscale data exists
         # Get the microscale data
@@ -198,7 +201,7 @@ class DataStore:
         # This is really just a list of edgepoints from the bins for tPA leaving time
         # These bins are evenly distributed along the interval [0, 1]
         tPAleave = np.append(np.arange(0, 1, 0.01), [1.0])
-        np.savetxt(os.path.join(self._path, f"tPAleave_{filecode}.dat"), tPAleave)
+        np.savetxt(os.path.join(self._path, f"tPAleave{filecode}.dat"), tPAleave)
 
         # The remaining data will be arranged into 100 bins
         # according to the time tPA left the simulation.
@@ -208,7 +211,7 @@ class DataStore:
         tsectPA = np.append(
             [0], micro_data["tpa_leaving_time"][:][indices[bin_size - 1 :: bin_size]]
         )
-        np.savetxt(os.path.join(self._path, f"tsectPA_{filecode}.dat"), tsectPA)
+        np.savetxt(os.path.join(self._path, f"tsectPA{filecode}.dat"), tsectPA)
 
         # Identify which simulations had the fiber fully degraded
         lysis_complete = micro_data["fiber_degraded"][:]
@@ -228,13 +231,13 @@ class DataStore:
                 for i in range(100)
             ]
         ).T
-        np.savetxt(os.path.join(self._path, f"lysismat_{filecode}.dat"), lysismat)
+        np.savetxt(os.path.join(self._path, f"lysismat{filecode}.dat"), lysismat)
 
         # Find the location of the first '6000' entry in each column of the ``lysismat`` matrix
         # Then convert to 1-indexing.
         lenlysisvect = lysismat.argmax(axis=1) + 1
         np.savetxt(
-            os.path.join(self._path, f"lenlysisvect_{filecode}.dat"), lenlysisvect
+            os.path.join(self._path, f"lenlysisvect{filecode}.dat"), lenlysisvect
         )
 
     def __getattr__(self, key: AnyStr) -> np.ndarray:
