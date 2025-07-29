@@ -7,7 +7,7 @@ Fortran Script Usage
 First-time setup
 +++++++++++++++++
 
-#. Open a web browser, go to https://buddy.uco.edu, and log in.
+#. Open a web browser, go to https://ondemand.hpc.uco.edu, and log in.
 
 #. Click on "Files" and then "Home Directory"
 
@@ -60,15 +60,15 @@ First-time setup
    https://github.com/UCO-OpResearch/lysis/blob/micro-wrapper/doc/usage/micro_fortran_run.sh
 
 #. In line 18 (that starts `LYSIS_ROOT=`), paste the path of the lysis
-   folder that you copied earier. Make sure there are no spaces that line.
-   If your path has spaces, put double-quotes around it.
+   folder that you copied earier. Make sure there are no spaces on that line.
+   If your path has spaces, put double-quotes around the path.
 
 #. Click the "Save" button in the top left and close the tab.
 
 Running a job
 +++++++++++++++++
 
-#. Log into Buddy (https://buddy.uco.edu) and go to the Job Composer 
+#. Log into Buddy OnDemand (https://ondemand.hpc.uco.edu) and go to the Job Composer 
    ("Jobs" -> "Job Composer").
 
 #. In the list of jobs, select your "Microscale Template" job, 
@@ -91,7 +91,7 @@ Running a job
    - Add a space after the name of the parameter, then type the value of
       the parameter without units.
 
-   - Finally, place a `\` at the end of each line.
+   - Finally, place a backslash (``\``) at the end of each line.
 
    - There must *NOT* be any blank lines between parameters, 
       or between the parameters and the line that starts `> data`.
