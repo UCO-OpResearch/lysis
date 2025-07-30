@@ -5,6 +5,7 @@ from .parameters import *
 from .util import *
 from .codeutil import *
 from .edge_grid import *
+from .dataspec import *
 
 try:
     import matplotlib.pyplot

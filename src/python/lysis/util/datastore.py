@@ -18,26 +18,7 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 
-tpa_molecule_status = h5py.enum_dtype(
-    {i.name: i.value for i in CONST.MOL_STATUS}, basetype="u1"
-)
 
-tpa_bind_event_type = np.dtype(
-    [
-        ("Simulation Time Elapsed", np.float64),
-        ("tPA Molecule Index", np.int64),
-        ("Molecule New Status", tpa_molecule_status),
-        ("Grid Location Index", np.int16),
-    ]
-)
-
-fiber_degrade_event_type = np.dtype(
-    [
-        ("Simulation Time Elapsed", np.float64),
-        ("Grid Location Index", np.int32),
-        ("Fiber New Degrade Time", np.float64),
-    ]
-)
 
 
 @unique
@@ -184,6 +165,11 @@ class DataStore:
         if self._mode == "a" and self._status["micro"] == DataStatus.INITIALIZED:
             raise os.UnsupportedOperation("Existing data cannot be overwritten.")
         micro_data = self._data.create_group("micro_data")
+        h5py.get_config().track_order = True
+        h5file = h5py.File(os.path.join(path, f'{self._run_code}.h5'), 'a')
+        micro_data = h5file.require_group("micro_data")
+
+
 
     def import_fortran_macro_data(self, filecode=None) -> None:
         """

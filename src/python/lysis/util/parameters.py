@@ -199,10 +199,10 @@ class Run(object):
             # Get units
             units = MacroParameters.units()
             output["macro_params"] = {}
-            params = asdict(self.macro_params)
-            del params["micro_params"]
             # Loop through the parameters
-            for k, v in params.items():
+            for k, v in asdict(self.macro_params).items():
+                if k == "micro_params":
+                    continue
                 # If the parameter is stored as a Quantity, convert it to standard units
                 # and output as a string. Else, pass it as-is
                 if isinstance(v, Quantity):
