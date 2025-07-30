@@ -166,7 +166,10 @@ class DataStore:
         return self._path + r"/" + self._run_code + ".h5: " + str(self._status)
 
     def import_fortran_micro_data(
-        self, path: AnyStr = None, filecode: AnyStr = None, data_version: AnyStr = "current"
+        self,
+        path: AnyStr = None,
+        filecode: AnyStr = None,
+        data_version: AnyStr = "current",
     ) -> None:
         """
         Import data from a Fortran Microscale run into the HDF5 storage.
@@ -248,7 +251,7 @@ class DataStore:
 
         # Find the location of the first '6000' entry in each column of the ``lysismat`` matrix
         # Then convert to 1-indexing.
-        lenlysisvect = lysismat.argmax(axis=1) + 1
+        lenlysisvect = lysismat.argmax(axis=0) + 1
         np.savetxt(os.path.join(path, f"lenlysisvect{filecode}.dat"), lenlysisvect)
 
     def __getattr__(self, key: AnyStr) -> np.ndarray:
