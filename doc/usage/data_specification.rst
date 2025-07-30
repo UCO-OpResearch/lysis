@@ -1,9 +1,267 @@
 =========================
-Data Specification v2.0.0
+Data Specifications
 =========================
 
 *Note: This document is written with NumPy indexing, which is zero-indexed.
 This is especially noteworthy since the Fortran code is one-indexed.*
+
+*Note: Grid Locations in this specification are stored in a two-dimension, 0-indexed system. 
+For more information, see the documentation of the Python lysis.util.EdgeGrid class (link below)*
+
+https://github.com/UCO-OpResearch/lysis/blob/c1e6b2a92758fb8620d6f5a2223976a1478c3231/src/python/lysis/util/edge_grid.py
+
+^^^^^^^^^^^^^^^^^
+v2.0.0 (First HDF5-based specification)
+^^^^^^^^^^^^^^^^^
+
+Files
++++++++++++
+
+``YYYY-MM-DD-hhmm.h5``
+  HDF5 file containing all data for a run
+
+Group Structure
+----------
+
+``micro_group``
+  Contains microscale output datasets.
+
+``macro_group``
+  Contains a group for each macroscale simulations datasets, numbered 00, 01, 02, ...
+
+``log_files``
+  Contains log files for all executions of code
+
+Microscale datasets
+++++++++++++++++
+
+``pli_first_time``
+  Time to first plasmin
+
+  :Data Type: 
+    NumPy 64-bit float (``f8``)
+  :Units:
+    seconds
+  :Dimensions: 
+    (``micro_params.simulations``,)
+  :Fortran equivalent:
+    ``firstPLi``
+
+
+``tpa_final_num``
+  The number of tPA molecules in the fiber at the end of the simulation.
+
+  :Data Type: 
+    NumPy unsigned 8-bit integer (``u1``)
+  :Units:
+    None
+  :Dimensions: 
+    (``micro_params.simulations``,)
+  :Fortran equivalent:
+    ``lasttPA``
+
+``fiber_degraded``
+  Whether or not lysis is complete at the end of the simulation. That
+  is, at least ``micro_params.snap_proportion`` of binding doublets were degraded.
+  1 for yes, 0 for no.
+
+  :Data Type: 
+    NumPy boolean (``?``)
+  :Units:
+    None
+  :Dimensions: 
+    (``micro_params.simulations``,)
+  :Fortran equivalent:
+    ``lysis_complete``
+
+``sim_final_time``
+  The amount of time elapsed in each simulation. If lysis completed,
+  this is the time at which that occurred.
+
+  :Data Type: 
+    NumPy 64-bit float (``f8``)
+  :Units:
+    seconds
+  :Dimensions: 
+    (``micro_params.simulations``,)
+  :Fortran equivalent:
+    ``lysis.dat``
+
+``pli_generated_num``
+  The number of Plasmin molecules generated in the fiber
+  by the end of the simulation.
+
+  :Data Type: 
+    NumPy 16-bit unsigned integer (``u2``)
+  :Units:
+    None
+  :Dimensions: 
+    (``micro_params.simulations``,)
+  :Fortran equivalent:
+    ``PLi``
+
+``tpa_leaving_time``
+  The simulation time elapsed when the tPA molecule leaves the system
+  or infinity if the simulation ends
+  with the tPA molecule still bound. 
+  
+  :Data Type: 
+    NumPy 64-bit float (``f8``)
+  :Units:
+    seconds
+  :Dimensions: 
+    (``micro_params.simulations``,)
+  :Fortran equivalent:
+    ``tPA_time``
+
+``tpa_unbound_by_pli``
+  Whether or not tPA was forced to unbind by plasmin-mediated
+  degradation of fibrin.
+  1 for yes, 0 for no.
+
+  :Data Type: 
+    NumPy boolean (``?``)
+  :Units:
+    None
+  :Dimensions: 
+    (``micro_params.simulations``,)
+  :Fortran equivalent:
+    ``tPAPLiunbd``
+
+``tpa_unbound_kinetic``
+  Whether or not tPA unbinds from the fiber by itself (kinetically).
+  1 for yes, 0 for no.
+
+  :Data Type: 
+    NumPy boolean (``?``)
+  :Units:
+    None
+  :Dimensions: 
+    (``micro_params.simulations``,)
+  :Fortran equivalent:
+    ``tPAunbind``
+
+Macro to Micro datasets
+++++++++++++++++++++
+
+:NOTE: These files should NOT be stored in this version of the data specification, 
+but should be generated when needed from the microscale data.
+
+
+Macroscale datasets
+++++++++++++++++
+
+
+``fiber_degrade_time``
+  A list of updates to the degrade time of any fiber in the model.
+  Each row represents one update to one fiber and contains 4 entries:
+
+  #. The simulation time elapsed when the event occurred.
+  #. The python location row index of the fiber on which the event occurred.
+  #. The python location rank index of the fiber on which the event occurred.
+  #. The new degrade time for the fiber. (the time at which the fiber will degrade if no further updates occur).
+
+  :Data Type: 
+    (NumPy float (``f8``), NumPy int32 (``u4``), NumPy int32 (``u4``), NumPy float (``f8``))
+  :Units:
+    (seconds, None, None, seconds)
+  :Dimensions: 
+    (number of binding events, 4)
+  :Fortran equivalent:
+    ``f_deg_list``
+
+``tpa_bind_events``
+  A list of tPA molecule bindings and their associated metrics.
+  Each row represents one update to one tPA molecule and contains 5 entries:
+
+  #. The simulation time elapsed when the event occurred.
+  #. The index of the tPA molecule which was involved in the event.
+  #. The new status of the tPA molecule (see below for details).
+  #. The python location (fiber index) row at which the event occurred. 
+  #. The python location (fiber index) rank at which the event occurred. 
+
+  Valid molecule statuses are:
+
+  0. Kinetically Unbound.
+  1. Bound to an undegraded fiber.
+  2. Bound to a degraded fiber (macro-unbound).
+  3. Bound to a fiber degradation product (micro-unbound).
+
+  :Data Type: 
+    (NumPy float64 (``f8``), NumPy integer (``u8``), NumPy integer (``u1``), NumPy integer (``u4``), NumPy integer (``u4``))
+  :Units:
+    (seconds, None, None, None, None)
+  :Dimensions: 
+    (number of binding events, 5) 
+  :Fortran equivalent:
+    ``m_bind_t``
+
+``tpa_location_snapshot``
+  An array, giving the location (fiber index) row and rank of each molecule at point when a save is made.
+  That is, ``tpa_location_snapshot[i, :, j]`` is the pair of location coordinates for tPA molecule ``i`` when 
+  snapshot ``j`` is recorded.
+
+  :Data Type: 
+    NumPy integer (``i4``)
+  :Units:
+    None 
+  :Dimensions: 
+    (number of molecules, 2, number of snapshots)
+  :Fortran equivalent:
+    ``m_loc``
+
+``tpa_transit_time``
+  The simulation time elapsed when each tPA molecule reached the back row of the 
+  fiber grid for the first time.
+
+  :Data Type: 
+    NumPy float (``f8``)
+  :Units:
+    seconds
+  :Dimensions: 
+    (number of molecules,)
+  :Fortran equivalent:
+    ``mfpt``
+
+``snapshot_time``
+  The simulation time elapsed at the point when each snapshot is recorded.
+
+  :Data Type: 
+    NumPy float64 (``f8``)
+  :Units:
+    seconds
+  :Dimensions: 
+    (number of snapshots,)
+  :Fortran equivalent:
+    ``tsave``
+
+Log datasets
+++++++++++++++++
+
+``micro_log``
+  The log from the microscale execution, stored one line per row.
+
+  :Data Type:
+    String (``S``)
+  :Dimensions:
+    (log events,)
+
+  ``macro_log__sim_XX``
+  The log from the macroscale execution of simulation XX, stored one line per row.
+
+  :Data Type:
+    String (``S``)
+  :Dimensions:
+    (log events,)
+
+
+^^^^^^^^^^^^^^^^^^
+v1.99.0 (Last Fortran-based specification)
+^^^^^^^^^^^^^^^^^^
+*Note: Grid Locations here are stored in a single-dimension, 1-indexed system. 
+For more information, see the documentation of the Python lysis.util.EdgeGrid class (link below)*
+
+https://github.com/UCO-OpResearch/lysis/blob/c1e6b2a92758fb8620d6f5a2223976a1478c3231/src/python/lysis/util/edge_grid.py
 
 Folder root
 -----------
@@ -39,7 +297,7 @@ Microscale files
   Fortran source code for the microscale model.
   This is the code that was used in this run.
 
-  :Data Type: 
+  :File Type: 
     Plain text
 
 ``micro.txt``
@@ -48,222 +306,135 @@ Microscale files
   :Data Type: 
     Plain text
 
-``pli_first_time``
+``firstPLi.dat``
   Time to first plasmin
-
+  
+  :File Type:
+    Binary
   :Data Type: 
-    NumPy float64 (``f8``)
+    double precision (``f8``)
   :Units:
     seconds
   :Dimensions: 
-    (``micro_params.simulations``,)
-  :Fortran name:
+    (``simulations``,)
+  :Fortran Variable:
     ``firstPLi``
 
 
-``tpa_final_num``
+``lasttPA.dat``
   The number of tPA molecules in the fiber at the end of the simulation.
 
+  :File Type:
+    Binary
   :Data Type: 
-    NumPy unsigned int 1 byte (``u1``)
+    integer (``i4``)
   :Units:
     None
   :Dimensions: 
-    (``micro_params.simulations``,)
-  :Fortran name:
-    ``lasttPA``
-``fiber_degraded``
+    (``simulations``,)
+  :Fortran Variable:
+    ``ltPA = [tPA(count)]``
+
+``lyscomplete.dat``
   Whether or not lysis is complete at the end of the simulation. That
-  is, at least :math:`\frac{2}{3}` of binding doublets were degraded.
+  is, at least ``snap_proportion`` of binding doublets were degraded.
   1 for yes, 0 for no.
 
+  :File Type:
+    Binary
   :Data Type: 
-    NumPy boolean (``?``)
+    integer (``u4``)
   :Units:
     None
   :Dimensions: 
-    (``micro_params.simulations``,)
-  :name:
-    ``lysis_complete``
+    (``simulations``,)
+  :Fortran Variable:
+    ``lysiscomplete``
 
-``sim_final_time``
+``lysis.dat``
   The amount of time elapsed in each simulation. If lysis completed,
   this is the time at which that occurred.
 
+  :File Type:
+    Binary
   :Data Type: 
-    NumPy float64 (``f8``)
+    double precision (``f8``)
   :Units:
     seconds
   :Dimensions: 
-    (``micro_params.simulations``,)
-  :Fortran name:
-    ``lysis.dat``
+    (``simulations``,)
+  :Fortran Variable:
+    ``lysis_time = [tvals(count)]``
 
-``pli_generated_num``
+``PLi.dat``
   The number of Plasmin molecules generated in the fiber
   by the end of the simulation.
 
+  :File Type:
+    Binary
   :Data Type: 
-    NumPy integer (``u2``)
+    integer (``i4``)
   :Units:
     None
   :Dimensions: 
-    (``micro_params.simulations``,)
-    :Fortran name:
-    ``PLi``
+    (``simulations``,)
+  :Fortran Variable:
+    ``Plasmin = [PLi(count)]``
 
-``tpa_leaving_time``
+``tPA_time.dat``
   The simulation time elapsed when the tPA molecule leaves the system
   or infinity if the simulation ends
   with the tPA molecule still bound. 
   
+  :File Type:
+    Binary
   :Data Type: 
-    NumPy float64 (``f8``)
+    double precision (``f8``)
   :Units:
     seconds
   :Dimensions: 
-    (``micro_params.simulations``,)
-  :Fortran name:
-    ``tPA_time``
+    (``simulations``,)
+  :Fortran Variable:
+    ``tPA_time = [tvals(loca)]``
 
-``tpa_unbound_by_pli``
+``tPAPLiunbd.dat``
   Whether or not tPA was forced to unbind by plasmin-mediated
   degradation of fibrin.
   1 for yes, 0 for no.
 
+  :File Type:
+    Binary
   :Data Type: 
-    NumPy boolean (``?``)
+    integer (``i4``)
   :Units:
     None
   :Dimensions: 
-    (``micro_params.simulations``,)
-  :fortran name:
-    ``tPAPLiunbd``
+    (``simulations``,)
+  :Fortran Variable:
+    ``tPAPLiunbd = [reaction3]``
 
-``tpa_unbound_kinetic``
+``tPAunbind.dat``
   Whether or not tPA unbinds from the fiber by itself (kinetically).
   1 for yes, 0 for no.
 
+  :File Type:
+    Binary
   :Data Type: 
-    NumPy boolean (``?``)
+    integer (``i4``)
   :Units:
     None
   :Dimensions: 
-    (``micro_params.simulations``,)
+    (``simulations``,)
   :Fortran name:
-    ``tPAunbind``
-
-
-Macroscale files
-++++++++++++++++
-
-
-Subfolders
-----------
-:Purpose:
-  Stores all files related to an individual macroscale simulation
-
-:Name: 
-  A two-digit number giving the macroscale simulations's position
-  in the run array
-
-``macro.txt``
-  Output log for the macroscale simulation.
-
-  :Data Type: 
-    Plain text
-
-``fiber_degrade_time``
-  A list of updates to the degrade time of any fiber in the model.
-  Each row represents one update to one fiber and contains 3 entries:
-
-  #. The simulation time elapsed when the event occurred.
-  #. The location index of the fiber on which the event occurred.
-  #. The new degrade time for the fiber. (the time at which the fiber will degrade if no further updates occur).
-
-  :Data Type: 
-    (NumPy float (``f8``), NumPy int32 (``u4``), NumPy float (``f8``))
-  :Units:
-    (seconds, None, seconds)
-  :Dimensions: 
-    (number of binding events, 3)
-  :Fortran name:
-    ``f_deg_list``
-
-``tpa_bind_events``
-  A list of tPA molecule bindings and their associated metrics.
-  Each row represents one update to one tPA molecule and contains 4 entries:
-
-  #. The simulation time elapsed when the event occurred.
-  #. The index of the tPA molecule which was involved in the event.
-  #. The new status of the tPA molecule (see below for details).
-  #. The location (fiber index) at which the event occurred. 
-
-  Valid molecule statuses are:
-
-  0. Kinetically Unbound.
-  1. Bound to an undegraded fiber.
-  2. Bound to a degraded fiber (macro-unbound).
-  3. Bound to a fiber degradation product (micro-unbound).
-
-  :Data Type: 
-    (NumPy float64 (``f8``), NumPy integer (``u8``), NumPy integer (``u1``), NumPy integer (``u4``))
-  :Units:
-    (seconds, None, None, None)
-  :Dimensions: 
-    (number of binding events, 4) 
-  :Fortran name:
-    ``m_bind_t``
-
-``tpa_location_snapshot``
-  An array, giving the location (fiber index) of each molecule at point when a save is made.
-  That is, ``tpa_location_snapshot[i, j]`` is the location of tPA molecule ``i`` when 
-  snapshot ``j`` is recorded.
-
-  :Data Type: 
-    NumPy integer (``i4``)
-  :Units:
-    None 
-  :Dimensions: 
-    (number of molecules, number of snapshots)
-  :Fortran name:
-    ``m_loc``
-
-``tpa_transit_time``
-  The simulation time elapsed when each tPA molecule reached the back row of the 
-  fiber grid for the first time.
-
-  :Data Type: 
-    NumPy float (``f8``)
-  :Units:
-    seconds
-  :Dimensions: 
-    (number of molecules,)
-  :Fortran name:
-    ``mfpt``
-
-``snapshot_time``
-  The simulation time elapsed at the point when each snapshot is recorded.
-
-  :Data Type: 
-    NumPy float64 (``f8``)
-  :Units:
-    seconds
-  :Dimensions: 
-    (number of snapshots,)
-  :Fortran name:
-    ``tsave``
-
+    ``tPAunbind = [reaction2]``
 
 Macro to Micro files
 ++++++++++++++++++++
 
 :NOTE: These files are needed to input the data from the microscale model into the Fortran macroscale code.
 Historically these were generated with the Matlab ``micro_to_macro`` code.
-These files should NOT be stored in this version of the data specification, 
-but should be generated when needed from the microscale data.
 
-*We continue to use 0-indexing here to be consistent with the rest of this document, 
+*We continue to use 0-indexing for arrays here to be consistent with the rest of this document, 
 even though these files are only used in Fortran which is 1-indexed.*
 
 ``tPAleave.dat``
@@ -311,7 +482,7 @@ even though these files are only used in Fortran which is 1-indexed.*
   :Units:
     seconds
   :Dimensions:
-    (``micro_params.simulations`` // 100, 100)
+    (``simulations`` // 100, 100)
 
 ``lenlysisvect.dat``
   The number of simulations in a tPA leaving time bin, where full lysis of the fiber occurs.
@@ -333,10 +504,7 @@ even though these files are only used in Fortran which is 1-indexed.*
   This data was historically generated inside the Fortran code, 
   but it is now generated by the Python wrapper
 
-  *For more detail on how the edge grid co-ordinates are defined in both Fortran and Python,
-  see the documentation of the Python lysis.util.EdgeGrid class (link below)*
-
-  https://github.com/UCO-OpResearch/lysis/blob/c1e6b2a92758fb8620d6f5a2223976a1478c3231/src/python/lysis/util/edge_grid.py
+  
 
   :File Type:
     Space-delimited Text
@@ -345,4 +513,145 @@ even though these files are only used in Fortran which is 1-indexed.*
   :Units:
     None
   :Dimensions:
-    (8, ``macro_params.total_edges``)
+    (8, ``num``)
+
+
+Macroscale files
+++++++++++++++++
+
+
+Subfolders
+----------
+:Purpose:
+  Stores all files related to an individual macroscale simulation
+
+:Name: 
+  A two-digit number giving the macroscale simulations's position
+  in the run array
+
+``macro.txt``
+  Output log for the macroscale simulation.
+
+  :Data Type: 
+    Plain text
+
+``f_deg_list.dat``
+  A list of updates to the degrade time of any fiber in the model.
+  Each row represents one update to one fiber and contains 3 entries:
+
+  #. The simulation time elapsed when the event occurred.
+  #. The fortran location index of the fiber on which the event occurred.
+  #. The new degrade time for the fiber. (the time at which the fiber will degrade if no further updates occur).
+
+  :File Type:
+    Comma-delimited Text
+  :Data Type: 
+    (double precision (``f8``), integer (``i4``), double precision (``f8``))
+  :Units:
+    (seconds, None, seconds)
+  :Dimensions: 
+    (number of binding events which result in an updated degrade time, 3)
+  :Fortran Variable:
+    ``(t, V(1, j), t_degrade(V(1, j)))``
+
+``m_bind_t.dat``
+  A list of tPA molecule bindings and their associated metrics.
+  Each row represents one update to one tPA molecule and contains 4 entries:
+
+  #. The simulation time elapsed when the event occurred.
+  #. The 1-based index of the tPA molecule which was involved in the event.
+  #. The new status of the tPA molecule (see below for details).
+  #. The fortran location (fiber index) at which the event occurred. 
+
+  Valid molecule statuses are:
+
+  0. Kinetically Unbound.
+  1. Bound to an undegraded fiber.
+  2. Bound to a degraded fiber (macro-unbound).
+  3. Bound to a fiber degradation product (micro-unbound).
+
+  :File Type:
+    Comma-delimited Text
+  :Data Type: 
+    (double precision (``f8``), integer (``i4``), integer (``i4``), integer (``i4``))
+  :Units:
+    (seconds, None, None, None)
+  :Dimensions: 
+    (number of binding and unbinding events, 4) 
+  :Fortran Variable:
+    ``(t, j, [0-3], V(1, j))``
+
+``m_loc.dat``
+  An array, giving the fortran location (fiber index) of each molecule at point when a save is made.
+  That is, ``m_loc[i, j]`` is the fortran location of tPA molecule ``i`` when 
+  snapshot ``j`` is recorded.
+
+  :File Type:
+    Binary
+  :Data Type: 
+    integer (``i4``)
+  :Units:
+    None 
+  :Dimensions: 
+    (``M``, ``cNsave``)
+  :Fortran Variable:
+    ``V(1, :)``
+
+  ``m_bound.dat``
+  An array, giving the bound/unbound status of each molecule at point when a save is made.
+  That is, ``m_bound[i, j]`` is 1 if tPA molecule ``i`` is bound to a fiber when 
+  snapshot ``j`` is recorded, 0 else.
+
+  :File Type:
+    Binary
+  :Data Type: 
+    integer (``i4``)
+  :Units:
+    None 
+  :Dimensions: 
+    (``M``, ``cNsave``)
+  :Fortran Variable:
+    ``V(2, :)``
+
+``mfpt.dat``
+  The simulation time elapsed when each tPA molecule reached the back row of the 
+  fiber grid for the first time.
+
+  :File Type:
+    Binary
+  :Data Type: 
+    double precision (``f8``)
+  :Units:
+    seconds
+  :Dimensions: 
+    (``M``,)
+  :Fortran Variable:
+    ``mfpt``
+
+``tsave.dat``
+  The simulation time elapsed at the point when each snapshot is recorded.
+
+  :File Type:
+    Binary
+  :Data Type: 
+    double precision (``f8``)
+  :Units:
+    seconds
+  :Dimensions: 
+    (``cNsave``,)
+  :Fortran name:
+    ``t``
+
+``Nsave.dat``
+  The number of snapshots is recorded in the simulation.
+
+  :File Type:
+    Binary
+  :Data Type: 
+    integer (``i4``)
+  :Units:
+    None
+  :Dimensions: 
+    (``simulations``,)
+  :Fortran name:
+    ``Nsavevect = [cNsave]``
