@@ -18,6 +18,7 @@ program macrolysis
     !!                  - Removed "degrade" array and use "t_degrade" instead
     !!                  - Read in "neighborc" array generated in Python
     !!                  - Output fiber t_degrade changes instead of snapshots
+    !!                  - Input radius instead of dist
 
     ! This code uses information from the microscale model about the fraction of times tPA is FORCED to unbind by plasmin. 
     ! Here, every time tPA unbinds, we draw a random #. If the number is less than the fraction of time tPA is forced to unbind, 
@@ -33,7 +34,7 @@ program macrolysis
 
     implicit none
     character(:), allocatable   :: runCode
-    ! File Codes should include any leading underscores, but NOT a file extension.
+    ! File codes should include any leading underscores, but NOT a file extension.
     character(:), allocatable   :: inFileCode
     character(:), allocatable   :: outFileCode
     logical         :: verbose = .False.!.True. !
@@ -54,19 +55,20 @@ program macrolysis
     double precision :: avgwait = 27.8 ! 2.78 ! 27.8 ! measured in seconds, this is the average time a tPA molecule stays bound to fibrin. It's 1/koff. For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG
 
     double precision :: q = 0.2d+00      ! 0.2             ! q is the probability of moving. Make sure it is small enough that we've converged
+    double precision :: radius = 72.7/2/1000 ! fiber bundle radius in microns !! MAKE SURE you enter this as a decimal, even if it ends in .0
     double precision :: delx = 1.0135d-04 ! 10**(-4)             ! pore size (distance between nodes), measured in centimeters
     double precision :: Diff = 5.0d-07 ! 5*10**(-7)           ! diffusion coefficient, measured in cm**2/s
     !! BRAD 2023-01-08: Does this need to be a float, or can it be an integer?
     !! BRITT:           Has been an integer for years and will probably stay that way
     integer          :: bs = 427              ! concentration of binding sites in micromolar
-    double precision :: dist = 1.0862d+00 ! microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
 
-    ! External :: vurcw1
     integer  :: seed = 0 ! -2137354075
 
+    !! BRAD 2025-07-29: These parameters are dependent on others and will be calculated later.
     integer  :: num
     integer  :: enoFB ! the last edge number without fibrin
     integer  :: backrow ! defines the first fiber number in the back row of the clot. To calculate mean first passage time, I will record the first time that each tPA molecule diffuses to a fiber with edge number backrow or greater
+    double precision :: dist != 1.0862d+00 ! microns because distance between nodes is 1.0135 micron and diameter of 1 fiber is 0.0727 micron
     double precision :: tstep  ! 4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
     double precision :: num_t            ! number of timesteps
 
@@ -378,13 +380,13 @@ program macrolysis
                 stop
             end if
             write (*, *) 'Setting bs = ', bs
-        case ('dist')
-            read (param_value, *, iostat=io_status) dist
+        case ('radius')
+            read (param_value, *, iostat=io_status) radius
             if (io_status .ne. 0) then
                 write (*, *) 'String conversion error'
                 stop
             end if
-            write (*, *) 'Setting dist = ', dist
+            write (*, *) 'Setting radius = ', radius
         case ('seed')
             read (param_value, *, iostat=io_status) seed
             if (io_status .ne. 0) then
@@ -410,6 +412,7 @@ program macrolysis
     num = (2*N - 1)*F + N*(F - 1)
     enoFB = (3*N - 1)*(Ffree - 1) ! the last edge number without fibrin
     backrow = num - (2*N - 1) + 1 ! defines the first fiber number in the back row of the clot. To calculate mean first passage time, I will record the first time that each tPA molecule diffuses to a fiber with edge number backrow or greater
+    dist = delx*10000 + radius*2 ! microns because distance between nodes is delx centimeters and radius of 1 fiber is radius microns
     tstep = q*delx**2/(12*Diff)  ! 4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
     num_t = tf/tstep            ! number of timesteps
 
@@ -467,6 +470,9 @@ program macrolysis
     write (*, *) ' Ffree=', Ffree
     write (*, *) ' num=', num
     write (*, *) ' M=', M
+    write (*, *) ' delx=', delx, ' cm'
+    write (*, *) ' radius=', radius, ' um'
+    write (*, *) ' dist=', dist, ' um'
     write (*, *) ' obtained using code macro_diffuse_into_and_along__internal.f90 on data ', runCode
     ! write(*,*)'fraction of time tPA is forced to unbind',frac_forced
 
@@ -657,7 +663,7 @@ program macrolysis
 
     !! BRAD 2023-04-23:
 
-    open (106, file=ADJUSTL('data/'//runCode//'/neighbors.dat'))
+    open (106, file=ADJUSTL('data/'//TRIM(runCode)//'/neighbors.dat'))
     do j = 1, num
         do countc = 1, 8
             read (106, *) neighborc(countc, j)
@@ -701,14 +707,14 @@ program macrolysis
     ! read in the data from the micro model, which we obtained from /micro.f90
     ! READ IN VECTORS FROM MATLAB
 
-    open (200, file=ADJUSTL('data/'//runCode//'/tPAleave'//inFileCode//'.dat'))
+    open (200, file=ADJUSTL('data/'//TRIM(runCode)//'/tPAleave'//TRIM(inFileCode)//'.dat'))
     do i = 1, 101
         read (200, *) CDFtPA(i)
     end do
     close (200)
     write (*, *) 'read tPAleave.dat'
 
-    open (300, file=ADJUSTL('data/'//runCode//'/tsectPA'//inFileCode//'.dat'))
+    open (300, file=ADJUSTL('data/'//TRIM(runCode)//'/tsectPA'//TRIM(inFileCode)//'.dat'))
     do i = 1, 101
         read (300, *) tsec1(i)
     end do
@@ -718,7 +724,7 @@ program macrolysis
     ! lysismat_PLG2_tPA01_Q2.dat is a matrix with column corresponding to bin number (1-100) and with entries
     ! equal to the lysis times obtained in that bin. an entry of 6000 means lysis didn't happen.
     ! lysismat(:,1)=the first column, i.e. the lysis times for the first 100 (or 500 if we did 50,000 micro simulations) tPA leaving times
-    OPEN (unit=201, FILE=ADJUSTL('data/'//runCode//'/lysismat'//inFileCode//'.dat'))
+    OPEN (unit=201, FILE=ADJUSTL('data/'//TRIM(runCode)//'/lysismat'//TRIM(inFileCode)//'.dat'))
     do i = 1, nummicro  ! 100 if only did 10,000 micro simulations, 500 if did 50,000
         READ (201, *) (lysismat(i, ii), ii=1, 100)
     end do
@@ -726,7 +732,7 @@ program macrolysis
 
     ! lenlysisvect_PLG2_tPA01_Q2.dat saves the first row entry in each column of lysismat_PLG2_tPA01_Q2.dat that lysis
     ! did not occur, i.e. the first entry there's a 6000
-    OPEN (unit=202, FILE=ADJUSTL('data/'//runCode//'/lenlysisvect'//inFileCode//'.dat'))
+    OPEN (unit=202, FILE=ADJUSTL('data/'//TRIM(runCode)//'/lenlysisvect'//TRIM(inFileCode)//'.dat'))
     do i = 1, 100
         READ (202, *) lenlysismat(i)
     end do
@@ -746,24 +752,24 @@ program macrolysis
     ! write(cbindfile,'(57a)') 'numbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     ! write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     ! write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
-    ! open(degunit,file=ADJUSTL('data/' // runCode // '/deg' // outFileCode//'.dat'),form=filetype)
-    open (Nunit, file=ADJUSTL('data/'//runCode//'/Nsave'//outFileCode//'.dat'), form=filetype)
-    open (tunit, file=ADJUSTL('data/'//runCode//'/tsave'//outFileCode//'.dat'), form=filetype)
-    ! open(moveunit,file=ADJUSTL('data/' // runCode // '/move' // outFileCode//'.dat'),form=filetype)
-    ! open(lastmoveunit,file=ADJUSTL('data/' // runCode // '/lastmove' // outFileCode//'.dat'),form=filetype)
-    ! open(plotunit,file=ADJUSTL('data/' // runCode // '/plot' // outFileCode//'.dat'),form=filetype)
-    open (mfptunit, file=ADJUSTL('data/'//runCode//'/mfpt'//outFileCode//'.dat'), form=filetype)
+    ! open(degunit,file=ADJUSTL('data/' //TRIM(runCode)// '/deg' //TRIM(outFileCode)//'.dat'),form=filetype)
+    open (Nunit, file=ADJUSTL('data/'//TRIM(runCode)//'/Nsave'//TRIM(outFileCode)//'.dat'), form=filetype)
+    open (tunit, file=ADJUSTL('data/'//TRIM(runCode)//'/tsave'//TRIM(outFileCode)//'.dat'), form=filetype)
+    ! open(moveunit,file=ADJUSTL('data/' //TRIM(runCode)// '/move' //TRIM(outFileCode)//'.dat'),form=filetype)
+    ! open(lastmoveunit,file=ADJUSTL('data/' //TRIM(runCode)// '/lastmove' //TRIM(outFileCode)//'.dat'),form=filetype)
+    ! open(plotunit,file=ADJUSTL('data/' //TRIM(runCode)// '/plot' //TRIM(outFileCode)//'.dat'),form=filetype)
+    open (mfptunit, file=ADJUSTL('data/'//TRIM(runCode)//'/mfpt'//TRIM(outFileCode)//'.dat'), form=filetype)
 
     !! BRAD 2023-01-21:
-    ! open(t_degrade_unit,file=ADJUSTL('data/' // runCode // '/f_deg_time' // outFileCode//'.dat'),form=filetype)
-    open (m_location_unit, file=ADJUSTL('data/'//runCode//'/m_loc'//outFileCode//'.dat'), form=filetype)
-    open (m_bound_unit, file=ADJUSTL('data/'//runCode//'/m_bound'//outFileCode//'.dat'), form=filetype)
+    ! open(t_degrade_unit,file=ADJUSTL('data/' //TRIM(runCode)// '/f_deg_time' //TRIM(outFileCode)//'.dat'),form=filetype)
+    open (m_location_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/m_loc'//TRIM(outFileCode)//'.dat'), form=filetype)
+    open (m_bound_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/m_bound'//TRIM(outFileCode)//'.dat'), form=filetype)
 
     !! BRAD 2023-06-09:
-    open (m_bind_time_unit, file=ADJUSTL('data/'//runCode//'/m_bind_t'//outFileCode//'.dat'), form='formatted')
+    open (m_bind_time_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/m_bind_t'//TRIM(outFileCode)//'.dat'), form='formatted')
 
     !! BRAD 2024-02-02:
-    open (f_deg_list_unit, file=ADJUSTL('data/'//runCode//'/f_deg_list'//outFileCode//'.dat'), form='formatted')
+    open (f_deg_list_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/f_deg_list'//TRIM(outFileCode)//'.dat'), form='formatted')
 
     !!!!! COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     ! open(degnextunit,file=degnextfile,form=filetype)
@@ -1111,7 +1117,8 @@ program macrolysis
                                         rmicro = lysismat(r400 - 1, colr2 - 1)! tseclys(r400)-tseclys(r400)*percent4
                                     else
                                         percent4 = r400 - 1 - r4*nummicro
-                         rmicro = (lysismat(r400, colr2 - 1) - (lysismat(r400, colr2 - 1) - lysismat(r400 - 1, colr2 - 1))*percent4)
+                                        rmicro = (lysismat(r400, colr2 - 1) - (lysismat(r400, colr2 - 1) &
+                                                                            - lysismat(r400 - 1, colr2 - 1))*percent4)
                                     end if
 
                                     !! BRAD 2023-01-31:
@@ -1765,12 +1772,12 @@ program macrolysis
         !         end do
         !     end do  ! for jj loop
 
-        !     open(x1unit,file=ADJUSTL('data/' // runCode // '/X1plot' // outFileCode//'.dat'),form=filetype)
-        !     open(x2unit,file=ADJUSTL('data/' // runCode // '/X2plot' // outFileCode//'.dat'),form=filetype)
-        !     open(y1unit,file=ADJUSTL('data/' // runCode // '/Y1plot' // outFileCode//'.dat'),form=filetype)
-        !     open(y2unit,file=ADJUSTL('data/' // runCode // '/Y2plot' // outFileCode//'.dat'),form=filetype)
-        !     open(xvunit,file=ADJUSTL('data/' // runCode // '/Xvplot' // outFileCode//'.dat'),form=filetype)
-        !     open(yvunit,file=ADJUSTL('data/' // runCode // '/Yvplot' // outFileCode//'.dat'),form=filetype)
+        !     open(x1unit,file=ADJUSTL('data/' //TRIM(runCode)// '/X1plot' //TRIM(outFileCode)//'.dat'),form=filetype)
+        !     open(x2unit,file=ADJUSTL('data/' //TRIM(runCode)// '/X2plot' //TRIM(outFileCode)//'.dat'),form=filetype)
+        !     open(y1unit,file=ADJUSTL('data/' //TRIM(runCode)// '/Y1plot' //TRIM(outFileCode)//'.dat'),form=filetype)
+        !     open(y2unit,file=ADJUSTL('data/' //TRIM(runCode)// '/Y2plot' //TRIM(outFileCode)//'.dat'),form=filetype)
+        !     open(xvunit,file=ADJUSTL('data/' //TRIM(runCode)// '/Xvplot' //TRIM(outFileCode)//'.dat'),form=filetype)
+        !     open(yvunit,file=ADJUSTL('data/' //TRIM(runCode)// '/Yvplot' //TRIM(outFileCode)//'.dat'),form=filetype)
 
         !     write(x1unit) X1plot
         !     write(x2unit) X2plot
@@ -1859,8 +1866,8 @@ program macrolysis
         !     end do
 
 
-        !     open(tPAbdunit,file=ADJUSTL('data/' // runCode // '/tPAbd' // outFileCode//'.dat'),form=filetype)
-        !     open(tPAfreeunit,file=ADJUSTL('data/' // runCode // '/tPAfree' // outFileCode//'.dat'),form=filetype)
+        !     open(tPAbdunit,file=ADJUSTL('data/' //TRIM(runCode)// '/tPAbd' //TRIM(outFileCode)//'.dat'),form=filetype)
+        !     open(tPAfreeunit,file=ADJUSTL('data/' //TRIM(runCode)// '/tPAfree' //TRIM(outFileCode)//'.dat'),form=filetype)
 
         !     write(tPAbdunit) bdtPA
         !     write(tPAfreeunit) freetPA

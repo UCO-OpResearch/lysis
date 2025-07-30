@@ -161,7 +161,7 @@ class Run(object):
         if self.micro_params is None:
             raise RuntimeError("No Microscale parameters.")
         if params is not None:
-            self.macro_params = MacroParameters(**params)
+            self.macro_params = MacroParameters(self.micro_params, **params)
         else:
             self.macro_params = MacroParameters(micro_params=self.micro_params)
 
@@ -178,8 +178,8 @@ class Run(object):
             "macro_params": None,
         }
         # Get the data filenames from the DataStore
-        if self.data is not None:
-            output["data_filenames"] = self.data.to_dict()
+        # if self.data is not None:
+        #     output["data_filenames"] = self.data.to_dict()
         # Convert the Microscale parameters to a dictionary
         if self.micro_params is not None:
             # Get units
@@ -199,8 +199,10 @@ class Run(object):
             # Get units
             units = MacroParameters.units()
             output["macro_params"] = {}
+            params = asdict(self.macro_params)
+            del params["micro_params"]
             # Loop through the parameters
-            for k, v in asdict(self.macro_params).items():
+            for k, v in params.items():
                 # If the parameter is stored as a Quantity, convert it to standard units
                 # and output as a string. Else, pass it as-is
                 if isinstance(v, Quantity):
@@ -315,7 +317,9 @@ class Run(object):
                         out_macro_params[k] = v
                 # Now unpack whatever is left in the dict and pass it to the
                 # constructor
-                self.macro_params = MacroParameters(**out_macro_params)
+                self.macro_params = MacroParameters(
+                    micro_params=self.micro_params, **out_macro_params
+                )
             else:
                 # If there were no parameters in the file, then we leave the
                 # object null.
@@ -762,6 +766,9 @@ class MacroParameters:
         >>> macro_params_override = MacroParameters(**p)
     """
 
+    micro_params: MicroParameters
+    """The parameters for the microscale model that feeds this macroscale model."""
+
     #####################################
     # Physical Parameters
     #####################################
@@ -778,7 +785,7 @@ class MacroParameters:
     :Units: cm^2/s
     :Fortran: Diff"""
 
-    # TODO(bpaynter): This value should derive from MicroParameters
+    # TODO(bpaynter): This value should derive from Microscale Model results
     forced_unbind: float = 0.0852
     """Fraction of times tPA was forced to unbind in microscale model.
     
@@ -787,12 +794,12 @@ class MacroParameters:
 
     # TODO(bpaynter): This value should derive from MicroParameters
     # TODO(bpaynter): Rename to average_bound_time
-    average_bound_time: Quantity = Q_("27.8 sec")
+    average_bound_time: Quantity = field(init=False)  #  = Q_("27.8 sec")
     """This is the average time a tPA molecule stays bound to fibrin. 
     For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
     
     :Units: seconds
-    :Fortran: avgwait = 1/koff"""
+    :Fortran: avgwait = 1/kaoff10"""
 
     #####################################
     # Model Parameters
@@ -984,6 +991,12 @@ class MacroParameters:
         """This method calculates the dependent parameters once the
         MacroParameters object is created. It is automatically called by the
         DataClass.__init__()"""
+        # A full row of the fiber grid contains a 'right', 'up', and 'out' edge
+        # for each node, except the last node which contains no 'right' edge.
+        object.__setattr__(
+            self, "average_bound_time", 1.0 / self.micro_params.unbind_rate_tPA_woPLG
+        )
+
         # These names must be elements of the Run's DataStore
         object.__setattr__(
             self,

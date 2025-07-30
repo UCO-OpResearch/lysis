@@ -47,8 +47,8 @@ class FortranMacro:
         params = asdict(self.run.macro_params)
         if self.index is not None:
             stream = np.random.SeedSequence(params["seed"])
-            seeds = stream.generate_state(params["total_trials"])
-            params["total_trials"] = 1
+            seeds = stream.generate_state(params["simulations"])
+            params["simulations"] = 1
             params["seed"] = int(np.int32(seeds[self.index]))
             self.out_file_code = self.out_file_code + f"__{self.index:02}"
         arguments = [
@@ -61,17 +61,38 @@ class FortranMacro:
         ]
         sig = inspect.signature(MacroParameters)
         fortran_names = MacroParameters.fortran_names()
+        units = MacroParameters.units()
         for key in sig.parameters:
             if key in fortran_names and params[key] != sig.parameters[key].default:
+                if isinstance(params[key], Quantity):
+                    value = params[key].to(units[key]).magnitude
+                else:
+                    value = params[key]
                 if fortran_names[key][-2:] == "-1":
-                    arguments += ["--" + fortran_names[key][:-2], str(params[key] + 1)]
+                    arguments += ["--" + fortran_names[key][:-2], str(value + 1)]
                 elif fortran_names[key][-4:] == "*100":
                     arguments += [
                         "--" + fortran_names[key][:-4],
-                        str(params[key] // 100),
+                        str(value // 100),
                     ]
                 else:
                     arguments += ["--" + fortran_names[key], str(params[key])]
+        arguments += [
+            "--radius",
+            str(
+                self.run.micro_params.fiber_radius.to(
+                    MicroParameters.units()["fiber_radius"]
+                ).magnitude
+            ),
+        ]
+        arguments += [
+            "--bs",
+            str(
+                self.run.micro_params.binding_sites.to(
+                    MicroParameters.units()["binding_sites"]
+                ).magnitude
+            ),
+        ]
         return [self.executable] + arguments
 
     def exec(self):

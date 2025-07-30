@@ -635,24 +635,25 @@ program micromodel
             !ipar=16
         end if
 
+
         if (stats == 1) then
-            write (*, *) 'data/'//trim(runCode)//'/lysis'//outFileCode//'.dat'
-            write (lysfile, '(58a)') 'data/'//trim(runCode)//'/lysis'//outFileCode//'.dat'
-            write (tPAfile, '(61a)') 'data/'//trim(runCode)//'/tPA_time'//outFileCode//'.dat'
-            write (PLifile, '(56a)') 'data/'//trim(runCode)//'/PLi'//outFileCode//'.dat'
-            write (endfile, '(64a)') 'data/'//trim(runCode)//'/lyscomplete'//outFileCode//'.dat'
-            !write(plgfile,'(56a)' ) 'data/' // runCode // '/PLG' // outFileCode//'.dat'
-            !write(ctfile,'(58a)' ) 'data/' // runCode // '/count' // outFileCode//'.dat'
-            !write(plgbdfile,'(27a)') 'data/' // runCode // '/PLGunbindPLG2//outFileCode//'.dat'
-            !write(plgunbdfile,'(29a)') 'data/' // runCode // '/PLGbindPLG2//outFileCode//'.dat'
-            !write(plitimefile,'(63a)') 'data/' // runCode // '/PLitime' // outFileCode//'.dat'
-            write (tPAPLifile, '(63a)') 'data/'//trim(runCode)//'/tPAPLiunbd'//outFileCode//'.dat'
-            !write(sfile,'(28a)' ) 'data/' // runCode // '/statetPAPLG2//outFileCode//'.dat'
-            !write(profile,'(23a)' ) 'data/' // runCode // '/ersavePLG2//outFileCode//'.dat'
-            !write(t2file,'(23a)' ) 'data/' // runCode // '/tsavePLG2//outFileCode//'.dat'
-            write (tPAunbdfile, '(61a)') 'data/'//trim(runCode)//'/tPAunbind'//outFileCode//'.dat'
-            write (s2file, '(67a)') 'data/'//trim(runCode)//'/lasttPA'//outFileCode//'.dat'
-            write (fpfile, '(77a)') 'data/'//trim(runCode)//'/firstPLi'//outFileCode//'.dat'
+            write (*, *) 'data/'//trim(runCode)//'/lysis'//trim(outFileCode)//'.dat'
+            write (lysfile, '(58a)') 'data/'//trim(runCode)//'/lysis'//trim(outFileCode)//'.dat'
+            write (tPAfile, '(61a)') 'data/'//trim(runCode)//'/tPA_time'//trim(outFileCode)//'.dat'
+            write (PLifile, '(56a)') 'data/'//trim(runCode)//'/PLi'//trim(outFileCode)//'.dat'
+            write (endfile, '(64a)') 'data/'//trim(runCode)//'/lyscomplete'//trim(outFileCode)//'.dat'
+            !write(plgfile,'(56a)' ) 'data/' // runCode // '/PLG' // trim(outFileCode)//'.dat'
+            !write(ctfile,'(58a)' ) 'data/' // runCode // '/count' // trim(outFileCode)//'.dat'
+            !write(plgbdfile,'(27a)') 'data/' // runCode // '/PLGunbindPLG2//trim(outFileCode)//'.dat'
+            !write(plgunbdfile,'(29a)') 'data/' // runCode // '/PLGbindPLG2//trim(outFileCode)//'.dat'
+            !write(plitimefile,'(63a)') 'data/' // runCode // '/PLitime' // trim(outFileCode)//'.dat'
+            write (tPAPLifile, '(63a)') 'data/'//trim(runCode)//'/tPAPLiunbd'//trim(outFileCode)//'.dat'
+            !write(sfile,'(28a)' ) 'data/' // runCode // '/statetPAPLG2//trim(outFileCode)//'.dat'
+            !write(profile,'(23a)' ) 'data/' // runCode // '/ersavePLG2//trim(outFileCode)//'.dat'
+            !write(t2file,'(23a)' ) 'data/' // runCode // '/tsavePLG2//trim(outFileCode)//'.dat'
+            write (tPAunbdfile, '(61a)') 'data/'//trim(runCode)//'/tPAunbind'//trim(outFileCode)//'.dat'
+            write (s2file, '(67a)') 'data/'//trim(runCode)//'/lasttPA'//trim(outFileCode)//'.dat'
+            write (fpfile, '(77a)') 'data/'//trim(runCode)//'/firstPLi'//trim(outFileCode)//'.dat'
             open (lysunit, file=lysfile, form=filetype)
             open (tPAunit, file=tPAfile, form=filetype)
             open (PLiunit, file=PLifile, form=filetype)
