@@ -3,6 +3,8 @@ from typing import Tuple
 
 import numpy as np
 
+from pint import Quantity
+
 from .constants import Const, BoundaryCondition
 from .parameters import Run
 
@@ -22,6 +24,7 @@ CONST = Const()
 class EdgeGrid(object):
     """The main class containing a 3-D grid of edges. This represents an
     xy-planar slice, one edge high, of a clot.
+    An edge's location is determined by its Row and its Rank within that row.
 
     Co-ordinate arrangement::
 
@@ -86,10 +89,10 @@ class EdgeGrid(object):
                 CONST.BOUND_COND.REFLECTING,
             )
 
-        self.edges_in_row = 3 * self.nodes_in_row - 1
+        self.ranks = 3 * self.nodes_in_row - 1
         self.fiber_rows = self.total_rows - self.empty_rows
         self.fiber_status = initial_fiber_status * np.ones(
-            (self.total_rows, self.edges_in_row), dtype=np.double
+            (self.total_rows, self.ranks), dtype=np.double
         )
         """np.ndarray: The status of the fibers in this EdgeGrid. This is 
                     essentially the degrade time of the fiber.
@@ -106,16 +109,16 @@ class EdgeGrid(object):
 
         Args:
             i: The index of the edge's row.
-            j: The index of the edge within its row.
+            j: The index of the edge's rank within its row.
 
         Returns: None if the index is valid, or an error message (as a string)
             if the index is invalid.
         """
-        # Edges are 0 through self.edges_in_row-1
-        if j < 0 or j > self.edges_in_row - 1:
+        # Edges are 0 through self.ranks-1
+        if j < 0 or j > self.ranks - 1:
             return (
                 f"Index j={j} out of bounds. "
-                f"This model only has edges [0..{self.edges_in_row - 1}] in "
+                f"This model only has edges [0..{self.ranks - 1}] in "
                 f"each row."
             )
         # Rows are 0 through self.rows-1
@@ -154,57 +157,57 @@ class EdgeGrid(object):
 
             * x-edge neighborhood::
 
-                '        2:(i,j-2)     3:(i,j+1)
-                '            |             |
-                '            |  /          |  /
-                '            | 5:(i,j-1)   | 7:(i,j+2)
-                '            |/            |/
-                '            +----(i,j)----+
-                '          / |            /|
-                ' 4:(i,j-1)  |   6:(i,j+2) |
-                '        /   |          /  |
-                '            |             |
-                '      0:(i-1,j-2)   1:(i-1,j+1)
+                '        2:(i, j-2)      3:(i, j+1)
+                '            |              |
+                '            |  /           |  /
+                '            | 5:(i, j-1)   | 7:(i, j+2)
+                '            |/             |/
+                '            +----(i, j)----+
+                '          / |             /|
+                ' 4:(i, j-1) |   6:(i, j+2) |
+                '        /   |          /   |
+                '            |              |
+                '      0:(i-1, j-2)   1:(i-1, j+1)
 
             * y-edge neighborhood::
 
-                '                    /
-                '                   3:(i+1,j+1)
-                '                  /
-                ' 5:(i+1,j-1)-----+-----7:(i+1,j+2)
-                '                /|
-                '     2:(i+1,j+1) |
-                '              /  |
-                '               (i,j)
-                '                 |  /
-                '                 | 1:(i,j+1)
-                '                 |/
-                '   4:(i,j-1)-----+-----6:(i,j+2)
-                '                /
-                '       0:(i,j+1)
-                '              /
+                '                     /
+                '                    3:(i+1, j+1)
+                '                   /
+                ' 5:(i+1, j-1)-----+-----7:(i+1, j+2)
+                '                 /|
+                '     2:(i+1, j+1) |
+                '               /  |
+                '               (i, j)
+                '                  |  /
+                '                  | 1:(i, j+1)
+                '                  |/
+                '   4:(i, j-1)-----+-----6:(i, j+2)
+                '                 /
+                '       0:(i, j+1)
+                '               /
 
             * z-edge neighborhood::
 
-                '                         |
-                '               3:(i+1,j-1)
-                '                         |
-                '         5:(i+1,j-2)-----+-----7:(i+1,j+1)
-                '                        /|
-                '                       / 1:(i,j-1)
-                '                      /  |
-                '                   (i,j)
-                '                 |  /
-                '       2:(i+1,j-1) /
-                '                 |/
-                ' 4:(i+1,j-2)-----+-----6:(i+1,j+1)
-                '                 |
-                '                 0:(i,j-1)
-                '                 |
+                '                          |
+                '               3:(i+1, j-1)
+                '                          |
+                '         5:(i+1, j-2)-----+-----7:(i+1, j+1)
+                '                         /|
+                '                        / 1:(i, j-1)
+                '                       /  |
+                '                   (i, j)
+                '                  |  /
+                '       2:(i+1, j-1) /
+                '                  |/
+                ' 4:(i+1, j-2)-----+-----6:(i+1, j+1)
+                '                  |
+                '                  0:(i, j-1)
+                '                  |
 
         Args:
             i: The row of the generating edge.
-            j: The index of the generating edge within its row.
+            j: The rank of the generating edge within its row.
             k: The index of the neighbor in the neighborhood (i.e., the (k+1)st
                 neighbor)
 
@@ -280,7 +283,7 @@ class EdgeGrid(object):
         # The right boundary of the grid.
         # Note that, if the edge generating the neighborhood is an x-edge,
         # Then its neighborhood never overruns the side of the grid
-        elif j >= self.edges_in_row - 2:  # We are the right-most y- or z-edge
+        elif j >= self.ranks - 2:  # We are the right-most y- or z-edge
             neighbor_j += CONST.NEIGHBORHOOD.RIGHT_REFL[k]
 
         # Return the co-ordinates of the requested neighbor.
@@ -289,9 +292,9 @@ class EdgeGrid(object):
     @staticmethod
     def generate_neighborhood_structure(run: Run):
         # edge_grid = EdgeGrid(run)
-        # neighbor_i = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=np.short)
-        # neighbor_j = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=np.short)
-        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
+        # neighbor_i = np.empty((edge_grid.total_rows, edge_grid.ranks, 8), dtype=np.short)
+        # neighbor_j = np.empty((edge_grid.total_rows, edge_grid.ranks, 8), dtype=np.short)
+        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.ranks, 8):
         #     if i == edge_grid.total_rows-1 and j % 3 == 0:
         #         neighbor_i[i, j, k] = 0
         #         neighbor_j[i, j, k] = 0
@@ -302,8 +305,8 @@ class EdgeGrid(object):
         # return neighbor_i, neighbor_j
 
         # edge_grid = EdgeGrid(run)
-        # neighbors = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8, 2), dtype=np.short)
-        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
+        # neighbors = np.empty((edge_grid.total_rows, edge_grid.ranks, 8, 2), dtype=np.short)
+        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.ranks, 8):
         #     if i == edge_grid.total_rows - 1 and j % 3 == 0:
         #         neighbors[i, j, k, :] = [-1, -1]
         #     else:
@@ -318,7 +321,7 @@ class EdgeGrid(object):
         neighbors = np.empty(
             (run.macro_params.rows * run.macro_params.full_row, 8), dtype=np.ushort
         )
-        for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
+        for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.ranks, 8):
             if i == edge_grid.total_rows - 1 and j % 3 == 0:
                 neighbors[
                     edge_lookup((i, j)),
@@ -363,24 +366,24 @@ class EdgeGrid(object):
     @staticmethod
     def get_distance(
         run: Run, a: Tuple[int, int], b: Tuple[int, int], metric: str = "euclidian"
-    ):
+    ) -> Quantity:
         if metric == "euclidian":
             a_coord = EdgeGrid.get_spatial_coordinates(*a)
             b_coord = EdgeGrid.get_spatial_coordinates(*b)
             squares = sum((a_coord[k] - b_coord[k]) ** 2 for k in range(3))
             # return run.macro_params.grid_node_distance * squares**0.5
-            return run.macro_params.pore_size * 10_000 * squares**0.5
+            return run.macro_params.pore_size * squares**0.5
         elif metric in ["manhattan", "taxicab"]:
             a_coord = EdgeGrid.get_spatial_coordinates(*a)
             b_coord = EdgeGrid.get_spatial_coordinates(*b)
             sides = sum(abs(a_coord[k] - b_coord[k]) for k in range(3))
-            return run.macro_params.pore_size * 10_000 * sides
+            return run.macro_params.pore_size * sides
         if metric == "2d_euclidian":
             a_coord = EdgeGrid.get_spatial_coordinates(*a)
             b_coord = EdgeGrid.get_spatial_coordinates(*b)
             squares = sum((a_coord[k] - b_coord[k]) ** 2 for k in range(2))
             # return run.macro_params.grid_node_distance * squares**0.5
-            return run.macro_params.pore_size * 10_000 * squares**0.5
+            return run.macro_params.pore_size * squares**0.5
         else:
             raise AttributeError(f"{metric} metric not implemented yet.")
 
@@ -456,20 +459,20 @@ def from_fortran_edge_index(
     # Count the number of full rows before this edge
     i = index // full_row
     # Determine the number of edges (in 1-D order) before this one in its own row
-    index_in_row = index % full_row
+    rank = index % full_row
     # If all x- and z-edges are already counted, this must be a y-edge
-    if index_in_row > xz_row - 1:
+    if rank > xz_row - 1:
         # Its index in the list of y-edges is the index of its triplet in the 2-D index
-        triplet = index_in_row - xz_row
+        triplet = rank - xz_row
         # The y-fiber is first in its triplet, so count up the triplets before this one.
         j = triplet * 3
     else:
         # Else it is an x- or z-edge. So find out which triplet it is in by
         # counting pairs of x- and z-edges.
-        triplet = index_in_row // 2
+        triplet = rank // 2
         # Then we need to insert all the y-edges for the preceding triplets,
         # and the y-edge for this triplet.
-        j = index_in_row + triplet + 1
+        j = rank + triplet + 1
 
     # Return the co-ordinates in the 2-D ordering.
     return i, j
