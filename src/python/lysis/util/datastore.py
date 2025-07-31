@@ -7,7 +7,7 @@ import numpy as np
 import h5py
 
 from .constants import CONST
-from .dataspec import DataCollectionSpec, DataSetSpec, dataspec
+from .dataspec import DataCollectionSpec, DataSetSpec, dataspec, data_readers
 from .parameters import read_param_file
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -312,45 +312,15 @@ class DataStore:
 
 
 def read_data_set(
-    params: dict[str, Any],
     path: AnyStr,
     spec: DataSetSpec,
+    params: dict[str, Any] = None,
     sim: int = None,
     file_code: str = "",
 ) -> np.ndarray | dict[str, Any]:
-    match spec.dataset_type:
-        case CONST.DATASET_TYPE.FILE_TEXT:
-            dataset = np.loadtxt(
-                os.path.join(
-                    path, spec.data_location.format(sim=sim, file_code=file_code)
-                ),
-                dtype=spec.dtype,
-                delimiter=spec.delimiter,
-            )
-        case CONST.DATASET_TYPE.FILE_BINARY:
-            dataset = np.fromfile(
-                os.path.join(
-                    path, spec.data_location.format(sim=sim, file_code=file_code)
-                ),
-                dtype=spec.dtype,
-            )
-            shape = []
-            for i in spec.shape:
-                if isinstance(i, int):
-                    shape.append(i)
-                elif isinstance(i, str):
-                    shape.append(params[i])
-                else:
-                    raise RuntimeError("Incorrect shape format {i}.")
-            dataset = dataset.reshape(tuple(shape))
-        case CONST.DATASET_TYPE.FILE_JSON:
-            micro, macro = read_param_file(os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)))
-            dataset = micro | macro
-        case _:
-            raise NotImplementedError(
-                "This function does not currently support HDF5 data."
-            )
-    return dataset
+    return data_readers[spec.dataset_type](
+        path, spec, params=params, sim=sim, file_code=file_code
+    )
 
 
 def read_data_collection(
@@ -365,11 +335,15 @@ def read_data_collection(
             file_code = file_codes[idx]
         else:
             file_code = ""
-        params = read_data_set(None, path, collection.params, file_code=file_code)
+        params = read_data_set(
+            path, collection.params, params=None, file_code=file_code
+        )
         data["params"] = data["params"] | params
         for name, spec in collection.data.items():
             if collection.simulations_combined is True:
-                data[name] = read_data_set(params, path, spec, file_code=file_code)
+                data[name] = read_data_set(
+                    path, spec, params=params, file_code=file_code
+                )
             else:
                 data[name] = []
                 sim = 0
@@ -377,7 +351,7 @@ def read_data_collection(
                 while next_sim:
                     try:
                         dataset = read_data_set(
-                            params, path, spec, sim=sim, file_code=file_code
+                            path, spec, params=params, sim=sim, file_code=file_code
                         )
                     except FileNotFoundError as e:
                         if sim == 0:
