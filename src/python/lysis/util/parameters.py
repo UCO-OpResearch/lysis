@@ -1,25 +1,3 @@
-"""Code for holding, storing, and reading information about a Run
-
-This module gives a uniform way to handle the data and parameters of a given
-run. It contains classes to house these and make them accessible to the
-rest of the code. It also handles the storing and reading of parameters and
-data to/from disk.
-
-Typical usage example:
-    >>> # Create a new run
-    >>> exp = Run('path/to/data')
-    >>> param = {'override_parameter': 2.54, 'another_new_parameter': 32}
-    >>> exp.initialize_macro_param(param)
-    >>> exp.to_file()
-    >>> # Load an existing run
-    >>> exp = Run('path/to/data', '2022_12_27_1100')
-    >>> exp.read_file()
-    >>> # Access a parameter
-    >>> exp.macro_params.pore_size
-    >>> # Access data
-    >>> exp.data.lysis_time[4][18]
-"""
-
 import inspect
 import json
 import logging
@@ -34,7 +12,6 @@ from typing import Any, List, Mapping, Tuple, Union
 from pint import Quantity
 
 from .constants import default_filenames, ureg, Q_
-from .datastore import DataStore
 from .util import dict_to_formatted_str
 
 
@@ -48,282 +25,101 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 
-# TODO: Rename this object to Run
-class Run(object):
-    """Houses all information about a given experimental run.
-
-    This object contains:
-
-    * Data location
-    * Run parameters
-    * Run data
-
-    It includes methods for
-
-    * Initializing with default parameters
-    * Reading parameters from disk
-    * Saving parameters to disk
-    * Reading input data from disk
-    * Writing result data to disk
-
-    Args:
-        data_root: The path of the folder containing datasets
-        run_code: The code number of the run.
-            This will be the name of the folder containing the data specific to
-            this run.
-            This should be a date and time in 'YYYY-MM-DD-hhmm' format
-            If no code is given, one will be generated from the current date
-            and time.
-
-    Attributes:
-        run_code (str): The code number of the run.
-        os_path (str): The path to the folder containing this run's data
-        macro_params (DataClass): A dictionary of
-
+def read_param_file(file_path: str) -> tuple[dict[str, Any] | None]:
+    """Load the run parameters from disk.
 
     Raises:
-        RuntimeError: An invalid data folder was given.
+        RuntimeError: No parameter file is available for this run.
     """
+    # Determine whether the parameter file exists for this run
+    if not os.path.isfile(file_path):
+        raise RuntimeError("Run parameter file not found.")
+    # Open the file
+    with open(file_path, "r") as file:
+        # Use the JSON library to read in the parameters as a dictionary
+        params = json.load(file)
+        # Initialize a datastore
+        data_filenames = params.pop("data_filenames", None)
+        if data_filenames is not None:
+            # self.data = DataStore(self.os_path, data_filenames)
+            pass
 
-    def __init__(self, data_root: Union[str, bytes, os.PathLike], run_code: str = None):
-        # Check if the data folder path is valid
-        if not os.path.isdir(data_root):
-            raise RuntimeError("Data folder not found.", data_root)
-        self.os_data_root = data_root
-        # If no run code was given, create a new one from the current
-        # date and time.
-        if run_code is None:
-            self.run_code = datetime.now().strftime("%Y-%m-%d-%H%M")
-        else:
-            self.run_code = run_code
-
-        # Generate the path to the run folder and the parameters file
-        self.os_path = os.path.join(data_root, str(self.run_code))
-        os.makedirs(self.os_path, exist_ok=True)
-        self.os_param_file = os.path.join(self.os_path, "params.json")
-
-        # TODO(bpaynter): Check if the parameters are already stored.
-        #                 Don't allow parameters to be changed once stored.
-        # Initialize the internal storage as empty
-        # self.sequence: ExpComponent = ExpComponent.NONE
-        self.micro_params = None
-        self.macro_params = None
-        # self.data = DataStore(self.os_path, default_filenames)
-
-    def __str__(self) -> str:
-        """Gives a human-readable, formatted string of the current run's
-        parameters."""
-        # Convert internal storage to a dictionary
-        values = self.to_dict()
-        # Call the formatter and return
-        return dict_to_formatted_str(values)
-
-    def initialize_micro_param(self, params: Mapping[str, Any] = None) -> None:
-        """Creates the parameters for the Microscale model.
-
-        Parameters are set to the default values unless new values are passed
-        in the params dictionary.
-
-        This method is essentially a wrapper for the MicroParameters
-        constructor.
-
-        Args:
-            params: A dictionary of parameters that differ from the default
-                    values.
-
-                For example,
-                    >>> {'binding_rate': 10, 'pore_size': 3,}
-        """
-        if params is not None:
-            self.micro_params = MicroParameters(**params)
-        else:
-            self.micro_params = MicroParameters()
-
-    def initialize_macro_param(self, params: dict[str, Any] = None) -> None:
-        """Creates the parameters for the Macroscale model.
-
-        Parameters are set to the default values unless new values are passed
-        in the params dictionary.
-
-        This method is essentially a wrapper for the MacroParameters
-        constructor.
-
-        Args:
-            params: A dictionary of parameters that differ from the default
-                    values.
-
-                For example,
-                    >>> {'binding_rate': 10, 'pore_size': 3,}
-        """
-        # The macroscale model is dependent on the parameters and results of the
-        # microscale model. If no microscale parameters are supplied, the macroscale
-        # model cannot be initialized.
-        if self.micro_params is None:
-            raise RuntimeError("No Microscale parameters.")
-        if params is not None:
-            self.macro_params = MacroParameters(self.micro_params, **params)
-        else:
-            self.macro_params = MacroParameters(micro_params=self.micro_params)
-
-    def to_dict(self) -> dict:
-        """Returns the internally stored data as a dictionary.
-
-        Does not include system-specific information like paths.
-        """
-        # Initialize a dictionary of the appropriate parameters
-        output = {
-            "run_code": self.run_code,
-            "data_filenames": None,
-            "micro_params": None,
-            "macro_params": None,
-        }
-        # Get the data filenames from the DataStore
-        # if self.data is not None:
-        #     output["data_filenames"] = self.data.to_dict()
-        # Convert the Microscale parameters to a dictionary
-        if self.micro_params is not None:
-            # Get units
+        # Remove the Microscale parameters from the dictionary (if it
+        # exists) and create a new MicroParameters object using its values
+        micro_params = params.pop("micro_params", None)
+        if micro_params is not None:
+            # We are checking here to make sure that saved, dependent
+            # parameters don't get passed to the MicroParameters
+            # constructor
+            out_micro_params = {}
             units = MicroParameters.units()
-            output["micro_params"] = {}
-            # Loop through the parameters
-            for k, v in asdict(self.micro_params).items():
-                # If the parameter is stored as a Quantity, convert it to standard units
-                # and output as a string. Else, pass it as-is
-                if isinstance(v, Quantity):
-                    output["micro_params"][k] = str(v.to(units[k]))
-                else:
-                    output["micro_params"][k] = v
-
-        # Convert the Macroscale parameters to a dictionary
-        if self.macro_params is not None:
-            # Get units
-            units = MacroParameters.units()
-            output["macro_params"] = {}
-            # Loop through the parameters
-            for k, v in asdict(self.macro_params).items():
-                if k == "micro_params":
+            # Find the parameters needed to initialize a new
+            # MicroParameters object
+            sig = inspect.signature(MicroParameters)
+            # Get the keys we read from the JSON
+            for k, v in micro_params.items():
+                # If that key is not needed, then toss it
+                if k not in sig.parameters:
                     continue
-                # If the parameter is stored as a Quantity, convert it to standard units
-                # and output as a string. Else, pass it as-is
-                if isinstance(v, Quantity):
-                    output["macro_params"][k] = str(v.to(units[k]))
+                # If the parameter has units, parse it with Pint
+                if k in units:
+                    if isinstance(v, int) or isinstance(v, float):
+                        warnings.warn(
+                            f"Parameter {k} has no units. Assuming {units[k]}.",
+                            RuntimeWarning,
+                        )
+                        out_micro_params[k] = Q_(v, units[k])
+                    else:
+                        out_micro_params[k] = Q_(v)
                 else:
-                    output["macro_params"][k] = v
+                    out_micro_params[k] = v
 
-        return output
+        else:
+            # If there were no microscale parameters in the file, then
+            # we raise a warning.
+            warnings.warn(
+                "Parameter file does not contain Microscale parameters. "
+                "Using defaults.",
+                RuntimeWarning,
+            )
+            out_micro_params = asdict(MicroParameters())
 
-    def to_file(self) -> None:
-        """Stores the run parameters to disk.
+        # Remove the Macroscale parameters from the dictionary (if it
+        # exists) and create a new MacroParameters object using its values
+        macro_params = params.pop("macro_params", None)
+        if macro_params is not None:
+            # We are checking here to make sure that saved, dependent
+            # parameters don't get passed to the MacroParameters
+            # constructor
 
-        Creates or overwrites the params.json file in the run's data
-        folder. This file will contain the current run parameters
-        (including any micro- and macroscale parameters) in JSON format.
-        """
-        with open(self.os_param_file, "w") as file:
-            # Convert the internal parameters to a dictionary and then use the
-            # JSON module to save to disk.
-            json.dump(self.to_dict(), file)
-
-    def read_file(self) -> None:
-        """Load the run parameters from disk.
-
-        Raises:
-            RuntimeError: No parameter file is available for this run.
-        """
-        # Determine whether the parameter file exists for this run
-        if not os.path.isfile(self.os_param_file):
-            raise RuntimeError("Run parameter file not found.")
-        # Open the file
-        with open(self.os_param_file, "r") as file:
-            # Use the JSON library to read in the parameters as a dictionary
-            params = json.load(file)
-            # Initialize a datastore
-            data_filenames = params.pop("data_filenames", None)
-            if data_filenames is not None:
-                # self.data = DataStore(self.os_path, data_filenames)
-                pass
-
-            # Remove the Microscale parameters from the dictionary (if it
-            # exists) and create a new MicroParameters object using its values
-            micro_params = params.pop("micro_params", None)
-            if micro_params is not None:
-                # We are checking here to make sure that saved, dependent
-                # parameters don't get passed to the MicroParameters
-                # constructor
-                out_micro_params = {}
-                units = MicroParameters.units()
-                # Find the parameters needed to initialize a new
-                # MicroParameters object
-                sig = inspect.signature(MicroParameters)
-                # Get the keys we read from the JSON
-                for k, v in micro_params.items():
-                    # If that key is not needed, then toss it
-                    if k not in sig.parameters:
-                        continue
-                    # If the parameter has units, parse it with Pint
-                    if k in units:
-                        if isinstance(v, int) or isinstance(v, float):
-                            warnings.warn(
-                                f"Parameter {k} has no units. Assuming {units[k]}.",
-                                RuntimeWarning,
-                            )
-                            out_micro_params[k] = Q_(v, units[k])
-                        else:
-                            out_micro_params[k] = Q_(v)
+            out_macro_params = {}
+            units = MacroParameters.units()
+            # Find the parameters needed to initialize a new
+            # MicroParameters object
+            sig = inspect.signature(MacroParameters)
+            # Get the keys we read from the JSON
+            for k, v in macro_params.items():
+                # If that key is not needed, then toss it
+                if k not in sig.parameters:
+                    continue
+                # If the parameter has units, parse it with Pint
+                if k in units:
+                    if isinstance(v, int) or isinstance(v, float):
+                        warnings.warn(
+                            f"Parameter {k} has no units. Assuming {units[k]}.",
+                            RuntimeWarning,
+                        )
+                        out_macro_params[k] = Q_(v, units[k])
                     else:
-                        out_micro_params[k] = v
-                # Now unpack whatever is left in the dict and pass it to the
-                # constructor
-                self.micro_params = MicroParameters(**out_micro_params)
-            else:
-                # If there were no microscale parameters in the file, then
-                # we raise a warning.
-                warnings.warn(
-                    "Run parameter file does not contain Microscale parameters. "
-                    "Using defaults.",
-                    RuntimeWarning,
-                )
-                self.micro_params = MicroParameters()
+                        out_macro_params[k] = Q_(v)
+                else:
+                    out_macro_params[k] = v
 
-            # Remove the Macroscale parameters from the dictionary (if it
-            # exists) and create a new MacroParameters object using its values
-            macro_params = params.pop("macro_params", None)
-            if macro_params is not None:
-                # We are checking here to make sure that saved, dependent
-                # parameters don't get passed to the MacroParameters
-                # constructor
-
-                out_macro_params = {}
-                units = MacroParameters.units()
-                # Find the parameters needed to initialize a new
-                # MicroParameters object
-                sig = inspect.signature(MacroParameters)
-                # Get the keys we read from the JSON
-                for k, v in macro_params.items():
-                    # If that key is not needed, then toss it
-                    if k not in sig.parameters:
-                        continue
-                    # If the parameter has units, parse it with Pint
-                    if k in units:
-                        if isinstance(v, int) or isinstance(v, float):
-                            warnings.warn(
-                                f"Parameter {k} has no units. Assuming {units[k]}.",
-                                RuntimeWarning,
-                            )
-                            out_macro_params[k] = Q_(v, units[k])
-                        else:
-                            out_macro_params[k] = Q_(v)
-                    else:
-                        out_macro_params[k] = v
-                # Now unpack whatever is left in the dict and pass it to the
-                # constructor
-                self.macro_params = MacroParameters(
-                    micro_params=self.micro_params, **out_macro_params
-                )
-            else:
-                # If there were no parameters in the file, then we leave the
-                # object null.
-                self.macro_params = None
+        else:
+            # If there were no parameters in the file, then we leave the
+            # object null.
+            out_macro_params = None
+    return out_micro_params, out_macro_params
 
 
 ################################
@@ -517,7 +313,7 @@ class MicroParameters:
     # Model Parameters
     #####################################
 
-    nodes_in_row: int = 7
+    nodes_in_micro_row: int = 7
     """The number of protofibrils in one row of the lattice inside one
     fiber.
     
@@ -535,24 +331,17 @@ class MicroParameters:
     # Mechanism Parameters
     #####################################
 
-    simulations: int = 50_000
+    micro_simulations: int = 50_000
     """The number of independent trials run in the microscale model.
     
     :Units: None
     :Fortran: simulations"""
 
-    seed: int = 0
+    micro_seed: int = 0
     """Seed for the random number generator
     
     :Units: None
     :Fortran: seed"""
-
-    #####################################
-    # Data Parameters
-    #####################################
-
-    output_data: List[str] = field(init=False)
-    """The data output by the Microscale model."""
 
     #####################################
     # Code Parameters
@@ -630,7 +419,7 @@ class MicroParameters:
             self,
             "protein_per_fiber",
             (
-                self.nodes_in_row**2
+                self.nodes_in_micro_row**2
                 / (self.fibrinogen_length / 2 * ureg.pi * self.fiber_radius**2)
                 * (self.fibrinogen_length / 2)
                 * (ureg.pi * self.protofibril_radius**2)
@@ -644,7 +433,7 @@ class MicroParameters:
             self,
             "fibrin_conc_per_fiber",
             (
-                self.nodes_in_row**2
+                self.nodes_in_micro_row**2
                 / (self.fibrinogen_length / 2 * ureg.pi * self.fiber_radius**2)
                 / ureg.avogadro_constant
             ).to("micromolar"),
@@ -657,8 +446,8 @@ class MicroParameters:
             self,
             "binding_sites",
             4
-            * (self.nodes_in_row - 1)
-            / self.nodes_in_row**2
+            * (self.nodes_in_micro_row - 1)
+            / self.nodes_in_micro_row**2
             * self.fibrin_conc_per_fiber,
         )
 
@@ -792,8 +581,6 @@ class MacroParameters:
     :Units: None
     :Fortran: frac_forced"""
 
-    # TODO(bpaynter): This value should derive from MicroParameters
-    # TODO(bpaynter): Rename to average_bound_time
     average_bound_time: Quantity = field(init=False)  #  = Q_("27.8 sec")
     """This is the average time a tPA molecule stays bound to fibrin. 
     For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
@@ -894,7 +681,7 @@ class MacroParameters:
     # Mechanism Parameters
     #####################################
 
-    simulations: int = 10
+    macro_simulations: int = 10
     """The number of independent simulations to be run
     
     :Units: None
@@ -918,7 +705,7 @@ class MacroParameters:
     :Units: None
     :Fortran: num_t"""
 
-    seed: int = 0  # -2137354075
+    macro_seed: int = 0  # -2137354075
     """Seed for the random number generator
     
     :Units: None
@@ -1071,7 +858,9 @@ class MacroParameters:
         )
 
         # Set the state
-        object.__setattr__(self, "state", (129281, 362436069, 123456789, self.seed))
+        object.__setattr__(
+            self, "state", (129281, 362436069, 123456789, self.macro_seed)
+        )
 
         # Total saves is one for the start of each 'save_interval' plus one at
         # the end of the run.

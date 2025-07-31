@@ -6,7 +6,7 @@ import numpy as np
 from pint import Quantity
 
 from .constants import Const, BoundaryCondition
-from .parameters import Run
+from .run import Run
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"

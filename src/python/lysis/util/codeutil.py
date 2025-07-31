@@ -9,7 +9,8 @@ import numpy as np
 
 from pint import Quantity
 
-from .parameters import Run, MacroParameters, MicroParameters
+from .parameters import MacroParameters, MicroParameters
+from .run import Run
 from .edge_grid import EdgeGrid
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -46,10 +47,10 @@ class FortranMacro:
     def exec_command(self):
         params = asdict(self.run.macro_params)
         if self.index is not None:
-            stream = np.random.SeedSequence(params["seed"])
-            seeds = stream.generate_state(params["simulations"])
-            params["simulations"] = 1
-            params["seed"] = int(np.int32(seeds[self.index]))
+            stream = np.random.SeedSequence(params["macro_seed"])
+            seeds = stream.generate_state(params["macro_simulations"])
+            params["macro_simulations"] = 1
+            params["macro_seed"] = int(np.int32(seeds[self.index]))
             self.out_file_code = self.out_file_code + f"__{self.index:02}"
         arguments = [
             "--runCode",

@@ -25,7 +25,7 @@ class CudaMacroscaleRun:
         self.run = run
         assert self.run.macro_params is not None
 
-        self.rng = cp.random.default_rng(seed=abs(run.macro_params.seed))
+        self.rng = cp.random.default_rng(seed=abs(run.macro_params.macro_seed))
 
         self.binding_time_factory = self._BindingTimeFactory(self.run, self.rng)
 

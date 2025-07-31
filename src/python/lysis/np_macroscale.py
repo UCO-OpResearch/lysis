@@ -23,7 +23,7 @@ class MacroscaleSim:
         self.logger = logging.getLogger(__name__)
         self.logger.debug(f"Initializing MacroscaleSim")
         if seed is None:
-            seed = run.macro_params.seed
+            seed = run.macro_params.macro_seed
         if run.macro_params.duplicate_fortran:
             self.rng = KissRandomGenerator(seed)
         else:
