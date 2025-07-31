@@ -1,4 +1,4 @@
-from enum import Enum, IntEnum, unique, Flag
+from enum import Enum, IntEnum, unique, Flag, auto
 
 from pint import UnitRegistry
 
@@ -47,6 +47,7 @@ class Const:
         self.DIR = FiberDirection
         self.NEIGHBORHOOD = Neighbors()
         self.MOL_STATUS = MolStatus
+        self.DATASET_TYPE = DataSetType
 
 
 class Neighbors:
@@ -115,6 +116,17 @@ class MolStatus(IntEnum):
     BOUND = 1
     MACRO_UNBOUND = 2
     MICRO_UNBOUND = 3
+
+
+@unique
+class DataSetType(Enum):
+    HDF5_ATTR = auto()
+    HDF5_GROUP = auto()
+    HDF5_DATASET = auto()
+    FILE_HDF5 = auto()
+    FILE_TEXT = auto()
+    FILE_BINARY = auto()
+    FILE_JSON = auto()
 
 
 CONST = Const()

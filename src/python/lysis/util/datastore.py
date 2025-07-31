@@ -7,6 +7,8 @@ import numpy as np
 import h5py
 
 from .constants import CONST
+from .dataspec import DataCollectionSpec, DataSetSpec, dataspec
+from .parameters import read_param_file
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"
@@ -16,9 +18,6 @@ __version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
-
-
-
 
 
 @unique
@@ -166,10 +165,8 @@ class DataStore:
             raise os.UnsupportedOperation("Existing data cannot be overwritten.")
         micro_data = self._data.create_group("micro_data")
         h5py.get_config().track_order = True
-        h5file = h5py.File(os.path.join(path, f'{self._run_code}.h5'), 'a')
+        h5file = h5py.File(os.path.join(path, f"{self._run_code}.h5"), "a")
         micro_data = h5file.require_group("micro_data")
-
-
 
     def import_fortran_macro_data(self, filecode=None) -> None:
         """
@@ -312,3 +309,82 @@ class DataStore:
         # This is a placeholder implementation
         # Replace with actual logic to access HDF5 file
         pass
+
+
+def read_data_set(
+    params: dict[str, Any],
+    path: AnyStr,
+    spec: DataSetSpec,
+    sim: int = None,
+    file_code: str = "",
+) -> np.ndarray | dict[str, Any]:
+    match spec.dataset_type:
+        case CONST.DATASET_TYPE.FILE_TEXT:
+            dataset = np.loadtxt(
+                os.path.join(
+                    path, spec.data_location.format(sim=sim, file_code=file_code)
+                ),
+                dtype=spec.dtype,
+                delimiter=spec.delimiter,
+            )
+        case CONST.DATASET_TYPE.FILE_BINARY:
+            dataset = np.fromfile(
+                os.path.join(
+                    path, spec.data_location.format(sim=sim, file_code=file_code)
+                ),
+                dtype=spec.dtype,
+            )
+            shape = []
+            for i in spec.shape:
+                if isinstance(i, int):
+                    shape.append(i)
+                elif isinstance(i, str):
+                    shape.append(params[i])
+                else:
+                    raise RuntimeError("Incorrect shape format {i}.")
+            dataset = dataset.reshape(tuple(shape))
+        case CONST.DATASET_TYPE.FILE_JSON:
+            micro, macro = read_param_file(os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)))
+            dataset = micro | macro
+        case _:
+            raise NotImplementedError(
+                "This function does not currently support HDF5 data."
+            )
+    return dataset
+
+
+def read_data_collection(
+    path: AnyStr,
+    collections: list[DataCollectionSpec],
+    file_codes: list[str],
+) -> dict[str, np.ndarray] | dict[str, list[np.ndarray]]:
+    data = {}
+    data["params"] = {}
+    for idx, collection in enumerate(collections):
+        if len(file_codes) > idx:
+            file_code = file_codes[idx]
+        else:
+            file_code = ""
+        params = read_data_set(None, path, collection.params, file_code=file_code)
+        data["params"] = data["params"] | params
+        for name, spec in collection.data.items():
+            if collection.simulations_combined is True:
+                data[name] = read_data_set(params, path, spec, file_code=file_code)
+            else:
+                data[name] = []
+                sim = 0
+                next_sim = True
+                while next_sim:
+                    try:
+                        dataset = read_data_set(
+                            params, path, spec, sim=sim, file_code=file_code
+                        )
+                    except FileNotFoundError as e:
+                        if sim == 0:
+                            raise e
+                        else:
+                            next_sim = False
+                    else:
+                        data[name].append(dataset)
+                        sim += 1
+    return data

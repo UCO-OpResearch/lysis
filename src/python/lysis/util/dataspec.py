@@ -1,9 +1,12 @@
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 
 import h5py
 import numpy as np
 
-from .constants import CONST
+from pint import Quantity
+
+from .constants import CONST, DataSetType
 
 __author__ = "Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -15,235 +18,317 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 
-@dataclass
-class DataCollection:
+@dataclass(frozen=True)
+class DataSetSpec:
+    dataset_type: DataSetType
+    dtype: np.dtype
+    data_location: str = None
+    shape: tuple[int] = (-1,)
+    delimiter: str = None
+
+
+@dataclass(frozen=True)
+class DataCollectionSpec:
     simulations_combined: bool
-    text: list[str]
-    tables: list[str]
-    dtype: dict[str, np.dtype]
-    shape: dict[str, tuple[int]]
-    delimiter: dict[str, str]
+    params: DataSetSpec
+    data: dict[str, DataSetSpec]
 
 
-@dataclass
+@dataclass(frozen=True)
 class DataSpec:
-    microscale_out: DataCollection
-    macroscale_in: DataCollection
-    macroscale_out: DataCollection
+    microscale_out: DataCollectionSpec
+    macroscale_in: DataCollectionSpec
+    macroscale_out: DataCollectionSpec
 
 
 dataspec: dict[str, DataSpec] = {
     "v1.99.0": DataSpec(
-        microscale_out=DataCollection(
+        microscale_out=DataCollectionSpec(
             simulations_combined=True,
-            text=["micro.txt", "micro_rates.f90"],
-            tables=[
-                "firstPLi",
-                "lasttPA",
-                "lyscomplete",
-                "lysis",
-                "PLi",
-                "tPA_time",
-                "tPAPLiunbd",
-                "tPAunbind",
-            ],
-            dtype={
-                "firstPLi": np.float64,
-                "lasttPA": np.int32,
-                "lyscomplete": np.int32,
-                "lysis": np.float64,
-                "PLi": np.int32,
-                "tPA_time": np.float64,
-                "tPAPLiunbd": np.int32,
-                "tPAunbind": np.int32,
-            },
-            shape={
-                "firstPLi": (-1,),
-                "lasttPA": (-1,),
-                "lyscomplete": (-1,),
-                "lysis": (-1,),
-                "PLi": (-1,),
-                "tPA_time": (-1,),
-                "tPAPLiunbd": (-1,),
-                "tPAunbind": (-1,),
-            },
-            delimiter={
-                "firstPLi": None,
-                "lasttPA": None,
-                "lyscomplete": None,
-                "lysis": None,
-                "PLi": None,
-                "tPA_time": None,
-                "tPAPLiunbd": None,
-                "tPAunbind": None,
+            params=DataSetSpec(
+                data_location="params.json",
+                dataset_type=CONST.DATASET_TYPE.FILE_JSON,
+                dtype=Quantity,
+            ),
+            data={
+                "micro": DataSetSpec(
+                    data_location="micro{file_code}.txt",
+                    dataset_type=CONST.DATASET_TYPE.FILE_TEXT,
+                    dtype=str,
+                    delimiter="\u0000",
+                ),
+                "micro_rates": DataSetSpec(
+                    data_location="micro_rates.f90",
+                    dataset_type=CONST.DATASET_TYPE.FILE_TEXT,
+                    dtype=str,
+                    delimiter="\u0000",
+                ),
+                "firstPLi": DataSetSpec(
+                    data_location="firstPLi{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.float64,
+                ),
+                "lasttPA": DataSetSpec(
+                    data_location="lasttPA{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.int32,
+                ),
+                "lyscomplete": DataSetSpec(
+                    data_location="lyscomplete{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.int32,
+                ),
+                "lysis": DataSetSpec(
+                    data_location="lysis{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.float64,
+                ),
+                "PLi": DataSetSpec(
+                    data_location="PLi{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.int32,
+                ),
+                "tPA_time": DataSetSpec(
+                    data_location="tPA_time{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.float64,
+                ),
+                "tPAPLiunbd": DataSetSpec(
+                    data_location="tPAPLiunbd{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.int32,
+                ),
+                "tPAunbind": DataSetSpec(
+                    data_location="tPAunbind{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.int32,
+                ),
             },
         ),
-        macroscale_in=DataCollection(
+        macroscale_in=DataCollectionSpec(
             simulations_combined=True,
-            text=[],
-            tables=["tPAleave", "tsectPA", "lysismat", "lenlysisvect", "neighbors"],
-            dtype={
-                "tPAleave": np.float64,
-                "tsectPA": np.float64,
-                "lysismat": np.float64,
-                "lenlysisvect": np.int32,
-                "neighbors": np.int32,
-            },
-            shape={
-                "tPAleave": (101,),
-                "tsectPA": (101,),
-                "lysismat": (-1, 100),
-                "lenlysisvect": (100,),
-                "neighbors": (8, -1),
-            },
-            delimiter={
-                "tPAleave": " ",
-                "tsectPA": " ",
-                "lysismat": " ",
-                "lenlysisvect": " ",
-                "neighbors": " ",
+            params=None,
+            data={
+                "tPAleave": DataSetSpec(
+                    data_location="tPAleave{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_TEXT,
+                    dtype=np.float64,
+                    shape=(101,),
+                ),
+                "tsectPA": DataSetSpec(
+                    data_location="tsectPA{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_TEXT,
+                    dtype=np.float64,
+                    shape=(101,),
+                ),
+                "lysismat": DataSetSpec(
+                    data_location="lysismat{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_TEXT,
+                    dtype=np.float64,
+                    shape=(-1, 100),
+                ),
+                "lenlysisvect": DataSetSpec(
+                    data_location="lenlysisvect{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_TEXT,
+                    dtype=np.int32,
+                    shape=(100,),
+                ),
+                "neighbors": DataSetSpec(
+                    data_location="neighbors{file_code}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_TEXT,
+                    dtype=np.int32,
+                    shape=(8, -1),
+                ),
             },
         ),
-        macroscale_out=DataCollection(
+        macroscale_out=DataCollectionSpec(
             simulations_combined=False,
-            text=["macro.txt"],
-            tables=[
-                "Nsave",
-                "tsave",
-                "f_deg_list",
-                "m_bind_t",
-                "m_loc",
-                "m_bound",
-                "mfpt",
-            ],
-            dtype={
-                "f_deg_list": np.dtype(
-                    [
-                        ("Simulation Time Elapsed", np.float64),
-                        ("Grid Location Index", np.int32),
-                        ("Fiber New Degrade Time", np.float64),
-                    ]
+            params=DataSetSpec(
+                data_location="params.json",
+                dataset_type=CONST.DATASET_TYPE.FILE_JSON,
+                dtype=Quantity,
+            ),
+            data={
+                "macro": DataSetSpec(
+                    data_location="{sim:02}/macro{file_code}_{sim:02}.txt",
+                    dataset_type=CONST.DATASET_TYPE.FILE_TEXT,
+                    dtype=str,
+                    delimiter="\u0000",
                 ),
-                "m_bind_t": np.dtype(
-                    [
-                        ("Simulation Time Elapsed", np.float64),
-                        ("tPA Molecule Index", np.int32),
-                        ("Molecule New Status", np.int32),
-                        ("Grid Location Index", np.int32),
-                    ]
+                "Nsave": DataSetSpec(
+                    data_location="{sim:02}/Nsave{file_code}_{sim:02}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.int32,
+                    shape=(),
                 ),
-                "m_loc": np.int32,
-                "m_bound": np.int32,
-                "mfpt": np.float64,
-                "tsave": np.float64,
-                "Nsave": np.int32,
-            },
-            shape={
-                "f_deg_list": (-1,),
-                "m_bind_t": (-1,),
-                "m_loc": (-1, "tsave"),
-                "m_bound": (-1, "tsave"),
-                "mfpt": (-1,),
-                "tsave": (-1,),
-                "Nsave": None,
-            },
-            delimiter={
-                "f_deg_list": ",",
-                "m_bind_t": ",",
-                "m_loc": None,
-                "m_bound": None,
-                "mfpt": None,
-                "tsave": None,
-                "Nsave": None,
+                "tsave": DataSetSpec(
+                    data_location="{sim:02}/tsave{file_code}_{sim:02}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.float64,
+                ),
+                "f_deg_list": DataSetSpec(
+                    data_location="{sim:02}/f_deg_list{file_code}_{sim:02}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_TEXT,
+                    dtype=np.dtype(
+                        [
+                            ("Simulation Time Elapsed", np.float64),
+                            ("Grid Location Index", np.int32),
+                            ("Fiber New Degrade Time", np.float64),
+                        ]
+                    ),
+                    delimiter=",",
+                ),
+                "m_bind_t": DataSetSpec(
+                    data_location="{sim:02}/m_bind_t{file_code}_{sim:02}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.dtype(
+                        [
+                            ("Simulation Time Elapsed", np.float64),
+                            ("tPA Molecule Index", np.int32),
+                            ("Molecule New Status", np.int32),
+                            ("Grid Location Index", np.int32),
+                        ]
+                    ),
+                    delimiter=",",
+                ),
+                "m_loc": DataSetSpec(
+                    data_location="{sim:02}/m_loc{file_code}_{sim:02}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.int32,
+                    shape=("total_molecules", -1),
+                ),
+                "m_bound": DataSetSpec(
+                    data_location="{sim:02}/m_bound{file_code}_{sim:02}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.int32,
+                    shape=("total_molecules", -1),
+                ),
+                "mfpt": DataSetSpec(
+                    data_location="{sim:02}/mfpt{file_code}_{sim:02}.dat",
+                    dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
+                    dtype=np.float64,
+                ),
             },
         ),
     ),
     "v2.0.0": DataSpec(
-        microscale_out=DataCollection(
+        microscale_out=DataCollectionSpec(
             simulations_combined=True,
-            text=["log_files/micro_log"],
-            tables=[
-                "pli_first_time",
-                "tpa_final_num",
-                "fiber_degraded",
-                "sim_final_time",
-                "pli_generated_num",
-                "tpa_leaving_time",
-                "tpa_unbound_by_pli",
-                "tpa_unbound_kinetic",
-            ],
-            dtype={
-                "pli_first_time": np.float64,
-                "tpa_final_num": np.uint8,
-                "fiber_degraded": np.bool,
-                "sim_final_time": np.float64,
-                "pli_generated_num": np.int16,
-                "tpa_leaving_time": np.float64,
-                "tpa_unbound_by_pli": np.bool,
-                "tpa_unbound_kinetic": np.bool,
+            params=DataSetSpec(
+                data_location="micro_data",
+                dataset_type=CONST.DATASET_TYPE.HDF5_ATTR,
+                dtype=Quantity,
+            ),
+            data={
+                "micro_log": DataSetSpec(
+                    data_location="log_files/micro_log",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=str,
+                ),
+                "pli_first_time": DataSetSpec(
+                    data_location="micro_data/pli_first_time",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.float64,
+                ),
+                "tpa_final_num": DataSetSpec(
+                    data_location="micro_data/tpa_final_num",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.uint8,
+                ),
+                "fiber_degraded": DataSetSpec(
+                    data_location="micro_data/fiber_degraded",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.bool,
+                ),
+                "sim_final_time": DataSetSpec(
+                    data_location="micro_data/sim_final_time",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.float64,
+                ),
+                "pli_generated_num": DataSetSpec(
+                    data_location="micro_data/pli_generated_num",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.int16,
+                ),
+                "tpa_leaving_time": DataSetSpec(
+                    data_location="micro_data/tpa_leaving_time",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.float64,
+                ),
+                "tpa_unbound_by_pli": DataSetSpec(
+                    data_location="micro_data/tpa_unbound_by_pli",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.bool,
+                ),
+                "tpa_unbound_kinetic": DataSetSpec(
+                    data_location="micro_data/tpa_unbound_kinetic",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.bool,
+                ),
             },
-            shape={
-                "pli_first_time": (-1,),
-                "tpa_final_num": (-1,),
-                "fiber_degraded": (-1,),
-                "sim_final_time": (-1,),
-                "pli_generated_num": (-1,),
-                "tpa_leaving_time": (-1,),
-                "tpa_unbound_by_pli": (-1,),
-                "tpa_unbound_kinetic": (-1,),
-            },
-            delimiter=None,
         ),
         macroscale_in=None,
-        macroscale_out=DataCollection(
+        macroscale_out=DataCollectionSpec(
             simulations_combined=False,
-            text=["log_files/macro_log__sim_{sim:02}"],
-            tables=[
-                "f_degfiber_degrade_time_list",
-                "tpa_bind_events",
-                "tpa_location_snapshot",
-                "m_bound",
-                "mfpt",
-                "tsave",
-            ],
-            dtype={
-                "fiber_degrade_time": np.dtype(
-                    [
-                        ("Simulation Time Elapsed", np.float64),
-                        ("Grid Location Row", np.uint32),
-                        ("Grid Location Rank", np.uint32),
-                        ("Fiber New Degrade Time", np.float64),
-                    ]
+            params=DataSetSpec(
+                data_location="macro_data",
+                dataset_type=CONST.DATASET_TYPE.HDF5_ATTR,
+                dtype=Quantity,
+            ),
+            data={
+                "macro_log": DataSetSpec(
+                    data_location="log_files/macro_log__sim_{sim:02}",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=str,
                 ),
-                "tpa_bind_events": np.dtype(
-                    [
-                        ("Simulation Time Elapsed", np.float64),
-                        ("tPA Molecule Index", np.int64),
-                        (
-                            "Molecule New Status",
-                            h5py.enum_dtype(
-                                {i.name: i.value for i in CONST.MOL_STATUS},
-                                basetype="u1",
+                "snapshot_time": DataSetSpec(
+                    data_location="macro_data/sim_{sim:02}/snapshot_time",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.float64,
+                ),
+                "fiber_degrade_time": DataSetSpec(
+                    data_location="macro_data/sim_{sim:02}/fiber_degrade_time",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.dtype(
+                        [
+                            ("Simulation Time Elapsed", np.float64),
+                            ("Grid Location Row", np.uint32),
+                            ("Grid Location Rank", np.uint32),
+                            ("Fiber New Degrade Time", np.float64),
+                        ]
+                    ),
+                ),
+                "tpa_bind_events": DataSetSpec(
+                    data_location="macro_data/sim_{sim:02}/tpa_bind_events",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.dtype(
+                        [
+                            ("Simulation Time Elapsed", np.float64),
+                            ("tPA Molecule Index", np.int64),
+                            (
+                                "Molecule New Status",
+                                h5py.enum_dtype(
+                                    {i.name: i.value for i in CONST.MOL_STATUS},
+                                    basetype="u1",
+                                ),
                             ),
-                        ),
-                        ("Grid Location Row", np.uint32),
-                        ("Grid Location Rank", np.uint32),
-                    ]
+                            ("Grid Location Row", np.uint32),
+                            ("Grid Location Rank", np.uint32),
+                        ]
+                    ),
                 ),
-                "tpa_location_snapshot": np.int32,
-                "m_bound": np.int32,
-                "mfpt": np.float64,
-                "tsave": np.float64,
+                "tpa_location_snapshot": DataSetSpec(
+                    data_location="macro_data/sim_{sim:02}/tpa_location_snapshot",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.int32,
+                    shape=(None, 2, None),
+                ),
+                "tpa_transit_time": DataSetSpec(
+                    data_location="macro_data/sim_{sim:02}/tpa_transit_time",
+                    dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
+                    dtype=np.float64,
+                ),
             },
-            shape={
-                "fiber_degrade_time": (-1,),
-                "tpa_bind_events": (-1,),
-                "tpa_location_snapshot": (-1, 2, "tsave"),
-                "m_bound": (-1, "tsave"),
-                "mfpt": (-1,),
-                "tsave": (-1,),
-            },
-            delimiter=None,
         ),
     ),
 }
@@ -251,3 +336,10 @@ dataspec: dict[str, DataSpec] = {
 dataspec["fortran"] = dataspec["v1.99.0"]
 dataspec["hdf5"] = dataspec["v2.0.0"]
 dataspec["current"] = dataspec["hdf5"]
+
+# Format: data_converters["From DataSpec", "To DataSpec"]["Name in new DataSpec"] = function(read_data_collection("From DataSpec")) |-> "New array"
+data_converters: dict[
+    tuple[str, str], dict[str, Callable[[dict[str, np.ndarray]], np.ndarray]]
+] = {
+    ("v1.99.0", "v2.0.0"): {"log_files/micro_log": lambda x: x[""]},
+}
