@@ -51,3 +51,7 @@ Edge grid column
 Edge grid rank
     Fibers and edges in a given edge grid row are numbered by rank from left to right.
     Note that a location's rank does NOT correspond with it's adjoining node's column.
+
+Dataset
+    A single table of data. One Run will produce many different datasets.
+    (This usage of the term is for consistency with the H5Py library which being used to store data for this project.)

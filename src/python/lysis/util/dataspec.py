@@ -325,7 +325,7 @@ dataspec: dict[str, DataSpec] = {
                     data_location="macro_data/sim_{sim:02}/tpa_location_snapshot",
                     dataset_type=CONST.DATASET_TYPE.HDF5_DATASET,
                     dtype=np.int32,
-                    shape=(None, 2, None),
+                    shape=(-1, 2, -1),
                 ),
                 "tpa_transit_time": DataSetSpec(
                     data_location="macro_data/sim_{sim:02}/tpa_transit_time",
@@ -348,102 +348,3 @@ data_converters: dict[
     ("v1.99.0", "v2.0.0"): {"log_files/micro_log": lambda x: x[""]},
 }
 
-
-def read_file_text(
-    path: AnyStr,
-    spec: DataSetSpec,
-    params: dict[str, Any] = None,
-    sim: int = None,
-    file_code: str = "",
-) -> np.ndarray:
-    return np.loadtxt(
-        os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)),
-        dtype=spec.dtype,
-        delimiter=spec.delimiter,
-    )
-
-
-def read_file_binary(
-    path: AnyStr,
-    spec: DataSetSpec,
-    params: dict[str, Any] = None,
-    sim: int = None,
-    file_code: str = "",
-) -> np.ndarray:
-    dataset = np.fromfile(
-        os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)),
-        dtype=spec.dtype,
-    )
-    shape = []
-    for i in spec.shape:
-        if isinstance(i, int):
-            shape.append(i)
-        elif isinstance(i, str):
-            shape.append(params[i])
-        else:
-            raise RuntimeError("Incorrect shape format {i}.")
-    return dataset.reshape(tuple(shape))
-
-
-def read_file_json(
-    path: AnyStr,
-    spec: DataSetSpec,
-    params: dict[str, Any] = None,
-    sim: int = None,
-    file_code: str = "",
-) -> dict[str, Any]:
-    micro, macro = read_param_file(
-        os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code))
-    )
-    return micro | macro
-
-
-def read_file_hdf5(
-    path: AnyStr,
-    spec: DataSetSpec,
-    params: dict[str, Any] = None,
-    sim: int = None,
-    file_code: str = "",
-):
-    raise NotImplementedError
-
-
-def read_hdf5_attr(
-    path: AnyStr,
-    spec: DataSetSpec,
-    params: dict[str, Any] = None,
-    sim: int = None,
-    file_code: str = "",
-):
-    raise NotImplementedError
-
-
-def read_hdf5_group(
-    path: AnyStr,
-    spec: DataSetSpec,
-    params: dict[str, Any] = None,
-    sim: int = None,
-    file_code: str = "",
-):
-    raise NotImplementedError
-
-
-def read_hdf5_dataset(
-    path: AnyStr,
-    spec: DataSetSpec,
-    params: dict[str, Any] = None,
-    sim: int = None,
-    file_code: str = "",
-):
-    raise NotImplementedError
-
-
-data_readers = {
-    CONST.DATASET_TYPE.FILE_TEXT: read_file_text,
-    CONST.DATASET_TYPE.FILE_BINARY: read_file_binary,
-    CONST.DATASET_TYPE.FILE_JSON: read_file_json,
-    CONST.DATASET_TYPE.FILE_HDF5: read_file_hdf5,
-    CONST.DATASET_TYPE.HDF5_ATTR: read_hdf5_attr,
-    CONST.DATASET_TYPE.HDF5_GROUP: read_hdf5_group,
-    CONST.DATASET_TYPE.HDF5_DATASET: read_hdf5_dataset,
-}

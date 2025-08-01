@@ -16,9 +16,9 @@ from .util import dict_to_formatted_str
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2024, Brittany Bannish"
+__copyright__ = "Copyright 2025, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
+__license__ = "GPLv3"
 __version__ = "0.2"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"

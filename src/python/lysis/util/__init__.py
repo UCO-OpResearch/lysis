@@ -7,6 +7,7 @@ from .codeutil import *
 from .edge_grid import *
 from .dataspec import *
 from .run import *
+from .fileops import *
 
 try:
     import matplotlib.pyplot
