@@ -36,7 +36,8 @@ from pint import Quantity
 from .constants import default_filenames, ureg, Q_
 from .datastore import DataStore
 from .util import dict_to_formatted_str
-from .parameters import MicroParameters, MacroParameters, read_param_file
+from .parameters import MicroParameters, MacroParameters
+from .fileops import _read_file_json
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -49,7 +50,6 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 
-# TODO: Rename this object to Run
 class Run(object):
     """Houses all information about a given experimental run.
 
@@ -183,34 +183,11 @@ class Run(object):
         #     output["data_filenames"] = self.data.to_dict()
         # Convert the Microscale parameters to a dictionary
         if self.micro_params is not None:
-            # Get units
-            units = MicroParameters.units()
-            output["micro_params"] = {}
-            # Loop through the parameters
-            for k, v in asdict(self.micro_params).items():
-                # If the parameter is stored as a Quantity, convert it to standard units
-                # and output as a string. Else, pass it as-is
-                if isinstance(v, Quantity):
-                    output["micro_params"][k] = str(v.to(units[k]))
-                else:
-                    output["micro_params"][k] = v
+            output["micro_params"] = self.micro_params.to_basedict()
 
         # Convert the Macroscale parameters to a dictionary
         if self.macro_params is not None:
-            # Get units
-            units = MacroParameters.units()
-            output["macro_params"] = {}
-            # Loop through the parameters
-            for k, v in asdict(self.macro_params).items():
-                if k == "micro_params":
-                    continue
-                # If the parameter is stored as a Quantity, convert it to standard units
-                # and output as a string. Else, pass it as-is
-                if isinstance(v, Quantity):
-                    output["macro_params"][k] = str(v.to(units[k]))
-                else:
-                    output["macro_params"][k] = v
-
+            output["macro_params"] = self.macro_params.to_basedict()
         return output
 
     def to_file(self) -> None:
@@ -226,12 +203,45 @@ class Run(object):
             json.dump(self.to_dict(), file)
 
     def read_file(self) -> None:
-        micro_params, macro_params = read_param_file(self.os_param_file)
-        # Now unpack whatever is left in the dict and pass it to the
-        # constructor
-        self.micro_params = MicroParameters(**micro_params)
-        # Now unpack whatever is left in the dict and pass it to the
-        # constructor
-        self.macro_params = MacroParameters(
-            micro_params=self.micro_params, **macro_params
-        )
+        """Load the run parameters from disk.
+
+        Raises:
+            RuntimeError: No parameter file is available for this run.
+        """
+        # Determine whether the parameter file exists for this run
+        if not os.path.isfile(self.os_param_file):
+            raise RuntimeError("Run parameter file not found.")
+        # Open the file
+        with open(self.os_param_file, "r") as file:
+            # Use the JSON library to read in the parameters as a dictionary
+            params = json.load(file)
+        # Initialize a datastore
+        data_filenames = params.pop("data_filenames", None)
+        if data_filenames is not None:
+            self.data = DataStore(self.os_path, data_filenames)
+
+        # Remove the Microscale parameters from the dictionary (if it
+        # exists) and create a new MicroParameters object using its values
+        micro_params = params.pop("micro_params", None)
+        if micro_params is not None:
+            self.micro_params = MicroParameters.parse_from_basedict(micro_params)
+        else:
+            # If there were no microscale parameters in the file, then
+            # we raise a warning.
+            warnings.warn(
+                "Run parameter file does not contain Microscale parameters. "
+                "Using defaults.",
+                RuntimeWarning,
+            )
+            self.micro_params = MicroParameters()
+
+        # Remove the Macroscale parameters from the dictionary (if it
+        # exists) and create a new MacroParameters object using its values
+        macro_params = params.pop("macro_params", None)
+        if macro_params is not None:
+            macro_params["micro_params"] = self.micro_params
+            self.macro_params = MacroParameters.parse_from_basedict(macro_params)
+        else:
+            # If there were no parameters in the file, then we leave the
+            # object null.
+            self.macro_params = None

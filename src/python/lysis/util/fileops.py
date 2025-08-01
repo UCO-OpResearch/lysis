@@ -1,3 +1,4 @@
+import json
 import os
 
 from enum import Flag, auto, unique
@@ -7,8 +8,13 @@ import numpy as np
 import h5py
 
 from .constants import CONST
-from .dataspec import DataCollectionSpec, DataSetSpec, dataspec
-from .parameters import read_param_file
+from .dataspec import (
+    DataCollectionSpec,
+    DataSetSpec,
+    dataspec,
+    parse_shape,
+    check_dataset_spec,
+)
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -20,9 +26,11 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 
+def _not_implemented(*args, **kwargs):
+    raise NotImplementedError("This function is not yet implemented.")
 
 
-def read_file_text(
+def _read_file_text(
     path: AnyStr,
     spec: DataSetSpec,
     params: dict[str, Any] = None,
@@ -36,7 +44,7 @@ def read_file_text(
     )
 
 
-def read_file_binary(
+def _read_file_binary(
     path: AnyStr,
     spec: DataSetSpec,
     params: dict[str, Any] = None,
@@ -47,31 +55,25 @@ def read_file_binary(
         os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)),
         dtype=spec.dtype,
     )
-    shape = []
-    for i in spec.shape:
-        if isinstance(i, int):
-            shape.append(i)
-        elif isinstance(i, str):
-            shape.append(params[i])
-        else:
-            raise RuntimeError("Incorrect shape format {i}.")
-    return dataset.reshape(tuple(shape))
+    return dataset.reshape(parse_shape(spec.shape, params=params))
 
 
-def read_file_json(
+def _read_file_json(
     path: AnyStr,
     spec: DataSetSpec,
     params: dict[str, Any] = None,
     sim: int = None,
     file_code: str = "",
 ) -> dict[str, Any]:
-    micro, macro = read_param_file(
-        os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code))
-    )
-    return micro | macro
+    with open(
+        os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)), "r"
+    ) as file:
+        # Use the JSON library to read in the parameters as a dictionary
+        data = json.load(file)
+    return data
 
 
-def read_file_hdf5(
+def _read_file_hdf5(
     path: AnyStr,
     spec: DataSetSpec,
     params: dict[str, Any] = None,
@@ -81,7 +83,7 @@ def read_file_hdf5(
     raise NotImplementedError
 
 
-def read_hdf5_attr(
+def _read_hdf5_attr(
     path: AnyStr,
     spec: DataSetSpec,
     params: dict[str, Any] = None,
@@ -91,7 +93,7 @@ def read_hdf5_attr(
     raise NotImplementedError
 
 
-def read_hdf5_group(
+def _read_hdf5_group(
     path: AnyStr,
     spec: DataSetSpec,
     params: dict[str, Any] = None,
@@ -101,7 +103,7 @@ def read_hdf5_group(
     raise NotImplementedError
 
 
-def read_hdf5_dataset(
+def _read_hdf5_dataset(
     path: AnyStr,
     spec: DataSetSpec,
     params: dict[str, Any] = None,
@@ -112,18 +114,66 @@ def read_hdf5_dataset(
 
 
 data_readers = {
-    CONST.DATASET_TYPE.FILE_TEXT: read_file_text,
-    CONST.DATASET_TYPE.FILE_BINARY: read_file_binary,
-    CONST.DATASET_TYPE.FILE_JSON: read_file_json,
-    CONST.DATASET_TYPE.FILE_HDF5: read_file_hdf5,
-    CONST.DATASET_TYPE.HDF5_ATTR: read_hdf5_attr,
-    CONST.DATASET_TYPE.HDF5_GROUP: read_hdf5_group,
-    CONST.DATASET_TYPE.HDF5_DATASET: read_hdf5_dataset,
+    CONST.DATASET_TYPE.FILE_TEXT: _read_file_text,
+    CONST.DATASET_TYPE.FILE_BINARY: _read_file_binary,
+    CONST.DATASET_TYPE.FILE_JSON: _read_file_json,
+    CONST.DATASET_TYPE.FILE_HDF5: _not_implemented,
+    CONST.DATASET_TYPE.HDF5_ATTR: _not_implemented,
+    CONST.DATASET_TYPE.HDF5_GROUP: _not_implemented,
+    CONST.DATASET_TYPE.HDF5_DATASET: _not_implemented,
 }
 
 
+def _write_file_text(
+    data: np.ndarray,
+    path: AnyStr,
+    spec: DataSetSpec,
+    params: dict[str, Any] = None,
+    sim: int = None,
+    file_code: str = "",
+):
+    """
+    Writes an array to disk as a text file
 
-def read_data_set(
+    :param data: The array to write.
+    :type data: np.ndarray
+    :param path: The folder in which to store the file.
+        Note: The simulation folder and filename should not be included here as they will be included in the data specification.
+    :type path: AnyStr
+    :param spec: The specification for the data.
+    :type spec: DataSetSpec
+    :param params: The parameters matching the data, defaults to None
+    :type params: dict[str, Any], optional
+    :param sim: The index of the simulation this data is from, if stored individually, defaults to None.
+        Format: {"micro_params": dict[str, float | int | Quantity | str], "macro_params": dict[str, float | int | Quantity | str]}
+    :type sim: int, optional
+    :param file_code: Any code that needs to be attached to the filename, defaults to ""
+    :type file_code: str, optional
+    :raises TypeError: Raised if the data does not match the specification.
+    """
+    if not check_dataset_spec(data, spec, params=params):
+        raise TypeError(
+            f"Data sent for writing does not meet the specification {spec}."
+        )
+    np.savetxt(
+        os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)),
+        data,
+        delimiter=spec.delimiter,
+    )
+
+
+data_writers = {
+    CONST.DATASET_TYPE.FILE_TEXT: _write_file_text,
+    CONST.DATASET_TYPE.FILE_BINARY: _not_implemented,
+    CONST.DATASET_TYPE.FILE_JSON: _not_implemented,
+    CONST.DATASET_TYPE.FILE_HDF5: _not_implemented,
+    CONST.DATASET_TYPE.HDF5_ATTR: _not_implemented,
+    CONST.DATASET_TYPE.HDF5_GROUP: _not_implemented,
+    CONST.DATASET_TYPE.HDF5_DATASET: _not_implemented,
+}
+
+
+def read_dataset(
     path: AnyStr,
     spec: DataSetSpec,
     params: dict[str, Any] = None,
@@ -147,13 +197,13 @@ def read_data_collection(
             file_code = file_codes[idx]
         else:
             file_code = ""
-        params = read_data_set(
+        params = read_dataset(
             path, collection.params, params=None, file_code=file_code
         )
         data["params"] = data["params"] | params
         for name, spec in collection.data.items():
             if collection.simulations_combined is True:
-                data[name] = read_data_set(
+                data[name] = read_dataset(
                     path, spec, params=params, file_code=file_code
                 )
             else:
@@ -162,7 +212,7 @@ def read_data_collection(
                 next_sim = True
                 while next_sim:
                     try:
-                        dataset = read_data_set(
+                        dataset = read_dataset(
                             path, spec, params=params, sim=sim, file_code=file_code
                         )
                     except FileNotFoundError as e:
@@ -174,3 +224,41 @@ def read_data_collection(
                         data[name].append(dataset)
                         sim += 1
     return data
+
+
+def write_dataset(
+    data: np.ndarray | dict[str, Any],
+    path: AnyStr,
+    spec: DataSetSpec,
+    params: dict[str, Any] = None,
+    sim: int = None,
+    file_code: str = "",
+) -> np.ndarray | dict[str, Any]:
+    data_writers[spec.dataset_type](
+        data, path, spec, params=params, sim=sim, file_code=file_code
+    )
+
+def write_data_collection(
+    data: dict[str, np.ndarray] | dict[str, list[np.ndarray]],
+    path: AnyStr,
+    collections: list[DataCollectionSpec],
+    file_codes: list[str],
+):
+    for idx, collection in enumerate(collections):
+        if len(file_codes) > idx:
+            file_code = file_codes[idx]
+        else:
+            file_code = ""
+        write_dataset(
+            data["params"], path, collection.params, params=None, file_code=file_code
+        )
+        for name, spec in collection.data.items():
+            if collection.simulations_combined is True:
+                write_dataset(
+                    data[name], path, spec, params=data["params"], file_code=file_code
+                )
+            else:
+                for sim, table in enumerate(data[name]):
+                    write_dataset(
+                        table, path, spec, params=data["params"], sim=sim, file_code=file_code
+                    )

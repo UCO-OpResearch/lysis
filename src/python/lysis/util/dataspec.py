@@ -10,7 +10,6 @@ import numpy as np
 from pint import Quantity
 
 from .constants import CONST, DataSetType
-from .parameters import read_param_file
 
 __author__ = "Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -199,13 +198,13 @@ dataspec: dict[str, DataSpec] = {
                     data_location="{sim:02}/m_loc{file_code}_{sim:02}.dat",
                     dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
                     dtype=np.int32,
-                    shape=("total_molecules", -1),
+                    shape=("macro_params.total_molecules", -1),
                 ),
                 "m_bound": DataSetSpec(
                     data_location="{sim:02}/m_bound{file_code}_{sim:02}.dat",
                     dataset_type=CONST.DATASET_TYPE.FILE_BINARY,
                     dtype=np.int32,
-                    shape=("total_molecules", -1),
+                    shape=("macro_params.total_molecules", -1),
                 ),
                 "mfpt": DataSetSpec(
                     data_location="{sim:02}/mfpt{file_code}_{sim:02}.dat",
@@ -337,6 +336,7 @@ dataspec: dict[str, DataSpec] = {
     ),
 }
 
+# Define tags
 dataspec["fortran"] = dataspec["v1.99.0"]
 dataspec["hdf5"] = dataspec["v2.0.0"]
 dataspec["current"] = dataspec["hdf5"]
@@ -348,3 +348,50 @@ data_converters: dict[
     ("v1.99.0", "v2.0.0"): {"log_files/micro_log": lambda x: x[""]},
 }
 
+
+def parse_shape(
+    shape: tuple[int | str, ...], params: dict[str, Any] = None
+) -> tuple[int, ...]:
+    """
+    Fills in any unknown values in the specification shape from the params dictionary.
+
+    :param shape: The shape from the specification.
+        May contain integers, which are passed through unchanged,
+        or strings, which are used as keys in the params dictionary to look up the correct value.
+    :type shape: tuple[int  |  str, ...]
+    :param params: The dictionary containing parameters necessary for calculating shape, defaults to None.
+    :type params: dict[str, Any], optional
+    :raises RuntimeError: Raised if the shape cannot be parsed correctly.
+    :return: Returns a shape appropriate for use in numpy methods.
+    :rtype: tuple[int, ...]
+    """
+    parsed_shape = []
+    for i in shape:
+        if isinstance(i, int):
+            parsed_shape.append(i)
+        elif isinstance(i, str):
+            parts = i.split(".")
+            parsed_shape.append(params[parts[0]][parts[1]])
+        else:
+            raise RuntimeError("Incorrect shape format {i}.")
+    return tuple(parsed_shape)
+
+
+def check_dataset_spec(
+    data: np.ndarray, spec: DataSetSpec, params: dict[str, Any] = None
+) -> bool:
+    """
+    Checks whether or not an array of data meets the given specification.
+
+    :param data: The array of data to be checked.
+    :type data: np.ndarray
+    :param spec: The specification to check the data against.
+    :type spec: DataSetSpec
+    :param params: A dictionary of parameters matching the data and specifications, defaults to None.
+    :type params: dict[str, Any], optional
+    :return: True if the data matches the specification, False else.
+    :rtype: bool
+    """
+    return data.dtype == spec.dtype and data.shape == parse_shape(
+        spec.shape, params=params
+    )

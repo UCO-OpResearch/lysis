@@ -9,7 +9,6 @@ import h5py
 from .constants import CONST
 from .dataspec import DataCollectionSpec, DataSetSpec, dataspec
 from .fileops import data_readers
-from .parameters import read_param_file
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -75,7 +74,7 @@ class DataStore:
         "run_code",
         "path",
         "data",
-        "tables",
+        "datasets",
         "views",
         "status",
         "mode",
@@ -111,7 +110,7 @@ class DataStore:
             },
         )
 
-        object.__setattr__(self, "_tables", [])
+        object.__setattr__(self, "_datasets", [])
         object.__setattr__(self, "_views", [])
 
         # Initialize HDF5 file

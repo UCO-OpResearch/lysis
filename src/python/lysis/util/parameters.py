@@ -1,5 +1,4 @@
 import inspect
-import json
 import logging
 import os
 import pkgutil
@@ -7,7 +6,7 @@ import re
 import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, List, Mapping, Tuple, Union
+from typing import Any, List, Mapping, Tuple, Union, Type, TypeVar
 
 from pint import Quantity
 
@@ -25,103 +24,6 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 
-def read_param_file(file_path: str) -> tuple[dict[str, Any] | None]:
-    """Load the run parameters from disk.
-
-    Raises:
-        RuntimeError: No parameter file is available for this run.
-    """
-    # Determine whether the parameter file exists for this run
-    if not os.path.isfile(file_path):
-        raise RuntimeError("Run parameter file not found.")
-    # Open the file
-    with open(file_path, "r") as file:
-        # Use the JSON library to read in the parameters as a dictionary
-        params = json.load(file)
-        # Initialize a datastore
-        data_filenames = params.pop("data_filenames", None)
-        if data_filenames is not None:
-            # self.data = DataStore(self.os_path, data_filenames)
-            pass
-
-        # Remove the Microscale parameters from the dictionary (if it
-        # exists) and create a new MicroParameters object using its values
-        micro_params = params.pop("micro_params", None)
-        if micro_params is not None:
-            # We are checking here to make sure that saved, dependent
-            # parameters don't get passed to the MicroParameters
-            # constructor
-            out_micro_params = {}
-            units = MicroParameters.units()
-            # Find the parameters needed to initialize a new
-            # MicroParameters object
-            sig = inspect.signature(MicroParameters)
-            # Get the keys we read from the JSON
-            for k, v in micro_params.items():
-                # If that key is not needed, then toss it
-                if k not in sig.parameters:
-                    continue
-                # If the parameter has units, parse it with Pint
-                if k in units:
-                    if isinstance(v, int) or isinstance(v, float):
-                        warnings.warn(
-                            f"Parameter {k} has no units. Assuming {units[k]}.",
-                            RuntimeWarning,
-                        )
-                        out_micro_params[k] = Q_(v, units[k])
-                    else:
-                        out_micro_params[k] = Q_(v)
-                else:
-                    out_micro_params[k] = v
-
-        else:
-            # If there were no microscale parameters in the file, then
-            # we raise a warning.
-            warnings.warn(
-                "Parameter file does not contain Microscale parameters. "
-                "Using defaults.",
-                RuntimeWarning,
-            )
-            out_micro_params = asdict(MicroParameters())
-
-        # Remove the Macroscale parameters from the dictionary (if it
-        # exists) and create a new MacroParameters object using its values
-        macro_params = params.pop("macro_params", None)
-        if macro_params is not None:
-            # We are checking here to make sure that saved, dependent
-            # parameters don't get passed to the MacroParameters
-            # constructor
-
-            out_macro_params = {}
-            units = MacroParameters.units()
-            # Find the parameters needed to initialize a new
-            # MicroParameters object
-            sig = inspect.signature(MacroParameters)
-            # Get the keys we read from the JSON
-            for k, v in macro_params.items():
-                # If that key is not needed, then toss it
-                if k not in sig.parameters:
-                    continue
-                # If the parameter has units, parse it with Pint
-                if k in units:
-                    if isinstance(v, int) or isinstance(v, float):
-                        warnings.warn(
-                            f"Parameter {k} has no units. Assuming {units[k]}.",
-                            RuntimeWarning,
-                        )
-                        out_macro_params[k] = Q_(v, units[k])
-                    else:
-                        out_macro_params[k] = Q_(v)
-                else:
-                    out_macro_params[k] = v
-
-        else:
-            # If there were no parameters in the file, then we leave the
-            # object null.
-            out_macro_params = None
-    return out_micro_params, out_macro_params
-
-
 ################################
 ###  NOTE:
 ###  In the following dataclass definitions, do not use double-quotes (")
@@ -133,7 +35,164 @@ def read_param_file(file_path: str) -> tuple[dict[str, Any] | None]:
 
 
 @dataclass(frozen=True)
-class MicroParameters:
+class Parameters:
+    def __str__(self) -> str:
+        """Returns a human-readable, JSON-like string of all parameters."""
+        # Convert the internal parameters into one dictionary
+        values = asdict(self)
+        # Format the dictionary and return
+        return dict_to_formatted_str(values)
+
+    def to_basedict(self) -> dict[str, int | float | str]:
+        """
+        Outputs the contents of this micro parameter set to a dictionary with base value types
+
+        :return: _description_
+        :rtype: dict[str, int | float | str]
+        """
+        # Get units
+        units = self.units()
+        output = {}
+        # Loop through the parameters
+        for k, v in asdict(self).items():
+            # If the parameter is stored as a Quantity, convert it to standard units
+            # and output as a string. Else, pass it as-is
+            if isinstance(v, Quantity):
+                output[k] = str(v.to(units[k]))
+            else:
+                output[k] = v
+        return output
+
+    def to_dict(self) -> dict[str, int | float | str | Quantity]:
+        """
+        _summary_
+
+        :return: _description_
+        :rtype: dict[str, int | float | str | Quantity]
+        """
+        return asdict(self)
+
+    @staticmethod
+    def units():
+        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
+        that have units. The values in the dictionary are those units.
+        These values are parsed from the docstrings in this file.
+        """
+        # Get the text of this source code file
+        text = pkgutil.get_data(__name__, "parameters.py")
+        # Initialize the regex for finding :Units: tags in the docstrings
+        pattern = re.compile(
+            r"[\r\n]"  # The start of a line
+            + r"^\s{4}"  # four spaces (one tab)
+            + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
+            + r":.*[\r\n]*"  # the rest of that line
+            + r".*\"\"\""  # a triple-quote
+            + r"[^\"]*"  # text that is not a douple-quote
+            + r":Units:\s"  # the units tag
+            + r"([^\n\r]+)"  # Second capture group, the units
+            + r"[\r\n]",  # A line break
+            re.M,
+        )
+        units = {}
+        # Find all matches
+        matches = re.findall(pattern, text.decode("utf-8"))
+
+        # Check that the units are not none.
+        for match in matches:
+            if match[1] != "None":
+                units[match[0]] = match[1]
+
+        return units
+
+    @staticmethod
+    def fortran_names():
+        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
+        that have equivalents in Fortran. The values in the dictionary are the names of the equivalent
+        Fortran variable names.
+        These values are parsed from the docstrings in this file.
+        """
+        # Get the text of this source code file
+        text = pkgutil.get_data(__name__, "parameters.py")
+        # Initialize the regex for finding :Units: tags in the docstrings
+        pattern = re.compile(
+            r"[\r\n]+"  # The start of a line
+            + r"^\s{4}"  # four spaces (one tab)
+            + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
+            + r":.*[\r\n]*"  # the rest of that line
+            + r".*\"\"\""  # a triple-quote
+            + r"[^\"]*"  # text that is not a douple-quote
+            + r":Fortran:\s"  # the Fortran tag
+            + r"([\w_]+(-1)?)"  # Second capture group, the fortran name, possibly with a -1
+            + r"(\s=[^\"]*)?"  # Third capture group (optional), a formula for the parameter in Fortran
+            + r"\"\"\"",  # A line break
+            re.M,
+        )
+        names = {}
+        # Find all matches
+        matches = re.findall(pattern, text.decode("utf-8"))
+        # Check that the units are not none.
+        for match in matches:
+            if match[1] != "None":
+                names[match[0]] = match[1]
+
+        return names
+
+    @classmethod
+    def print_default_values(cls) -> str:
+        """Returns the default parameters for the model."""
+        # Create a new Parameters object with the default values
+        default_params = cls()
+        # Convert to a dict, then to a formatted string, and return
+        return str(default_params)
+
+    T = TypeVar("T")
+
+    @classmethod
+    def parse_from_basedict(
+        cls: Type[T], base_params: dict[str, int | float | str]
+    ) -> T:
+        """
+        Creates a Parameters object from a dict of base type values.
+
+        Any values will be checked to see if they need units and, if so,
+        will be parsed into Quantity objects with Pint.
+
+        :param base_params: A dictionary of parameter values in base types only.
+        :type base_params: dict[str, int  |  float  |  str]
+        :return: A dataclass of parameters
+        :rtype: MicroParameters | MacroParameters
+        """
+        # We are checking here to make sure that saved, dependent
+        # parameters don't get passed to the MicroParameters
+        # constructor
+        quant_params = {}
+        units = cls.units()
+        # Find the parameters needed to initialize a new
+        # Parameters object
+        sig = inspect.signature(cls)
+        # Get the keys from the string dict
+        for k, v in base_params.items():
+            # If that key is not needed, then toss it
+            if k not in sig.parameters:
+                continue
+            # If the parameter has units, parse it with Pint
+            if k in units:
+                if isinstance(v, int) or isinstance(v, float):
+                    warnings.warn(
+                        f"Parameter {k} has no units. Assuming {units[k]}.",
+                        RuntimeWarning,
+                    )
+                    quant_params[k] = Q_(v, units[k])
+                else:
+                    quant_params[k] = Q_(v)
+            else:
+                quant_params[k] = v
+        print(quant_params)
+        return cls(**quant_params)
+
+
+@dataclass(frozen=True)
+class MicroParameters(Parameters):
     """This will contain the parameters for the Microscale model.
 
     Parameters can be accessed as attributes.
@@ -451,89 +510,9 @@ class MicroParameters:
             * self.fibrin_conc_per_fiber,
         )
 
-    @staticmethod
-    def units():
-        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
-        that have units. The values in the dictionary are those units.
-        These values are parsed from the docstrings in this file.
-        """
-        # Get the text of this source code file
-        text = pkgutil.get_data(__name__, "parameters.py")
-        # Initialize the regex for finding :Units: tags in the docstrings
-        pattern = re.compile(
-            r"[\r\n]"  # The start of a line
-            + r"^\s{4}"  # four spaces (one tab)
-            + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
-            + r":.*[\r\n]*"  # the rest of that line
-            + r".*\"\"\""  # a triple-quote
-            + r"[^\"]*"  # text that is not a douple-quote
-            + r":Units:\s"  # the units tag
-            + r"([^\n\r]+)"  # Second capture group, the units
-            + r"[\r\n]",  # A line break
-            re.M,
-        )
-        units = {}
-        # Find all matches
-        matches = re.findall(pattern, text.decode("utf-8"))
-
-        # Check that the units are not none.
-        for match in matches:
-            if match[1] != "None":
-                units[match[0]] = match[1]
-
-        return units
-
-    @staticmethod
-    def fortran_names():
-        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
-        that have equivalents in Fortran. The values in the dictionary are the names of the equivalent
-        Fortran variable names.
-        These values are parsed from the docstrings in this file.
-        """
-        # Get the text of this source code file
-        text = pkgutil.get_data(__name__, "parameters.py")
-        # Initialize the regex for finding :Units: tags in the docstrings
-        pattern = re.compile(
-            r"[\r\n]+"  # The start of a line
-            + r"^\s{4}"  # four spaces (one tab)
-            + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
-            + r":.*[\r\n]*"  # the rest of that line
-            + r".*\"\"\""  # a triple-quote
-            + r"[^\"]*"  # text that is not a douple-quote
-            + r":Fortran:\s"  # the Fortran tag
-            + r"([\w_]+(-1)?)"  # Second capture group, the fortran name, possibly with a -1
-            + r"(\s=[^\"]*)?"  # Third capture group (optional), a formula for the parameter in Fortran
-            + r"\"\"\"",  # A line break
-            re.M,
-        )
-        names = {}
-        # Find all matches
-        matches = re.findall(pattern, text.decode("utf-8"))
-        # Check that the units are not none.
-        for match in matches:
-            if match[1] != "None":
-                names[match[0]] = match[1]
-
-        return names
-
-    def __str__(self) -> str:
-        """Returns a human-readable, JSON-like string of all parameters."""
-        # Convert the internal parameters into one dictionary
-        values = asdict(self)
-        # Format the dictionary and return
-        return dict_to_formatted_str(values)
-
-    @staticmethod
-    def print_default_values() -> str:
-        """Returns the default parameters for the Microscale model."""
-        # Create a new MicroParameters object with the default values
-        default_micro_params = MicroParameters()
-        # Convert to a dict, then to a formatted string, and return
-        return str(default_micro_params)
-
 
 @dataclass(frozen=True)
-class MacroParameters:
+class MacroParameters(Parameters):
     """Contains parameters for the Macroscale model.
 
     Parameters can be accessed as attributes.
@@ -778,8 +757,7 @@ class MacroParameters:
         """This method calculates the dependent parameters once the
         MacroParameters object is created. It is automatically called by the
         DataClass.__init__()"""
-        # A full row of the fiber grid contains a 'right', 'up', and 'out' edge
-        # for each node, except the last node which contains no 'right' edge.
+        #
         object.__setattr__(
             self, "average_bound_time", 1.0 / self.micro_params.unbind_rate_tPA_woPLG
         )
@@ -867,83 +845,3 @@ class MacroParameters:
         object.__setattr__(
             self, "number_of_saves", int(self.total_time / self.save_interval) + 1
         )
-
-    @staticmethod
-    def units():
-        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
-        that have units. The values in the dictionary are those units.
-        These values are parsed from the docstrings in this file.
-        """
-        # Get the text of this source code file
-        text = pkgutil.get_data(__name__, "parameters.py")
-        # Initialize the regex for finding :Units: tags in the docstrings
-        pattern = re.compile(
-            r"[\r\n]"  # The start of a line
-            + r"^\s{4}"  # four spaces (one tab)
-            + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
-            + r":.*[\r\n]*"  # the rest of that line
-            + r".*\"\"\""  # a triple-quote
-            + r"[^\"]*"  # text that is not a douple-quote
-            + r":Units:\s"  # the units tag
-            + r"([^\n\r]+)"  # Second capture group, the units
-            + r"[\r\n]",  # A line break
-            re.M,
-        )
-        units = {}
-        # Find all matches
-        matches = re.findall(pattern, text.decode("utf-8"))
-
-        # Check that the units are not none.
-        for match in matches:
-            if match[1] != "None":
-                units[match[0]] = match[1]
-
-        return units
-
-    @staticmethod
-    def fortran_names():
-        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
-        that have equivalents in Fortran. The values in the dictionary are the names of the equivalent
-        Fortran variable names.
-        These values are parsed from the docstrings in this file.
-        """
-        # Get the text of this source code file
-        text = pkgutil.get_data(__name__, "parameters.py")
-        # Initialize the regex for finding :Units: tags in the docstrings
-        pattern = re.compile(
-            r"[\r\n]+"  # The start of a line
-            + r"^\s{4}"  # four spaces (one tab)
-            + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
-            + r":.*[\r\n]*"  # the rest of that line
-            + r".*\"\"\""  # a triple-quote
-            + r"[^\"]*"  # text that is not a douple-quote
-            + r":Fortran:\s"  # the Fortran tag
-            + r"([\w_]+(-1)?)"  # Second capture group, the fortran name, possibly with a -1
-            + r"(\s=[^\"]*)?"  # Third capture group (optional), a formula for the parameter in Fortran
-            + r"\"\"\"",  # A line break
-            re.M,
-        )
-        names = {}
-        # Find all matches
-        matches = re.findall(pattern, text.decode("utf-8"))
-        # Check that the units are not none.
-        for match in matches:
-            if match[1] != "None":
-                names[match[0]] = match[1]
-
-        return names
-
-    def __str__(self) -> str:
-        """Returns a human-readable, JSON-like string of all parameters."""
-        # Convert the internal parameters into one dictionary
-        values = asdict(self)
-        # Format the dictionary and return
-        return dict_to_formatted_str(values)
-
-    @staticmethod
-    def print_default_values() -> str:
-        """Returns the default parameters for the Macroscale model."""
-        # Create a new MacroParameters object with the default values
-        default_macro_params = MacroParameters()
-        # Convert to a dict, then to a formatted string, and return
-        return str(default_macro_params)
