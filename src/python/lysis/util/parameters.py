@@ -57,7 +57,9 @@ class Parameters:
         for k, v in asdict(self).items():
             # If the parameter is stored as a Quantity, convert it to standard units
             # and output as a string. Else, pass it as-is
-            if isinstance(v, Quantity):
+            if isinstance(v, dict):
+                continue
+            elif isinstance(v, Quantity):
                 output[k] = str(v.to(units[k]))
             else:
                 output[k] = v
