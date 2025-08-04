@@ -11,12 +11,12 @@ from pint import Quantity
 
 from .parameters import MacroParameters, MicroParameters
 from .run import Run
-from .edge_grid import EdgeGrid
+from .edge_grid import generate_fortran_neighborhood_structure
 
 __author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish"
+__copyright__ = "Copyright 2025, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
+__license__ = "GPLv3"
 __version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
@@ -39,7 +39,12 @@ class FortranMacro:
     index: int = None
 
     def generate_neighborhoods(self):
-        fort_neighbors = EdgeGrid.generate_fortran_neighborhood_structure(self.run) + 1
+        fort_neighbors = (
+            generate_fortran_neighborhood_structure(
+                self.run.macro_params.rows, self.run.macro_params.cols
+            )
+            + 1
+        )
         fort_neighbors.tofile(
             os.path.join(self.run.os_path, "neighbors.dat"), sep=os.linesep
         )

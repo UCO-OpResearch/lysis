@@ -387,6 +387,110 @@ class EdgeGrid(object):
         else:
             raise AttributeError(f"{metric} metric not implemented yet.")
 
+    @staticmethod
+    def full_row(rows: int, nodes_in_row: int) -> int:
+        """
+        Calculates the number of edges in a full row of the edge grid
+
+        :param rows: The number of rows in the edge grid
+        :type rows: int
+        :param nodes_in_row: The number of nodes in each row of the edge grid
+        :type nodes_in_row: int
+        :return: The number of edges in a full row of the edge grid
+        :rtype: int
+        """
+        return 3 * nodes_in_row - 1
+
+    @staticmethod
+    def xz_row(rows: int, nodes_in_row: int) -> int:
+        """
+        Calculates the number of x- and z-edges in a row of the edge grid
+
+        :param rows: The number of rows in the edge grid
+        :type rows: int
+        :param nodes_in_row: The number of nodes in each row of the edge grid
+        :type nodes_in_row: int
+        :return: The number of x- and z-edges in a row of the edge grid
+        :rtype: int
+        """
+        return 2 * nodes_in_row - 1
+
+    @staticmethod
+    def total_edges(rows: int, nodes_in_row: int) -> int:
+        """
+        Calculates the total number of edges in an edge grid
+
+        :param rows: The number of rows in the edge grid
+        :type rows: int
+        :param nodes_in_row: The number of nodes in each row of the edge grid
+        :type nodes_in_row: int
+        :return: The total number of edges in an edge grid
+        :rtype: int
+        """
+        return EdgeGrid.full_row(rows, nodes_in_row) * (rows - 1) + EdgeGrid.xz_row(
+            rows, nodes_in_row
+        )
+
+
+def generate_fortran_neighborhood_structure(rows: int, nodes_in_row: int) -> np.ndarray:
+    """
+    Generates the neighbor structure needed by the Fortran Macroscale code.
+    This is a (-1, 8) array with a row for each edge, ordered by their Fortran index.
+    Each row contains the 0-indexed, fortran (1-D) indices for the 8 neighbors of the edge.
+    Each row is sorted in increasing order for consistency with the Fortran code.
+
+    :param rows: The number of rows in the edge grid
+    :type rows: int
+    :param nodes_in_row: The number of nodes in each row of the edge grid
+    :type nodes_in_row: int
+    :return: A (-1, 8) NumPy array of dtype uint32
+    :rtype: np.ndarray
+    """
+    # Generate a list of all fortran-index edges and get the equivalent 2-d indeces
+    edges = from_fortran_edge_index_array(
+        np.arange(EdgeGrid.total_edges(rows, nodes_in_row)), rows, nodes_in_row
+    )
+    # Figure out which edges are x-, y-, and z-edges
+    edge_type = edges[:, 1] % 3
+    # Top edges are x- and z-edges with the largest row index
+    top = (edges[:, 0] == rows - 1) & (edge_type != 0)
+    # Bottom edges are x- and z-edges with the smallest row index
+    bottom = (edges[:, 0] == 0) & (edge_type != 0)
+    # Left edges are those with rank 0 or 1
+    left = edges[:, 1] <= 1
+    # Right edges are those with the largest 2 ranks
+    right = edges[:, 1] >= EdgeGrid.full_row(rows, nodes_in_row) - 2
+    # Add an axis in the middle
+    edges = edges.reshape(-1, 1, 2)
+    # and then duplicate 8 times along that axis.
+    # This is where the 8 neighbors will go
+    neighbors = np.repeat(edges, 8, axis=1)
+
+    # Create a matrix for the neighbor delta
+    adds = np.empty(neighbors.shape, dtype=int)
+    # Get the appropriate neighbor delta for each edge type (x, y, z) and put them in the matrix
+    adds[edge_type == 0] = np.array(CONST.NEIGHBORHOOD.Y).T
+    adds[edge_type == 1] = np.array(CONST.NEIGHBORHOOD.Z).T
+    adds[edge_type == 2] = np.array(CONST.NEIGHBORHOOD.X).T
+    # Deal with the boundaries
+    adds[top, :, 0] += CONST.NEIGHBORHOOD.TOP_REFL
+    adds[bottom, :, 0] += CONST.NEIGHBORHOOD.BOTTOM_REFL
+    adds[left, :, 1] += CONST.NEIGHBORHOOD.LEFT_REFL
+    adds[right, :, 1] += CONST.NEIGHBORHOOD.RIGHT_REFL
+    # Add the delta to the current location to get the actual neighbor indices
+    # TODO: This casting should be fine, but it wouldn't hurt to add code to check it
+    neighbors = np.add(neighbors, adds, out=neighbors, casting="unsafe")
+
+    # Rearrange the axes so that its (8, -1, 2)
+    neighbors = np.moveaxis(neighbors, [0, 1, 2], [1, 0, 2])
+    # Slice up this matrix by neigbor number, convert its 2-D indices to 1-D,
+    # and then stack them back together.
+    neighbor_1d = np.array(
+        [to_fortran_edge_index_array(x, rows, nodes_in_row) for x in neighbors]
+    )
+    # Cast, Transpose, sort, and return
+    return np.sort(neighbor_1d.T)
+
 
 def from_fortran_edge_index(
     index: int, rows: int, nodes_in_row: int
