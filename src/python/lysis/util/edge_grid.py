@@ -10,9 +10,9 @@ from .run import Run
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish"
+__copyright__ = "Copyright 2025, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
+__license__ = "GPLv3"
 __version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
@@ -227,8 +227,8 @@ class EdgeGrid(object):
             raise IndexError(valid_index)
 
         # The index of the neighboring fiber being requested
-        neighbor_i = i
-        neighbor_j = j
+        neighbor_i = int(i)
+        neighbor_j = int(j)
 
         # Move to the required neighbor
         if j % 3 == 0:  # We are a y-edge
@@ -287,7 +287,7 @@ class EdgeGrid(object):
             neighbor_j += CONST.NEIGHBORHOOD.RIGHT_REFL[k]
 
         # Return the co-ordinates of the requested neighbor.
-        return neighbor_i, neighbor_j
+        return np.uint32(neighbor_i), np.uint32(neighbor_j)
 
     @staticmethod
     def generate_neighborhood_structure(run: Run):
@@ -478,6 +478,60 @@ def from_fortran_edge_index(
     return i, j
 
 
+def from_fortran_edge_index_array(
+    index_array: np.ndarray, rows: int, nodes_in_row: int
+) -> np.ndarray:
+    """
+    Does the same as the from_fortran_edge_index() method, but with a whole numpy array at once.
+
+    :param index_array: A (-1,) array of 0-indexed indices in the Fortran 1-D indexing system.
+    :type index_array: np.ndarray
+    :param rows: The number of rows in the grid
+    :type rows: int
+    :param nodes_in_row: The number of nodes each row of the grid
+    :type nodes_in_row: int
+    :raises IndexError: Raised if any of the indices are out of bounds
+    :return: A (-1, 2) array with each row containing the indices of an edge in the 2-D ordering system
+    :rtype: np.ndarray
+    """
+    # The number of edges in a full row: 3 of each per node, except the last
+    # node which has no x-edge.
+    full_row = 3 * nodes_in_row - 1
+    # The number of x- and z-edges in a full row: 2 of each per node, except
+    # the last node which has no x-edge.
+    xz_row = 2 * nodes_in_row - 1
+    # The total number of edges in the grid: full_row for each row, except the
+    # last row which has no y-edges.
+    total_edges = full_row * (rows - 1) + xz_row
+
+    # Check if the index given is in-bounds.
+    if np.count_nonzero(index_array < 0) or np.count_nonzero(
+        index_array > total_edges - 1
+    ):
+        raise IndexError(
+            f"Index ({index_array}) out of bounds. Edge indices are in the range "
+            f"[0..{total_edges-1}]."
+        )
+
+    out_array = np.empty(shape=(index_array.size, 2), dtype=np.uint32)
+    # Count the number of full rows before this edge
+    # Determine the number of edges (in 1-D order) before this one in its own row
+    out_array[:, 0], rank = np.divmod(index_array, full_row)
+    # If all x- and z-edges are already counted, this must be a y-edge
+    # Its index in the list of y-edges is the index of its triplet in the 2-D index
+    # The y-fiber is first in its triplet, so count up the triplets before this one.
+    out_array[rank > xz_row - 1, 1] = (rank[rank > xz_row - 1] - xz_row) * 3
+    # Else it is an x- or z-edge. So find out which triplet it is in by
+    # counting pairs of x- and z-edges.
+    # Then we need to insert all the y-edges for the preceding triplets,
+    # and the y-edge for this triplet.
+    out_array[rank <= xz_row - 1, 1] = (
+        rank[rank <= xz_row - 1] + rank[rank <= xz_row - 1] // 2 + 1
+    )
+    # Return the co-ordinates in the 2-D ordering.
+    return out_array
+
+
 def to_fortran_edge_index(i: int, j: int, rows: int, nodes_in_row: int) -> int:
     """Converts a 2-dimensional index of an edge to its 1-dimensional index.
 
@@ -543,3 +597,63 @@ def to_fortran_edge_index(i: int, j: int, rows: int, nodes_in_row: int) -> int:
             raise IndexError(f"No y-edges on the top row (row {rows-1}).")
 
     return index
+
+
+def to_fortran_edge_index_array(
+    index_array: np.ndarray, rows: int, nodes_in_row: int
+) -> np.ndarray:
+    """
+    Does the same as the to_fortran_edge_index() method, but with a whole numpy array at once.
+
+    :param index_array: A (-1, 2) array with each row containing the indices of an edge in the 2-D ordering system
+    :type index_array: np.ndarray
+    :param rows: The number of rows in the grid.
+    :type rows: int
+    :param nodes_in_row: The number of nodes in each row of the grid.
+    :type nodes_in_row: int
+    :raises IndexError: Raised if any of the indices are out of bounds
+    :return: A (-1,) array of 0-indexed indices in the Fortran 1-D indexing system.
+    :rtype: np.ndarray
+    """
+    # The number of edges in a full row: 3 of each per node, except the last
+    # node which has no x-edge.
+    full_row = 3 * nodes_in_row - 1
+    # The number of x- and z-edges in a full row: 2 of each per node, except
+    # the last node which has no x-edge.
+    xz_row = 2 * nodes_in_row - 1
+
+    # Check that the indices given are valid
+    if np.count_nonzero(index_array[:, 0] < 0) or np.count_nonzero(
+        index_array[:, 0] > rows - 1
+    ):
+        raise IndexError(
+            f"Index i={index_array[:, 0]} out of bounds. Rows are [0..{rows-1}]."
+        )
+    if np.count_nonzero(index_array[:, 1] < 0) or np.count_nonzero(
+        index_array[:, 1] > full_row - 1
+    ):
+        raise IndexError(
+            f"Index j={index_array[:, 1]} out of bounds. Edges in each row are [0..{full_row-1}]."
+        )
+    # Determine which y-, z-, and x-edge triplet in its row it belongs to.
+    triplet, direction = np.divmod(index_array[:, 1], 3)
+    # In the last row, there are no y-edges.
+    if np.count_nonzero(index_array[direction == 0, 0] >= rows - 1):
+        raise IndexError(f"No y-edges on the top row (row {rows-1}).")
+    out = np.empty(shape=index_array.shape[0], dtype=np.uint32)
+    # Add up the number of edges that are in the preceding rows.
+    out = index_array[:, 0] * full_row
+    # If the edge is a z-edge,
+    # the number of edges before it in this row is two (x- and z-edges) per triplet.
+    out[direction == 1] += 2 * triplet[direction == 1]
+    # If the edge is an x-edge,
+    # the number of edges before it in this row is two (x- and z-edges) per triplet,
+    # plus its partner z-edge.
+    out[direction == 2] += 2 * triplet[direction == 2] + 1
+    # If the edge is a y-edge
+    # In all but the last row,
+    # the number of edges before it is all x- and z-edges in its row,
+    # plus the y-edges before it.
+    out[direction == 0] += xz_row + triplet[direction == 0]
+
+    return out
