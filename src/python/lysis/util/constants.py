@@ -4,9 +4,9 @@ from pint import UnitRegistry
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2023, Brittany Bannish"
+__copyright__ = "Copyright 2025, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
+__license__ = "GPLv3"
 __version__ = "0.2"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
@@ -47,7 +47,7 @@ class Const:
         self.DIR = FiberDirection
         self.NEIGHBORHOOD = Neighbors()
         self.MOL_STATUS = MolStatus
-        self.DATASET_TYPE = DataSetType
+        self.DATASET_STORAGE_TYPE = DataSetStorageType
 
 
 class Neighbors:
@@ -119,7 +119,7 @@ class MolStatus(IntEnum):
 
 
 @unique
-class DataSetType(Enum):
+class DataSetStorageType(Enum):
     HDF5_ATTR = auto()
     HDF5_GROUP = auto()
     HDF5_DATASET = auto()

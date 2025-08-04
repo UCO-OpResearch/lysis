@@ -168,74 +168,7 @@ class DataStore:
         h5file = h5py.File(os.path.join(path, f"{self._run_code}.h5"), "a")
         micro_data = h5file.require_group("micro_data")
 
-    def import_fortran_macro_data(self, filecode=None) -> None:
-        """
-        Import data from a Fortran Macroscale run into the HDF5 storage.
-
-        :param filecode: The file code associated with the Macroscale run being imported.
-            This file code should include any leading underscores, but NOT the file extension.
-        """
-        pass
-
-    def export_fortran_micro_data(
-        self, path: AnyStr = None, filecode: str = None
-    ) -> None:
-        """
-        Export Microscale data from the HDF5 storage to disk for use by a Fortran Macroscale run.
-
-        See the "Macro to Micro files" section of the Data Specification for more information.
-
-        :param path: The location to which the micro to macro data should be exported.
-        :param filecode: The file code associated with the Microscale run being exported.
-            This file code should include any leading underscores, but NOT the file extension.
-        """
-        if path is None:
-            path = self._path
-        # TODO: Add code to check if microscale data exists
-        # Get the microscale data
-        micro_data = self._data["micro_data"]
-        # Get the number of microscale runs and set the dimensions of the bins so that we get 100 bins
-        bin_size = micro_data["pli_first_time"].size // 100
-        # tPAleave is the CDF of the tPA leaving time distribution.
-        # This is really just a list of edgepoints from the bins for tPA leaving time
-        # These bins are evenly distributed along the interval [0, 1]
-        tPAleave = np.append(np.arange(0, 1, 0.01), [1.0])
-        np.savetxt(os.path.join(path, f"tPAleave{filecode}.dat"), tPAleave)
-
-        # The remaining data will be arranged into 100 bins
-        # according to the time tPA left the simulation.
-        # Get the sorted ordering of the tPA leaving times
-        indices = micro_data["tpa_leaving_time"][:].argsort()
-        # Find the tPA leaving times for the edges of each bin.
-        tsectPA = np.append(
-            [0], micro_data["tpa_leaving_time"][:][indices[bin_size - 1 :: bin_size]]
-        )
-        np.savetxt(os.path.join(path, f"tsectPA{filecode}.dat"), tsectPA)
-
-        # Identify which simulations had the fiber fully degraded
-        lysis_complete = micro_data["fiber_degraded"][:]
-        # Read in the fiber degradation times for all simulations
-        lysis_time = micro_data["sim_final_time"][:]
-        # If full degradation did NOT occur,
-        # this matrix currently contains the ending time of the simulation.
-        # Replace these times with an 'infinity' marker of 6,000 seconds
-        lysis_time[~lysis_complete] = 6_000
-        # Rearrange the matrix so that each row contains the lysis times for simulations
-        # corresponding to the matching bin in the ``tsectPA`` vector.
-        # Then sort the rows (bins) individually by lysis time.
-        # Finally, transpose the matrix so that the bins are arranged in columns.
-        lysismat = np.stack(
-            [
-                np.sort(lysis_time[indices[i * bin_size : (i + 1) * bin_size]])
-                for i in range(100)
-            ]
-        ).T
-        np.savetxt(os.path.join(path, f"lysismat{filecode}.dat"), lysismat)
-
-        # Find the location of the first '6000' entry in each column of the ``lysismat`` matrix
-        # Then convert to 1-indexing.
-        lenlysisvect = lysismat.argmax(axis=0) + 1
-        np.savetxt(os.path.join(path, f"lenlysisvect{filecode}.dat"), lenlysisvect)
+   
 
     def __getattr__(self, key: AnyStr) -> np.ndarray:
         """
