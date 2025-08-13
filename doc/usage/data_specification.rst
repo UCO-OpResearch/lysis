@@ -184,7 +184,7 @@ but should be generated when needed from the microscale data.
   then that simulation's fiber degrade time will be found in column ``i``.
   In that column, the fiber degrade times are sorted in increasing order.
 
-  All simulations where degradation did not occur are assigned a value of 6,000 seconds.
+  All simulations where degradation did not occur are assigned a value of infinity (numpy.inf).
 
   :Data Type:
     NumPy 64-bit float (``f8``)

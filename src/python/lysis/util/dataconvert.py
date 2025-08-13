@@ -1,7 +1,7 @@
+import warnings
 from dataclasses import asdict
 from enum import Flag, auto, unique
 from typing import Any, AnyStr, List, Mapping, Union, Callable
-
 
 import numpy as np
 import h5py
@@ -15,6 +15,7 @@ from .dataspec import (
     dataspec,
     parse_shape,
     check_dataset_spec,
+    tags,
 )
 from .edge_grid import generate_fortran_neighborhood_structure
 
@@ -26,6 +27,63 @@ __version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
+
+
+def safe_np_int_conversion(int_array, dtype=np.uint8, copy=True):
+    """
+    A few functions require arrays of a certain type (e.g. np.int32, np.uint8).
+    To allow functions to accept standard numpy integer arrays (usually of
+    dtype=np.int64) we cast but check bounds to avoid wrap-around
+    conversion errors (numpy doesn't seem to provide this functionality)
+
+    Shamelessly stolen from https://stackoverflow.com/questions/56684893/numpy-cast-from-signed-to-unsigned-int-with-same-kind
+    Modified to allow boolean
+    """
+    int_array = np.array(int_array)
+    if int_array.size == 0:
+        return int_array.astype(dtype, copy=copy)  # Allow empty arrays of any type
+    try:
+        return int_array.astype(dtype, casting="safe", copy=copy)
+    except TypeError:
+        bounds = np.iinfo(dtype)
+        if np.all(int_array >= bounds.min) and np.all(int_array <= bounds.max):
+            if int_array.dtype.kind == "i" and np.dtype(dtype).kind == "u":
+                # Allow casting from int to unsigned int, since we have checked bounds
+                casting = "unsafe"
+            else:
+                # Raise a TypeError when we try to convert from, e.g., a float.
+                casting = "same_kind"
+            return int_array.astype(dtype, casting=casting, copy=copy)
+        else:
+            raise OverflowError("Cannot convert safely to {} type".format(dtype))
+
+
+def safe_np_bool_conversion(int_array, copy=True):
+    """
+    A few functions require arrays of np.bool.
+    To allow functions to accept standard numpy integer arrays (usually of
+    dtype=np.int64) we cast but check bounds to avoid wrap-around
+    conversion errors (numpy doesn't seem to provide this functionality)
+
+    Shamelessly stolen from https://stackoverflow.com/questions/56684893/numpy-cast-from-signed-to-unsigned-int-with-same-kind
+    Modified to allow boolean
+    """
+    int_array = np.array(int_array)
+    if int_array.size == 0:
+        return int_array.astype(np.bool, copy=copy)  # Allow empty arrays of any type
+    try:
+        return int_array.astype(np.bool, casting="safe", copy=copy)
+    except TypeError:
+        if np.all(int_array >= 0) and np.all(int_array <= 1):
+            if int_array.dtype.kind == "i":
+                # Allow casting from int to bool, since we have checked bounds
+                casting = "unsafe"
+            else:
+                # Raise a TypeError when we try to convert from, e.g., a float.
+                casting = "same_kind"
+            return int_array.astype(np.bool, casting=casting, copy=copy)
+        else:
+            raise OverflowError("Cannot convert safely to np.bool type")
 
 
 def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
@@ -40,6 +98,8 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     :return: _description_
     :rtype: DataSetType
     """
+
+    # TODO: Add code to check that `in_data` meets the "current" data specification
     out_data = in_data.copy()
     # Get the number of microscale runs and set the dimensions of the bins so that we get 100 bins
     bin_size = in_data["pli_first_time"].size // 100
@@ -113,7 +173,18 @@ data_converters: dict[
         "tPA_time": lambda data: data["tpa_leaving_time"],
         "tPAPLiunbd": lambda data: data["tpa_unbound_by_pli"],
         "tPAunbind": lambda data: data["tpa_unbound_kinetic"],
-    }
+    },
+    ("v1.99.0", "v2.0.0"): {
+        "micro_log": lambda data: data["micro_log"],
+        "pli_first_time": lambda data: data["firstPLi"],
+        "tpa_final_num": lambda data: data["lasttPA"],
+        "fiber_degraded": lambda data: data["lyscomplete"],
+        "sim_final_time": lambda data: data["lysis"],
+        "pli_generated_num": lambda data: data["PLi"],
+        "tpa_leaving_time": lambda data: data["tPA_time"],
+        "tpa_unbound_by_pli": lambda data: data["tPAPLiunbd"],
+        "tpa_unbound_kinetic": lambda data: data["tPAunbind"],
+    },
 }
 
 
@@ -122,6 +193,12 @@ def convert_data(
     input_set_spec: str,
     output_set_spec: str,
 ) -> DataCollectionType:
+    while input_set_spec in tags:
+        input_set_spec = tags[input_set_spec]
+    while output_set_spec in tags:
+        output_set_spec = tags[output_set_spec]
+    # TODO: Check that `input_set_spec` and `output_set_spec` exist
+    # TODO: Add code to check that `input_data` meets the specifications of `input_set_spec`.
     out_data = {}
     out_data["params"] = input_data["params"]
     for collection in dataspec[output_set_spec].values():
@@ -129,13 +206,26 @@ def convert_data(
             try:
                 out = data_converters[input_set_spec, output_set_spec][dataset_needed](
                     input_data
-                ).astype(
+                )
+            except KeyError as e:
+                warnings.warn(f"Missing data for {dataset_needed}")
+                continue
+            try:
+                out_data[dataset_needed] = out.astype(
                     collection.data[dataset_needed].dtype,
                     casting="same_kind",
                 )
-            except KeyError:
-                raise RuntimeWarning(f"Missing data for {dataset_needed}")
-                continue
-            else:
-                out_data[dataset_needed] = out
+            except TypeError as e:
+                dt = np.dtype(collection.data[dataset_needed].dtype)
+                match dt.kind:
+                    case "u":
+                        out_data[dataset_needed] = safe_np_int_conversion(out, dtype=dt)
+                    case "b":
+                        out_data[dataset_needed] = safe_np_bool_conversion(out)
+                    case "f":
+                        # TODO: Create a function that does the same thing as the safe_np_int_conversion, but for floats.
+                        raise NotImplementedError("Not implemented yet")
+                    case _:
+                        raise e
+
     return out_data

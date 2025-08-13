@@ -45,13 +45,6 @@ class DataCollectionSpec:
     data: dict[str, DataSetSpec]
 
 
-# @dataclass(frozen=True)
-# class DataSpec:
-#     microscale_out: DataCollectionSpec
-#     macroscale_in: DataCollectionSpec
-#     macroscale_out: DataCollectionSpec
-
-
 dataspec: dict[str, dict[str, DataCollectionSpec]] = {
     "v1.99.0": {
         "microscale_out": DataCollectionSpec(
@@ -380,9 +373,15 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
 }
 
 # Define tags
-dataspec["fortran"] = dataspec["v1.99.0"]
-dataspec["hdf5"] = dataspec["v2.0.0"]
-dataspec["current"] = dataspec["hdf5"]
+tags = {
+    "fortran": "v1.99.0",
+    "hdf5": "v2.0.0",
+    "current": "hdf5",
+}
+
+# Add tags to data spec
+for k, v in tags.items():
+    dataspec[k] = dataspec[v]
 
 
 def parse_shape(
