@@ -13,3 +13,5 @@ fort.*
 data
 *.h5
 test.ipynb
+doc/usage/Lysis-Component.vpp.bak_000f
+**/.DS_Store

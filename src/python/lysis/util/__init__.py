@@ -8,6 +8,7 @@ from .edge_grid import *
 from .dataspec import *
 from .run import *
 from .fileops import *
+from .dataconvert import *
 
 try:
     import matplotlib.pyplot

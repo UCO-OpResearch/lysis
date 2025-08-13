@@ -12,7 +12,6 @@ from .dataspec import (
     DataCollectionType,
     DataSetSpec,
     DataSetType,
-    DataSpec,
     dataspec,
     parse_shape,
     check_dataset_spec,
@@ -29,17 +28,7 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 
-data_converters: dict[
-    tuple[DataSpec, DataSpec], dict[str, Callable[[DataCollectionType], DataSetType]]
-] = {
-    (dataspec["v2.0.0"], dataspec["v1.99.0"]): {
-        "micro_log": lambda data: data["micro_log"],
-        "firstPLi": lambda data: data["pli_first_time"],
-    }
-}
-
-
-def generate_macroscale_in(in_data: DataSetType) -> DataSetType:
+def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     """
     This method generates the input data for the Fortran macroscale model.
     *NOTE: Even though this method should only be used with the Fortran macroscale model,
@@ -99,20 +88,53 @@ def generate_macroscale_in(in_data: DataSetType) -> DataSetType:
         in_data["params"]["macro_params"]["cols"],
     )
 
+    # Calculate
+    out_data["params"]["macro_params"]["forced_unbind"] = np.count_nonzero(
+        in_data["tPA_forced_unbind"]
+    ) / (
+        np.count_nonzero(in_data["tPA_forced_unbind"])
+        + np.count_nonzero(in_data["tPA_kinetic_unbind"])
+    )
+
+    print(out_data["params"]["macro_params"]["forced_unbind"])
+    return out_data
+
+
+data_converters: dict[
+    tuple[str, str], dict[str, Callable[[DataCollectionType], DataSetType]]
+] = {
+    ("v2.0.0", "v1.99.0"): {
+        "micro_log": lambda data: data["micro_log"],
+        "firstPLi": lambda data: data["pli_first_time"],
+        "lasttPA": lambda data: data["tpa_final_num"],
+        "lyscomplete": lambda data: data["fiber_degraded"],
+        "lysis": lambda data: data["sim_final_time"],
+        "PLi": lambda data: data["pli_generated_num"],
+        "tPA_time": lambda data: data["tpa_leaving_time"],
+        "tPAPLiunbd": lambda data: data["tpa_unbound_by_pli"],
+        "tPAunbind": lambda data: data["tpa_unbound_kinetic"],
+    }
+}
+
 
 def convert_data(
     input_data: DataCollectionType,
-    input_set_spec: DataSetSpec,
-    output_set_spec: DataSetSpec,
+    input_set_spec: str,
+    output_set_spec: str,
 ) -> DataCollectionType:
     out_data = {}
-    for collection in output_set_spec:
-        for dataset_needed in output_set_spec[collection].data.keys():
+    out_data["params"] = input_data["params"]
+    for collection in dataspec[output_set_spec].values():
+        for dataset_needed in collection.data.keys():
             try:
                 out = data_converters[input_set_spec, output_set_spec][dataset_needed](
                     input_data
+                ).astype(
+                    collection.data[dataset_needed].dtype,
+                    casting="same_kind",
                 )
             except KeyError:
+                raise RuntimeWarning(f"Missing data for {dataset_needed}")
                 continue
             else:
                 out_data[dataset_needed] = out

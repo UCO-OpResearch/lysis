@@ -45,16 +45,16 @@ class DataCollectionSpec:
     data: dict[str, DataSetSpec]
 
 
-@dataclass(frozen=True)
-class DataSpec:
-    microscale_out: DataCollectionSpec
-    macroscale_in: DataCollectionSpec
-    macroscale_out: DataCollectionSpec
+# @dataclass(frozen=True)
+# class DataSpec:
+#     microscale_out: DataCollectionSpec
+#     macroscale_in: DataCollectionSpec
+#     macroscale_out: DataCollectionSpec
 
 
-dataspec: dict[str, DataSpec] = {
-    "v1.99.0": DataSpec(
-        microscale_out=DataCollectionSpec(
+dataspec: dict[str, dict[str, DataCollectionSpec]] = {
+    "v1.99.0": {
+        "microscale_out": DataCollectionSpec(
             simulations_combined=True,
             params=DataSetSpec(
                 data_location="params.json",
@@ -116,7 +116,7 @@ dataspec: dict[str, DataSpec] = {
                 ),
             },
         ),
-        macroscale_in=DataCollectionSpec(
+        "macroscale_in": DataCollectionSpec(
             simulations_combined=True,
             params=None,
             data={
@@ -152,7 +152,7 @@ dataspec: dict[str, DataSpec] = {
                 ),
             },
         ),
-        macroscale_out=DataCollectionSpec(
+        "macroscale_out": DataCollectionSpec(
             simulations_combined=False,
             params=DataSetSpec(
                 data_location="params.json",
@@ -221,9 +221,9 @@ dataspec: dict[str, DataSpec] = {
                 ),
             },
         ),
-    ),
-    "v2.0.0": DataSpec(
-        microscale_out=DataCollectionSpec(
+    },
+    "v2.0.0": {
+        "microscale_out": DataCollectionSpec(
             simulations_combined=True,
             params=DataSetSpec(
                 data_location="micro_data",
@@ -278,7 +278,7 @@ dataspec: dict[str, DataSpec] = {
                 ),
             },
         ),
-        macroscale_in=DataCollectionSpec(
+        "macroscale_in": DataCollectionSpec(
             simulations_combined=False,
             params=None,
             data={
@@ -286,13 +286,13 @@ dataspec: dict[str, DataSpec] = {
                     data_location=None,
                     dataset_storage_type=None,
                     dtype=np.float64,
-                    shape=(101,)
+                    shape=(101,),
                 ),
                 "bin_edge_tpa_leaving_time": DataSetSpec(
                     data_location=None,
                     dataset_storage_type=None,
                     dtype=np.float64,
-                    shape=(101,)
+                    shape=(101,),
                 ),
                 "binned_fiber_degrade_time": DataSetSpec(
                     data_location=None,
@@ -312,9 +312,9 @@ dataspec: dict[str, DataSpec] = {
                     dtype=np.uint32,
                     shape=(-1, 8),
                 ),
-            }
+            },
         ),
-        macroscale_out=DataCollectionSpec(
+        "macroscale_out": DataCollectionSpec(
             simulations_combined=False,
             params=DataSetSpec(
                 data_location="macro_data",
@@ -376,7 +376,7 @@ dataspec: dict[str, DataSpec] = {
                 ),
             },
         ),
-    ),
+    },
 }
 
 # Define tags

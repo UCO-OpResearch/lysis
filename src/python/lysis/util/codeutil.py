@@ -82,7 +82,7 @@ class FortranMacro:
                         str(value // 100),
                     ]
                 else:
-                    arguments += ["--" + fortran_names[key], str(params[key])]
+                    arguments += ["--" + fortran_names[key], str(value)]
         arguments += [
             "--radius",
             str(
