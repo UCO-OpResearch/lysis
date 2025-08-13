@@ -1522,8 +1522,8 @@ program macrolysis
                     reached_back_row_percent, '% of total).'
 
                 !! TERMINATION CRITERIA
-                if (all_fibers_degraded .and. most_molecules_passed) exit
-                ! if (all_fibers_degraded) exit
+                ! if (all_fibers_degraded .and. most_molecules_passed) exit
+                if (all_fibers_degraded) exit
             end if
 
             !! BRAD 2023-01-31:
