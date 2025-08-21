@@ -160,6 +160,22 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     return out_data
 
 
+def convert_fiber_degrade_time(
+    data: DataCollectionType,
+) -> DataSetType:
+    """
+    TODO: Function from cell 9 of H5-File-Builder.ipynb
+    _summary_
+
+    :param data: a dict of data in fortran format
+    :type data: DataCollectionType
+    :return: A numpy array, or a list of numpy arrays in HDF5 format
+    """
+    pass
+
+
+# TODO Do the same thing with the tpa_bind_events from cell 10 of H5-File-Builder.ipynb
+
 data_converters: dict[
     tuple[str, str], dict[str, Callable[[DataCollectionType], DataSetType]]
 ] = {
@@ -184,6 +200,7 @@ data_converters: dict[
         "tpa_leaving_time": lambda data: data["tPA_time"],
         "tpa_unbound_by_pli": lambda data: data["tPAPLiunbd"],
         "tpa_unbound_kinetic": lambda data: data["tPAunbind"],
+        "fiber_degrade_time": convert_fiber_degrade_time,
     },
 }
 

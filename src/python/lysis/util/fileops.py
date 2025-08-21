@@ -290,6 +290,7 @@ def write_hdf5_dataset(
             compression="gzip",
             dtype=spec.dtype,
             data=data.astype(spec.dtype),
+            # TODO: Add chunk calculation. Maybe not. Check if it calculates automatically from the size of the data
         )
 
 
