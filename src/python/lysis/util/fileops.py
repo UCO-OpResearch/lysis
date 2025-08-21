@@ -2,7 +2,7 @@ import json
 import os
 
 from enum import Flag, auto, unique
-from typing import Any, AnyStr, List, Mapping, Union, Callable
+from typing import Any, AnyStr, Mapping, Union, Callable
 
 import numpy as np
 import h5py
@@ -118,6 +118,93 @@ data_readers: dict[
     CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _read_hdf5_attr,
     CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _read_hdf5_dataset,
 }
+
+
+def read_dataset(
+    path: AnyStr,
+    spec: DataSetSpec,
+    params: BaseParamsType = None,
+    sim: int = None,
+    file_code: str = "",
+) -> np.ndarray | BaseParamsType:
+    """
+    Reads a single table
+
+    This function calls the reader function matching the 
+    type of this dataset from the `data_readers` dictionary
+
+    :param path: _description_
+    :type path: AnyStr
+    :param spec: _description_
+    :type spec: DataSetSpec
+    :param params: _description_, defaults to None
+    :type params: BaseParamsType, optional
+    :param sim: _description_, defaults to None
+    :type sim: int, optional
+    :param file_code: _description_, defaults to ""
+    :type file_code: str, optional
+    :return: _description_
+    :rtype: np.ndarray | BaseParamsType
+    """
+    return data_readers[spec.dataset_storage_type](
+        path, spec, params=params, sim=sim, file_code=file_code
+    )
+
+
+def read_data_collection(
+    path: AnyStr,
+    collections: list[DataCollectionSpec],
+    file_codes: list[str],
+) -> DataCollectionType:
+    """
+    Iterates over the items in a data collection, calling the `read_dataset` function
+    for each item.
+    This function also determines whether simulations are stored together or separately
+    and calls the appropriate functions.
+    This function also handles parameter loading
+
+    :param path: _description_
+    :type path: AnyStr
+    :param collections: _description_
+    :type collections: list[DataCollectionSpec]
+    :param file_codes: _description_
+    :type file_codes: list[str]
+    :raises e: _description_
+    :return: _description_
+    :rtype: DataCollectionType
+    """
+    data = {}
+    data["params"] = {}
+    for idx, collection in enumerate(collections):
+        if len(file_codes) > idx:
+            file_code = file_codes[idx]
+        else:
+            file_code = ""
+        params = read_dataset(path, collection.params, params=None, file_code=file_code)
+        data["params"] = data["params"] | params
+        for name, spec in collection.data.items():
+            if collection.simulations_combined is True:
+                data[name] = read_dataset(
+                    path, spec, params=params, file_code=file_code
+                )
+            else:
+                data[name] = []
+                sim = 0
+                next_sim = True
+                while next_sim:
+                    try:
+                        dataset = read_dataset(
+                            path, spec, params=params, sim=sim, file_code=file_code
+                        )
+                    except (FileNotFoundError, KeyError) as e:
+                        if sim == 0:
+                            raise e
+                        else:
+                            next_sim = False
+                    else:
+                        data[name].append(dataset)
+                        sim += 1
+    return data
 
 
 def _write_file_text(
@@ -253,56 +340,6 @@ data_writers: dict[
     CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: write_hdf5_dataset,
 }
 
-
-def read_dataset(
-    path: AnyStr,
-    spec: DataSetSpec,
-    params: BaseParamsType = None,
-    sim: int = None,
-    file_code: str = "",
-) -> np.ndarray | BaseParamsType:
-    return data_readers[spec.dataset_storage_type](
-        path, spec, params=params, sim=sim, file_code=file_code
-    )
-
-
-def read_data_collection(
-    path: AnyStr,
-    collections: list[DataCollectionSpec],
-    file_codes: list[str],
-) -> DataCollectionType:
-    data = {}
-    data["params"] = {}
-    for idx, collection in enumerate(collections):
-        if len(file_codes) > idx:
-            file_code = file_codes[idx]
-        else:
-            file_code = ""
-        params = read_dataset(path, collection.params, params=None, file_code=file_code)
-        data["params"] = data["params"] | params
-        for name, spec in collection.data.items():
-            if collection.simulations_combined is True:
-                data[name] = read_dataset(
-                    path, spec, params=params, file_code=file_code
-                )
-            else:
-                data[name] = []
-                sim = 0
-                next_sim = True
-                while next_sim:
-                    try:
-                        dataset = read_dataset(
-                            path, spec, params=params, sim=sim, file_code=file_code
-                        )
-                    except (FileNotFoundError, KeyError) as e:
-                        if sim == 0:
-                            raise e
-                        else:
-                            next_sim = False
-                    else:
-                        data[name].append(dataset)
-                        sim += 1
-    return data
 
 
 def write_dataset(
