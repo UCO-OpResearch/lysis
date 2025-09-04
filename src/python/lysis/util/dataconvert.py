@@ -1,3 +1,4 @@
+from curses import raw
 import warnings
 from dataclasses import asdict
 from enum import Flag, auto, unique
@@ -17,7 +18,7 @@ from .dataspec import (
     check_dataset_spec,
     tags,
 )
-from .edge_grid import generate_fortran_neighborhood_structure
+from .edge_grid import generate_fortran_neighborhood_structure, from_fortran_edge_index
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -160,17 +161,27 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     return out_data
 
 
+#Unsure if the intention is for me to build an H5 File/structure from scratch here or if there is a H5 file somewhere in the DataCollectionType that I should be using
+
+
 def convert_fiber_degrade_time(
-    data: DataCollectionType,
-) -> DataSetType:
+    input_data: DataCollectionType,       #Is this DataCollectionType going to contain an H5 file, a file path, the Fortran data, the fortran data file path, or the number of simulations we need to iterate through?    
+) -> DataSetType:                   #Depending on this, we may need to pass more into the function header. If data can be a numpy array, a list of numpy arrays, or another object, what should I expect as the input?
+                  #Using macro simulations key in order to get the number of simulations we need to iterate through
+    output_data = []
+    for i in range (0 , input_data["params"]["macro_params"]["macro_simulations"]):
+        output_data[i] = np.empty(input_data.shape, dtype= dataspec["v2.0.0"]["macroscale_out"].data["fiber_degrade_time"].dtype)  #Creating an empty numpy array of the correct shape and dtype
+        output_data[i][["Simulation Time Elapsed", "Fiber New Degrade Time"]] = input_data["f_deg_list"][i][["Simulation Time Elapsed", "Fiber New Degrade Time"]]
+        output_data[i][["Grid Location Row", "Grid Location Rank"]] = [from_fortran_edge_index(idx-1, input_data["params"]["macro_params"]["rows"], input_data["f_deg_list"][i]["params"]["macro_params"]["cols"]) for idx in input_data["Grid Location Index"]]
+    
     """
     TODO: Function from cell 9 of H5-File-Builder.ipynb
     _summary_
 
     :param data: a dict of data in fortran format
     :type data: DataCollectionType
-    :return: A numpy array, or a list of numpy arrays in HDF5 format
-    """
+    :return: A numpy array, or a list of numpy arrays in dataspec 2.00 format    
+    """                                                                
     pass
 
 
