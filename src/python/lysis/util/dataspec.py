@@ -28,7 +28,6 @@ UnitParamsType = NewType(
 DataSetType = Union[np.ndarray | list[np.ndarray] | BaseParamsType]
 DataCollectionType = NewType("DataCollectionType", dict[str, DataSetType])
 
-# Does the DataSetSpec class below tell me that I will have the following attributes for each instance of a DataSetType? 
 
 @dataclass(frozen=True)
 class DataSetSpec:
@@ -326,7 +325,7 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
                     dtype=np.float64,
                 ),
-                "fiber_degrade_time": DataSetSpec(                                              #Done
+                "fiber_degrade_time": DataSetSpec(  # Done
                     data_location="macro_data/sim_{sim:02}/fiber_degrade_time",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
                     dtype=np.dtype(
@@ -338,7 +337,7 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
                         ]
                     ),
                 ),
-                "tpa_bind_events": DataSetSpec(                                             #Still need to do
+                "tpa_bind_events": DataSetSpec(  # Still need to do
                     data_location="macro_data/sim_{sim:02}/tpa_bind_events",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
                     dtype=np.dtype(
@@ -357,14 +356,14 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
                         ]
                     ),
                 ),
-                "tpa_location_snapshot": DataSetSpec(                                       #Still need to do
+                "tpa_location_snapshot": DataSetSpec(  # Still need to do
                     data_location="macro_data/sim_{sim:02}/tpa_location_snapshot",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
                     dtype=np.int32,
                     shape=(-1, 2, -1),
                 ),
                 "tpa_transit_time": DataSetSpec(
-                    data_location="macro_data/sim_{sim:02}/tpa_transit_time",               #Still need to do
+                    data_location="macro_data/sim_{sim:02}/tpa_transit_time",  # Still need to do
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
                     dtype=np.float64,
                 ),

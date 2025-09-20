@@ -1,5 +1,6 @@
-from curses import raw
+import functools
 import warnings
+
 from dataclasses import asdict
 from enum import Flag, auto, unique
 from typing import Any, AnyStr, List, Mapping, Union, Callable
@@ -18,7 +19,10 @@ from .dataspec import (
     check_dataset_spec,
     tags,
 )
-from .edge_grid import generate_fortran_neighborhood_structure, from_fortran_edge_index
+from .edge_grid import (
+    generate_fortran_neighborhood_structure,
+    from_fortran_edge_index_array,
+)
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -161,28 +165,39 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     return out_data
 
 
-#Unsure if the intention is for me to build an H5 File/structure from scratch here or if there is a H5 file somewhere in the DataCollectionType that I should be using
-
-
 def convert_fiber_degrade_time(
-    input_data: DataCollectionType,       #Is this DataCollectionType going to contain an H5 file, a file path, the Fortran data, the fortran data file path, or the number of simulations we need to iterate through?    
-) -> DataSetType:                   #Depending on this, we may need to pass more into the function header. If data can be a numpy array, a list of numpy arrays, or another object, what should I expect as the input?
-                  #Using macro simulations key in order to get the number of simulations we need to iterate through
-    output_data = []
-    for i in range (0 , input_data["params"]["macro_params"]["macro_simulations"]):
-        output_data[i] = np.empty(input_data.shape, dtype= dataspec["v2.0.0"]["macroscale_out"].data["fiber_degrade_time"].dtype)  #Creating an empty numpy array of the correct shape and dtype
-        output_data[i][["Simulation Time Elapsed", "Fiber New Degrade Time"]] = input_data["f_deg_list"][i][["Simulation Time Elapsed", "Fiber New Degrade Time"]]
-        output_data[i][["Grid Location Row", "Grid Location Rank"]] = [from_fortran_edge_index(idx-1, input_data["params"]["macro_params"]["rows"], input_data["f_deg_list"][i]["params"]["macro_params"]["cols"]) for idx in input_data["Grid Location Index"]]
-    
+    input_data: DataCollectionType, input_spec: str, output_spec: str
+) -> DataSetType:
     """
     TODO: Function from cell 9 of H5-File-Builder.ipynb
     _summary_
 
     :param data: a dict of data in fortran format
     :type data: DataCollectionType
-    :return: A numpy array, or a list of numpy arrays in dataspec 2.00 format    
-    """                                                                
-    pass
+    :return: A numpy array, or a list of numpy arrays in `output_spec` format
+    """
+    # TODO: Check if simulations_combined = True
+    output_data = []
+    for data in input_data["f_deg_list"]:
+        output_data.append(
+            np.empty(
+                data.shape,
+                dtype=dataspec["v2.0.0"]["macroscale_out"]
+                .data["fiber_degrade_time"]
+                .dtype,
+            )
+        )
+        output_data[-1][["Simulation Time Elapsed", "Fiber New Degrade Time"]] = data[
+            ["Simulation Time Elapsed", "Fiber New Degrade Time"]
+        ]
+        locations = from_fortran_edge_index_array(
+            data["Grid Location Index"] - 1,
+            input_data["params"]["macro_params"]["rows"],
+            input_data["params"]["macro_params"]["cols"],
+        )
+        output_data[-1]["Grid Location Row"] = locations[:, 0]
+        output_data[-1]["Grid Location Rank"] = locations[:, 1]
+    return output_data
 
 
 # TODO Do the same thing with the tpa_bind_events from cell 10 of H5-File-Builder.ipynb
@@ -211,7 +226,9 @@ data_converters: dict[
         "tpa_leaving_time": lambda data: data["tPA_time"],
         "tpa_unbound_by_pli": lambda data: data["tPAPLiunbd"],
         "tpa_unbound_kinetic": lambda data: data["tPAunbind"],
-        "fiber_degrade_time": convert_fiber_degrade_time,
+        "fiber_degrade_time": functools.partial(
+            convert_fiber_degrade_time, input_spec="v1.99.0", output_spec="v2.0.0"
+        ),
     },
 }
 
@@ -238,22 +255,28 @@ def convert_data(
             except KeyError as e:
                 warnings.warn(f"Missing data for {dataset_needed}")
                 continue
-            try:
-                out_data[dataset_needed] = out.astype(
-                    collection.data[dataset_needed].dtype,
-                    casting="same_kind",
-                )
-            except TypeError as e:
-                dt = np.dtype(collection.data[dataset_needed].dtype)
-                match dt.kind:
-                    case "u":
-                        out_data[dataset_needed] = safe_np_int_conversion(out, dtype=dt)
-                    case "b":
-                        out_data[dataset_needed] = safe_np_bool_conversion(out)
-                    case "f":
-                        # TODO: Create a function that does the same thing as the safe_np_int_conversion, but for floats.
-                        raise NotImplementedError("Not implemented yet")
-                    case _:
-                        raise e
-
+            if collection.simulations_combined:
+                out = [out]
+            out_data[dataset_needed] = []
+            for data_table in out:
+                try:
+                    output_table = data_table.astype(
+                        collection.data[dataset_needed].dtype,
+                        casting="same_kind",
+                    )
+                except TypeError as e:
+                    dt = np.dtype(collection.data[dataset_needed].dtype)
+                    match dt.kind:
+                        case "u":
+                            output_table = safe_np_int_conversion(data_table, dtype=dt)
+                        case "b":
+                            output_table = safe_np_bool_conversion(data_table)
+                        case "f":
+                            # TODO: Create a function that does the same thing as the safe_np_int_conversion, but for floats.
+                            raise NotImplementedError("Not implemented yet")
+                        case _:
+                            raise e
+                out_data[dataset_needed].append(output_table)
+            if collection.simulations_combined:
+                out_data[dataset_needed] = out_data[dataset_needed][0]
     return out_data
