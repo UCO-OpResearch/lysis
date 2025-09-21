@@ -33,7 +33,7 @@ mkdir -p data/$MACRO_RUN_CODE/$SIM
 make
 
 # Produce the input files the Macroscale 
-FRAC_FORCED = $(doc/usage/micro_to_macro.py \
+FRAC_FORCED=$(doc/usage/micro_to_macro.py \
     --run_code $MACRO_RUN_CODE/$SIM \
     --in_code $MICRO_FILE_CODE \
     --out_code $MACRO_RUN_CODE \
