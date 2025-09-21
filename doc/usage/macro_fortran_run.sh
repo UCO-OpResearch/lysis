@@ -20,7 +20,7 @@ module load SciPy-bundle/2023.07-gfbf-2023a
 SIM=$(printf "%02d" ${SLURM_ARRAY_TASK_ID})
 # Replace these values MAKE SURE THERE ARE NO SPACES
 LYSIS_ROOT=
-MICRO_RUN_CODE=
+MICRO_FILE_CODE=
 MACRO_RUN_CODE= 
 
 # Macroscale grid size
@@ -29,16 +29,16 @@ F=
 
 ### Run
 cd $LYSIS_ROOT
-mkdir -p data/$RUN_CODE
+mkdir -p data/$MACRO_RUN_CODE/$SIM
 make
 
 # Produce the input files the Macroscale 
-doc/usage/micro_to_macro.py \
+FRAC_FORCED = $(doc/usage/micro_to_macro.py \
     --run_code $MACRO_RUN_CODE/$SIM \
     --in_code $MICRO_FILE_CODE \
     --out_code $MACRO_RUN_CODE \
     -N $N \
-    -F $F
+    -F $F)
 
 # Put parameters here on their own lines between --outFileCode and > data
 # The format should be --param_name param_value \
@@ -48,5 +48,6 @@ bin/macro_diffuse_into_and_along__external \
     --outFileCode $MACRO_RUN_CODE \
     --N $N \
     --F $F \
+    --frac_forced $FRAC_FORCED \
     > data/$MACRO_RUN_CODE/$SIM/macro__$MACRO_RUN_CODE.txt
 

@@ -286,6 +286,12 @@ fiber_degraded = np.fromfile(
 sim_final_time = np.fromfile(
     os.path.join("data", args.in_code, f"lysis{args.in_code}.dat")
 )
+tpa_unbound_by_pli = np.fromfile(
+    os.path.join("data", args.in_code, f"tPAPLiunbd{args.in_code}.dat"), dtype=np.int32
+).astype(bool)
+tpa_unbound_kinetic = np.fromfile(
+    os.path.join("data", args.in_code, f"tPAunbind{args.in_code}.dat"), dtype=np.int32
+).astype(bool)
 
 
 # Get the number of microscale runs and set the dimensions of the bins so that we get 100 bins
@@ -326,3 +332,9 @@ lenlysisvect = lysismat.argmax(axis=0) + 1
 np.savetxt(
     os.path.join("data", args.run_code, f"lenlysisvect{args.in_code}.dat"), lenlysisvect
 )
+
+# Calculate and print "frac_forced_unbind"
+frac_forced_unbind = np.count_nonzero(tpa_unbound_by_pli) / (
+    np.count_nonzero(tpa_unbound_by_pli) + np.count_nonzero(tpa_unbound_kinetic)
+)
+print(frac_forced_unbind)
