@@ -5,9 +5,10 @@ import os
 
 import numpy as np
 
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("run_code", type=str)
+    parser.add_argument("--run_code", type=str)
     parser.add_argument(
         "--in_code",
         type=str,
@@ -21,18 +22,21 @@ def parse_arguments():
         help="The code to add to all output filenames (should include any leading underscores, but NOT the file extension).",
     )
     parser.add_argument(
-        "-F", "--rows",
+        "-F",
+        "--rows",
         type=int,
         default="",
-        help="The number of rows in the macroscale simulation EdgeGrid. This should include any non-fiber rows."
+        help="The number of rows in the macroscale simulation EdgeGrid. This should include any non-fiber rows.",
     )
     parser.add_argument(
-        "-N", "--cols",
+        "-N",
+        "--cols",
         type=int,
         default="",
-        help="The number of nodes in one row of the macroscale simulation EdgeGrid."
+        help="The number of nodes in one row of the macroscale simulation EdgeGrid.",
     )
     return parser.parse_args()
+
 
 class Neighbors:
     def __init__(self):
@@ -58,6 +62,7 @@ def full_row(rows: int, nodes_in_row: int) -> int:
     """
     return 3 * nodes_in_row - 1
 
+
 def xz_row(rows: int, nodes_in_row: int) -> int:
     """
     Calculates the number of x- and z-edges in a row of the edge grid
@@ -71,6 +76,7 @@ def xz_row(rows: int, nodes_in_row: int) -> int:
     """
     return 2 * nodes_in_row - 1
 
+
 def total_edges(rows: int, nodes_in_row: int) -> int:
     """
     Calculates the total number of edges in an edge grid
@@ -82,9 +88,8 @@ def total_edges(rows: int, nodes_in_row: int) -> int:
     :return: The total number of edges in an edge grid
     :rtype: int
     """
-    return full_row(rows, nodes_in_row) * (rows - 1) + xz_row(
-        rows, nodes_in_row
-    )
+    return full_row(rows, nodes_in_row) * (rows - 1) + xz_row(rows, nodes_in_row)
+
 
 def from_fortran_edge_index_array(
     index_array: np.ndarray, rows: int, nodes_in_row: int
@@ -266,16 +271,21 @@ args = parse_arguments()
 
 # Create neighborhood structure and save to file
 fort_neighbors = generate_fortran_neighborhood_structure(args.rows, args.cols) + 1
-fort_neighbors.tofile(os.path.join("data", args.run_code, "neighbors.dat"), sep=os.linesep)
+fort_neighbors.tofile(
+    os.path.join("data", args.run_code, "neighbors.dat"), sep=os.linesep
+)
 
 # Read in microscale data
-tpa_leaving_time = np.fromfile(os.path.join("data", args.in_code, f"tPA_time{args.in_code}.dat"))
+tpa_leaving_time = np.fromfile(
+    os.path.join("data", args.in_code, f"tPA_time{args.in_code}.dat")
+)
 fiber_degraded = np.fromfile(
-    os.path.join("data", args.in_code, f"lyscomplete{args.in_code}.dat"), 
+    os.path.join("data", args.in_code, f"lyscomplete{args.in_code}.dat"),
     dtype=np.int32,
 ).astype(bool)
-sim_final_time = np.fromfile(os.path.join("data", args.in_code, f"lysis{args.in_code}.dat"))
-
+sim_final_time = np.fromfile(
+    os.path.join("data", args.in_code, f"lysis{args.in_code}.dat")
+)
 
 
 # Get the number of microscale runs and set the dimensions of the bins so that we get 100 bins
@@ -303,11 +313,16 @@ sim_final_time[~fiber_degraded] = 6000
 # Then sort the rows (bins) individually by lysis time.
 # Finally, transpose the matrix so that the bins are arranged in columns.
 lysismat = np.stack(
-    [np.sort(sim_final_time[indices[i * set_size : (i + 1) * set_size]]) for i in range(100)]
+    [
+        np.sort(sim_final_time[indices[i * set_size : (i + 1) * set_size]])
+        for i in range(100)
+    ]
 ).T
 np.savetxt(os.path.join("data", args.run_code, f"lysismat{args.in_code}.dat"), lysismat)
 
 # Find the location of the first '6000' entry in each column of the ``binned_fiber_degrade_time`` matrix
 # Then convert to 1-indexing.
-lenlysisvect = lysismat.argmax(axis=0)+1
-np.savetxt(os.path.join("data", args.run_code, f"lenlysisvect{args.in_code}.dat"), lenlysisvect)
+lenlysisvect = lysismat.argmax(axis=0) + 1
+np.savetxt(
+    os.path.join("data", args.run_code, f"lenlysisvect{args.in_code}.dat"), lenlysisvect
+)

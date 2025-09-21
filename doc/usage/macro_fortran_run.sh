@@ -9,7 +9,7 @@
 # 1. Fill out the folders in Setup
 # 2. Add arguments at bottom of this file
 # 3. Run this job
-# 4. Examine micro_rates__###.out and micro__XXXXXXX.txt
+# 4. Examine macro__###.out and macro__XXXXXXX.txt
 
 ### Load Modules
 module purge
@@ -34,9 +34,9 @@ make
 
 # Produce the input files the Macroscale 
 doc/usage/micro_to_macro.py \
-    --runCode $MACRO_RUN_CODE/$SIM \
-    --inFileCode $MICRO_FILE_CODE \
-    --outFileCode $MACRO_RUN_CODE \
+    --run_code $MACRO_RUN_CODE/$SIM \
+    --in_code $MICRO_FILE_CODE \
+    --out_code $MACRO_RUN_CODE \
     -N $N \
     -F $F
 
