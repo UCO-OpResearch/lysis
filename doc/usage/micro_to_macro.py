@@ -277,20 +277,20 @@ fort_neighbors.tofile(
 
 # Read in microscale data
 tpa_leaving_time = np.fromfile(
-    os.path.join("data", args.in_code, f"tPA_time{args.in_code}.dat")
+    os.path.join("data", args.in_code, f"tPA_time_{args.in_code}.dat")
 )
 fiber_degraded = np.fromfile(
-    os.path.join("data", args.in_code, f"lyscomplete{args.in_code}.dat"),
+    os.path.join("data", args.in_code, f"lyscomplete_{args.in_code}.dat"),
     dtype=np.int32,
 ).astype(bool)
 sim_final_time = np.fromfile(
-    os.path.join("data", args.in_code, f"lysis{args.in_code}.dat")
+    os.path.join("data", args.in_code, f"lysis_{args.in_code}.dat")
 )
 tpa_unbound_by_pli = np.fromfile(
-    os.path.join("data", args.in_code, f"tPAPLiunbd{args.in_code}.dat"), dtype=np.int32
+    os.path.join("data", args.in_code, f"tPAPLiunbd_{args.in_code}.dat"), dtype=np.int32
 ).astype(bool)
 tpa_unbound_kinetic = np.fromfile(
-    os.path.join("data", args.in_code, f"tPAunbind{args.in_code}.dat"), dtype=np.int32
+    os.path.join("data", args.in_code, f"tPAunbind_{args.in_code}.dat"), dtype=np.int32
 ).astype(bool)
 
 
