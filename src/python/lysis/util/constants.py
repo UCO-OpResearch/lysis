@@ -12,6 +12,8 @@ __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
+# A Pint unit registry for use across the entire project.
+# Any additional units should be added here.
 ureg = UnitRegistry()
 Q_ = ureg.Quantity
 
@@ -37,10 +39,12 @@ default_filenames = {
     "save_time": "tsave",  # Fortran: tsave
 }
 
-## Molecular constants
-
 
 class Const:
+    """
+    A class to hold constants that need to be referred to throughout the project.
+    This is really nothing more than a fancy dict and could 
+    """
     def __init__(self):
         self.BOUND = BoundaryDirection
         self.BOUND_COND = BoundaryCondition
@@ -51,12 +55,22 @@ class Const:
 
 
 class Neighbors:
+    """
+    Contains constants needed to calculate neighboring edges in an EdgeGrid
+    """
     def __init__(self):
+        # The changes that need to be made to the 2-D co-ordinates to obtain a neighbor.
+        # For example, to obtain the first neighbor of an x-edge, 
+        # you decrease the x co-ordinate by one and decrease the y co-ordinate by 2.
+        # See the documentation for the EdgeGrid.neighbor method for more details
         self.X = ((-1, -1, 0, 0, 0, 0, 0, 0), (-2, 1, -2, 1, -1, -1, 2, 2))
         self.Y = ((0, 0, 1, 1, 0, 1, 0, 1), (1, 1, 1, 1, -1, -1, 2, 2))
         self.Z = ((-1, -1, 0, 0, 0, 0, 0, 0), (-1, -1, -1, -1, -2, -2, 1, 1))
+        # The additional changes that need to be made to the 2-D co-ordinates when at a boundary.
+        # The top/bottom deltas need to be added to the y co-ordinate
         self.TOP_REFL = (0, 0, -1, -1, 0, 0, 0, 0)
         self.BOTTOM_REFL = (1, 1, 0, 0, 0, 0, 0, 0)
+        # The left/right deltas need to be added to the x co-ordinate
         self.LEFT_REFL = (0, 0, 0, 0, 3, 3, 0, 0)
         self.RIGHT_REFL = (0, 0, 0, 0, 0, 0, -3, -3)
 
