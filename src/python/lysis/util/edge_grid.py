@@ -90,7 +90,9 @@ class EdgeGrid(object):
             )
 
         self.ranks = 3 * self.nodes_in_row - 1
+        """int: The number of fibers in one row of this grid."""
         self.fiber_rows = self.total_rows - self.empty_rows
+        """int: The nunber of rows of the grid that contain actual fibers."""
         self.fiber_status = initial_fiber_status * np.ones(
             (self.total_rows, self.ranks), dtype=np.double
         )
@@ -102,6 +104,9 @@ class EdgeGrid(object):
                     located along edge [60, 25].
 
                     Supports two-dimensional slicing."""
+        # Set the status of empty rows to zero. 
+        # That is, the "fiber" here "degraded" at time zero 
+        # (since it never actually existed in the first place).
         self.fiber_status[: self.empty_rows] = 0
 
     def _is_valid_index(self, i: int, j: int) -> str | None:
@@ -290,70 +295,111 @@ class EdgeGrid(object):
         return np.uint32(neighbor_i), np.uint32(neighbor_j)
 
     @staticmethod
-    def generate_neighborhood_structure(run: Run):
-        # edge_grid = EdgeGrid(run)
-        # neighbor_i = np.empty((edge_grid.total_rows, edge_grid.ranks, 8), dtype=np.short)
-        # neighbor_j = np.empty((edge_grid.total_rows, edge_grid.ranks, 8), dtype=np.short)
-        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.ranks, 8):
-        #     if i == edge_grid.total_rows-1 and j % 3 == 0:
-        #         neighbor_i[i, j, k] = 0
-        #         neighbor_j[i, j, k] = 0
-        #     else:
-        #         n_i, n_j = edge_grid.neighbor(i, j, k)
-        #         neighbor_i[i, j, k] = n_i
-        #         neighbor_j[i, j, k] = n_j
-        # return neighbor_i, neighbor_j
+    def generate_neighborhood_structure(run: Run) -> np.ndarray[np.ushort]:
+        """
+        Generates a list of all neighbors of all edges. 
+        For the purposes of this structure, a 1-D index is used for both input and output 
+        Note that this is NOT the same as the Fortran 1-D index, 
+        but is instead a flattened form of the Python 2-D index.
 
-        # edge_grid = EdgeGrid(run)
-        # neighbors = np.empty((edge_grid.total_rows, edge_grid.ranks, 8, 2), dtype=np.short)
-        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.ranks, 8):
-        #     if i == edge_grid.total_rows - 1 and j % 3 == 0:
-        #         neighbors[i, j, k, :] = [-1, -1]
-        #     else:
-        #         neighbors[i, j, k, :] = edge_grid.neighbor(i, j, k)
-        # return neighbors
-
+        :param run: The Run that this edge grid will be used for.
+        :type run: Run
+        :return: A two-dimensional array, one row per edge in the grid,
+            with eight entries per row, corresponding to the eight neighbors
+            of each edge. 
+            Note that there can be duplicates in each row due to boundary conditions
+        :rtype: np.ndarray[np.ushort]
+        """
+        # We humans would rather interact with the edge grid in 2-D co-ordinates, 
+        # but it is faster to work with a 1-D array, 
+        # so we use the NumPy function ravel_multi_index to do that for us.
+        # We use functools.partial to pre-fill the grid dimensions
         edge_lookup = partial(
             np.ravel_multi_index,
             dims=(run.macro_params.rows, run.macro_params.full_row),
         )
+        # Initialize the EdgeGrid for the given parameters
         edge_grid = EdgeGrid(run)
+        # Initialize an empty array to contain the neighbor indices
         neighbors = np.empty(
             (run.macro_params.rows * run.macro_params.full_row, 8), dtype=np.ushort
         )
+        # Loop over all edges in the grid and their eight neighbors.
         for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.ranks, 8):
+            # If the edge is one of the non-existant vertical edges on the top row
             if i == edge_grid.total_rows - 1 and j % 3 == 0:
+                # Set its neighbors to itself
                 neighbors[
                     edge_lookup((i, j)),
                     k,
-                ] = -1
+                ] = edge_lookup((i, j))
             else:
+                # Else determine the neighbor from the EdgeGrid and convert it's index.
                 neighbors[
                     edge_lookup((i, j)),
                     k,
                 ] = edge_lookup(tuple(edge_grid.neighbor(i, j, k)))
+        # Return the completed array
         return neighbors
 
     @staticmethod
-    def generate_fortran_neighborhood_structure(run: Run):
+    def generate_fortran_neighborhood_structure(run: Run) -> np.ndarray[int]:
+        """
+        Generates a list of all neighbors of all edges for use with the Fortran Macroscale code.
+        Please note the following,
+            - The starting locations (array rows) are listed in the same order in this array as in the one generated and used in the Fortran code.
+            - The starting locations (array rows) are NOT listed in the same order as in the array generated by the generate_neighborhood_structure method and used by the Python MacroscaleRun class.
+            - The ending locations (array row entries) are listed in the same order in each row as they would be in the Fortran code.
+            - The ending locations (array row entries) are NOT listed in the same order as in the array generated by the generate_neighborhood_structure method and used by the Python MacroscaleRun class.
+            - The ending locations (array row entries) ARE returned in 0-indexed form. Before passing this array to the Fortran code, you MUST add 1 to all entries.
+
+        :param run: The Run that this edge grid will be used for.
+        :type run: Run
+        :return: A two-dimensional array, one row per edge in the grid,
+            with eight entries per row, corresponding to the eight neighbors
+            of each edge. 
+            Note that there can be duplicates in each row due to boundary conditions
+        :rtype: np.ndarray[int]
+        """
+        # Create the EdgeGrid object for this run
         edge_grid = EdgeGrid(run)
+        # Initialize an empty array
         fort_neighbors = np.empty((run.macro_params.total_edges, 8), dtype="int")
+        # Loop over all of the edges in the grid
         for f in range(run.macro_params.total_edges):
+            # Identify the co-ordinates of the 2-D grid corresponding to this Fortran index
             i, j = from_fortran_edge_index(
                 f, run.macro_params.rows, run.macro_params.cols
             )
+            # Loop over the edge's neighbors
             for k in range(8):
                 neighbor_i, neighbor_j = edge_grid.neighbor(i, j, k)
+                # Convert the neighbor's 2-D index back to the 1-D Fortran index
                 fort_neighbors[f, k] = to_fortran_edge_index(
                     neighbor_i, neighbor_j, run.macro_params.rows, run.macro_params.cols
                 )
+        # Sort the idices by row (which is how they appear in Fortran) and return
         return np.sort(fort_neighbors)
 
     @staticmethod
-    def get_spatial_coordinates(i: int, j: int):
+    def get_spatial_coordinates(i: int, j: int) -> Tuple[int, int, int]:
+        """
+        Calculate the location of the center of an edge in the node-grid underlying the EdgeGrid
+
+        :param i: The row of the EdgeGrid in which this edge appears
+        :type i: int
+        :param j: The rank of the edge in its row of the EdgeGrid
+        :type j: int
+        :return: A tuple, describing the x, y, and z co-ordinates of the center of the edge
+        :rtype: Tuple[int, int, int]
+        
+        """
+        # TODO: Adapt for non-square lattices
+        # Identify which node forms the first end of the edge
         x = j // 3
         y = i
         z = 0
+        # Move half a step in the direction of the edge.
         match j % 3:
             case 0:
                 y += 0.5
@@ -361,28 +407,51 @@ class EdgeGrid(object):
                 z += 0.5
             case 2:
                 x += 0.5
+        # Return the tuple of co-ordinates
         return x, y, z
 
     @staticmethod
     def get_distance(
         run: Run, a: Tuple[int, int], b: Tuple[int, int], metric: str = "euclidian"
     ) -> Quantity:
+        """
+        Calculate the distance between the centers of two edges on an EdgeGrid. 
+        The distance returned will be a Pint Quantity which includes appropriate units.
+
+        :param run: The Run that this edge grid will be used for.
+        :type run: Run
+        :param a: The 2-D index of the first edge
+        :type a: Tuple[int, int]
+        :param b: The 2-D index of the second edge
+        :type b: Tuple[int, int]
+        :param metric: The metric being used to calculate the distance, defaults to "euclidian".
+            Options are:
+                - "euclidian": :math:`\sqrt{(x_1-x_2)^2+(y_1-y_2)^2+(z_1-z_2)^2}`
+                - "manhattan": :math:`\lvert x_1-x_2\rvert+\lvert y_1-y_2\rvert+\lvert z_1-z_2\rvert`
+                - "taxicab": :math:`\lvert x_1-x_2\rvert+\lvert y_1-y_2\rvert+\lvert z_1-z_2\rvert`
+                - "2d_euclidian": :math:`\sqrt{(x_1-x_2)^2+(y_1-y_2)^2}`
+        :type metric: str, optional
+        :raises AttributeError: If the metric passed is not among those implemented.
+        :return: A Pint Quantity object containing the distance between the centers of the two edges.
+        :rtype: Quantity
+        """
+        # Get the location of the centers of the two edges
+        a_coord = EdgeGrid.get_spatial_coordinates(*a)
+        b_coord = EdgeGrid.get_spatial_coordinates(*b)
         if metric == "euclidian":
-            a_coord = EdgeGrid.get_spatial_coordinates(*a)
-            b_coord = EdgeGrid.get_spatial_coordinates(*b)
+            # Sum the square differences of all three co-ordinates
             squares = sum((a_coord[k] - b_coord[k]) ** 2 for k in range(3))
-            # return run.macro_params.grid_node_distance * squares**0.5
+            # Square-root the sum, multiply by the pore size, and return
             return run.macro_params.pore_size * squares**0.5
         elif metric in ["manhattan", "taxicab"]:
-            a_coord = EdgeGrid.get_spatial_coordinates(*a)
-            b_coord = EdgeGrid.get_spatial_coordinates(*b)
+            # Sum the absolute differences of all three co-ordinates
             sides = sum(abs(a_coord[k] - b_coord[k]) for k in range(3))
+            # Multiply by the pore size and return
             return run.macro_params.pore_size * sides
         if metric == "2d_euclidian":
-            a_coord = EdgeGrid.get_spatial_coordinates(*a)
-            b_coord = EdgeGrid.get_spatial_coordinates(*b)
+            # Sum the square differences of just the x and y co-ordinates
             squares = sum((a_coord[k] - b_coord[k]) ** 2 for k in range(2))
-            # return run.macro_params.grid_node_distance * squares**0.5
+            # Square-root the sum, multiply by the pore size, and return
             return run.macro_params.pore_size * squares**0.5
         else:
             raise AttributeError(f"{metric} metric not implemented yet.")
@@ -399,6 +468,7 @@ class EdgeGrid(object):
         :return: The number of edges in a full row of the edge grid
         :rtype: int
         """
+        # Three edges for each node except the last one, which has no x-edge
         return 3 * nodes_in_row - 1
 
     @staticmethod
@@ -413,6 +483,7 @@ class EdgeGrid(object):
         :return: The number of x- and z-edges in a row of the edge grid
         :rtype: int
         """
+        # Two edges for each node except the last one, which has no x-edge
         return 2 * nodes_in_row - 1
 
     @staticmethod
@@ -427,6 +498,7 @@ class EdgeGrid(object):
         :return: The total number of edges in an edge grid
         :rtype: int
         """
+        # Each row has a full set of edges, except the top row which has no y-edges
         return EdgeGrid.full_row(rows, nodes_in_row) * (rows - 1) + EdgeGrid.xz_row(
             rows, nodes_in_row
         )

@@ -16,40 +16,69 @@ from .util import (
 
 
 class MacroscaleSim:
-    def __init__(self, run: Run, instance: int = None, seed: int = None):
+    """
+    The main class for the macroscale simulation. 
+    This class sets up the simulation from the data provided and executes the simulation itself.
+    """
+    def __init__(self, run: Run):
+        """
+        Defines a macroscale simulation.
+
+        :param run: The Run that this macroscale simulation is a part of. 
+            The Run object will contain the parameters for the simulation.
+        :type run: Run
+        """
         self.run = run
+        # Check that the run has macro parameters
         assert self.run.macro_params is not None
 
+        # Initialize logger
         self.logger = logging.getLogger(__name__)
         self.logger.debug(f"Initializing MacroscaleSim")
-        if seed is None:
-            seed = run.macro_params.macro_seed
-        if run.macro_params.duplicate_fortran:
-            self.rng = KissRandomGenerator(seed)
-        else:
-            self.rng = np.random.default_rng(seed=abs(seed))
 
+        # Initialize pseudorandom number generator
+        if run.macro_params.duplicate_fortran:
+            # If we are copying the Fortran code step-by-step, 
+            # we want to use the same RNG which is the KISS C code
+            self.rng = KissRandomGenerator(run.macro_params.macro_seed)
+        else:
+            # Else we use NumPy's default RNG which is the Mersenne Twister
+            self.rng = np.random.default_rng(seed=abs(run.macro_params.macro_seed))
+
+        # Initialize the Binding Time Factory which will generate random binding times for the simulation
+        # We use the factory to generate these times in batches, giving us faster amortized run times
         self.binding_time_factory = self._BindingTimeFactory(self.run, self.rng)
 
+        # We humans would rather interact with the edge grid in 2-D co-ordinates, 
+        # but it is faster to work with a 1-D array, 
+        # so we use the NumPy function ravel_multi_index to do that for us.
+        # We use functools.partial to pre-fill the grid dimensions
         self.edge_lookup = partial(
             np.ravel_multi_index,
             dims=(run.macro_params.rows, run.macro_params.full_row),
         )
 
+        # Initialize the status of all fibers to intact and never degrading.
+        # This is achieved by setting all degrade times to infinity
         self.fiber_status = np.full(
             self.run.macro_params.rows * self.run.macro_params.full_row,
             float("inf"),
-            dtype=np.float_,
+            dtype=np.float64,
         )
+        # Determine the co-ordinates of true fibers verses empty spaces (if any)
+        # Start by initializing all edges to true
         self.real_fiber = np.full(
             self.run.macro_params.rows * self.run.macro_params.full_row,
             True,
             dtype=np.bool_,
         )
+        # Find the empty edges. 
+        # These are the first few rows of edges when the tPA starts external to the clot
         for i, j in np.ndindex(
             self.run.macro_params.empty_rows, self.run.macro_params.full_row
         ):
             self.real_fiber[self.edge_lookup((i, j))] = False
+        # Find the non-existant veritical edges on the top row
         for j in range(run.macro_params.cols):
             self.real_fiber[
                 self.edge_lookup(
@@ -59,36 +88,20 @@ class MacroscaleSim:
                     )
                 )
             ] = False
+        # Set the fiber status for the non-fiber edges.
+        # This is achieved by setting all degrade times to zero.
+        # That is the equivalent of the fiber fully degrading at the start time
+        # of the simulation
         self.fiber_status[~self.real_fiber] = 0
 
+        # Precalculate the neighbors of all edges. 
+        # This is done once at the start of the simulation and generates significant
+        # run-time savings.
         self.logger.debug(f"Precalculating neighbors.")
-        self.neighbors = EdgeGrid.generate_neighborhood_structure(run)
-
         if run.macro_params.duplicate_fortran:
-            perm = np.array(
-                [
-                    from_fortran_edge_index(
-                        k, run.macro_params.rows, run.macro_params.cols
-                    )
-                    for k in range(run.macro_params.total_edges)
-                ]
-            )
-            perm = np.ravel_multi_index(
-                (perm[:, 0], perm[:, 1]),
-                dims=(run.macro_params.rows, run.macro_params.full_row),
-            )
-            inv_perm = []
-            for k in range(run.macro_params.rows * run.macro_params.full_row):
-                p = np.argwhere(perm == k)
-                if p.size > 0:
-                    inv_perm.append(p[0, 0])
-                else:
-                    inv_perm.append(-1)
-            inv_perm = np.array(inv_perm)
-            sort = np.argsort(inv_perm[self.neighbors[perm]], axis=1)
-            self.neighbors[perm] = np.take_along_axis(
-                self.neighbors[perm], sort, axis=1
-            )
+            self.neighbors = EdgeGrid.generate_fortran_neighborhood_structure(run)
+        else:
+            self.neighbors = EdgeGrid.generate_neighborhood_structure(run)
 
         self.logger.info(f"Placing molecules on empty edges.")
         if run.macro_params.duplicate_fortran:
@@ -137,16 +150,16 @@ class MacroscaleSim:
 
         self.bound = np.full(run.macro_params.total_molecules, False, dtype=np.bool_)
         self.waiting_time = np.full(
-            run.macro_params.total_molecules, 0, dtype=np.float_
+            run.macro_params.total_molecules, 0, dtype=np.float64
         )
         self.binding_time = np.full(
-            run.macro_params.total_molecules, float("inf"), dtype=np.float_
+            run.macro_params.total_molecules, float("inf"), dtype=np.float64
         )
         self.unbound_by_degradation = np.full(
             run.macro_params.total_molecules, 0, dtype=np.bool_
         )
         self.time_to_reach_back_row = np.full(
-            run.macro_params.total_molecules, float("inf"), dtype=np.float_
+            run.macro_params.total_molecules, float("inf"), dtype=np.float64
         )
         self.reached_back_row = np.full(
             run.macro_params.total_molecules, False, dtype=np.bool_
@@ -171,7 +184,7 @@ class MacroscaleSim:
                 self.run.macro_params.number_of_saves,
                 self.run.macro_params.rows * self.run.macro_params.full_row,
             ),
-            dtype=np.float_,
+            dtype=np.float64,
         )
         self.run.data.molecule_location = np.empty(
             (
@@ -189,7 +202,7 @@ class MacroscaleSim:
         )
         self.run.data.save_time = np.empty(
             (self.run.macro_params.number_of_saves,),
-            dtype=np.float_,
+            dtype=np.float64,
         )
 
         self.logger.debug(f"Initialization complete.")
@@ -610,7 +623,7 @@ class MacroscaleSim:
 
             if self.run.macro_params.duplicate_fortran:
                 self.random_numbers = np.empty(
-                    (8, self.run.macro_params.total_molecules), np.float_
+                    (8, self.run.macro_params.total_molecules), np.float64
                 )
                 for i in range(8):
                     self.random_numbers[i] = self.rng.random(

@@ -47,7 +47,7 @@ def exec(run: lysis.util.Run, timestamp: AnyStr):
 
 
 def main():
-    run = lysis.util.Run(r"../../data", run_code="2023-04-15-1803")
+    run = lysis.util.Run(r"../../data", run_code="2026-01-25-1000")
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     os.makedirs(os.path.join(run.os_path, "log"), exist_ok=True)
     logfile = os.path.join(run.os_path, "log", "lysis-py-" + timestamp + ".log")
