@@ -1,3 +1,212 @@
+"""NumPy-based macroscale simulation of tPA-mediated fibrin clot lysis.
+
+This module implements the macroscale component of the multi-scale clot lysis
+simulation. It models the diffusion of tissue plasminogen activator (tPA) molecules
+through a fibrin network and their binding to and degradation of individual fibers.
+
+The macroscale simulation operates on a rectilinear edge grid where each edge
+represents a fibrin fiber. tPA molecules perform a random walk through the grid,
+binding to fibers, causing degradation, and unbinding according to statistics
+derived from microscale simulations.
+
+Simulation Algorithm
+--------------------
+
+The simulation follows these steps each timestep:
+
+1. **Unbinding**: Molecules bound to degraded fibers or whose binding time expired
+   are unbound. Forced unbinds impose a waiting period with restricted movement.
+
+2. **Movement decision**: Each unbound molecule has a probability of moving. Those
+   that move perform a random walk to one of 8 neighboring edges.
+
+3. **Binding decision**: Molecules at intact fibers may bind based on their binding
+   time and fiber status.
+
+4. **Conflict resolution**: When both binding and movement are scheduled, probability
+   favors binding if the molecule is overdue to bind.
+
+5. **Fiber degradation**: Bound molecules may cause their fiber to degrade based on
+   lysis times from microscale data.
+
+6. **Data collection**: Periodic snapshots of fiber and molecule state are saved.
+
+The simulation terminates early if all fibers degrade or runs until the configured
+end time.
+
+Operational Modes
+-----------------
+
+The simulation supports two modes:
+
+**Native NumPy mode** (default):
+    - Optimized for performance using NumPy's Mersenne Twister RNG
+    - Generates random numbers on-demand as needed
+    - Vectorized operations for maximum speed
+    - Recommended for production simulations
+
+**Fortran duplication mode** (``duplicate_fortran=True``):
+    - Replicates the original Fortran implementation exactly
+    - Uses KISS RNG for identical random number sequences
+    - Pre-generates all random numbers per timestep in Fortran order
+    - Used for validation and comparison with legacy code
+
+Key Features
+------------
+
+- **Vectorization**: Extensive use of NumPy array operations for performance
+- **Pre-computed neighbors**: EdgeGrid neighbor structure calculated once at startup
+- **Batch binding time generation**: _BindingTimeFactory amortizes RNG costs
+- **Microscale integration**: Uses binding/unbinding/lysis statistics from microscale
+- **Restricted movement**: Molecules unbound by degradation temporarily restricted
+- **Progress tracking**: Monitors degradation progress and molecule migration
+
+Main Classes
+------------
+
+**MacroscaleSim**:
+    The primary simulation class. Initializes the grid, places molecules, and
+    executes the main simulation loop. Contains all state arrays (fiber_status,
+    molecule locations, binding states) and simulation logic.
+
+**_BindingTimeFactory** (nested):
+    Factory class for efficient generation of binding times. Pre-generates large
+    batches of binding times and serves them on demand, dramatically improving
+    performance over generating times individually.
+
+Molecule States
+---------------
+
+Molecules can be in one of several states:
+
+- **Unbound**: Free to move via random walk, may bind to intact fibers
+- **Bound**: Attached to a fiber, cannot move, may cause lysis
+- **Macro-unbound**: Forcibly unbound by fiber degradation, restricted movement
+- **Micro-unbound**: Forcibly unbound during natural unbinding, restricted movement
+
+Restricted movement means the molecule can only move to neighboring edges that
+have already degraded, or remain in place.
+
+Data Storage
+------------
+
+The simulation stores periodic snapshots of:
+
+- ``degradation_state``: Degradation time for each fiber (infinity if intact)
+- ``molecule_location``: 1D grid index of each molecule
+- ``molecule_state``: Boolean binding state of each molecule
+- ``save_time``: Simulation time corresponding to each snapshot
+
+Snapshots are taken at regular intervals and saved to disk at simulation end.
+
+Performance Considerations
+--------------------------
+
+The simulation is optimized for large-scale problems:
+
+- Neighbor structure pre-computation: O(1) lookups vs O(1) calculations per timestep
+- Vectorized operations: Process all molecules simultaneously when possible
+- Batch RNG: Generate binding times in large batches (1M+ at a time)
+- In-place operations: Minimize memory allocations during time-stepping
+
+For a 100x100 grid with 10,000 molecules over 1M timesteps, expect:
+- ~1-2 hours runtime (native mode, modern CPU)
+- ~2-3 GB RAM usage
+- Linear scaling with molecule count and timestep count
+
+Example Usage
+-------------
+
+Basic simulation setup::
+
+    >>> from lysis.util import Run
+    >>> from lysis.np_macroscale import MacroscaleSim
+    >>>
+    >>> # Create run with parameters
+    >>> run = Run(...)
+    >>> run.macro_params.rows = 100
+    >>> run.macro_params.cols = 100
+    >>> run.macro_params.total_molecules = 10000
+    >>> run.macro_params.total_time_steps = 1000000
+    >>>
+    >>> # Initialize and run simulation
+    >>> sim = MacroscaleSim(run)
+    >>> sim.go()
+    >>>
+    >>> # Results are stored in run.data
+    >>> print(f"Final degradation: {sim.fiber_status}")
+
+Fortran compatibility mode for validation::
+
+    >>> run.macro_params.duplicate_fortran = True
+    >>> run.macro_params.macro_seed = 12345
+    >>> sim = MacroscaleSim(run)
+    >>> sim.go()  # Will exactly match Fortran output
+
+Access saved data::
+
+    >>> # Data is saved to disk after simulation
+    >>> degradation = run.data.degradation_state
+    >>> locations = run.data.molecule_location
+    >>> states = run.data.molecule_state
+    >>> times = run.data.save_time
+
+Algorithm Details
+-----------------
+
+**Binding time calculation**:
+    Binding times are drawn from an exponential distribution:
+    t_bind = -ln(X) / (rate * sites) - dt/2
+    where X ~ Uniform(0,1), rate is the binding rate, and sites is the number
+    of binding sites per fiber.
+
+**Unbinding time calculation**:
+    Unbinding times are drawn from microscale simulation data. A random uniform
+    value selects a bin [0, 100], and linear interpolation provides the
+    unbinding time within that bin.
+
+**Lysis time calculation**:
+    Lysis times (when bound molecules cause fiber degradation) are also drawn
+    from microscale data, indexed by the unbinding time bin. Not all bindings
+    result in lysis.
+
+**Conflict resolution**:
+    When both binding and movement are scheduled in the same timestep, the
+    probability of binding increases linearly with how overdue the binding is:
+    P(bind) = (t_current - t_bind) / dt
+
+Limitations and Assumptions
+----------------------------
+
+- Assumes well-mixed system at the microscale (binding/unbinding rates uniform)
+- Molecules do not interact with each other (independent random walks)
+- Fibers degrade instantly and completely (no partial degradation)
+- Boundary conditions are reflecting or periodic (no molecule creation/destruction)
+- Grid is rectilinear (not truly hexagonal, though edge structure mimics it)
+
+See Also
+--------
+
+- ``util.edge_grid``: Rectilinear grid structure and neighbor calculations
+- ``util.parameters``: MacroParameters configuration class
+- ``util.run``: Run container for parameters and data
+
+References
+----------
+
+.. [1] Bannish, B.E., et al. (Year). "Multi-scale modeling of fibrin clot lysis."
+   (Add appropriate reference when available)
+
+Notes
+-----
+
+The simulation can terminate early if all fibers degrade before the configured
+end time. Check ``sim.last_degrade_time`` for the actual termination time.
+
+Progress is logged every 100K timesteps, showing degradation percentage and
+molecules reaching the back row.
+"""
+
 import logging
 import os
 from functools import partial

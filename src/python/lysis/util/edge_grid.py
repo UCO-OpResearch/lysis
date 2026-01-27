@@ -1,3 +1,106 @@
+"""Rectilinear edge grid representation for fibrin network simulation.
+
+This module provides the EdgeGrid class and associated utilities for representing
+and manipulating a 3D rectilinear lattice of fibrin fiber edges. The grid is the
+fundamental spatial structure for the macroscale simulation of tPA-mediated clot
+lysis.
+
+Grid Structure
+--------------
+
+The EdgeGrid represents fibrin fibers as edges in a rectilinear lattice. Each edge
+connects two nodes and represents a single fiber segment. The grid is organized into
+rows (y-direction), with each row containing nodes in the x-direction, and depth
+in the z-direction.
+
+Three edge types exist, corresponding to the three spatial directions:
+
+- **x-edges**: Horizontal edges (left-right), rank j where j % 3 == 2
+- **y-edges**: Vertical edges (up-down), rank j where j % 3 == 0
+- **z-edges**: Depth edges (in-out), rank j where j % 3 == 1
+
+Each edge has 8 neighbors, pre-computed for efficient access during simulation.
+
+Indexing Systems
+----------------
+
+The module supports two indexing systems:
+
+1. **Python 2D indexing (i, j)**:
+   - i: row index (0 to rows-1)
+   - j: rank within row (0 to 3*cols-2)
+   - Used throughout Python implementation
+   - Edges ordered as triplets: (y-edge, z-edge, x-edge) for each node
+
+2. **Fortran 1D indexing**:
+   - Single index from 0 to total_edges-1
+   - Orders edges differently: all z/x edges in a row, then all y edges
+   - Used for compatibility with legacy Fortran code
+   - **Fortran uses 1-based indexing; add 1 to all indices for Fortran**
+
+Conversion functions (from_fortran_edge_index, to_fortran_edge_index) handle
+translation between these systems.
+
+Boundary Conditions
+-------------------
+
+The grid supports three boundary condition types (from constants.BoundaryCondition):
+
+- **REFLECTING**: Molecules bounce back at boundaries
+- **PERIODIC**: Molecules wrap around to opposite boundary
+- **CONTINUING**: Molecules pass through freely (open boundary)
+
+The top row has no y-edges due to the reflecting top boundary condition. Empty
+rows at the front represent space where tPA starts before entering the clot.
+
+Main Classes
+------------
+
+- **EdgeGrid**: Main class representing the grid, managing fiber status, and
+  computing neighbors with boundary conditions
+
+Utility Functions
+-----------------
+
+- **from_fortran_edge_index**: Convert Fortran 1D index to Python (i,j)
+- **to_fortran_edge_index**: Convert Python (i,j) to Fortran 1D index
+- **from_fortran_edge_index_array**: Vectorized Fortran to Python conversion
+- **to_fortran_edge_index_array**: Vectorized Python to Fortran conversion
+- **generate_fortran_neighborhood_structure**: Generate neighbor lookup table for Fortran
+
+Example Usage
+-------------
+
+Create an edge grid for a simulation::
+
+    >>> from lysis.util import Run
+    >>> run = Run(...)  # Configure simulation parameters
+    >>> grid = EdgeGrid(run)
+    >>>
+    >>> # Get the 3rd neighbor of edge at (10, 5)
+    >>> neighbor_i, neighbor_j = grid.neighbor(10, 5, 3)
+    >>>
+    >>> # Check fiber status
+    >>> if grid.fiber_status[10, 5] > current_time:
+    >>>     print("Fiber is intact")
+
+Pre-compute all neighbors for fast lookup::
+
+    >>> neighbors = EdgeGrid.generate_neighborhood_structure(run)
+    >>> # neighbors[edge_idx, k] gives the 1D index of the k-th neighbor
+
+Convert between indexing systems::
+
+    >>> fortran_idx = to_fortran_edge_index(10, 5, rows=100, nodes_in_row=50)
+    >>> i, j = from_fortran_edge_index(fortran_idx, rows=100, nodes_in_row=50)
+
+See Also
+--------
+
+- constants.py: Neighbor offset constants and boundary condition enumerations
+- np_macroscale.py: Macroscale simulation that uses EdgeGrid
+"""
+
 from functools import partial
 from typing import Tuple
 
@@ -61,17 +164,18 @@ class EdgeGrid(object):
         boundary_conditions: Tuple[BoundaryCondition, BoundaryCondition] | None = None,
         initial_fiber_status: float = float("inf"),
     ):
-        """Initializes an EdgeGrid.
+        """Initialize an EdgeGrid for the rectilinear lattice simulation.
 
-        Args:
-            run: The run that this EdgeGrid is a part of.
-                 This structure passes many of the parameters used to set up
-                 the run.
-            boundary_conditions: A tuple that maps boundaries from CONST.BOUND
-                to conditions from CONST.BOUND_COND.
-            initial_fiber_status: The initial value of the fiber status.
-                This should generally be an infinite degrade time
-                (degrade time > simulation length).
+        :param run: The Run object containing simulation parameters. This provides
+            the grid dimensions (rows, cols) and empty row configuration.
+        :type run: Run
+        :param boundary_conditions: Tuple of (top/bottom, left/right) boundary
+            conditions. If None, defaults to reflecting boundaries on all sides.
+        :type boundary_conditions: Tuple[BoundaryCondition, BoundaryCondition], optional
+        :param initial_fiber_status: Initial degradation time for all fibers.
+            Should be infinity (or greater than simulation length) to indicate
+            intact fibers. Empty rows are automatically set to 0.
+        :type initial_fiber_status: float, optional
         """
 
         self.total_rows = run.macro_params.rows
@@ -110,14 +214,19 @@ class EdgeGrid(object):
         self.fiber_status[: self.empty_rows] = 0
 
     def _is_valid_index(self, i: int, j: int) -> str | None:
-        """Checks if [i, j] is a valid index for this EdgeGrid.
+        """Check if [i, j] is a valid index for this EdgeGrid.
 
-        Args:
-            i: The index of the edge's row.
-            j: The index of the edge's rank within its row.
+        Validates that the given coordinates refer to an existing edge in the grid,
+        accounting for grid boundaries and the fact that y-edges don't exist on
+        the top row with reflecting boundary conditions.
 
-        Returns: None if the index is valid, or an error message (as a string)
-            if the index is invalid.
+        :param i: The row index of the edge (0 to total_rows-1)
+        :type i: int
+        :param j: The rank (column) index of the edge within its row (0 to ranks-1)
+        :type j: int
+        :return: None if the index is valid, otherwise an error message string
+            describing why the index is invalid
+        :rtype: str or None
         """
         # Edges are 0 through self.ranks-1
         if j < 0 or j > self.ranks - 1:
@@ -147,18 +256,17 @@ class EdgeGrid(object):
         return None
 
     def neighbor(self, i: int, j: int, k: int) -> Tuple[int, int]:
-        """Finds the co-ordinates of a neighboring edge.
+        """Find the coordinates of a neighboring edge.
 
-        Given the co-ordinates of an edge, and the index (in the neighborhood)
-        of a neighboring edge, this method will find the co-ordinates of the
-        requested neighbor, taking appropriate boundary conditions into account.
+        Given the coordinates of an edge and the index of a neighbor in its
+        neighborhood, returns the coordinates of that neighbor, accounting for
+        boundary conditions.
 
-        Neighborhoods each contain eight other edges and are constructed as in
-        the following examples (without boundary conditions). Note that in each
-        situation, the generating edge is labelled "(i,j)" and the members of
-        the neighborhood are labelled "k:(i+p,j+q)" where (p,q) is the vector
-        from the generating edge to the neighbor.
-        ::
+        Each edge has 8 neighbors arranged according to its type (x, y, or z edge).
+        The edge type is determined by j % 3: 0=y-edge, 1=z-edge, 2=x-edge.
+
+        Neighborhoods are labeled with k:(i+p,j+q) where (p,q) is the offset
+        from the generating edge to the k-th neighbor::
 
             * x-edge neighborhood::
 
@@ -210,14 +318,16 @@ class EdgeGrid(object):
                 '                  0:(i, j-1)
                 '                  |
 
-        Args:
-            i: The row of the generating edge.
-            j: The rank of the generating edge within its row.
-            k: The index of the neighbor in the neighborhood (i.e., the (k+1)st
-                neighbor)
-
-        Returns: The pair of co-ordinates (in the EdgeGrid) of the requested
-            neighbor.
+        :param i: The row index of the generating edge (0 to total_rows-1)
+        :type i: int
+        :param j: The rank index of the generating edge within its row (0 to ranks-1)
+        :type j: int
+        :param k: The neighbor index in the neighborhood (0 to 7)
+        :type k: int
+        :return: The (row, rank) coordinates of the k-th neighbor
+        :rtype: Tuple[int, int]
+        :raises IndexError: If i, j, or k are out of bounds, or if (i,j) refers
+            to a non-existent edge
         """
         # Check that we are in-bounds
 
@@ -296,18 +406,25 @@ class EdgeGrid(object):
 
     @staticmethod
     def generate_neighborhood_structure(run: Run) -> np.ndarray[np.ushort]:
-        """
-        Generates a list of all neighbors of all edges. 
-        For the purposes of this structure, a 1-D index is used for both input and output 
-        Note that this is NOT the same as the Fortran 1-D index, 
-        but is instead a flattened form of the Python 2-D index.
+        """Generate a pre-computed neighbor lookup table for all edges.
 
-        :param run: The Run that this edge grid will be used for.
+        Creates a 2D array where each row contains the 1D indices of the 8 neighbors
+        for the corresponding edge. This pre-computation significantly accelerates
+        the macroscale simulation by eliminating repeated neighbor calculations.
+
+        The 1D indexing used here is the flattened Python 2D index
+        (via np.ravel_multi_index), NOT the Fortran 1D index. For Fortran
+        compatibility, use generate_fortran_neighborhood_structure() instead.
+
+        Boundary conditions are respected: edges at boundaries may have duplicate
+        neighbors in their list (e.g., reflecting boundaries cause the edge to
+        neighbor itself).
+
+        :param run: The Run object containing grid parameters (rows, cols, boundary conditions)
         :type run: Run
-        :return: A two-dimensional array, one row per edge in the grid,
-            with eight entries per row, corresponding to the eight neighbors
-            of each edge. 
-            Note that there can be duplicates in each row due to boundary conditions
+        :return: Array of shape (total_edges, 8) where result[edge_idx, k] is the
+            1D index of the k-th neighbor of edge_idx. Duplicates may appear due
+            to boundary conditions.
         :rtype: np.ndarray[np.ushort]
         """
         # We humans would rather interact with the edge grid in 2-D co-ordinates, 
@@ -344,22 +461,32 @@ class EdgeGrid(object):
 
     @staticmethod
     def generate_fortran_neighborhood_structure(run: Run) -> np.ndarray[int]:
-        """
-        Generates a list of all neighbors of all edges for use with the Fortran Macroscale code.
-        Please note the following,
-            - The starting locations (array rows) are listed in the same order in this array as in the one generated and used in the Fortran code.
-            - The starting locations (array rows) are NOT listed in the same order as in the array generated by the generate_neighborhood_structure method and used by the Python MacroscaleRun class.
-            - The ending locations (array row entries) are listed in the same order in each row as they would be in the Fortran code.
-            - The ending locations (array row entries) are NOT listed in the same order as in the array generated by the generate_neighborhood_structure method and used by the Python MacroscaleRun class.
-            - The ending locations (array row entries) ARE returned in 0-indexed form. Before passing this array to the Fortran code, you MUST add 1 to all entries.
+        """Generate neighbor lookup table compatible with Fortran Macro code.
 
-        :param run: The Run that this edge grid will be used for.
+        Creates a neighbor structure using Fortran's 1D indexing and ordering
+        conventions. This allows the Python code to generate input files for
+        the legacy Fortran implementation.
+
+        **Critical differences from generate_neighborhood_structure():**
+
+        - **Row ordering**: Edges ordered by Fortran 1D index (z/x edges first, then y edges per row)
+        - **Neighbor ordering**: Each row's neighbors sorted in ascending order (Fortran convention)
+        - **Indexing**: Returns 0-indexed values; **must add 1 before passing to Fortran**
+
+        The Python generate_neighborhood_structure() uses different ordering for both
+        rows and neighbors, making the two arrays incompatible despite containing the
+        same topological information.
+
+        :param run: The Run object containing grid parameters
         :type run: Run
-        :return: A two-dimensional array, one row per edge in the grid,
-            with eight entries per row, corresponding to the eight neighbors
-            of each edge. 
-            Note that there can be duplicates in each row due to boundary conditions
+        :return: Array of shape (total_edges, 8) where result[fortran_edge_idx, k] is
+            the 0-indexed Fortran 1D index of the k-th neighbor (in sorted order).
+            **Add 1 to all values before using in Fortran.**
         :rtype: np.ndarray[int]
+
+        Warning:
+            The returned indices are 0-based. Fortran uses 1-based indexing, so add 1
+            to all values before writing to files for Fortran consumption.
         """
         # Create the EdgeGrid object for this run
         edge_grid = EdgeGrid(run)
@@ -382,17 +509,28 @@ class EdgeGrid(object):
         return np.sort(fort_neighbors)
 
     @staticmethod
-    def get_spatial_coordinates(i: int, j: int) -> Tuple[int, int, int]:
-        """
-        Calculate the location of the center of an edge in the node-grid underlying the EdgeGrid
+    def get_spatial_coordinates(i: int, j: int) -> Tuple[float, float, float]:
+        """Calculate the spatial coordinates of an edge's center point.
 
-        :param i: The row of the EdgeGrid in which this edge appears
+        Returns the (x, y, z) coordinates of the center of an edge in the
+        rectilinear node grid underlying the EdgeGrid. Edges connect nodes, so
+        their centers are offset by 0.5 in the direction of the edge.
+
+        Edge types (determined by j % 3):
+        - j % 3 == 0: y-edge (vertical), centered at (x, y+0.5, z)
+        - j % 3 == 1: z-edge (depth), centered at (x, y, z+0.5)
+        - j % 3 == 2: x-edge (horizontal), centered at (x+0.5, y, z)
+
+        :param i: The row index of the edge in the EdgeGrid
         :type i: int
-        :param j: The rank of the edge in its row of the EdgeGrid
+        :param j: The rank index of the edge within its row
         :type j: int
-        :return: A tuple, describing the x, y, and z co-ordinates of the center of the edge
-        :rtype: Tuple[int, int, int]
-        
+        :return: The (x, y, z) coordinates of the edge's center in the node grid.
+            Coordinates are in node-spacing units (not physical units).
+        :rtype: Tuple[float, float, float]
+
+        Todo:
+            Adapt for non-square lattices (currently assumes cubic unit cells)
         """
         # TODO: Adapt for non-square lattices
         # Identify which node forms the first end of the edge
@@ -458,14 +596,18 @@ class EdgeGrid(object):
 
     @staticmethod
     def full_row(rows: int, nodes_in_row: int) -> int:
-        """
-        Calculates the number of edges in a full row of the edge grid
+        """Calculate the number of edges in a full row of the edge grid.
 
-        :param rows: The number of rows in the edge grid
+        A full row (not the top row) contains 3 edges per node, except the last
+        node which has no x-edge. This gives: 3 * nodes_in_row - 1 edges.
+
+        The top row has no y-edges and should use xz_row() instead.
+
+        :param rows: The number of rows in the edge grid (unused but kept for API consistency)
         :type rows: int
         :param nodes_in_row: The number of nodes in each row of the edge grid
         :type nodes_in_row: int
-        :return: The number of edges in a full row of the edge grid
+        :return: The number of edges in a full row: 3 * nodes_in_row - 1
         :rtype: int
         """
         # Three edges for each node except the last one, which has no x-edge
@@ -473,14 +615,19 @@ class EdgeGrid(object):
 
     @staticmethod
     def xz_row(rows: int, nodes_in_row: int) -> int:
-        """
-        Calculates the number of x- and z-edges in a row of the edge grid
+        """Calculate the number of x- and z-edges in a row (excluding y-edges).
 
-        :param rows: The number of rows in the edge grid
+        Each node contributes one x-edge and one z-edge, except the last node
+        which has no x-edge. This gives: 2 * nodes_in_row - 1 edges.
+
+        This is the edge count for the top row, which has no y-edges due to
+        the reflecting boundary condition.
+
+        :param rows: The number of rows in the edge grid (unused but kept for API consistency)
         :type rows: int
         :param nodes_in_row: The number of nodes in each row of the edge grid
         :type nodes_in_row: int
-        :return: The number of x- and z-edges in a row of the edge grid
+        :return: The number of x- and z-edges: 2 * nodes_in_row - 1
         :rtype: int
         """
         # Two edges for each node except the last one, which has no x-edge
@@ -488,14 +635,20 @@ class EdgeGrid(object):
 
     @staticmethod
     def total_edges(rows: int, nodes_in_row: int) -> int:
-        """
-        Calculates the total number of edges in an edge grid
+        """Calculate the total number of edges in the entire edge grid.
+
+        The total is computed as:
+        - (rows - 1) full rows, each with full_row(rows, nodes_in_row) edges
+        - Plus 1 top row with only x- and z-edges: xz_row(rows, nodes_in_row)
+
+        The top row has no y-edges due to the reflecting boundary condition
+        at the top of the grid.
 
         :param rows: The number of rows in the edge grid
         :type rows: int
         :param nodes_in_row: The number of nodes in each row of the edge grid
         :type nodes_in_row: int
-        :return: The total number of edges in an edge grid
+        :return: The total number of edges in the grid
         :rtype: int
         """
         # Each row has a full set of edges, except the top row which has no y-edges
@@ -505,18 +658,29 @@ class EdgeGrid(object):
 
 
 def generate_fortran_neighborhood_structure(rows: int, nodes_in_row: int) -> np.ndarray:
-    """
-    Generates the neighbor structure needed by the Fortran Macroscale code.
-    This is a (-1, 8) array with a row for each edge, ordered by their Fortran index.
-    Each row contains the 0-indexed, fortran (1-D) indices for the 8 neighbors of the edge.
-    Each row is sorted in increasing order for consistency with the Fortran code.
+    """Generate Fortran-compatible neighbor structure using vectorized operations.
+
+    This is an optimized, standalone version of EdgeGrid.generate_fortran_neighborhood_structure()
+    that uses vectorized NumPy operations for better performance. It produces the
+    same neighbor structure but doesn't require creating an EdgeGrid object.
+
+    Returns a 2D array where each row corresponds to an edge (ordered by Fortran 1D
+    index), and each row contains the 0-indexed Fortran 1D indices of that edge's
+    8 neighbors, sorted in ascending order.
+
+    **Important**: The returned indices are 0-based. Add 1 before using in Fortran code.
 
     :param rows: The number of rows in the edge grid
     :type rows: int
     :param nodes_in_row: The number of nodes in each row of the edge grid
     :type nodes_in_row: int
-    :return: A (-1, 8) NumPy array of dtype uint32
+    :return: Array of shape (total_edges, 8) where result[fortran_edge_idx, :] contains
+        the sorted 0-indexed Fortran 1D indices of the 8 neighbors. Add 1 for Fortran.
     :rtype: np.ndarray
+
+    Note:
+        This function is significantly faster than the EdgeGrid method version for
+        large grids due to vectorization, but produces identical results.
     """
     # Generate a list of all fortran-index edges and get the equivalent 2-d indeces
     edges = from_fortran_edge_index_array(
@@ -567,21 +731,22 @@ def generate_fortran_neighborhood_structure(rows: int, nodes_in_row: int) -> np.
 def from_fortran_edge_index(
     index: int, rows: int, nodes_in_row: int
 ) -> Tuple[int, int]:
-    """Converts a 1-dimensional index of an edge to its 2-dimensional index.
+    """Convert a 1-dimensional Fortran edge index to 2-dimensional (i, j) coordinates.
 
-    Converts from the index for an edge used in the "Macro" Fortran data
-    structures and data files into the (i, j) index used by this package.
+    Converts from the 1D index used in Fortran "Macro" data structures and files
+    to the (i, j) index used by this Python package.
 
-    **NOTE**: All indices in this method are zero-indexed.
-    They will need to be incremented by one if used in Fortran code.
+    .. note::
+        **All indices are zero-indexed.** Add 1 before using in Fortran code.
 
-    This method exists to aid with compatability with the Fortran "Macro" code
-    during the transition phase. It should be depreciated once the Python code
-    is complete.
+    This function aids compatibility with legacy Fortran code during the transition
+    phase and should be deprecated once Python implementation is complete.
 
-    For an example of the 2-dimensional index, see the DocString for the
-    EdgeGrid class. The 1-dimensional index arrangement for the same setup is
-    as follows::
+    The Fortran 1D indexing orders edges as: all z-edges and x-edges in row 0,
+    then all y-edges in row 0, then all z-edges and x-edges in row 1, etc.
+
+    For the 2D index layout, see EdgeGrid class docstring. The corresponding
+    1D index layout is::
 
         '        /           /           /           /           /
         '      42          44          46           48          50
@@ -608,12 +773,15 @@ def from_fortran_edge_index(
         '    /           /           /           /           /
         '   /           /           /           /           /
 
-    Args:
-        index: The index of an edge in the 1-dimensional system
-        rows: The number of rows in the grid
-        nodes_in_row: The number of nodes each row of the grid
-
-    Returns: The pair of co-ordinates for the edge in the 2-dimensional system.
+    :param index: The 0-indexed edge index in the Fortran 1D system
+    :type index: int
+    :param rows: The number of rows in the grid
+    :type rows: int
+    :param nodes_in_row: The number of nodes in each row of the grid
+    :type nodes_in_row: int
+    :return: The (row, rank) coordinates for the edge in the 2D system
+    :rtype: Tuple[int, int]
+    :raises IndexError: If index is out of bounds [0, total_edges-1]
     """
     # The number of edges in a full row: 3 of each per node, except the last
     # node which has no x-edge.
@@ -657,18 +825,25 @@ def from_fortran_edge_index(
 def from_fortran_edge_index_array(
     index_array: np.ndarray, rows: int, nodes_in_row: int
 ) -> np.ndarray:
-    """
-    Does the same as the from_fortran_edge_index() method, but with a whole numpy array at once.
+    """Convert array of Fortran 1D edge indices to 2D (i, j) coordinates (vectorized).
 
-    :param index_array: A (-1,) array of 0-indexed indices in the Fortran 1-D indexing system.
+    Vectorized version of from_fortran_edge_index() that operates on entire arrays
+    at once, providing significant performance improvements for bulk conversions.
+
+    Converts multiple Fortran 1D indices to their corresponding (row, rank) pairs
+    in the Python 2D indexing system.
+
+    :param index_array: 1D array of 0-indexed edge indices in the Fortran system.
+        Shape: (n_edges,)
     :type index_array: np.ndarray
     :param rows: The number of rows in the grid
     :type rows: int
-    :param nodes_in_row: The number of nodes each row of the grid
+    :param nodes_in_row: The number of nodes in each row of the grid
     :type nodes_in_row: int
-    :raises IndexError: Raised if any of the indices are out of bounds
-    :return: A (-1, 2) array with each row containing the indices of an edge in the 2-D ordering system
+    :return: 2D array where result[k, :] = (i, j) coordinates for index_array[k].
+        Shape: (n_edges, 2), dtype: uint32
     :rtype: np.ndarray
+    :raises IndexError: If any indices are out of bounds [0, total_edges-1]
     """
     # The number of edges in a full row: 3 of each per node, except the last
     # node which has no x-edge.
@@ -709,29 +884,32 @@ def from_fortran_edge_index_array(
 
 
 def to_fortran_edge_index(i: int, j: int, rows: int, nodes_in_row: int) -> int:
-    """Converts a 2-dimensional index of an edge to its 1-dimensional index.
+    """Convert 2-dimensional (i, j) coordinates to a 1-dimensional Fortran edge index.
 
-    Converts from the (i, j) index for an edge used by this package into the
-    index used in "Macro" Fortran data structures and data files.
+    Converts from the (i, j) index used by this Python package to the 1D index
+    used in Fortran "Macro" data structures and files.
 
-    **NOTE**: All indices in this method are zero-indexed.
-    They will need to be incremented by one if used in Fortran code.
+    .. note::
+        **All indices are zero-indexed.** Add 1 before using in Fortran code.
 
-    This method exists to aid with compatability with the Fortran "Macro" code
-    during the transition phase. It should be depreciated once the Python code
-    is complete.
+    This function aids compatibility with legacy Fortran code during the transition
+    phase and should be deprecated once Python implementation is complete.
 
-    For an example of the 2-dimensional index, see the DocString for the
-    EdgeGrid class. For a matching example of the 1-dimensional index, see the
-    DocString for the from_fortran_edge_index() method.
+    For the 2D index layout, see EdgeGrid class docstring. For the 1D layout,
+    see from_fortran_edge_index() docstring.
 
-    Args:
-        i: The index of the edge's row.
-        j: The index of the edge within its row.
-        rows: The number of rows in the grid.
-        nodes_in_row: The number of nodes in each row of the grid.
-
-    Returns: A zero-indexed address of the edge in the Fortran Macro structure.
+    :param i: The row index of the edge (0 to rows-1)
+    :type i: int
+    :param j: The rank index of the edge within its row (0 to full_row-1)
+    :type j: int
+    :param rows: The number of rows in the grid
+    :type rows: int
+    :param nodes_in_row: The number of nodes in each row of the grid
+    :type nodes_in_row: int
+    :return: The 0-indexed edge address in the Fortran Macro structure
+    :rtype: int
+    :raises IndexError: If i or j are out of bounds, or if (i,j) refers to a
+        y-edge on the top row (which doesn't exist)
     """
     # The number of edges in a full row: 3 of each per node, except the last
     # node which has no x-edge.
@@ -778,18 +956,26 @@ def to_fortran_edge_index(i: int, j: int, rows: int, nodes_in_row: int) -> int:
 def to_fortran_edge_index_array(
     index_array: np.ndarray, rows: int, nodes_in_row: int
 ) -> np.ndarray:
-    """
-    Does the same as the to_fortran_edge_index() method, but with a whole numpy array at once.
+    """Convert array of 2D (i, j) coordinates to Fortran 1D edge indices (vectorized).
 
-    :param index_array: A (-1, 2) array with each row containing the indices of an edge in the 2-D ordering system
+    Vectorized version of to_fortran_edge_index() that operates on entire arrays
+    at once, providing significant performance improvements for bulk conversions.
+
+    Converts multiple (row, rank) coordinate pairs from the Python 2D system to
+    their corresponding Fortran 1D indices.
+
+    :param index_array: 2D array where each row is (i, j) coordinates in Python system.
+        Shape: (n_edges, 2)
     :type index_array: np.ndarray
-    :param rows: The number of rows in the grid.
+    :param rows: The number of rows in the grid
     :type rows: int
-    :param nodes_in_row: The number of nodes in each row of the grid.
+    :param nodes_in_row: The number of nodes in each row of the grid
     :type nodes_in_row: int
-    :raises IndexError: Raised if any of the indices are out of bounds
-    :return: A (-1,) array of 0-indexed indices in the Fortran 1-D indexing system.
+    :return: 1D array of 0-indexed Fortran edge indices corresponding to input coordinates.
+        Shape: (n_edges,), dtype: uint32. Add 1 for Fortran code.
     :rtype: np.ndarray
+    :raises IndexError: If any coordinates are out of bounds or refer to non-existent
+        y-edges on the top row
     """
     # The number of edges in a full row: 3 of each per node, except the last
     # node which has no x-edge.
