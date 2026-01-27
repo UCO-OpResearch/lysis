@@ -1,18 +1,36 @@
-"""Minimal skeleton for using the Marsaglia KISS generator
+"""Python wrapper for the Marsaglia KISS random number generator.
 
-Wrapper for C module.
+This module provides a Python interface to the KISS (Keep It Simple Stupid)
+random number generator implemented in C. KISS is a combination of multiple
+simple generators that produces high-quality pseudo-random numbers with a
+very long period.
+
+The KISS generator combines:
+- A 3-shift-register generator (xorshift)
+- A multiply-with-carry generator
+- A congruential generator
+
+This implementation is used primarily for validation against legacy Fortran
+code that uses the same KISS algorithm.
 
 Example Usage:
 
-* Initialize
+Initialize with a seed::
+
     >>> kiss = KissRandomGenerator()
     >>> kiss.seed(123)
 
-* Generate random integer 0..(2^32)-1
+Generate random integer in range [0, 2^32-1]::
+
     >>> kiss.kiss32()
 
-* Generate random U[0,1]
+Generate random float in range [0, 1]::
+
     >>> kiss.random()
+
+Generate array of random floats::
+
+    >>> kiss.random(size=100)
 """
 
 import ctypes
@@ -32,18 +50,44 @@ __status__ = "Development"
 
 
 class KissRandomGenerator:
-    """A Pseudo-random Number Generator.
+    """Pseudo-random number generator using the KISS algorithm.
 
-    Wrapper class for kiss.so C module
+    This class wraps the KISS (Keep It Simple Stupid) random number generator
+    implemented in C (kiss.so shared library). It provides a numpy-compatible
+    interface for generating random numbers using the same algorithm as the
+    original Fortran implementation.
+
+    The KISS generator has excellent statistical properties and a period of
+    approximately 2^123, making it suitable for Monte Carlo simulations.
+
+    The interface mimics numpy.random.Generator to allow drop-in replacement
+    in code that needs to exactly replicate the Fortran KISS sequence.
+
+    Attributes:
+        state_type: ctypes array type for the 4-element generator state
+        urcw1: C function for generating single U(0,1) random numbers
+        vurcw1: C function for generating arrays of U(0,1) random numbers
+        mscw: C function for generating time-based seeds
+        kiss32: C function for generating 32-bit unsigned integers
+
+    Note:
+        The underlying C library (kiss.so) must be compiled and available in
+        the lib/ directory relative to this module.
     """
 
     def __init__(self, seed: int = None):
-        """Creates a new KISS random number generator object
+        """Initialize a new KISS random number generator.
 
-        If no seed is given, one is generated from the system clock.
+        Loads the kiss.so C library, imports all necessary C functions, sets up
+        the ctypes interfaces, and initializes the generator state with the
+        provided seed (or a time-based seed if none is provided).
 
-        Args:
-            seed: The seed for the RNG
+        :param seed: Initial seed for the RNG. If None, generates a seed from
+            the system clock. Must be in range [0, 2^32-1] (values outside this
+            range will be truncated when passed to C).
+        :type seed: int, optional
+        :raises OSError: If the kiss.so library cannot be found or loaded
+        :raises ctypes.CException: If C function signatures don't match expected types
         """
         # Determine the current path and find the kiss.so library
         path = os.path.dirname(__file__)
@@ -91,16 +135,28 @@ class KissRandomGenerator:
         self.seed(seed)
 
     def setstate(self, state: Tuple[int, int, int, int]):
-        """Sets the state of the Random Number Generator.
+        """Set the internal state of the random number generator.
 
-        Args:
-            state: A tuple of four integers.
+        This allows restoration of a previously saved generator state, enabling
+        reproducible random sequences. The state consists of four 32-bit unsigned
+        integers that encode the current position in the KISS sequence.
 
-                Note: While Python will accept any 64-bit integer
-                (-9,223,372,036,854,775,806 through 9,223,372,036,854,775,807),
-                these will be converted to unsigned 32-bit integers (0 through
-                4,294,967,295) when passed to the underlying C code with
-                unpredictable results.
+        :param state: A tuple of four integers representing the generator state.
+            Each integer should be in the range [0, 2^32-1]. Values outside this
+            range will be truncated to 32 bits with unpredictable results.
+        :type state: Tuple[int, int, int, int]
+
+        Warning:
+            Python accepts 64-bit integers (-9,223,372,036,854,775,808 through
+            9,223,372,036,854,775,807), but these will be converted to unsigned
+            32-bit integers (0 through 4,294,967,295) when passed to the C code.
+            Values outside the 32-bit range will produce undefined behavior.
+
+        Example:
+            >>> kiss = KissRandomGenerator(123)
+            >>> state = kiss.getstate()
+            >>> kiss.random()  # Generate some numbers
+            >>> kiss.setstate(state)  # Restore previous state
         """
         # Unpack the state tuple into a c-type array
         c_state = self.state_type(state[0], state[1], state[2], state[3])
@@ -108,16 +164,30 @@ class KissRandomGenerator:
         self.__set_kiss32(c_state)
 
     def seed(self, seed: int = None):
-        """Sets the seed for the Random Number Generator.
+        """Set the seed for the random number generator.
 
-        Args:
-            seed: The seed.
+        The seed determines the starting point of the random sequence. The same
+        seed will always produce the same sequence of random numbers, enabling
+        reproducible simulations.
 
-                Note: While Python will accept any 64-bit integer
-                (-9,223,372,036,854,775,806 through 9,223,372,036,854,775,807),
-                this will be converted to an unsigned 32-bit integer (0 through
-                4,294,967,295) when passed to the underlying C code with
-                unpredictable results.
+        Internally, the seed becomes the fourth element of the generator's state
+        vector. The other three state elements are preserved from the current state.
+
+        :param seed: The seed value. If None, generates a time-based seed using
+            the system clock. Should be in range [0, 2^32-1].
+        :type seed: int, optional
+
+        Warning:
+            Python accepts 64-bit integers (-9,223,372,036,854,775,808 through
+            9,223,372,036,854,775,807), but these will be converted to unsigned
+            32-bit integers (0 through 4,294,967,295) when passed to the C code.
+            Values outside the 32-bit range will produce undefined behavior.
+
+        Example:
+            >>> kiss1 = KissRandomGenerator(42)
+            >>> kiss2 = KissRandomGenerator(42)
+            >>> kiss1.random() == kiss2.random()  # Same seed, same sequence
+            True
         """
         # If no seed was given, generate one from the system clock
         if seed is None:
@@ -130,7 +200,22 @@ class KissRandomGenerator:
         self.setstate(state)
 
     def getstate(self) -> Tuple[int, int, int, int]:
-        """Returns the current state of the Random Number Generator."""
+        """Get the current internal state of the random number generator.
+
+        Returns the four 32-bit unsigned integers that represent the current
+        position in the KISS sequence. This state can be saved and later restored
+        using setstate() to resume generation from the same point.
+
+        :return: A tuple of four integers representing the generator state.
+            Each integer is in the range [0, 2^32-1].
+        :rtype: Tuple[int, int, int, int]
+
+        Example:
+            >>> kiss = KissRandomGenerator(123)
+            >>> state = kiss.getstate()
+            >>> print(state)
+            (123, 234567890, 345678901, 456789012)  # Example values
+        """
         # Define a C array to hold the state
         c_state = self.state_type(0, 0, 0, 0)
         # Send the C array to the module
@@ -142,9 +227,27 @@ class KissRandomGenerator:
         return c_state[0], c_state[1], c_state[2], c_state[3]
 
     def random(self, size: int = None) -> float | np.ndarray:
-        """Returns the next double-precision random number from the
-        pseudo-random number stream. This is distributed uniformly from zero
-        through one."""
+        """Generate random float(s) uniformly distributed in [0, 1).
+
+        If size is None, returns a single float. If size is specified, returns
+        a numpy array of the given size filled with random floats.
+
+        This method mimics numpy.random.Generator.random() for compatibility.
+
+        :param size: If None, return a single float. If an integer, return a
+            1D numpy array of that length.
+        :type size: int, optional
+        :return: A single random float in [0, 1) if size is None, otherwise a
+            numpy array of random floats.
+        :rtype: float or np.ndarray
+
+        Example:
+            >>> kiss = KissRandomGenerator(42)
+            >>> kiss.random()  # Single value
+            0.123456789
+            >>> kiss.random(5)  # Array of 5 values
+            array([0.234, 0.567, 0.890, 0.123, 0.456])
+        """
         if size is None:
             return self.urcw1()
         else:
@@ -157,6 +260,35 @@ class KissRandomGenerator:
     def integers(
         self, bottom: int, top: int = None, size: int = None
     ) -> int | np.ndarray:
+        """Generate random integer(s) in a specified range.
+
+        Returns random integers from the half-open interval [bottom, top). If
+        top is not specified, returns integers from [0, bottom).
+
+        This method mimics numpy.random.Generator.integers() for compatibility.
+
+        :param bottom: If top is None, this is the exclusive upper bound and the
+            lower bound is 0. If top is specified, this is the inclusive lower bound.
+        :type bottom: int
+        :param top: Exclusive upper bound. If None, bottom becomes the upper bound
+            and 0 becomes the lower bound.
+        :type top: int, optional
+        :param size: If None, return a single integer. If an integer, return a
+            1D numpy array of that length.
+        :type size: int, optional
+        :return: A single random integer if size is None, otherwise a numpy array
+            of random integers in the range [bottom, top).
+        :rtype: int or np.ndarray
+
+        Example:
+            >>> kiss = KissRandomGenerator(42)
+            >>> kiss.integers(10)  # Random int in [0, 10)
+            7
+            >>> kiss.integers(5, 15)  # Random int in [5, 15)
+            12
+            >>> kiss.integers(0, 10, size=5)  # Array of 5 random ints
+            array([3, 7, 2, 9, 1])
+        """
         if top is None:
             top = bottom
             bottom = 0
@@ -169,16 +301,46 @@ class KissRandomGenerator:
             return out
 
     def mscw(self) -> int:
-        """Returns a pseudo-random 32-bit unsigned integer
-        (i.e., [0..(2^32)-1]).
-        This is based on the system clock and NOT the current seed or state."""
+        """Generate a time-based pseudo-random 32-bit unsigned integer.
+
+        This function uses the system clock to generate a random seed value,
+        making it useful for initialization when reproducibility is not required.
+
+        Important: This function is INDEPENDENT of the generator's current state
+        and seed. It always uses the system clock, not the KISS sequence.
+
+        :return: A pseudo-random integer in the range [0, 2^32-1] based on the
+            current system time.
+        :rtype: int
+
+        Note:
+            This method stub is overwritten by the C library function during
+            __init__. The implementation here is never actually called.
+        """
         # This method will be overwritten by the one from the C library when
         # the class is initialized.
         pass
 
     def kiss32(self) -> int:
-        """Returns the next 32-bit unsigned integer from the pseudo-random
-        number stream. This is distributed uniformly from 0 through (2^32)-1."""
+        """Generate the next 32-bit unsigned integer from the KISS sequence.
+
+        This is the core KISS generator function that produces uniformly
+        distributed integers in the full 32-bit range. The random() method uses
+        this internally and converts the output to floats in [0, 1).
+
+        :return: The next random integer in the range [0, 2^32-1], uniformly
+            distributed.
+        :rtype: int
+
+        Note:
+            This method stub is overwritten by the C library function during
+            __init__. The implementation here is never actually called.
+
+        Example:
+            >>> kiss = KissRandomGenerator(42)
+            >>> kiss.kiss32()
+            3141592653  # Example value
+        """
         # This method will be overwritten by the one from the C library when
         # the class is initialized.
         pass
