@@ -1,3 +1,17 @@
+"""Utility functions for handling run data and parameters.
+
+This module provides utility functions for managing experimental run data,
+including formatting dictionaries into readable string representations.
+
+Example usage:
+    >>> from lysis.util.util import dict_to_formatted_str
+    >>> measurements = {'Hat': 'Large', 'Pants': {'Waist': 40, 'Inseam': 38}}
+    >>> print(dict_to_formatted_str(measurements))
+    Hat   : Large
+    Pants : Waist  : 40
+            Inseam : 38
+"""
+
 import os
 
 from typing import Any, AnyStr, Mapping
@@ -15,17 +29,19 @@ __status__ = "Development"
 def dict_to_formatted_str(d: Mapping[AnyStr, Any]) -> str:
     """Converts a dictionary into a formatted, JSON-like string.
 
-    Align keys and values, including the alignment of sub-dicts.
+    Aligns keys and values, including the alignment of sub-dictionaries.
 
-    e.g.,
+    Example:
         >>> measurements = {'Hat': 'Large', 'Pants': {'Waist': 40, 'Inseam': 38}}
         >>> dict_to_formatted_str(measurements)
         Hat   : Large
         Pants : Waist  : 40
                 Inseam : 38
 
-    Args:
-        d (dict): A dictionary with string-like keys.
+    :param d: A dictionary with string-like keys
+    :type d: dict
+    :return: A formatted string representation of the dictionary
+    :rtype: str
     """
     # Initialize the output string
     output = ""

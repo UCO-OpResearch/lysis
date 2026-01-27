@@ -1,16 +1,79 @@
+"""Parameter definitions for microscale and macroscale simulations.
+
+This module defines the parameter classes used throughout the lysis simulation
+package. It provides:
+
+- Base Parameters class with serialization and metadata extraction
+- MicroParameters: Configuration for microscale (fiber-level) simulation
+- MacroParameters: Configuration for macroscale (clot-level) simulation
+
+The parameter classes use frozen dataclasses to ensure immutability after
+initialization. Some parameters are independent (set by user), while others
+are dependent (calculated automatically in __post_init__).
+
+Parameter Metadata System
+--------------------------
+
+The module includes a regex-based system for extracting parameter metadata from
+docstrings. Each parameter can include special tags:
+
+- ``:Units: <unit_string>`` - Physical units for the parameter (parsed by units())
+- ``:Fortran: <fortran_name>`` - Equivalent Fortran variable name (parsed by fortran_names())
+
+These tags are parsed at runtime using regular expressions to build metadata
+dictionaries. **Do not modify the format of these tags** as it will break the
+parsing system.
+
+Example parameter docstring format::
+
+    fiber_radius: Quantity = Q_("72.7/2 nanometers")
+    \"\"\"The radius of each fiber in the model.
+
+    :Units: microns
+    :Fortran: radius\"\"\"
+
+Unit Handling
+-------------
+
+Parameters with physical units use Pint Quantity objects, which provide:
+- Automatic unit conversion and validation
+- Dimensional analysis
+- Human-readable representation
+
+The ureg (UnitRegistry) and Q_ (Quantity constructor) are imported from
+the constants module.
+
+Usage Example
+-------------
+
+Creating parameter sets::
+
+    >>> # Use default values
+    >>> micro = MicroParameters()
+    >>> # Override specific parameters
+    >>> micro_custom = MicroParameters(
+    ...     fiber_radius=Q_("50 nm"),
+    ...     micro_simulations=100000
+    ... )
+    >>> # Access parameter values
+    >>> micro_custom.fiber_radius
+    <Quantity(50, 'nanometer')>
+    >>> # Get Fortran equivalent names
+    >>> MicroParameters.fortran_names()['fiber_radius']
+    'radius'
+"""
+
 import inspect
 import logging
-import os
 import pkgutil
 import re
 import warnings
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
-from typing import Any, List, Mapping, Tuple, Union, Type, TypeVar
+from typing import List, Tuple, Type, TypeVar
 
 from pint import Quantity
 
-from .constants import default_filenames, ureg, Q_
+from .constants import ureg, Q_
 from .util import dict_to_formatted_str
 
 
@@ -36,18 +99,45 @@ __status__ = "Development"
 
 @dataclass(frozen=True)
 class Parameters:
+    """Base class for simulation parameter sets.
+
+    Provides common functionality for both MicroParameters and MacroParameters:
+    - String representation (__str__)
+    - Dictionary conversion (to_dict, to_basedict)
+    - Metadata extraction from docstrings (units, fortran_names)
+    - Deserialization from dictionaries (parse_from_basedict)
+
+    This class should not be instantiated directly. Use MicroParameters or
+    MacroParameters instead.
+
+    The frozen=True argument makes all instances immutable after creation,
+    ensuring parameter consistency throughout a simulation run.
+    """
+
     def __str__(self) -> str:
-        """Returns a human-readable, JSON-like string of all parameters."""
+        """Return a human-readable, JSON-like string representation of all parameters.
+
+        Converts the parameter dataclass to a formatted string suitable for
+        display or logging. Uses JSON-like formatting for readability.
+
+        :return: Formatted string representation of all parameters with their values
+        :rtype: str
+        """
         # Convert the internal parameters into one dictionary
         values = asdict(self)
         # Format the dictionary and return
         return dict_to_formatted_str(values)
 
     def to_basedict(self) -> dict[str, int | float | str]:
-        """
-        Outputs the contents of this micro parameter set to a dictionary with base value types
+        """Convert parameters to a dictionary with base Python types only.
 
-        :return: _description_
+        Converts all Quantity objects to their string representations (with units),
+        and passes through other values as-is. Nested dictionaries are skipped.
+        This is useful for serialization to JSON or other formats that don't
+        support custom objects.
+
+        :return: Dictionary mapping parameter names to base type values (int, float,
+            or string representation of Quantity with units)
         :rtype: dict[str, int | float | str]
         """
         # Get units
@@ -66,19 +156,41 @@ class Parameters:
         return output
 
     def to_dict(self) -> dict[str, int | float | str | Quantity]:
-        """
-        _summary_
+        """Convert parameters to a dictionary preserving all types.
 
-        :return: _description_
+        Returns a dictionary representation of the parameters with all original
+        types preserved, including Quantity objects. This is a thin wrapper around
+        dataclasses.asdict().
+
+        :return: Dictionary mapping parameter names to their values (may include
+            Quantity objects, strings, ints, floats, etc.)
         :rtype: dict[str, int | float | str | Quantity]
         """
         return asdict(self)
 
     @staticmethod
     def units():
-        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
-        that have units. The values in the dictionary are those units.
-        These values are parsed from the docstrings in this file.
+        """Extract physical units for all parameters via regex parsing of docstrings.
+
+        Parses this source file's docstrings to find all ``:Units:`` tags and
+        builds a dictionary mapping parameter names to their unit strings. Only
+        parameters with non-None units are included.
+
+        The regex pattern matches parameter field docstrings in the format::
+
+            parameter_name: type = value
+            \"\"\"Description.
+
+            :Units: unit_string
+            ...\"\"\"
+
+        :return: Dictionary mapping parameter names to unit strings (e.g.,
+            {'fiber_radius': 'microns', 'total_time': 'seconds'})
+        :rtype: dict[str, str]
+
+        Warning:
+            This method uses regex to parse source code. Do not modify the
+            format of ``:Units:`` tags in parameter docstrings.
         """
         # Get the text of this source code file
         text = pkgutil.get_data(__name__, "parameters.py")
@@ -108,10 +220,30 @@ class Parameters:
 
     @staticmethod
     def fortran_names():
-        """Returns a dictionary whose keys are the names of all parameters (both micro- and macroscale)
-        that have equivalents in Fortran. The values in the dictionary are the names of the equivalent
-        Fortran variable names.
-        These values are parsed from the docstrings in this file.
+        """Extract Fortran equivalent names for parameters via regex parsing of docstrings.
+
+        Parses this source file's docstrings to find all ``:Fortran:`` tags and
+        builds a dictionary mapping Python parameter names to their Fortran
+        equivalents. Only parameters with non-None Fortran names are included.
+
+        The regex pattern matches parameter field docstrings in the format::
+
+            parameter_name: type = value
+            \"\"\"Description.
+
+            :Fortran: fortran_name\"\"\"
+
+        Special suffixes in Fortran names:
+        - ``-1``: Indicates 0-based to 1-based index conversion needed
+        - Formula after ``=``: Optional Fortran expression for the parameter
+
+        :return: Dictionary mapping Python parameter names to Fortran variable
+            names (e.g., {'fiber_radius': 'radius', 'empty_rows': 'Ffree-1'})
+        :rtype: dict[str, str]
+
+        Warning:
+            This method uses regex to parse source code. Do not modify the
+            format of ``:Fortran:`` tags in parameter docstrings.
         """
         # Get the text of this source code file
         text = pkgutil.get_data(__name__, "parameters.py")
@@ -141,7 +273,14 @@ class Parameters:
 
     @classmethod
     def print_default_values(cls) -> str:
-        """Returns the default parameters for the model."""
+        """Return a formatted string of all default parameter values.
+
+        Creates a new instance of the parameter class using all default values,
+        then converts it to a human-readable string representation.
+
+        :return: Formatted string showing all default parameter values
+        :rtype: str
+        """
         # Create a new Parameters object with the default values
         default_params = cls()
         # Convert to a dict, then to a formatted string, and return
@@ -249,7 +388,10 @@ class MicroParameters(Parameters):
     # Yeromonahos, 2010 doi: 10.1016/j.bpj.2010.04.059
     protofibril_radius: Quantity = field(init=False)
     """The radius of a protofibril.
-    
+
+    Calculated as 2 × fibrinogen_radius (one protofibril = two fibrinogens).
+    This is a dependent parameter computed in __post_init__().
+
     :Units: microns
     :Fortran: None"""
 
@@ -304,15 +446,19 @@ class MicroParameters(Parameters):
     :Fortran: kdeg"""
 
     unbind_rate_PLG_intact: Quantity = field(init=False)
-    """The unbinding rate of PLG, :math:`k^\\text{off}_\\text{PLG}`, 
-    from intact fibrin.
+    """The unbinding rate of PLG, :math:`k^\\text{off}_\\text{PLG}`, from intact fibrin.
+
+    Calculated from dissociation constant and binding rate. This is a dependent
+    parameter computed in __post_init__().
 
     :Units: sec^-1
     :Fortran: kplgoff"""
 
     unbind_rate_PLG_nicked: Quantity = field(init=False)
-    """The unbinding rate of PLG, :math:`k^\\text{off}_\\text{PLG}`, 
-    from nicked fibrin.
+    """The unbinding rate of PLG, :math:`k^\\text{off}_\\text{PLG}`, from nicked fibrin.
+
+    Calculated from dissociation constant and binding rate. This is a dependent
+    parameter computed in __post_init__().
 
     :Units: sec^-1
     :Fortran: kplgoffnick"""
@@ -325,15 +471,19 @@ class MicroParameters(Parameters):
     :Fortran: kplioff"""
 
     unbind_rate_tPA_wPLG: Quantity = field(init=False)
-    """The unbinding rate of tPA, :math:`k^\\text{off}_\\text{tPA}`, 
-    from fibrin in the presence of PLG.
+    """The unbinding rate of tPA, :math:`k^\\text{off}_\\text{tPA}`, from fibrin in the presence of PLG.
+
+    Calculated from dissociation constant and binding rate. This is a dependent
+    parameter computed in __post_init__().
 
     :Units: sec^-1
     :Fortran: kaoff12"""
 
     unbind_rate_tPA_woPLG: Quantity = field(init=False)
-    """The unbinding rate of tPA, :math:`k^\\text{off}_\\text{tPA}`, 
-    from fibrin in the absence of PLG.
+    """The unbinding rate of tPA, :math:`k^\\text{off}_\\text{tPA}`, from fibrin in the absence of PLG.
+
+    Calculated from dissociation constant and binding rate. This is a dependent
+    parameter computed in __post_init__().
 
     :Units: sec^-1
     :Fortran: kaoff10"""
@@ -353,20 +503,30 @@ class MicroParameters(Parameters):
     :Fortran: kncat"""
 
     protein_per_fiber: Quantity = field(init=False)
-    """The fraction of protein in each fiber (by volume?)
-    
+    """The volume fraction of protein in each fiber.
+
+    Calculated from fiber geometry and protofibril packing. This is a dependent
+    parameter computed in __post_init__() using equations from Bannish et al. 2017.
+
     :Units: %
     :Fortran: None"""
 
     fibrin_conc_per_fiber: Quantity = field(init=False)
-    """The concentration of fibrin in each fiber
+    """The concentration of fibrin in each fiber.
+
+    Calculated from fiber geometry and Avogadro's constant. This is a dependent
+    parameter computed in __post_init__() using equations from Bannish et al. 2017.
 
     :Units: micromolar
     :Fortran: None"""
 
     binding_sites: Quantity = field(init=False)  # int = 427
-    """Concentration of binding sites.
-     
+    """Concentration of binding sites for tPA and plasminogen on each fiber.
+
+    Calculated from the number of doublets in the fiber lattice and the fibrin
+    concentration. This is a dependent parameter computed in __post_init__()
+    using equations from Bannish et al. 2017.
+
     :Units: micromolar
     :Fortran: bs"""
 
@@ -375,16 +535,21 @@ class MicroParameters(Parameters):
     #####################################
 
     nodes_in_micro_row: int = 7
-    """The number of protofibrils in one row of the lattice inside one
-    fiber.
-    
+    """The number of protofibrils in one row of the lattice within a fiber.
+
+    Determines the internal structure of each fiber in the microscale model.
+    The total number of protofibrils in a fiber cross-section is nodes_in_micro_row².
+
     :Units: None
     :Fortran: nodes"""
 
     snap_proportion: float = 2.0 / 3.0
-    """The proportion of doublets that need to be degraded before the
-    fiber snaps.
-    
+    """The critical degradation fraction at which a fiber breaks.
+
+    When this proportion of fibrinogen doublets in a fiber have been degraded,
+    the fiber is considered to have snapped (completely lysed). Default value
+    of 2/3 means the fiber breaks when 67% of doublets are degraded.
+
     :Units: None
     :Fortran: snap_proportion"""
 
@@ -409,18 +574,39 @@ class MicroParameters(Parameters):
     #####################################
 
     micro_version: str = "micro_rates"
-    """A string identifying which version of the Microscale model is being run."""
+    """A string identifying which version of the microscale model is being run.
+
+    Used for tracking and logging purposes to distinguish between different
+    microscale implementations or parameter sets."""
 
     log_lvl: int = logging.WARNING
-    """How much debugging information to write out to the console
+    """The logging level for console output.
+
+    Controls the verbosity of debugging and status information. Uses Python's
+    standard logging levels (DEBUG, INFO, WARNING, ERROR, CRITICAL).
 
     :Units: None
     :Fortran: None"""
 
     def __post_init__(self):
-        """This method calculates the dependent parameters once the
-        MicroParameters object is created. It is automatically called by the
-        DataClass.__init__()"""
+        """Calculate dependent parameters after initialization.
+
+        This method is automatically called by dataclass.__init__() after all
+        independent parameters are set. It computes derived values including:
+
+        - Protofibril radius (2 × fibrinogen radius)
+        - Unbinding rates from dissociation constants and binding rates
+        - Protein fraction per fiber (from geometric calculations)
+        - Fibrin concentration per fiber
+        - Binding site concentration
+
+        The method uses object.__setattr__() to set values because the dataclass
+        is frozen (immutable).
+
+        Note:
+            This method should never be called manually. It runs automatically
+            during object construction.
+        """
 
         # These names must be elements of the Run's DataStore
         object.__setattr__(
@@ -537,7 +723,11 @@ class MacroParameters(Parameters):
     """
 
     micro_params: MicroParameters
-    """The parameters for the microscale model that feeds this macroscale model."""
+    """The microscale parameters used to generate input data for this macroscale simulation.
+
+    The macroscale model requires microscale output (binding/unbinding statistics)
+    as input. This field holds the microscale parameter set that was used to
+    generate that input data."""
 
     #####################################
     # Physical Parameters
@@ -563,9 +753,12 @@ class MacroParameters(Parameters):
     :Fortran: frac_forced"""
 
     average_bound_time: Quantity = field(init=False)  #  = Q_("27.8 sec")
-    """This is the average time a tPA molecule stays bound to fibrin. 
-    For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
-    
+    """The average time a tPA molecule stays bound to fibrin.
+
+    Calculated as the reciprocal of the unbinding rate in the absence of PLG
+    (1 / unbind_rate_tPA_woPLG). This is a dependent parameter computed in
+    __post_init__().
+
     :Units: seconds
     :Fortran: avgwait = 1/kaoff10"""
 
@@ -588,73 +781,99 @@ class MacroParameters(Parameters):
     :Fortran: F"""
 
     fiber_rows: int = field(init=False)
-    """The number of rows containing fibrin
-    
+    """The number of rows containing fibrin.
+
+    Calculated as total rows minus empty rows. This is a dependent parameter
+    computed in __post_init__().
+
     :Units: None
     :Fortran: Fhat"""
 
     empty_rows: int = 29 - 1
     """The number of fibrin-free rows at the top of the grid.
-    
-    Equivalent to 'first_fiber_row', which is the 1st node in vertical 
-    direction containing fibers.
-    So if first_fiber_row = 10, then rows 0-9 have no fibers, there's one more 
-    row of fiber-free planar vertical edges, and then the row with index 
-    'first_fiber_row' (e.g. 11th) is a full row of fibers.
-    
-    
+
+    This represents the depth of the fibrin-free region where tPA molecules
+    enter the simulation domain. Equivalent to the 0-based index of the first
+    row containing fibers (first_fiber_row in Fortran, which uses 1-based indexing).
+
+    For example, if empty_rows = 28, then rows 0-27 contain no fibers, and
+    row 28 is the first row with fibers.
+
     :Units: None
     :Fortran: Ffree-1"""
 
     empty_edges: int = field(init=False)
-    """The number of edges without fibrin.
-    Also the 1-D index of the last edge without fibrin when 1-indexing
-    
-    This is probably unnecessary when using a 2-D data structure, but is kept 
-    for historical reasons.
-    
-    
+    """The number of edges without fibrin in the fibrin-free region.
+
+    Also represents the 1-D index of the last edge without fibrin when using
+    1-based indexing (for Fortran compatibility). Calculated as full_row × empty_rows.
+    This is a dependent parameter computed in __post_init__().
+
+    Note:
+        This parameter is primarily for Fortran compatibility and may be
+        unnecessary when using 2-D data structures.
+
     :Units: None
     :Fortran: enoFB"""
 
     full_row: int = field(init=False)
-    """Edges in a full row of nodes
-    
+    """The number of edges in a full row of nodes.
+
+    Calculated as 3 × cols - 1 (right, up, and out edges for each node, except
+    the last node which has no right edge). This is a dependent parameter
+    computed in __post_init__().
+
     :Units: None
     :Fortran: None"""
 
     xz_row: int = field(init=False)
-    """Number of all x- and z-edges in a row
-    
+    """The number of horizontal (x) and vertical (z) edges in a row.
+
+    Calculated as 2 × cols - 1 (right and up edges for each node, except the
+    last node which has no right edge). This is a dependent parameter computed
+    in __post_init__().
+
     :Units: None
     :Fortran: None"""
 
     total_edges: int = field(init=False)
-    """The total number of edges in the model
-    
+    """The total number of edges in the entire grid.
+
+    Calculated as full_row × (rows - 1) + xz_row (full rows for all but the
+    last row, which has no up edges). This is a dependent parameter computed
+    in __post_init__().
+
     :Units: None
     :Fortran: num"""
 
     total_fibers: int = field(init=False)
-    """The total number of fibers in the model
+    """The total number of fibrin fibers in the model.
+
+    Calculated as full_row × (rows - empty_rows - 1) + xz_row, accounting for
+    the fibrin-free region and the last row having no up edges. This is a
+    dependent parameter computed in __post_init__().
 
     :Units: None
     :Fortran: None"""
 
     total_molecules: int = 43074
-    """The total number of tPA molecules:
-    
-        * 43074 is Colin's [tPA]=0.6 nM
-        * 86148 is Colin's [tPA]=1.2 nM
-        
+    """The total number of tPA molecules in the simulation.
+
+    Common values based on physiological concentrations:
+        - 43074 corresponds to [tPA] = 0.6 nM
+        - 86148 corresponds to [tPA] = 1.2 nM
+
     :Units: None
     :Fortran: M"""
 
     moving_probability: float = 0.2
-    """The probability of moving.
-    
-    Make sure it is small enough that we've converged.
-    
+    """The probability that an unbound tPA molecule attempts to move in a timestep.
+
+    This parameter connects the discrete simulation to the continuous diffusion
+    equation. It must be small enough to ensure numerical stability and convergence.
+    Together with pore size and diffusion coefficient, it determines the timestep
+    length via Equation 2.4 (Bannish et al. 2014).
+
     :Units: None
     :Fortran: q"""
 
@@ -675,14 +894,21 @@ class MacroParameters(Parameters):
     :Fortran: tf"""
 
     time_step: float = field(init=False)
-    """The length of one timestep.
-    
+    """The length of one timestep in the simulation.
+
+    Calculated from the diffusion equation (Equation 2.4, Bannish et al. 2014)
+    based on moving probability, pore size, and diffusion coefficient. This is
+    a dependent parameter computed in __post_init__().
+
     :Units: seconds
     :Fortran: tstep"""
 
     total_time_steps: int = field(init=False)
-    """The total number of timesteps.
-    
+    """The total number of timesteps in the simulation.
+
+    Calculated as total_time divided by time_step. This is a dependent parameter
+    computed in __post_init__().
+
     :Units: None
     :Fortran: num_t"""
 
@@ -693,8 +919,11 @@ class MacroParameters(Parameters):
     :Fortran: seed"""
 
     state: Tuple[int, int, int, int] = field(init=False)
-    """State for the random number generator.
-    
+    """Initial state for the random number generator.
+
+    A 4-tuple of unsigned 32-bit integers where the fourth element is set to
+    macro_seed. This is a dependent parameter computed in __post_init__().
+
     :Units: None
     :Fortran: state"""
 
@@ -703,11 +932,17 @@ class MacroParameters(Parameters):
     #####################################
 
     input_data: List[str] = field(init=False)
-    """The data (from the Microscale model) required to run the Macroscale 
-    model."""
+    """The dataset names required as input from the microscale model.
+
+    List of strings identifying which microscale output datasets must be loaded
+    before running the macroscale simulation. This is a dependent parameter
+    set in __post_init__()."""
 
     output_data: List[str] = field(init=False)
-    """The data output by the Macroscale model."""
+    """The dataset names that will be output by the macroscale model.
+
+    List of strings identifying which datasets the macroscale simulation will
+    save. This is a dependent parameter set in __post_init__()."""
 
     save_interval: Quantity = Q_("10 sec")
     """How often to record data from the model.
@@ -716,8 +951,12 @@ class MacroParameters(Parameters):
     :Fortran: save_interval"""
 
     number_of_saves: int = field(init=False)
-    """The number of times data will be saved from the model.
-    
+    """The number of times data will be saved during the simulation.
+
+    Calculated as total_time / save_interval + 1 (one save at the start of each
+    interval plus one at the end). This is a dependent parameter computed in
+    __post_init__().
+
     :Units: None
     :Fortran: nplt"""
 
@@ -726,39 +965,71 @@ class MacroParameters(Parameters):
     #####################################
 
     macro_version: str = "diffuse_into_and_along"
-    """A string identifying which version of the Macroscale model is being run.
-    This string was included in data filenames stored by the Fortran code."""
+    """A string identifying which version of the macroscale model is being run.
+
+    Used for tracking and logging purposes to distinguish between different
+    macroscale implementations. This string was historically included in data
+    filenames by the legacy Fortran code."""
 
     log_lvl: int = logging.WARNING
-    """How much debugging information to write out to the console
+    """The logging level for console output.
+
+    Controls the verbosity of debugging and status information. Uses Python's
+    standard logging levels (DEBUG, INFO, WARNING, ERROR, CRITICAL).
 
     :Units: None
     :Fortran: None"""
 
     duplicate_fortran: bool = False
-    """Whether the Python code should follow the Fortran code step-by-step.
-    Theoretically, with this set to "True", both sets of code will produce the 
-    exact same output.
-    This will impact performance negatively.
-    This currently does nothing.
+    """Whether the Python code should replicate Fortran implementation exactly.
+
+    When True, the Python implementation uses the same algorithm sequence and
+    random number generation as the legacy Fortran code to produce bit-identical
+    results for validation purposes. This mode sacrifices performance for exact
+    reproducibility.
+
+    Note:
+        This feature requires some modifications to the Fortran code to work.
+        See `macro_rng_array.f90`
 
     :Units: None
     :Fortran: None"""
 
     processing_library: str = "numpy"
-    """Which library the macroscale model should use for processing. 
-    Options include
-    
-    * 'numpy'
-    * 'cupy'
-    
+    """Which array processing library the macroscale model should use.
+
+    Options:
+        - 'numpy': Standard CPU-based NumPy arrays
+        - 'cupy': GPU-accelerated arrays (requires CUDA-compatible GPU)
+
+    The processing library determines whether computations run on CPU or GPU.
+
     :Units: None
     :Fortran: None"""
 
     def __post_init__(self):
-        """This method calculates the dependent parameters once the
-        MacroParameters object is created. It is automatically called by the
-        DataClass.__init__()"""
+        """Calculate dependent parameters after initialization.
+
+        This method is automatically called by dataclass.__init__() after all
+        independent parameters are set. It computes derived values including:
+
+        - Average bound time (from microscale unbinding rate)
+        - Input/output data lists
+        - Grid dimension parameters (full_row, xz_row, total_edges, etc.)
+        - Fiber count (total_fibers)
+        - Empty edge count
+        - Time step (from diffusion equation)
+        - Total time steps
+        - RNG state (initialized with macro_seed)
+        - Number of save points
+
+        The method uses object.__setattr__() to set values because the dataclass
+        is frozen (immutable).
+
+        Note:
+            This method should never be called manually. It runs automatically
+            during object construction.
+        """
         #
         object.__setattr__(
             self, "average_bound_time", 1.0 / self.micro_params.unbind_rate_tPA_woPLG

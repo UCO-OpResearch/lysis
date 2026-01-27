@@ -20,24 +20,15 @@ Typical usage example:
     >>> exp.data.lysis_time[4][18]
 """
 
-import inspect
 import json
-import logging
 import os
-import pkgutil
-import re
 import warnings
-from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, List, Mapping, Tuple, Union
+from typing import Any, Mapping, Union
 
-from pint import Quantity
-
-from .constants import default_filenames, ureg, Q_
 from .datastore import DataStore
 from .util import dict_to_formatted_str
 from .parameters import MicroParameters, MacroParameters
-from .fileops import _read_file_json
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -56,10 +47,10 @@ class Run(object):
     This object contains:
 
     * Data location
-    * Run parameters
+    * Run parameters (microscale and macroscale)
     * Run data
 
-    It includes methods for
+    It provides methods for:
 
     * Initializing with default parameters
     * Reading parameters from disk
@@ -67,26 +58,28 @@ class Run(object):
     * Reading input data from disk
     * Writing result data to disk
 
-    Args:
-        data_root: The path of the folder containing datasets
-        run_code: The code number of the run.
-            This will be the name of the folder containing the data specific to
-            this run.
-            This should be a date and time in 'YYYY-MM-DD-hhmm' format
-            If no code is given, one will be generated from the current date
-            and time.
-
-    Attributes:
-        run_code (str): The code number of the run.
-        os_path (str): The path to the folder containing this run's data
-        macro_params (DataClass): A dictionary of
-
-
-    Raises:
-        RuntimeError: An invalid data folder was given.
+    :param data_root: The path of the folder containing datasets
+    :type data_root: str, bytes, or os.PathLike
+    :param run_code: The code number of the run. This will be the name of the
+        folder containing the data specific to this run. This should be a date
+        and time in 'YYYY-MM-DD-hhmm' format. If no code is given, one will be
+        generated from the current date and time.
+    :type run_code: str
+    :raises RuntimeError: If an invalid data folder is given.
     """
 
     def __init__(self, data_root: Union[str, bytes, os.PathLike], run_code: str = None):
+        """Initialize a Run object with the given data root and run code.
+
+        :param data_root: The path of the folder containing datasets
+        :type data_root: str, bytes, or os.PathLike
+        :param run_code: The code number of the run. This will be the name of the
+            folder containing the data specific to this run. This should be a date
+            and time in 'YYYY-MM-DD-hhmm' format. If no code is given, one will be
+            generated from the current date and time.
+        :type run_code: str
+        :raises RuntimeError: If the data folder is not found.
+        """
         # Check if the data folder path is valid
         if not os.path.isdir(data_root):
             raise RuntimeError("Data folder not found.", data_root)
@@ -113,7 +106,11 @@ class Run(object):
 
     def __str__(self) -> str:
         """Gives a human-readable, formatted string of the current run's
-        parameters."""
+        parameters.
+
+        :return: A formatted string representation of the run parameters
+        :rtype: str
+        """
         # Convert internal storage to a dictionary
         values = self.to_dict()
         # Call the formatter and return
@@ -128,12 +125,10 @@ class Run(object):
         This method is essentially a wrapper for the MicroParameters
         constructor.
 
-        Args:
-            params: A dictionary of parameters that differ from the default
-                    values.
-
-                For example,
-                    >>> {'binding_rate': 10, 'pore_size': 3,}
+        :param params: A dictionary of parameters that differ from the default
+            values. For example, {'binding_rate': 10, 'pore_size': 3,}
+        :type params: dict, optional
+        :raises RuntimeError: If the microscale parameters are not valid.
         """
         if params is not None:
             self.micro_params = MicroParameters(**params)
@@ -149,12 +144,11 @@ class Run(object):
         This method is essentially a wrapper for the MacroParameters
         constructor.
 
-        Args:
-            params: A dictionary of parameters that differ from the default
-                    values.
-
-                For example,
-                    >>> {'binding_rate': 10, 'pore_size': 3,}
+        :param params: A dictionary of parameters that differ from the default
+            values. For example, {'binding_rate': 10, 'pore_size': 3,}
+        :type params: dict, optional
+        :raises RuntimeError: If no microscale parameters are supplied or
+            if the macroscale parameters are not valid.
         """
         # The macroscale model is dependent on the parameters and results of the
         # microscale model. If no microscale parameters are supplied, the macroscale
@@ -170,6 +164,9 @@ class Run(object):
         """Returns the internally stored data as a dictionary.
 
         Does not include system-specific information like paths.
+
+        :return: A dictionary representation of the run's parameters
+        :rtype: dict
         """
         # Initialize a dictionary of the appropriate parameters
         output = {
@@ -196,6 +193,9 @@ class Run(object):
         Creates or overwrites the params.json file in the run's data
         folder. This file will contain the current run parameters
         (including any micro- and macroscale parameters) in JSON format.
+
+        :raises RuntimeError: If the parameter file cannot be written or
+            if there's an issue with the data serialization.
         """
         with open(self.os_param_file, "w") as file:
             # Convert the internal parameters to a dictionary and then use the
@@ -205,8 +205,8 @@ class Run(object):
     def read_file(self) -> None:
         """Load the run parameters from disk.
 
-        Raises:
-            RuntimeError: No parameter file is available for this run.
+        :raises RuntimeError: If no parameter file is available for this run
+            or if the file cannot be read properly.
         """
         # Determine whether the parameter file exists for this run
         if not os.path.isfile(self.os_param_file):
