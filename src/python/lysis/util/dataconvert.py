@@ -161,7 +161,6 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
         + np.count_nonzero(in_data["tPA_kinetic_unbind"])
     )
 
-    print(out_data["params"]["macro_params"]["forced_unbind"])
     return out_data
 
 
@@ -202,10 +201,32 @@ def convert_fiber_degrade_time(
 
 # TODO Do the same thing with the tpa_bind_events from cell 10 of H5-File-Builder.ipynb
 
+
+def _not_implemented(dataset_name: str, input_spec: str, output_spec: str):
+    """Create a converter stub that raises NotImplementedError with a clear message.
+
+    :param dataset_name: Name of the dataset being converted
+    :type dataset_name: str
+    :param input_spec: Input specification version
+    :type input_spec: str
+    :param output_spec: Output specification version
+    :type output_spec: str
+    :return: Function that raises NotImplementedError when called
+    :rtype: Callable
+    """
+    def _raise_error(data):
+        raise NotImplementedError(
+            f"Conversion for dataset '{dataset_name}' from {input_spec} to {output_spec} "
+            f"is not yet implemented."
+        )
+    return _raise_error
+
+
 data_converters: dict[
     tuple[str, str], dict[str, Callable[[DataCollectionType], DataSetType]]
 ] = {
     ("v2.0.0", "v1.99.0"): {
+        # Microscale output (implemented)
         "micro_log": lambda data: data["micro_log"],
         "firstPLi": lambda data: data["pli_first_time"],
         "lasttPA": lambda data: data["tpa_final_num"],
@@ -215,8 +236,24 @@ data_converters: dict[
         "tPA_time": lambda data: data["tpa_leaving_time"],
         "tPAPLiunbd": lambda data: data["tpa_unbound_by_pli"],
         "tPAunbind": lambda data: data["tpa_unbound_kinetic"],
+        # Macroscale input (not implemented)
+        "tPAleave": _not_implemented("tPAleave", "v2.0.0", "v1.99.0"),
+        "tsectPA": _not_implemented("tsectPA", "v2.0.0", "v1.99.0"),
+        "lysismat": _not_implemented("lysismat", "v2.0.0", "v1.99.0"),
+        "lenlysisvect": _not_implemented("lenlysisvect", "v2.0.0", "v1.99.0"),
+        "neighbors": _not_implemented("neighbors", "v2.0.0", "v1.99.0"),
+        # Macroscale output (not implemented)
+        "macro_log": lambda data: data["macro_log"],
+        "Nsave": _not_implemented("Nsave", "v2.0.0", "v1.99.0"),
+        "tsave": _not_implemented("tsave", "v2.0.0", "v1.99.0"),
+        "f_deg_list": _not_implemented("f_deg_list", "v2.0.0", "v1.99.0"),
+        "m_bind_t": _not_implemented("m_bind_t", "v2.0.0", "v1.99.0"),
+        "m_loc": _not_implemented("m_loc", "v2.0.0", "v1.99.0"),
+        "m_bound": _not_implemented("m_bound", "v2.0.0", "v1.99.0"),
+        "mfpt": _not_implemented("mfpt", "v2.0.0", "v1.99.0"),
     },
     ("v1.99.0", "v2.0.0"): {
+        # Microscale output (implemented)
         "micro_log": lambda data: data["micro_log"],
         "pli_first_time": lambda data: data["firstPLi"],
         "tpa_final_num": lambda data: data["lasttPA"],
@@ -226,9 +263,21 @@ data_converters: dict[
         "tpa_leaving_time": lambda data: data["tPA_time"],
         "tpa_unbound_by_pli": lambda data: data["tPAPLiunbd"],
         "tpa_unbound_kinetic": lambda data: data["tPAunbind"],
+        # Macroscale input (not implemented)
+        "bin_edge_proportions": _not_implemented("bin_edge_proportions", "v1.99.0", "v2.0.0"),
+        "bin_edge_tpa_leaving_time": _not_implemented("bin_edge_tpa_leaving_time", "v1.99.0", "v2.0.0"),
+        "binned_fiber_degrade_time": _not_implemented("binned_fiber_degrade_time", "v1.99.0", "v2.0.0"),
+        "binned_fiber_degraded": _not_implemented("binned_fiber_degraded", "v1.99.0", "v2.0.0"),
+        "edge_grid_neighbors": _not_implemented("edge_grid_neighbors", "v1.99.0", "v2.0.0"),
+        # Macroscale output (partially implemented)
+        "macro_log": lambda data: data["macro_log"],
+        "snapshot_time": _not_implemented("snapshot_time", "v1.99.0", "v2.0.0"),
         "fiber_degrade_time": functools.partial(
             convert_fiber_degrade_time, input_spec="v1.99.0", output_spec="v2.0.0"
         ),
+        "tpa_bind_events": _not_implemented("tpa_bind_events", "v1.99.0", "v2.0.0"),
+        "tpa_location_snapshot": _not_implemented("tpa_location_snapshot", "v1.99.0", "v2.0.0"),
+        "tpa_transit_time": _not_implemented("tpa_transit_time", "v1.99.0", "v2.0.0"),
     },
 }
 

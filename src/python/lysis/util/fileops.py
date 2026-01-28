@@ -245,7 +245,7 @@ def _write_file_text(
     )
 
 
-def write_hdf5_dataset(
+def _write_hdf5_dataset(
     data: np.ndarray,
     path: AnyStr,
     spec: DataSetSpec,
@@ -322,9 +322,9 @@ def _write_hdf5_attr(
         group = file.require_group(
             spec.data_location.format(sim=sim, file_code=file_code)
         )
-        for k, v in data[
-            spec.data_location.format(sim=sim, file_code=file_code)[:6] + "params"
-        ].items():
+        # Convert data location (e.g., "micro_data/...") to params group (e.g., "micro_params")
+        param_group_name = spec.data_location.format(sim=sim, file_code=file_code).replace("_data", "_params")
+        for k, v in data[param_group_name].items():
             group.attrs[k] = v
 
 
@@ -338,7 +338,7 @@ data_writers: dict[
     CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _write_file_text,
     CONST.DATASET_STORAGE_TYPE.FILE_JSON: _not_implemented,
     CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _write_hdf5_attr,
-    CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: write_hdf5_dataset,
+    CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _write_hdf5_dataset,
 }
 
 
