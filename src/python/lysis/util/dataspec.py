@@ -1,3 +1,87 @@
+"""Data specification definitions for the lysis simulation system.
+
+This module defines the schema for all data used in the lysis simulation,
+including microscale and macroscale inputs and outputs. It provides:
+
+- Type definitions for parameter and dataset structures
+- Immutable specification classes (DataSetSpec, DataCollectionSpec)
+- Complete data schemas for v1.99.0 (Fortran) and v2.0.0 (HDF5) formats
+- Utility functions for shape parsing and data validation
+- Tag-based version aliasing system
+
+Data Organization
+-----------------
+
+The simulation has three main data stages:
+
+1. **Microscale Output**: Results from fiber-level simulations
+   - Stored per simulation run
+   - Contains binding/unbinding statistics, lysis times, etc.
+
+2. **Macroscale Input**: Processed microscale data for clot-level simulation
+   - Binned degradation times and neighbor information
+   - May be combined across multiple microscale runs
+
+3. **Macroscale Output**: Results from clot-level simulations
+   - Molecule locations, binding events, degradation state over time
+   - Stored per simulation run with periodic snapshots
+
+Specification Versions
+----------------------
+
+**v1.99.0 (Fortran format)**:
+- File-based storage (text, binary, JSON)
+- Separate files per dataset and simulation
+- 1-based indexing for grid locations
+- Legacy format for compatibility with Fortran code
+
+**v2.0.0 (HDF5 format)**:
+- Unified HDF5 container per run
+- Attributes for parameters, datasets for data arrays
+- 0-based indexing for grid locations
+- Modern format with compression and metadata
+
+Tag System
+----------
+
+Tags provide version aliasing for forward compatibility:
+- ``"fortran"`` → ``"v1.99.0"``
+- ``"hdf5"`` → ``"v2.0.0"``
+- ``"current"`` → ``"hdf5"`` (can be changed as formats evolve)
+
+Dynamic Shapes
+--------------
+
+Dataset shapes can reference parameter values using strings::
+
+    shape=(-1, "macro_params.total_molecules")
+
+At I/O time, parse_shape() resolves these to actual integers using
+the parameter dictionary.
+
+Usage Example
+-------------
+
+Accessing specifications::
+
+    >>> from lysis.util.dataspec import dataspec
+    >>> # Get v2.0.0 microscale output spec
+    >>> micro_out_spec = dataspec["v2.0.0"]["microscale_out"]
+    >>> # Access individual dataset spec
+    >>> pli_spec = micro_out_spec.data["pli_first_time"]
+    >>> pli_spec.dtype
+    dtype('float64')
+    >>> pli_spec.data_location
+    'micro_data/pli_first_time'
+    >>> # Use tag aliases
+    >>> current_spec = dataspec["current"]["microscale_out"]
+
+See Also
+--------
+- fileops.py : Functions that use these specs for actual I/O
+- dataconvert.py : Functions that convert between spec versions
+- datastore.py : High-level interface using these specs
+"""
 import os
 
 from collections.abc import Callable
@@ -21,16 +105,100 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 
+# Type aliases for parameter dictionaries and datasets
 BaseParamsType = NewType("BaseParamsType", dict[str, dict[str, int | float | str]])
+"""Type for parameter dictionaries with base Python types only.
+
+Structure: ``{"micro_params": {...}, "macro_params": {...}}``
+where values are int, float, or str (no Pint Quantity objects).
+Used for serialization to JSON and other formats that don't support custom types.
+"""
+
 UnitParamsType = NewType(
     "UnitParamsType", dict[str, dict[str, int | float | str | Quantity]]
 )
+"""Type for parameter dictionaries that may include Pint Quantity objects.
+
+Structure: ``{"micro_params": {...}, "macro_params": {...}}``
+where values can be int, float, str, or Pint Quantity with units.
+Used internally when working with parameters that have physical units.
+"""
+
 DataSetType = Union[np.ndarray | list[np.ndarray] | BaseParamsType]
+"""Type for individual datasets.
+
+Can be:
+- Single numpy array (for combined simulations)
+- List of numpy arrays (for separate simulations)
+- Parameter dictionary (for parameter datasets)
+"""
+
 DataCollectionType = NewType("DataCollectionType", dict[str, DataSetType])
+"""Type for a collection of datasets.
+
+Dictionary mapping dataset names to their data (arrays or parameter dicts).
+Represents all data in a collection (e.g., all microscale output datasets).
+"""
 
 
 @dataclass(frozen=True)
 class DataSetSpec:
+    """Specification for a single dataset's storage and structure.
+
+    Defines how a dataset is stored (format, location) and what it contains
+    (data type, shape). Frozen to ensure specs don't change at runtime.
+
+    :ivar dataset_storage_type: Storage backend for this dataset
+    :vartype dataset_storage_type: DataSetStorageType
+    :ivar dtype: NumPy dtype or special type (e.g., h5py.string_dtype(), Quantity)
+    :vartype dtype: np.dtype
+    :ivar data_location: Path template for file-based storage or HDF5 group/dataset path.
+        May contain format placeholders like {sim:02} or {file_code}.
+        None for derived datasets not stored directly.
+    :vartype data_location: str | None
+    :ivar shape: Expected array shape. Tuple of integers or strings.
+        -1 indicates variable dimension.
+        Strings reference parameter values (e.g., "macro_params.total_molecules").
+        Default (-1,) means 1D array with variable length.
+    :vartype shape: tuple[int | str, ...]
+    :ivar delimiter: Delimiter for text files (e.g., "," for CSV, "\\u0000" for null-terminated).
+        None for binary/HDF5 formats.
+    :vartype delimiter: str | None
+
+    Examples
+    --------
+    Fixed-size array stored in HDF5::
+
+        DataSetSpec(
+            dataset_storage_type=DataSetStorageType.HDF5_DATASET,
+            data_location="micro_data/pli_first_time",
+            dtype=np.float64,
+            shape=()  # Scalar
+        )
+
+    Variable-size array with dynamic dimension from parameters::
+
+        DataSetSpec(
+            dataset_storage_type=DataSetStorageType.FILE_BINARY,
+            data_location="{sim:02}/m_loc{file_code}_{sim:02}.dat",
+            dtype=np.int32,
+            shape=(-1, "macro_params.total_molecules")  # Rows variable, cols from params
+        )
+
+    Structured array (event log)::
+
+        DataSetSpec(
+            dataset_storage_type=DataSetStorageType.FILE_TEXT,
+            data_location="{sim:02}/f_deg_list{file_code}_{sim:02}.dat",
+            dtype=np.dtype([
+                ("Simulation Time Elapsed", np.float64),
+                ("Grid Location Index", np.int32),
+                ("Fiber New Degrade Time", np.float64)
+            ]),
+            delimiter=","
+        )
+    """
+
     dataset_storage_type: DataSetStorageType
     dtype: np.dtype
     data_location: str | None = None
@@ -40,13 +208,91 @@ class DataSetSpec:
 
 @dataclass(frozen=True)
 class DataCollectionSpec:
+    """Specification for a collection of related datasets.
+
+    Groups multiple datasets that are logically related (e.g., all microscale
+    outputs, all macroscale inputs). Defines whether simulations are stored
+    together or separately. Frozen to ensure specs don't change at runtime.
+
+    :ivar simulations_combined: Whether multiple simulations are in one file/group.
+        - True: All simulation data combined in single location (e.g., v1.99.0 microscale output)
+        - False: Each simulation in separate location (e.g., v1.99.0 macroscale output with {sim:02})
+    :vartype simulations_combined: bool
+    :ivar params: Specification for parameter storage in this collection.
+        None if collection has no associated parameters (e.g., macroscale input
+        which uses parameters from microscale output).
+    :vartype params: DataSetSpec | None
+    :ivar data: Dictionary mapping dataset names to their specifications.
+        Keys are dataset names (e.g., "pli_first_time", "snapshot_time").
+        Values are DataSetSpec objects defining storage and structure.
+    :vartype data: dict[str, DataSetSpec]
+
+    Examples
+    --------
+    Microscale output (combined simulations, has parameters)::
+
+        DataCollectionSpec(
+            simulations_combined=True,
+            params=DataSetSpec(
+                data_location="params.json",
+                dataset_storage_type=DataSetStorageType.FILE_JSON,
+                dtype=Quantity
+            ),
+            data={
+                "pli_first_time": DataSetSpec(...),
+                "fiber_degraded": DataSetSpec(...),
+                # ... more datasets
+            }
+        )
+
+    Macroscale output (separate simulations, has parameters)::
+
+        DataCollectionSpec(
+            simulations_combined=False,  # Separate files per simulation
+            params=DataSetSpec(
+                data_location="params.json",
+                dataset_storage_type=DataSetStorageType.FILE_JSON,
+                dtype=Quantity
+            ),
+            data={
+                "snapshot_time": DataSetSpec(
+                    data_location="macro_data/sim_{sim:02}/snapshot_time",  # Note {sim:02}
+                    ...
+                ),
+                # ... more datasets
+            }
+        )
+
+    Macroscale input (combined, no parameters of its own)::
+
+        DataCollectionSpec(
+            simulations_combined=True,
+            params=None,  # Uses parameters from microscale output
+            data={
+                "bin_edge_proportions": DataSetSpec(...),
+                # ... more datasets
+            }
+        )
+    """
+
     simulations_combined: bool
     params: DataSetSpec
     data: dict[str, DataSetSpec]
 
 
+# Master data specification dictionary
+# Structure: dataspec[version][collection_name] -> DataCollectionSpec
+# Versions: "v1.99.0" (Fortran), "v2.0.0" (HDF5), plus tag aliases
+# Collections: "microscale_out", "macroscale_in", "macroscale_out"
 dataspec: dict[str, dict[str, DataCollectionSpec]] = {
+    # ============================================================================
+    # v1.99.0: Fortran-compatible file-based format
+    # ============================================================================
     "v1.99.0": {
+        # ------------------------------------------------------------------------
+        # Microscale output: Results from fiber-level simulations
+        # All simulations combined in single files
+        # ------------------------------------------------------------------------
         "microscale_out": DataCollectionSpec(
             simulations_combined=True,
             params=DataSetSpec(
@@ -55,23 +301,27 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
                 dtype=Quantity,
             ),
             data={
+                # Log file with simulation status messages
                 "micro_log": DataSetSpec(
                     data_location="micro{file_code}.txt",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
                     dtype=str,
-                    delimiter="\u0000",
+                    delimiter="\u0000",  # Null-terminated strings
                 ),
+                # Source code file (for reproducibility)
                 "micro_code": DataSetSpec(
                     data_location="micro_rates.f90",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
                     dtype=str,
-                    delimiter="\u0000",
+                    delimiter="\u0000",  # Null-terminated strings
                 ),
+                # Time when first plasmin (PLi) molecule was generated in each simulation
                 "firstPLi": DataSetSpec(
                     data_location="firstPLi{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
                     dtype=np.float64,
                 ),
+                # Final number of tPA molecules (still bound at end)
                 "lasttPA": DataSetSpec(
                     data_location="lasttPA{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
@@ -109,10 +359,16 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
                 ),
             },
         ),
+        # ------------------------------------------------------------------------
+        # Macroscale input: Processed microscale data for clot-level simulation
+        # Binned degradation times and neighbor information
+        # All simulations combined; no separate parameters (uses microscale params)
+        # ------------------------------------------------------------------------
         "macroscale_in": DataCollectionSpec(
             simulations_combined=True,
-            params=None,
+            params=None,  # Uses parameters from microscale output
             data={
+                # Proportion of tPA molecules leaving at each bin edge (cumulative distribution)
                 "tPAleave": DataSetSpec(
                     data_location="tPAleave{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
@@ -145,8 +401,13 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
                 ),
             },
         ),
+        # ------------------------------------------------------------------------
+        # Macroscale output: Results from clot-level simulations
+        # Each simulation stored in separate files (note {sim:02} in paths)
+        # Contains snapshots of molecule locations, binding events, degradation state
+        # ------------------------------------------------------------------------
         "macroscale_out": DataCollectionSpec(
-            simulations_combined=False,
+            simulations_combined=False,  # Separate files per simulation
             params=DataSetSpec(
                 data_location="params.json",
                 dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_JSON,
@@ -215,11 +476,19 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
             },
         ),
     },
+    # ============================================================================
+    # v2.0.0: Modern HDF5-based unified storage format
+    # ============================================================================
     "v2.0.0": {
+        # ------------------------------------------------------------------------
+        # Microscale output: Results from fiber-level simulations in HDF5
+        # All simulations combined in single HDF5 file
+        # Parameters stored as HDF5 attributes on micro_data group
+        # ------------------------------------------------------------------------
         "microscale_out": DataCollectionSpec(
             simulations_combined=True,
             params=DataSetSpec(
-                data_location="micro_data",
+                data_location="micro_data",  # HDF5 group path
                 dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_ATTR,
                 dtype=Quantity,
             ),
@@ -271,12 +540,17 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
                 ),
             },
         ),
+        # ------------------------------------------------------------------------
+        # Macroscale input: Processed microscale data for clot-level simulation
+        # These are computed/derived datasets, not stored on disk (data_location=None)
+        # Generated by dataconvert.generate_macroscale_in() from microscale output
+        # ------------------------------------------------------------------------
         "macroscale_in": DataCollectionSpec(
             simulations_combined=False,
-            params=None,
+            params=None,  # Uses parameters from microscale output
             data={
                 "bin_edge_proportions": DataSetSpec(
-                    data_location=None,
+                    data_location=None,  # Derived dataset, not stored
                     dataset_storage_type=None,
                     dtype=np.float64,
                     shape=(101,),
@@ -300,17 +574,23 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
                     shape=(100,),
                 ),
                 "edge_grid_neighbors": DataSetSpec(
-                    data_location=None,
+                    data_location=None,  # Derived dataset, not stored
                     dataset_storage_type=None,
                     dtype=np.uint32,
                     shape=(-1, 8),
                 ),
             },
         ),
+        # ------------------------------------------------------------------------
+        # Macroscale output: Results from clot-level simulations in HDF5
+        # Each simulation stored in separate HDF5 groups (sim_{sim:02})
+        # Parameters stored as attributes on macro_data group
+        # Uses 2D grid indexing (row, rank) instead of 1D Fortran indices
+        # ------------------------------------------------------------------------
         "macroscale_out": DataCollectionSpec(
-            simulations_combined=False,
+            simulations_combined=False,  # Separate groups per simulation
             params=DataSetSpec(
-                data_location="macro_data",
+                data_location="macro_data",  # HDF5 group path
                 dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_ATTR,
                 dtype=Quantity,
             ),
@@ -372,14 +652,19 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
     },
 }
 
-# Define tags
+# ============================================================================
+# Tag System: Version Aliases for Forward Compatibility
+# ============================================================================
+# Tags allow code to reference versions without hard-coding version numbers.
+# For example, code can use dataspec["current"] and when the format evolves,
+# only this dictionary needs to be updated.
 tags = {
-    "fortran": "v1.99.0",
-    "hdf5": "v2.0.0",
-    "current": "hdf5",
+    "fortran": "v1.99.0",  # Alias for Fortran-compatible file format
+    "hdf5": "v2.0.0",      # Alias for HDF5 unified storage format
+    "current": "hdf5",     # Alias for current recommended format (can be changed)
 }
 
-# Add tags to data spec
+# Add tag aliases to the dataspec dictionary by copying the referenced specs
 for k, v in tags.items():
     dataspec[k] = dataspec[v]
 
@@ -387,51 +672,181 @@ for k, v in tags.items():
 def parse_shape(
     shape: tuple[int | str, ...], params: BaseParamsType = None
 ) -> tuple[int, ...]:
-    """
-    Fills in any unknown values in the specification shape from the params dictionary.
+    """Resolve dynamic shape dimensions using parameter values.
 
-    :param shape: The shape from the specification.
-        May contain integers, which are passed through unchanged,
-        or strings, which are used as keys in the params dictionary to look up the correct value.
-    :type shape: tuple[int  |  str, ...]
-    :param params: The dictionary containing parameters necessary for calculating shape, defaults to None.
+    Converts shape specifications that may contain parameter references (strings)
+    into concrete integer tuples suitable for NumPy array operations. This allows
+    dataset shapes to depend on simulation parameters like molecule counts or
+    grid dimensions.
+
+    Shape elements can be:
+    - **Integers**: Passed through unchanged (e.g., 100, -1)
+    - **Strings**: Parameter references in "dict_key.param_name" format
+      (e.g., "macro_params.total_molecules")
+
+    :param shape: Shape tuple from DataSetSpec, may contain integers and/or strings.
+        Integers (including -1 for variable dimensions) are kept as-is.
+        Strings are parameter references resolved via params dictionary.
+    :type shape: tuple[int | str, ...]
+    :param params: Parameter dictionary with structure::
+
+            {
+                "micro_params": {"param1": value1, ...},
+                "macro_params": {"param2": value2, ...}
+            }
+
+        Required if shape contains any string references.
     :type params: BaseParamsType, optional
-    :raises RuntimeError: Raised if the shape cannot be parsed correctly.
-    :return: Returns a shape appropriate for use in numpy methods.
+    :raises RuntimeError: If shape contains a type other than int or str
+    :return: Fully resolved shape tuple with all integer dimensions
     :rtype: tuple[int, ...]
+
+    Examples
+    --------
+    Fixed shape (no parameters needed)::
+
+        >>> parse_shape((100, 3))
+        (100, 3)
+
+    Variable first dimension::
+
+        >>> parse_shape((-1, 100))
+        (-1, 100)
+
+    Shape with parameter reference::
+
+        >>> params = {"macro_params": {"total_molecules": 43074}}
+        >>> parse_shape((-1, "macro_params.total_molecules"), params)
+        (-1, 43074)
+
+    Multiple parameter references::
+
+        >>> params = {
+        ...     "macro_params": {"total_molecules": 43074, "number_of_saves": 121}
+        ... }
+        >>> parse_shape(("macro_params.number_of_saves", "macro_params.total_molecules"), params)
+        (121, 43074)
+
+    See Also
+    --------
+    check_dataset_spec : Validates data against spec using parsed shapes
+    DataSetSpec : Contains shape specifications
     """
     parsed_shape = []
     for i in shape:
         if isinstance(i, int):
+            # Integer dimension (fixed size or -1 for variable)
             parsed_shape.append(i)
         elif isinstance(i, str):
+            # String dimension - resolve from parameter dictionary
+            # Format: "dict_name.param_name" e.g., "macro_params.total_molecules"
             parts = i.split(".")
             parsed_shape.append(params[parts[0]][parts[1]])
         else:
-            raise RuntimeError("Incorrect shape format {i}.")
+            raise RuntimeError(f"Incorrect shape format: {i}. Expected int or str.")
     return tuple(parsed_shape)
 
 
 def check_dataset_spec(
     data: np.ndarray, spec: DataSetSpec, params: BaseParamsType = None
 ) -> bool:
-    """
-    Checks whether or not an array of data meets the given specification.
+    """Validate that a data array conforms to its specification.
 
-    :param data: The array of data to be checked.
+    Checks two aspects of conformance:
+    1. **Data type compatibility**: Can data.dtype be cast to spec.dtype?
+    2. **Shape matching**: Does data.shape match spec.shape (after resolving parameters)?
+
+    Shape validation allows -1 in spec.shape to indicate variable dimensions
+    that will match any size in the actual data.
+
+    :param data: The data array to validate
     :type data: np.ndarray
-    :param spec: The specification to check the data against.
+    :param spec: The specification defining expected dtype and shape
     :type spec: DataSetSpec
-    :param params: A dictionary of parameters matching the data and specifications, defaults to None.
+    :param params: Parameter dictionary for resolving dynamic shape dimensions.
+        Required if spec.shape contains string references.
     :type params: BaseParamsType, optional
-    :return: True if the data matches the specification, False else.
+    :return: True if data conforms to spec (dtype and shape match), False otherwise
     :rtype: bool
+
+    Examples
+    --------
+    Fixed shape validation::
+
+        >>> import numpy as np
+        >>> spec = DataSetSpec(
+        ...     dataset_storage_type=DataSetStorageType.HDF5_DATASET,
+        ...     dtype=np.float64,
+        ...     shape=(100, 3)
+        ... )
+        >>> data = np.zeros((100, 3))
+        >>> check_dataset_spec(data, spec)
+        True
+        >>> bad_data = np.zeros((100, 4))  # Wrong shape
+        >>> check_dataset_spec(bad_data, spec)
+        False
+
+    Variable dimension (any size accepted)::
+
+        >>> spec = DataSetSpec(
+        ...     dataset_storage_type=DataSetStorageType.HDF5_DATASET,
+        ...     dtype=np.int32,
+        ...     shape=(-1, 100)  # First dimension variable
+        ... )
+        >>> check_dataset_spec(np.zeros((50, 100), dtype=np.int32), spec)
+        True
+        >>> check_dataset_spec(np.zeros((1000, 100), dtype=np.int32), spec)
+        True
+        >>> check_dataset_spec(np.zeros((100, 50), dtype=np.int32), spec)
+        False  # Second dimension doesn't match
+
+    Dynamic shape from parameters::
+
+        >>> params = {"macro_params": {"total_molecules": 43074}}
+        >>> spec = DataSetSpec(
+        ...     dataset_storage_type=DataSetStorageType.FILE_BINARY,
+        ...     dtype=np.int32,
+        ...     shape=(-1, "macro_params.total_molecules")
+        ... )
+        >>> data = np.zeros((121, 43074), dtype=np.int32)
+        >>> check_dataset_spec(data, spec, params)
+        True
+
+    Data type compatibility::
+
+        >>> spec = DataSetSpec(
+        ...     dataset_storage_type=DataSetStorageType.HDF5_DATASET,
+        ...     dtype=np.float64,
+        ...     shape=(100,)
+        ... )
+        >>> check_dataset_spec(np.zeros(100, dtype=np.float32), spec)
+        True  # float32 can be cast to float64
+        >>> check_dataset_spec(np.zeros(100, dtype=np.int32), spec)
+        True  # int32 can be cast to float64
+        >>> spec_int = DataSetSpec(
+        ...     dataset_storage_type=DataSetStorageType.HDF5_DATASET,
+        ...     dtype=np.int32,
+        ...     shape=(100,)
+        ... )
+        >>> check_dataset_spec(np.zeros(100, dtype=np.float64), spec_int)
+        False  # float64 cannot safely cast to int32
+
+    See Also
+    --------
+    parse_shape : Resolves dynamic dimensions in shape specifications
+    DataSetSpec : Specification class containing dtype and shape requirements
     """
+    # Check data type compatibility
     if not np.can_cast(data.dtype, spec.dtype):
         return False
-    for idx, i in enumerate(parse_shape(spec.shape, params=params)):
-        if i < 0:
+
+    # Check shape compatibility (resolve any parameter references first)
+    for idx, expected_dim in enumerate(parse_shape(spec.shape, params=params)):
+        if expected_dim < 0:
+            # -1 means variable dimension, accept any size
             continue
-        elif i != data.shape[idx]:
+        elif expected_dim != data.shape[idx]:
+            # Fixed dimension must match exactly
             return False
+
     return True
