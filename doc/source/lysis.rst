@@ -12,18 +12,34 @@ Subpackages
 Submodules
 ----------
 
-lysis.edge_grid module
------------------------
+lysis.cp\_macroscale module
+---------------------------
 
-.. automodule:: lysis.edge_grid
+.. automodule:: lysis.cp_macroscale
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:
+
+lysis.molecule module
+---------------------
+
+.. automodule:: lysis.molecule
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+lysis.np\_macroscale module
+---------------------------
+
+.. automodule:: lysis.np_macroscale
+   :members:
+   :show-inheritance:
+   :undoc-members:
 
 Module contents
 ---------------
 
 .. automodule:: lysis
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:

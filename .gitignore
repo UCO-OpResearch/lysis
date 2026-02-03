@@ -11,3 +11,17 @@ __pycache__
 fort.*
 *.sublime-*
 data
+*.h5
+test.ipynb
+doc/usage/Lysis-Component.vpp.bak_000f
+**/.DS_Store
+
+# Sphinx documentation build outputs
+doc/build/
+doc/_build/
+doc/html/
+
+# Sphinx auto-generated files (can be regenerated with sphinx-apidoc)
+# Uncomment these if you want to exclude auto-generated API docs
+# doc/source/modules.rst
+# doc/source/lysis*.rst
