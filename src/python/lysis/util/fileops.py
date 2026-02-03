@@ -1,3 +1,148 @@
+"""File I/O operations for lysis simulation data.
+
+This module provides a unified interface for reading and writing simulation data
+across multiple storage formats. It abstracts away the complexity of different
+file types, allowing the same high-level functions to work with Fortran text files,
+binary files, JSON parameter files, and HDF5 datasets.
+
+Storage Types
+-------------
+
+The module supports five storage types, each with specialized reader/writer functions:
+
+1. **FILE_TEXT**: Plain text files with delimited data (e.g., CSV, space-separated)
+   - Uses numpy.loadtxt/savetxt
+   - Supports custom delimiters
+
+2. **FILE_BINARY**: Binary files with raw numerical data
+   - Uses numpy.fromfile
+   - Requires shape information from parameters for correct reshaping
+
+3. **FILE_JSON**: JSON files for parameter storage
+   - Uses Python json library
+   - Stores nested parameter dictionaries
+
+4. **HDF5_DATASET**: HDF5 datasets for large numerical arrays
+   - Uses h5py library
+   - Supports compression, chunking, and dynamic shapes
+
+5. **HDF5_ATTR**: HDF5 attributes for parameter metadata
+   - Stores parameters as HDF5 group attributes
+   - More efficient than separate parameter files
+
+Architecture
+------------
+
+The module uses a registry-based design pattern:
+
+- ``data_readers``: Dictionary mapping storage types to reader functions
+- ``data_writers``: Dictionary mapping storage types to writer functions
+
+Each reader/writer function follows a common signature, allowing the high-level
+``read_dataset()`` and ``write_dataset()`` functions to dispatch to the
+appropriate handler based on the storage type specified in the ``DataSetSpec``.
+
+Key Functions
+-------------
+
+**High-level API** (recommended for most use cases):
+  - :func:`read_data_collection`: Read complete data collections with all datasets
+  - :func:`write_data_collection`: Write complete data collections with all datasets
+
+**Mid-level API** (for individual datasets):
+  - :func:`read_dataset`: Read a single dataset
+  - :func:`write_dataset`: Write a single dataset
+
+**Low-level API** (internal use):
+  - ``_read_file_text``, ``_read_file_binary``, ``_read_file_json``
+  - ``_read_hdf5_attr``, ``_read_hdf5_dataset``
+  - ``_write_file_text``, ``_write_hdf5_attr``, ``_write_hdf5_dataset``
+
+Example Usage
+-------------
+
+Reading a complete data collection::
+
+    from lysis.util.fileops import read_data_collection
+    from lysis.util.dataspec import dataspec
+
+    # Read v1.99.0 Fortran microscale output
+    collections = list(dataspec["v1.99.0"].values())
+    data = read_data_collection(
+        path="/path/to/fortran/output",
+        collections=[collections[0]],  # microscale_out only
+        file_codes=[""]
+    )
+
+    # Access datasets
+    lysis_times = data["lysis"]
+    parameters = data["params"]
+
+Writing a complete data collection::
+
+    from lysis.util.fileops import write_data_collection
+    from lysis.util.dataspec import dataspec
+
+    # Write v2.0.0 HDF5 format
+    collections = list(dataspec["v2.0.0"].values())
+    write_data_collection(
+        data=simulation_results,
+        path="/path/to/output.h5",
+        collections=collections,
+        file_codes=[""]
+    )
+
+Reading/writing individual datasets::
+
+    from lysis.util.fileops import read_dataset, write_dataset
+
+    # Read a single dataset
+    spec = dataspec["v1.99.0"]["microscale_out"].data["lysis"]
+    lysis_data = read_dataset(
+        path="/path/to/data",
+        spec=spec,
+        params=parameters,
+        sim=0  # First simulation
+    )
+
+    # Write a single dataset
+    write_dataset(
+        data=lysis_data,
+        path="/path/to/output",
+        spec=spec,
+        params=parameters,
+        sim=0
+    )
+
+File Codes and Simulation Indexing
+-----------------------------------
+
+**file_code**: Optional string inserted into filenames for organizing outputs
+  - Example: ``file_code="run1"`` → ``microscale_out_run1.h5``
+  - Useful for batch processing or parameter sweeps
+
+**sim**: Simulation index for per-simulation storage
+  - When ``simulations_combined=False``, each simulation is stored separately
+  - sim=0, 1, 2, ... indexes individual simulation files
+  - When ``simulations_combined=True``, all simulations are in one file (sim is ignored)
+
+Notes
+-----
+
+- All write operations validate data against specifications using ``check_dataset_spec()``
+- HDF5 writes use gzip compression by default
+- Binary file reading requires parameter-based shape resolution
+- Missing files during multi-simulation reads are handled gracefully (stop iteration)
+- File paths are constructed from ``spec.data_location`` with format string substitution
+
+See Also
+--------
+
+:mod:`lysis.util.dataspec` : Data specification definitions
+:mod:`lysis.util.dataconvert` : Data format conversion utilities
+:mod:`lysis.util.constants` : Storage type constants
+"""
+
 import json
 import os
 
