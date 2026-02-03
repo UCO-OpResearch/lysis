@@ -7,9 +7,16 @@ sphinx_rtd_theme>=3.0
 sphinxcontrib-jquery>=4.0
 
 # Required for autodoc to import the modules
+# Core scientific computing
 numpy>=1.20
 h5py>=3.0
 pint>=0.20
 
-# For napoleon extension (Google/NumPy style docstrings)
-# Already included in sphinx
+# Progress bars and visualization
+tqdm>=4.60
+matplotlib>=3.3
+
+# Optional dependencies (will be mocked in conf.py if not available)
+# cupy - GPU arrays (optional, only for GPU acceleration)
+# nvtx - NVIDIA profiling (optional, only for profiling)
+# GooseSLURM - SLURM job management (optional, only for HPC)
