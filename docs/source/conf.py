@@ -37,9 +37,18 @@ autodoc_default_options = {
     'show-inheritance': True,
 }
 
-# Mock imports for modules that might not be available during doc builds
-# (though we install them in requirements.txt, this is a fallback)
-autodoc_mock_imports = []
+# Mock imports for optional modules that aren't needed for documentation
+# These are specialized dependencies only used in specific contexts:
+# - cupy: GPU array library (only for CUDA acceleration)
+# - nvtx: NVIDIA profiling tools (only for performance profiling)
+# - GooseSLURM: SLURM cluster management (only for HPC job submission)
+autodoc_mock_imports = [
+    'cupy',
+    'cp',
+    'nvtx',
+    'GooseSLURM',
+    'gs',
+]
 
 # -- Napoleon settings -------------------------------------------------------
 napoleon_google_docstring = True
