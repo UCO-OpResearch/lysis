@@ -15,7 +15,7 @@ build:
       # You can add any other files or directories that you'd like here as well,
       # like your docs requirements file, or other files that will change your docs build.
       - |
-        if [ "$READTHEDOCS_VERSION_TYPE" = "external" ] && git diff --quiet origin/main -- doc/ .readthedocs.yaml;
+        if [ "$READTHEDOCS_VERSION_TYPE" = "external" ] && git diff --quiet origin/main -- docs/ .readthedocs.yaml;
         then
           echo "No changes to docs, canceling build";
           exit 183;
@@ -23,14 +23,10 @@ build:
 
 # Build documentation in the "doc" directory with Sphinx
 sphinx:
-  configuration: doc/source/conf.py
+  configuration: docs/source/conf.py
   fail_on_warning: false
 
 # Optionally declare the Python requirements required to build your docs
 python:
   install:
-    - requirements: doc/requirements.txt
-    - method: pip
-      path: .
-      extra_requirements:
-        - docs
+    - requirements: docs/requirements.txt
