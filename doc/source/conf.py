@@ -12,14 +12,47 @@ sys.path.insert(0, os.path.abspath(os.path.join('..', '..', 'src', 'python')))
 project = 'Lysis'
 copyright = '2022, Brittany Bannish <bbannish@uco.edu> & Brad Paynter <bpaynter@uco.edu>'
 author = 'Brittany Bannish <bbannish@uco.edu> & Brad Paynter <bpaynter@uco.edu>'
+release = '0.1'
+version = '0.1'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.coverage', 'sphinx.ext.napoleon']
+extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.coverage',
+    'sphinx.ext.napoleon',
+    'sphinx.ext.viewcode',  # Add source code links
+    'sphinx.ext.githubpages',  # Create .nojekyll file for GitHub Pages
+]
 
 templates_path = ['_templates']
 exclude_patterns = ['*.ipynb', '.ipynb_checkpoints']
+
+# -- Autodoc configuration ---------------------------------------------------
+autodoc_default_options = {
+    'members': True,
+    'member-order': 'bysource',
+    'undoc-members': True,
+    'show-inheritance': True,
+}
+
+# Mock imports for modules that might not be available during doc builds
+# (though we install them in requirements.txt, this is a fallback)
+autodoc_mock_imports = []
+
+# -- Napoleon settings -------------------------------------------------------
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+napoleon_include_init_with_doc = True
+napoleon_include_private_with_doc = False
+napoleon_include_special_with_doc = True
+napoleon_use_admonition_for_examples = False
+napoleon_use_admonition_for_notes = False
+napoleon_use_admonition_for_references = False
+napoleon_use_ivar = False
+napoleon_use_param = True
+napoleon_use_rtype = True
 
 
 # -- Options for HTML output -------------------------------------------------

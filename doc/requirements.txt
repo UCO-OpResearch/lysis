@@ -1,0 +1,15 @@
+# Documentation build requirements for ReadTheDocs
+# These are the packages needed to build the Sphinx documentation
+
+# Sphinx and theme
+sphinx>=6.0
+sphinx_rtd_theme>=3.0
+sphinxcontrib-jquery>=4.0
+
+# Required for autodoc to import the modules
+numpy>=1.20
+h5py>=3.0
+pint>=0.20
+
+# For napoleon extension (Google/NumPy style docstrings)
+# Already included in sphinx
