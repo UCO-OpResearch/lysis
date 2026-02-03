@@ -323,7 +323,7 @@ class EdgeGrid(object):
                 neighbors[
                     edge_lookup((i, j)),
                     k,
-                ] = -1
+                ] = edge_lookup((i, j))
             else:
                 neighbors[
                     edge_lookup((i, j)),

@@ -32,7 +32,7 @@ class MacroscaleRun:
         self.fiber_status = np.full(
             self.exp.macro_params.rows * self.exp.macro_params.full_row,
             float("inf"),
-            dtype=np.float_,
+            dtype=np.float64,
         )
         self.real_fiber = np.full(
             self.exp.macro_params.rows * self.exp.macro_params.full_row,
@@ -130,16 +130,16 @@ class MacroscaleRun:
 
         self.bound = np.full(exp.macro_params.total_molecules, False, dtype=np.bool_)
         self.waiting_time = np.full(
-            exp.macro_params.total_molecules, 0, dtype=np.float_
+            exp.macro_params.total_molecules, 0, dtype=np.float64
         )
         self.binding_time = np.full(
-            exp.macro_params.total_molecules, float("inf"), dtype=np.float_
+            exp.macro_params.total_molecules, float("inf"), dtype=np.float64
         )
         self.unbound_by_degradation = np.full(
             exp.macro_params.total_molecules, 0, dtype=np.bool_
         )
         self.time_to_reach_back_row = np.full(
-            exp.macro_params.total_molecules, float("inf"), dtype=np.float_
+            exp.macro_params.total_molecules, float("inf"), dtype=np.float64
         )
         self.reached_back_row = np.full(
             exp.macro_params.total_molecules, False, dtype=np.bool_
@@ -164,7 +164,7 @@ class MacroscaleRun:
                 self.exp.macro_params.number_of_saves,
                 self.exp.macro_params.rows * self.exp.macro_params.full_row,
             ),
-            dtype=np.float_,
+            dtype=np.float64,
         )
         self.exp.data.molecule_location = np.empty(
             (
@@ -182,7 +182,7 @@ class MacroscaleRun:
         )
         self.exp.data.save_time = np.empty(
             (self.exp.macro_params.number_of_saves,),
-            dtype=np.float_,
+            dtype=np.float64,
         )
 
         self.logger.debug(f"Initialization complete.")
@@ -601,7 +601,7 @@ class MacroscaleRun:
 
             if self.exp.macro_params.duplicate_fortran:
                 self.random_numbers = np.empty(
-                    (8, self.exp.macro_params.total_molecules), np.float_
+                    (8, self.exp.macro_params.total_molecules), np.float64
                 )
                 for i in range(8):
                     self.random_numbers[i] = self.rng.random(
