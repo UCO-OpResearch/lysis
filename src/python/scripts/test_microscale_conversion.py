@@ -2,10 +2,17 @@
 """Test script for converting Fortran microscale data to HDF5 format.
 
 This script tests the data conversion pipeline by:
-1. Reading Fortran v1.99.0 microscale output files
+1. Reading Fortran v1.99.0 microscale output files (including parameters)
 2. Converting to v2.0.0 HDF5 format
-3. Optionally testing round-trip conversion
-4. Reporting any issues found
+3. Validating the conversion by comparing field mappings
+4. Testing round-trip conversion (v1.99.0 → v2.0.0 → v1.99.0)
+5. Reporting any issues found
+
+The script uses the high-level read_data_collection() function which automatically
+handles parameter loading, so manual parameter reading is not needed.
+
+Note: The test data directory should contain Fortran microscale output files with
+the naming pattern: {dataset_name}_PLG2_tPA01_TB-xiii.dat
 """
 
 import sys
@@ -13,8 +20,9 @@ import os
 import numpy as np
 from pathlib import Path
 
-# Add src/python to path
-sys.path.insert(0, str(Path(__file__).parent / "src" / "python"))
+# Add parent directory (src/python) to path so we can import lysis
+sys.path.insert(0, str(Path(__file__).parent.parent))
+print(f"Path: {sys.path}")
 
 from lysis.util.fileops import read_data_collection, write_data_collection
 from lysis.util.dataconvert import convert_data
@@ -24,25 +32,38 @@ from lysis.util.dataspec import dataspec
 def test_microscale_conversion(data_path: str):
     """Test conversion of microscale Fortran data to HDF5.
 
-    :param data_path: Path to directory containing Fortran data files
+    This function performs a complete test of the data conversion system:
+    - Reads Fortran v1.99.0 files using read_data_collection() which automatically
+      loads parameters from the JSON file
+    - Converts to HDF5 v2.0.0 format using convert_data()
+    - Validates field mappings to ensure data integrity
+    - Tests round-trip conversion to detect any data loss
+
+    :param data_path: Path to directory containing Fortran data files and params.json
     :type data_path: str
+    :return: True if all tests passed, False otherwise
+    :rtype: bool
     """
     print("=" * 80)
     print("MICROSCALE DATA CONVERSION TEST")
     print("=" * 80)
     print(f"Data directory: {data_path}\n")
 
-    # Step 2: Read Fortran v1.99.0 microscale output
-    print("\nStep 2: Reading Fortran v1.99.0 microscale output files...")
+    # Step 1: Read Fortran v1.99.0 microscale output
+    # Note: Parameters are automatically loaded by read_data_collection()
+    print("\nStep 1: Reading Fortran v1.99.0 microscale output files...")
     try:
         # Get the microscale_out collection specification for v1.99.0
         fortran_spec = dataspec["v1.99.0"]["microscale_out"]
 
         # Read the data collection
+        # file_codes parameter specifies the suffix pattern for Fortran files
+        # (without the .dat extension, which is part of the data_location pattern)
+        # Files will be read as: {dataset_name}_PLG2_tPA01_TB-xiii.dat
         fortran_data = read_data_collection(
             path=data_path,
             collections=[fortran_spec],
-            file_codes=["_PLG2_tPA01_TB-xiii.dat"],
+            file_codes=["_PLG2_tPA01_TB-xiii"],
         )
 
         print(f"  ✓ Successfully read Fortran microscale data")
@@ -63,8 +84,9 @@ def test_microscale_conversion(data_path: str):
         traceback.print_exc()
         return False
 
-    # Step 3: Convert v1.99.0 → v2.0.0
-    print("\nStep 3: Converting v1.99.0 (Fortran) → v2.0.0 (HDF5)...")
+    # Step 2: Convert v1.99.0 → v2.0.0
+    # convert_data() will skip collections that don't exist in the input data
+    print("\nStep 2: Converting v1.99.0 (Fortran) → v2.0.0 (HDF5)...")
     try:
         hdf5_data = convert_data(
             input_data=fortran_data, input_set_spec="v1.99.0", output_set_spec="v2.0.0"
@@ -88,8 +110,8 @@ def test_microscale_conversion(data_path: str):
         traceback.print_exc()
         return False
 
-    # Step 4: Validate conversion by comparing field mappings
-    print("\nStep 4: Validating conversion...")
+    # Step 3: Validate conversion by comparing field mappings
+    print("\nStep 3: Validating conversion...")
     try:
         # Check some key field mappings
         validations = [
@@ -141,8 +163,8 @@ def test_microscale_conversion(data_path: str):
         traceback.print_exc()
         return False
 
-    # Step 5: Test round-trip conversion (optional)
-    print("\nStep 5: Testing round-trip conversion (v1.99.0 → v2.0.0 → v1.99.0)...")
+    # Step 4: Test round-trip conversion (optional)
+    print("\nStep 4: Testing round-trip conversion (v1.99.0 → v2.0.0 → v1.99.0)...")
     try:
         roundtrip_data = convert_data(
             input_data=hdf5_data, input_set_spec="v2.0.0", output_set_spec="v1.99.0"
