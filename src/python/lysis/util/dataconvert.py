@@ -300,11 +300,13 @@ def safe_np_string_conversion(str_array, dtype, copy=True):
     # For string/object conversions, we can use 'unsafe' casting
     # because we're not changing the actual data, just the dtype representation
     # Check if source and target are both string-like types
-    if str_array.dtype.kind in ['U', 'S', 'O'] and target_dtype.kind in ['U', 'S', 'O']:
+    if str_array.dtype.kind in ["U", "S", "O"] and target_dtype.kind in ["U", "S", "O"]:
         return str_array.astype(target_dtype, casting="unsafe", copy=copy)
     else:
         # Not a string-to-string conversion, raise TypeError
-        raise TypeError(f"Cannot convert from dtype {str_array.dtype} to {target_dtype}")
+        raise TypeError(
+            f"Cannot convert from dtype {str_array.dtype} to {target_dtype}"
+        )
 
 
 def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
@@ -350,7 +352,7 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     Notes
     -----
     - Microscale simulations will always be divided into 100 bins
-    - Uses 6,000 seconds as "infinity" marker for incomplete fiber degradation
+    - Uses infinity as marker for incomplete fiber degradation
     - Preserves all parameters from input data in the output
 
     See Also
@@ -389,9 +391,8 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     lysis_time = in_data["sim_final_time"]
 
     # For simulations where lysis did NOT complete, mark with sentinel value
-    # 6,000 seconds represents "infinity" (much longer than typical simulation times)
     # This allows incomplete simulations to be identified and handled separately
-    lysis_time[~lysis_complete] = 6_000
+    lysis_time[~lysis_complete] = float("inf")
 
     # Organize fiber degradation times into 100 bins (columns)
     # 1. Split simulations into bins using the sorted ordering (indices)
@@ -406,8 +407,8 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     ).T
 
     # Count how many simulations in each bin successfully degraded
-    # argmax() finds first occurrence of 6000 (sentinel) in each column
-    # If no 6000 exists (all degraded), argmax returns 0 → all succeeded
+    # argmax() finds first occurrence of infinity (sentinel) in each column
+    # If no infinity exists (all degraded), argmax returns 0 → all succeeded
     # TODO: Handle case where all fibers degrade
     # This gives the count of successful degradations per bin
     out_data["binned_fiber_degraded"] = out_data["binned_fiber_degrade_time"].argmax(
@@ -556,73 +557,110 @@ def _not_implemented(dataset_name: str, input_spec: str, output_spec: str):
 data_converters: dict[
     tuple[str, str], dict[str, Callable[[DataCollectionType], DataSetType]]
 ] = {
+    # ============================================================================
     # Convert from v2.0.0 (HDF5 unified format) to v1.99.0 (Fortran file-based format)
+    # ============================================================================
     ("v2.0.0", "v1.99.0"): {
+        # ------------------------------------------------------------------------
         # Microscale output datasets (fully implemented - direct field mapping)
-        "micro_log": lambda data: data["micro_log"],
-        "firstPLi": lambda data: data["pli_first_time"],
-        "lasttPA": lambda data: data["tpa_final_num"],
-        "lyscomplete": lambda data: data["fiber_degraded"],
-        "lysis": lambda data: data["sim_final_time"],
-        "PLi": lambda data: data["pli_generated_num"],
-        "tPA_time": lambda data: data["tpa_leaving_time"],
-        "tPAPLiunbd": lambda data: data["tpa_unbound_by_pli"],
-        "tPAunbind": lambda data: data["tpa_unbound_kinetic"],
-        # Macroscale input datasets (not yet implemented - complex binned data structures)
-        "tPAleave": _not_implemented("tPAleave", "v2.0.0", "v1.99.0"),
-        "tsectPA": _not_implemented("tsectPA", "v2.0.0", "v1.99.0"),
-        "lysismat": _not_implemented("lysismat", "v2.0.0", "v1.99.0"),
-        "lenlysisvect": _not_implemented("lenlysisvect", "v2.0.0", "v1.99.0"),
-        "neighbors": _not_implemented("neighbors", "v2.0.0", "v1.99.0"),
+        # ------------------------------------------------------------------------
+        "micro_log": lambda data: data["micro_log"],  # Direct mapping
+        "firstPLi": lambda data: data["pli_first_time"],  # Direct mapping
+        "lasttPA": lambda data: data["tpa_final_num"],  # Direct mapping
+        "lyscomplete": lambda data: data["fiber_degraded"],  # Direct mapping
+        "lysis": lambda data: data["sim_final_time"],  # Direct mapping
+        "PLi": lambda data: data["pli_generated_num"],  # Direct mapping
+        "tPA_time": lambda data: data["tpa_leaving_time"],  # Direct mapping
+        "tPAPLiunbd": lambda data: data["tpa_unbound_by_pli"],  # Direct mapping
+        "tPAunbind": lambda data: data["tpa_unbound_kinetic"],  # Direct mapping
+        # ------------------------------------------------------------------------
+        # Macroscale input datasets (fully implemented)
+        # ------------------------------------------------------------------------
+        "tPAleave": lambda data: data["bin_edge_proportions"],  # Direct mapping
+        "tsectPA": lambda data: data["bin_edge_tpa_leaving_time"],  # Direct mapping
+        "lysismat": lambda data: np.where(
+            data["binned_fiber_degrade_time"] == float("inf"),  # Replace infinity
+            6_000,  # With 6,000
+            data["binned_fiber_degrade_time"],
+        ),
+        "lenlysisvect": lambda data: data["binned_fiber_degraded"]
+        + 1,  # Convert to 1-based indexing
+        "neighbors": lambda data: np.reshape(
+            data["edge_grid_neighbors"] + 1,  # Convert to 1-based indexing
+            -1,
+            1,  # Reshape into column vector
+        ),
+        # ------------------------------------------------------------------------
         # Macroscale output datasets (partially implemented - requires grid index conversion)
+        # ------------------------------------------------------------------------
         "macro_log": lambda data: data["macro_log"],  # Direct mapping
-        "Nsave": _not_implemented("Nsave", "v2.0.0", "v1.99.0"),
-        "tsave": _not_implemented("tsave", "v2.0.0", "v1.99.0"),
+        "Nsave": lambda data: [len(x) for x in data["snapshot_time"]],
+        "tsave": lambda data: data["snapshot_time"],
         "f_deg_list": _not_implemented("f_deg_list", "v2.0.0", "v1.99.0"),
         "m_bind_t": _not_implemented("m_bind_t", "v2.0.0", "v1.99.0"),
         "m_loc": _not_implemented("m_loc", "v2.0.0", "v1.99.0"),
         "m_bound": _not_implemented("m_bound", "v2.0.0", "v1.99.0"),
-        "mfpt": _not_implemented("mfpt", "v2.0.0", "v1.99.0"),
+        "mfpt": lambda data: data["tpa_transit_time"],
     },
+    # ============================================================================
     # Convert from v1.99.0 (Fortran file-based format) to v2.0.0 (HDF5 unified format)
+    # ============================================================================
     ("v1.99.0", "v2.0.0"): {
+        # ------------------------------------------------------------------------
         # Microscale output datasets (fully implemented - direct field mapping)
-        "micro_log": lambda data: data["micro_log"],
-        "pli_first_time": lambda data: data["firstPLi"],
-        "tpa_final_num": lambda data: data["lasttPA"],
-        "fiber_degraded": lambda data: data["lyscomplete"],
-        "sim_final_time": lambda data: data["lysis"],
-        "pli_generated_num": lambda data: data["PLi"],
-        "tpa_leaving_time": lambda data: data["tPA_time"],
-        "tpa_unbound_by_pli": lambda data: data["tPAPLiunbd"],
-        "tpa_unbound_kinetic": lambda data: data["tPAunbind"],
-        # Macroscale input datasets (not yet implemented - reverse binning is non-trivial)
-        "bin_edge_proportions": _not_implemented(
-            "bin_edge_proportions", "v1.99.0", "v2.0.0"
+        # ------------------------------------------------------------------------
+        "micro_log": lambda data: data["micro_log"],  # Direct mapping
+        "pli_first_time": lambda data: data["firstPLi"],  # Direct mapping
+        "tpa_final_num": lambda data: data["lasttPA"],  # Direct mapping
+        "fiber_degraded": lambda data: data["lyscomplete"],  # Direct mapping
+        "sim_final_time": lambda data: data["lysis"],  # Direct mapping
+        "pli_generated_num": lambda data: data["PLi"],  # Direct mapping
+        "tpa_leaving_time": lambda data: data["tPA_time"],  # Direct mapping
+        "tpa_unbound_by_pli": lambda data: data["tPAPLiunbd"],  # Direct mapping
+        "tpa_unbound_kinetic": lambda data: data["tPAunbind"],  # Direct mapping
+        # ------------------------------------------------------------------------
+        # Macroscale input datasets (For testing only! These values should not be stored)
+        # ------------------------------------------------------------------------
+        "bin_edge_proportions": lambda data: data["tPAleave"],  # Direct mapping
+        "bin_edge_tpa_leaving_time": lambda data: data["tsectPA"],  # Direct mapping
+        "binned_fiber_degrade_time": lambda data: np.where(
+            data["lysismat"] == 6_000,  # Replace 6,000
+            float("inf"),  # With infinity
+            data["lysismat"],
         ),
-        "bin_edge_tpa_leaving_time": _not_implemented(
-            "bin_edge_tpa_leaving_time", "v1.99.0", "v2.0.0"
+        "binned_fiber_degraded": lambda data: data["lenlysisvect"]
+        - 1,  # Convert to 0-based indexing
+        "edge_grid_neighbors": lambda data: np.reshape(
+            data["neighbors"] - 1,  # Convert to 0-based indexing
+            -1,  # Rearrange to one row per edge
+            8,  # One neighbor per column
         ),
-        "binned_fiber_degrade_time": _not_implemented(
-            "binned_fiber_degrade_time", "v1.99.0", "v2.0.0"
-        ),
-        "binned_fiber_degraded": _not_implemented(
-            "binned_fiber_degraded", "v1.99.0", "v2.0.0"
-        ),
-        "edge_grid_neighbors": _not_implemented(
-            "edge_grid_neighbors", "v1.99.0", "v2.0.0"
-        ),
+        # ------------------------------------------------------------------------
         # Macroscale output datasets (partially implemented - grid coordinate conversion)
+        # ------------------------------------------------------------------------
         "macro_log": lambda data: data["macro_log"],  # Direct mapping
-        "snapshot_time": _not_implemented("snapshot_time", "v1.99.0", "v2.0.0"),
+        "snapshot_time": lambda data: data["tsave"],
         "fiber_degrade_time": functools.partial(
             convert_fiber_degrade_time, input_spec="v1.99.0", output_spec="v2.0.0"
         ),
         "tpa_bind_events": _not_implemented("tpa_bind_events", "v1.99.0", "v2.0.0"),
-        "tpa_location_snapshot": _not_implemented(
-            "tpa_location_snapshot", "v1.99.0", "v2.0.0"
-        ),
-        "tpa_transit_time": _not_implemented("tpa_transit_time", "v1.99.0", "v2.0.0"),
+        "tpa_location_snapshot": lambda data: [
+            np.moveaxis(
+                from_fortran_edge_index_array(  # Convert to 2-D indexing
+                    table - 1,  # Convert to 0-based indexing
+                    data["params"]["macro_params"]["rows"],
+                    data["params"]["macro_params"]["cols"],
+                ).reshape(  # Unstack so each (timestep, molecule) has its own slice
+                    -1,
+                    data["params"]["macro_params"]["total_molecules"],
+                    2,
+                ),
+                [0, 1, 2],  # Rearrange the axes of the array so that they are
+                [2, 0, 1],  # Molecule, position, time
+            )
+            for table in data["m_loc"]
+        ],
+        "tpa_transit_time": lambda data: data["mfpt"],
     },
 }
 
@@ -768,8 +806,12 @@ def convert_data(
                             output_table = safe_np_int_conversion(data_table, dtype=dt)
                         case "b":  # Boolean - validate values are 0 or 1
                             output_table = safe_np_bool_conversion(data_table)
-                        case "U" | "S" | "O":  # String types (Unicode, byte string, object)
-                            output_table = safe_np_string_conversion(data_table, dtype=dt)
+                        case (
+                            "U" | "S" | "O"
+                        ):  # String types (Unicode, byte string, object)
+                            output_table = safe_np_string_conversion(
+                                data_table, dtype=dt
+                            )
                         case "f":  # Float - safe conversion not yet implemented
                             # TODO: Create a function that does the same thing as the safe_np_int_conversion, but for floats.
                             raise NotImplementedError("Not implemented yet")
