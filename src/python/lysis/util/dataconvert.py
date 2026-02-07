@@ -34,6 +34,7 @@ Key Functions
 - :func:`convert_fiber_degrade_time`: Converts fiber degradation timing data
 - :func:`safe_np_int_conversion`: Safely converts integer arrays with bounds checking
 - :func:`safe_np_bool_conversion`: Safely converts boolean arrays with validation
+- :func:`safe_np_string_conversion`: Safely converts string/object arrays between dtypes
 
 Example Usage
 -------------
@@ -237,6 +238,73 @@ def safe_np_bool_conversion(int_array, copy=True):
             return int_array.astype(np.bool, casting=casting, copy=copy)
         else:
             raise OverflowError("Cannot convert safely to np.bool type")
+
+
+def safe_np_string_conversion(str_array, dtype, copy=True):
+    """Safely convert string/object arrays to a target string dtype.
+
+    Handles conversions between object arrays containing strings and fixed-width
+    Unicode string dtypes (e.g., '<U75'). This is needed when round-trip converting
+    data between formats that use different string representations (e.g., v1.99.0
+    uses fixed-width Unicode strings like '<U75', while v2.0.0 may use object dtype).
+
+    The function allows 'unsafe' casting for string-to-string conversions because
+    we're only changing the dtype representation, not the actual string data.
+
+    :param str_array: Input array or array-like of strings
+    :type str_array: array_like
+    :param dtype: Target NumPy dtype (e.g., 'U75', np.dtype('<U75'), object)
+    :type dtype: numpy.dtype or str
+    :param copy: Whether to copy the data (True) or reuse memory if possible (False)
+    :type copy: bool, optional
+    :return: Array converted to target dtype
+    :rtype: numpy.ndarray
+    :raises TypeError: If input cannot be safely converted to target dtype
+
+    Examples
+    --------
+    Object to Unicode string (common in round-trip conversions)::
+
+        >>> arr = np.array(['hello', 'world'], dtype=object)
+        >>> safe_np_string_conversion(arr, dtype='U10')
+        array(['hello', 'world'], dtype='<U10')
+
+    Unicode to object::
+
+        >>> arr = np.array(['hello', 'world'], dtype='U5')
+        >>> safe_np_string_conversion(arr, dtype=object)
+        array(['hello', 'world'], dtype=object)
+
+    Unicode size change::
+
+        >>> arr = np.array(['test'], dtype='U4')
+        >>> safe_np_string_conversion(arr, dtype='U10')
+        array(['test'], dtype='<U10')
+
+    Notes
+    -----
+    This function is particularly important for round-trip conversions where:
+    - v1.99.0 → v2.0.0: Fixed-width Unicode ('<U75') may become object dtype
+    - v2.0.0 → v1.99.0: Object dtype needs to convert back to fixed-width Unicode
+
+    The 'unsafe' casting is safe for string types because NumPy will:
+    - Truncate strings that are too long for the target dtype (by design)
+    - Preserve all data when converting object → Unicode if strings fit
+    """
+    str_array = np.array(str_array)
+    target_dtype = np.dtype(dtype)
+
+    if str_array.size == 0:
+        return str_array.astype(target_dtype, copy=copy)
+
+    # For string/object conversions, we can use 'unsafe' casting
+    # because we're not changing the actual data, just the dtype representation
+    # Check if source and target are both string-like types
+    if str_array.dtype.kind in ['U', 'S', 'O'] and target_dtype.kind in ['U', 'S', 'O']:
+        return str_array.astype(target_dtype, casting="unsafe", copy=copy)
+    else:
+        # Not a string-to-string conversion, raise TypeError
+        raise TypeError(f"Cannot convert from dtype {str_array.dtype} to {target_dtype}")
 
 
 def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
@@ -700,6 +768,8 @@ def convert_data(
                             output_table = safe_np_int_conversion(data_table, dtype=dt)
                         case "b":  # Boolean - validate values are 0 or 1
                             output_table = safe_np_bool_conversion(data_table)
+                        case "U" | "S" | "O":  # String types (Unicode, byte string, object)
+                            output_table = safe_np_string_conversion(data_table, dtype=dt)
                         case "f":  # Float - safe conversion not yet implemented
                             # TODO: Create a function that does the same thing as the safe_np_int_conversion, but for floats.
                             raise NotImplementedError("Not implemented yet")

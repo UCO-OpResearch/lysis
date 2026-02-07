@@ -82,6 +82,7 @@ See Also
 - dataconvert.py : Functions that convert between spec versions
 - datastore.py : High-level interface using these specs
 """
+
 import os
 
 from collections.abc import Callable
@@ -304,13 +305,6 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
                 # Log file with simulation status messages
                 "micro_log": DataSetSpec(
                     data_location="micro{file_code}.txt",
-                    dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
-                    dtype=str,
-                    delimiter="\u0000",  # Null-terminated strings
-                ),
-                # Source code file (for reproducibility)
-                "micro_code": DataSetSpec(
-                    data_location="micro_rates.f90",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
                     dtype=str,
                     delimiter="\u0000",  # Null-terminated strings
@@ -698,8 +692,8 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
 # only this dictionary needs to be updated.
 tags = {
     "fortran": "v1.99.0",  # Alias for Fortran-compatible file format
-    "hdf5": "v2.0.0",      # Alias for HDF5 unified storage format
-    "current": "hdf5",     # Alias for current recommended format (can be changed)
+    "hdf5": "v2.0.0",  # Alias for HDF5 unified storage format
+    "current": "hdf5",  # Alias for current recommended format (can be changed)
 }
 
 # Add tag aliases to the dataspec dictionary by copying the referenced specs
