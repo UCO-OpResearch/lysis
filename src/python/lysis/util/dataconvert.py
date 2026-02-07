@@ -572,13 +572,14 @@ def convert_data(
 
     1. Resolves tag aliases (like "current", "fortran") to version numbers
     2. Iterates through all datasets required by the output specification
-    3. Applies the appropriate converter function for each dataset
-    4. Performs safe type conversions to match output specification dtypes
-    5. Handles both combined and per-simulation data structures
+    3. **Skips collections that don't exist in the input data** (allows partial conversion)
+    4. Applies the appropriate converter function for each dataset
+    5. Performs safe type conversions to match output specification dtypes
+    6. Handles both combined and per-simulation data structures
 
-    The function uses the ``data_converters`` registry to find appropriate
-    conversion functions. Missing converters trigger warnings but don't stop
-    the conversion process.
+    The function gracefully handles partial data by checking if each collection
+    exists before attempting conversion. This allows converting only microscale
+    data without requiring macroscale data to be present.
 
     :param input_data: Complete data collection to convert, including all
                        datasets and parameters
@@ -613,12 +614,20 @@ def convert_data(
         >>> macro_input = generate_macroscale_in(micro_results)
         >>> fortran_input = convert_data(macro_input, "v2.0.0", "v1.99.0")
 
+    Partial data conversion (only microscale, no macroscale)::
+
+        >>> # Load only microscale output (no macroscale data)
+        >>> micro_only = read_data_collection(path, [microscale_out_spec], [""])
+        >>> # Convert successfully - macroscale collections are skipped automatically
+        >>> hdf5_data = convert_data(micro_only, "v1.99.0", "v2.0.0")
+
     Notes
     -----
     - Tag aliases are automatically resolved before conversion
     - Parameters are copied directly without conversion
-    - Missing datasets generate warnings but don't stop conversion
-    - Type conversions use safe methods that check bounds
+    - **Collections that don't exist in input data are skipped** (no error raised)
+    - Type conversions use safe methods that check bounds to prevent overflow
+    - Supports partial data conversion (e.g., microscale only, without macroscale)
     - TODO: Validate input_data against input_set_spec before conversion
     - TODO: Validate that input_set_spec and output_set_spec exist
 
@@ -645,18 +654,29 @@ def convert_data(
 
     # Iterate through all data collections in the output specification
     # (e.g., microscale_out, macroscale_in, macroscale_out)
-    for collection in dataspec[output_set_spec].values():
+    for name, collection in dataspec[output_set_spec].items():
+        # Check if this collection exists in the input data
+        # A collection is considered to exist if at least one of its datasets is present
+        # This allows convert_data() to work with partial data (e.g., only microscale_out
+        # without macroscale_in/out), preventing NotImplementedError for missing collections
+        collection_exists = True
+        for dataset in dataspec[input_set_spec][name].data.keys():
+            if not dataset in input_data:
+                collection_exists = False
+                break  # No need to check further if any dataset is missing
+
+        # Skip this collection if it doesn't exist in the input data
+        # This is expected when converting data that only contains some collections
+        # (e.g., microscale output only, without macroscale data)
+        if not collection_exists:
+            continue
+
         # Process each dataset within the collection
         for dataset_needed in collection.data.keys():
             # Apply the appropriate converter function for this dataset
-            try:
-                out = data_converters[input_set_spec, output_set_spec][dataset_needed](
-                    input_data
-                )
-            except KeyError as e:
-                # Converter not found - warn but continue with other datasets
-                warnings.warn(f"Missing data for {dataset_needed}")
-                continue
+            out = data_converters[input_set_spec, output_set_spec][dataset_needed](
+                input_data
+            )
 
             # Normalize data structure: ensure we're working with a list
             # If simulations_combined=True, converter returns single array → wrap in list
