@@ -146,8 +146,7 @@ See Also
 import json
 import os
 
-from enum import Flag, auto, unique
-from typing import Any, AnyStr, Mapping, Union, Callable
+from typing import AnyStr, Callable
 
 import numpy as np
 import h5py
@@ -157,9 +156,7 @@ from .dataspec import (
     DataCollectionSpec,
     DataSetSpec,
     DataCollectionType,
-    UnitParamsType,
     BaseParamsType,
-    dataspec,
     parse_shape,
     check_dataset_spec,
 )
@@ -175,6 +172,10 @@ __status__ = "Development"
 
 
 def _not_implemented(*args, **kwargs):
+    """Placeholder for storage types not yet implemented.
+
+    :raises NotImplementedError: Always raised when called
+    """
     raise NotImplementedError("This function is not yet implemented.")
 
 
@@ -185,6 +186,24 @@ def _read_file_text(
     sim: int = None,
     file_code: str = "",
 ) -> np.ndarray:
+    """Read a delimited text file (CSV, space-separated, etc.) into a NumPy array.
+
+    Uses numpy.loadtxt to read the file with the delimiter specified in the spec.
+    Common for Fortran output files in v1.99.0 format.
+
+    :param path: Directory containing the file (without filename)
+    :type path: AnyStr
+    :param spec: Dataset specification containing filename pattern, dtype, and delimiter
+    :type spec: DataSetSpec
+    :param params: Simulation parameters (not used for text files, but kept for interface consistency)
+    :type params: BaseParamsType, optional
+    :param sim: Simulation index for per-simulation files (e.g., 0, 1, 2...)
+    :type sim: int, optional
+    :param file_code: Additional code to insert into filename (e.g., "_PLG2_tPA01_TB-xiii.dat")
+    :type file_code: str, optional
+    :return: Array containing the file data
+    :rtype: np.ndarray
+    """
     return np.loadtxt(
         os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)),
         dtype=spec.dtype,
@@ -199,6 +218,27 @@ def _read_file_binary(
     sim: int = None,
     file_code: str = "",
 ) -> np.ndarray:
+    """Read a binary file into a NumPy array with proper reshaping.
+
+    Uses numpy.fromfile to read raw binary data, then reshapes it according to
+    the shape specification. The shape may reference parameters (e.g., "micro_simulations")
+    which are resolved using parse_shape().
+
+    Common for Fortran binary output files in v1.99.0 format.
+
+    :param path: Directory containing the file (without filename)
+    :type path: AnyStr
+    :param spec: Dataset specification containing filename pattern, dtype, and shape
+    :type spec: DataSetSpec
+    :param params: Simulation parameters used to resolve dynamic shapes
+    :type params: BaseParamsType, optional
+    :param sim: Simulation index for per-simulation files
+    :type sim: int, optional
+    :param file_code: Additional code to insert into filename
+    :type file_code: str, optional
+    :return: Reshaped array containing the file data
+    :rtype: np.ndarray
+    """
     dataset = np.fromfile(
         os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)),
         dtype=spec.dtype,
@@ -213,6 +253,24 @@ def _read_file_json(
     sim: int = None,
     file_code: str = "",
 ) -> BaseParamsType:
+    """Read a JSON file containing parameter dictionaries.
+
+    Uses Python's json library to parse the file. Typically used for reading
+    parameter files (micro_params, macro_params) in both v1.99.0 and v2.0.0 formats.
+
+    :param path: Directory containing the file (without filename)
+    :type path: AnyStr
+    :param spec: Dataset specification containing filename pattern
+    :type spec: DataSetSpec
+    :param params: Not used for JSON files, kept for interface consistency
+    :type params: BaseParamsType, optional
+    :param sim: Simulation index for per-simulation files
+    :type sim: int, optional
+    :param file_code: Additional code to insert into filename
+    :type file_code: str, optional
+    :return: Dictionary containing the parsed JSON data
+    :rtype: BaseParamsType
+    """
     with open(
         os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)), "r"
     ) as file:
@@ -228,6 +286,26 @@ def _read_hdf5_attr(
     sim: int = None,
     file_code: str = "",
 ) -> BaseParamsType:
+    """Read HDF5 group attributes as parameter dictionaries.
+
+    Reads all attributes from an HDF5 group and returns them as a nested dictionary.
+    Used for reading parameters stored as HDF5 attributes in v2.0.0 format.
+
+    The output structure is: {group_path: {attr_name: attr_value, ...}}
+
+    :param path: Path to the HDF5 file (full file path, not just directory)
+    :type path: AnyStr
+    :param spec: Dataset specification containing the HDF5 group path
+    :type spec: DataSetSpec
+    :param params: Not used for HDF5 attributes, kept for interface consistency
+    :type params: BaseParamsType, optional
+    :param sim: Simulation index for per-simulation files
+    :type sim: int, optional
+    :param file_code: Additional code to insert into group path
+    :type file_code: str, optional
+    :return: Nested dictionary containing {group_path: {attribute_name: value}}
+    :rtype: BaseParamsType
+    """
     out = {}
     out[spec.data_location.format(sim=sim, file_code=file_code)] = {}
     with h5py.File(path, "r") as file:
@@ -246,22 +324,47 @@ def _read_hdf5_dataset(
     sim: int = None,
     file_code: str = "",
 ) -> np.ndarray:
+    """Read an HDF5 dataset into a NumPy array.
+
+    Reads a complete HDF5 dataset using the [:] slice notation to load all data
+    into memory. Used for reading numerical datasets in v2.0.0 HDF5 format.
+
+    :param path: Path to the HDF5 file (full file path, not just directory)
+    :type path: AnyStr
+    :param spec: Dataset specification containing the HDF5 dataset path
+    :type spec: DataSetSpec
+    :param params: Not used for HDF5 datasets, kept for interface consistency
+    :type params: BaseParamsType, optional
+    :param sim: Simulation index for per-simulation files
+    :type sim: int, optional
+    :param file_code: Additional code to insert into dataset path
+    :type file_code: str, optional
+    :return: Array containing the HDF5 dataset data
+    :rtype: np.ndarray
+    """
     with h5py.File(path, "r") as file:
         table = file[spec.data_location.format(sim=sim, file_code=file_code)][:]
     return table
 
 
+# Registry mapping storage types to their corresponding reader functions
+# This enables the dispatcher pattern in read_dataset() - based on the
+# dataset_storage_type field in a DataSetSpec, the appropriate reader
+# function is automatically selected and called.
+#
+# Each reader function must accept: (path, spec, params, sim, file_code)
+# and return either a NumPy array (for data) or dict (for parameters)
 data_readers: dict[
     DataSetSpec,
     Callable[
         [AnyStr, DataSetSpec, BaseParamsType, int, str], np.ndarray | BaseParamsType
     ],
 ] = {
-    CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _read_file_text,
-    CONST.DATASET_STORAGE_TYPE.FILE_BINARY: _read_file_binary,
-    CONST.DATASET_STORAGE_TYPE.FILE_JSON: _read_file_json,
-    CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _read_hdf5_attr,
-    CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _read_hdf5_dataset,
+    CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _read_file_text,       # Delimited text files (CSV, etc.)
+    CONST.DATASET_STORAGE_TYPE.FILE_BINARY: _read_file_binary,   # Raw binary files (Fortran)
+    CONST.DATASET_STORAGE_TYPE.FILE_JSON: _read_file_json,       # JSON parameter files
+    CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _read_hdf5_attr,       # HDF5 group attributes (params)
+    CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _read_hdf5_dataset, # HDF5 datasets (numerical data)
 }
 
 
@@ -272,24 +375,56 @@ def read_dataset(
     sim: int = None,
     file_code: str = "",
 ) -> np.ndarray | BaseParamsType:
-    """
-    Reads a single table
+    """Read a single dataset using the appropriate reader for its storage type.
 
-    This function calls the reader function matching the 
-    type of this dataset from the `data_readers` dictionary
+    This is the mid-level API for reading individual datasets. It automatically
+    dispatches to the correct reader function (_read_file_text, _read_file_binary,
+    _read_file_json, _read_hdf5_attr, or _read_hdf5_dataset) based on the
+    dataset_storage_type specified in the DataSetSpec.
 
-    :param path: _description_
+    For most use cases, prefer read_data_collection() which handles complete
+    collections automatically.
+
+    :param path: Directory containing files (for file-based storage) or path to
+                 HDF5 file (for HDF5-based storage)
     :type path: AnyStr
-    :param spec: _description_
+    :param spec: Dataset specification defining storage type, location, dtype, and shape
     :type spec: DataSetSpec
-    :param params: _description_, defaults to None
+    :param params: Simulation parameters used for resolving dynamic shapes in binary files
     :type params: BaseParamsType, optional
-    :param sim: _description_, defaults to None
+    :param sim: Simulation index for per-simulation storage (e.g., 0, 1, 2...).
+                None for combined storage.
     :type sim: int, optional
-    :param file_code: _description_, defaults to ""
+    :param file_code: Optional string to insert into filename/path patterns.
+                      Example: "_PLG2_tPA01_TB-xiii.dat" for Fortran files.
     :type file_code: str, optional
-    :return: _description_
+    :return: For numerical datasets: NumPy array. For parameter datasets: dictionary.
     :rtype: np.ndarray | BaseParamsType
+
+    Examples
+    --------
+    Reading a single Fortran binary file::
+
+        >>> from lysis.util.dataspec import dataspec
+        >>> spec = dataspec["v1.99.0"]["microscale_out"].data["lysis"]
+        >>> data = read_dataset(
+        ...     path="/path/to/data",
+        ...     spec=spec,
+        ...     params=params,
+        ...     file_code="_PLG2_tPA01_TB-xiii.dat"
+        ... )
+
+    Reading an HDF5 dataset::
+
+        >>> spec = dataspec["v2.0.0"]["microscale_out"].data["sim_final_time"]
+        >>> data = read_dataset(
+        ...     path="/path/to/file.h5",
+        ...     spec=spec
+        ... )
+
+    See Also
+    --------
+    :func:`read_data_collection` : Read complete data collections (recommended)
     """
     return data_readers[spec.dataset_storage_type](
         path, spec, params=params, sim=sim, file_code=file_code
@@ -301,52 +436,127 @@ def read_data_collection(
     collections: list[DataCollectionSpec],
     file_codes: list[str],
 ) -> DataCollectionType:
-    """
-    Iterates over the items in a data collection, calling the `read_dataset` function
-    for each item.
-    This function also determines whether simulations are stored together or separately
-    and calls the appropriate functions.
-    This function also handles parameter loading
+    """Read complete data collections from disk.
 
-    :param path: _description_
+    This is the high-level API for reading simulation data. It handles:
+    - Reading parameters first (required for resolving dynamic shapes)
+    - Determining whether simulations are stored separately or combined
+    - Iterating through all datasets in each collection
+    - Loading per-simulation files until no more are found
+    - Merging parameters from multiple collections
+
+    **Recommended** for most use cases as it handles all the complexity of
+    reading multi-collection, multi-simulation data.
+
+    :param path: Directory containing files (for v1.99.0 Fortran format) or path to
+                 HDF5 file (for v2.0.0 format)
     :type path: AnyStr
-    :param collections: _description_
+    :param collections: List of collection specifications to read. Order matters as
+                        parameters from earlier collections are available to later ones.
+                        Typically from dataspec[version].values()
     :type collections: list[DataCollectionSpec]
-    :param file_codes: _description_
+    :param file_codes: List of file code strings, one per collection. Use [""] for
+                       no file codes. Example: ["_PLG2_tPA01_TB-xiii.dat"] for Fortran.
     :type file_codes: list[str]
-    :raises e: _description_
-    :return: _description_
+    :return: Dictionary containing all loaded datasets plus a "params" key with merged
+             parameters. For per-simulation storage, datasets are lists of arrays.
+             For combined storage, datasets are single arrays.
     :rtype: DataCollectionType
+    :raises FileNotFoundError: If sim=0 file is not found (no data exists)
+    :raises KeyError: If required HDF5 dataset/group is not found
+
+    Examples
+    --------
+    Reading Fortran v1.99.0 microscale output::
+
+        >>> from lysis.util.dataspec import dataspec
+        >>> collections = [dataspec["v1.99.0"]["microscale_out"]]
+        >>> data = read_data_collection(
+        ...     path="/path/to/fortran/data",
+        ...     collections=collections,
+        ...     file_codes=["_PLG2_tPA01_TB-xiii.dat"]
+        ... )
+        >>> # Access datasets
+        >>> lysis_times = data["lysis"]  # Single array (simulations_combined=True)
+        >>> params = data["params"]      # Merged parameter dictionary
+
+    Reading HDF5 v2.0.0 macroscale output (per-simulation storage)::
+
+        >>> collections = [dataspec["v2.0.0"]["macroscale_out"]]
+        >>> data = read_data_collection(
+        ...     path="/path/to/output.h5",
+        ...     collections=collections,
+        ...     file_codes=[""]
+        ... )
+        >>> # Access per-simulation datasets
+        >>> degrade_times = data["fiber_degrade_time"]  # List of arrays
+        >>> first_sim = degrade_times[0]                # Array for simulation 0
+
+    Reading multiple collections::
+
+        >>> # Read both microscale output and macroscale input
+        >>> collections = [
+        ...     dataspec["v2.0.0"]["microscale_out"],
+        ...     dataspec["v2.0.0"]["macroscale_in"]
+        ... ]
+        >>> data = read_data_collection(path, collections, ["", ""])
+
+    Notes
+    -----
+    - Per-simulation files are read sequentially (sim=0, 1, 2, ...) until FileNotFoundError
+    - Parameters are read first and made available to subsequent dataset reads
+    - Parameters from multiple collections are merged using dictionary union (|)
+    - If len(file_codes) < len(collections), empty strings are used for remaining collections
+
+    See Also
+    --------
+    :func:`read_dataset` : Read individual datasets
+    :func:`write_data_collection` : Write complete data collections
     """
+    # Initialize output dictionary with empty params
     data = {}
     data["params"] = {}
+
+    # Process each collection in order
     for idx, collection in enumerate(collections):
+        # Get the file code for this collection (use empty string if not provided)
         if len(file_codes) > idx:
             file_code = file_codes[idx]
         else:
             file_code = ""
+
+        # Read parameters first - needed for resolving dynamic shapes in later datasets
         params = read_dataset(path, collection.params, params=None, file_code=file_code)
+        # Merge parameters from this collection with previously loaded params
         data["params"] = data["params"] | params
+
+        # Read each dataset in the collection
         for name, spec in collection.data.items():
             if collection.simulations_combined is True:
+                # All simulations stored together in a single file/dataset
                 data[name] = read_dataset(
                     path, spec, params=params, file_code=file_code
                 )
             else:
+                # Each simulation stored in a separate file/dataset
                 data[name] = []
                 sim = 0
                 next_sim = True
+                # Keep reading simulation files until we run out
                 while next_sim:
                     try:
                         dataset = read_dataset(
                             path, spec, params=params, sim=sim, file_code=file_code
                         )
                     except (FileNotFoundError, KeyError) as e:
+                        # If the first simulation file doesn't exist, that's an error
                         if sim == 0:
                             raise e
+                        # Otherwise, we've simply read all available simulations
                         else:
                             next_sim = False
                     else:
+                        # Successfully read this simulation, add to list
                         data[name].append(dataset)
                         sim += 1
     return data
@@ -447,32 +657,49 @@ def _write_hdf5_attr(
     sim: int = None,
     file_code: str = "",
 ):
-    """
-    _summary_
+    """Write parameters as HDF5 group attributes.
 
-    :param data: _description_
-    :type data: dict[str, Any]
-    :param path: _description_
+    Creates or opens an HDF5 group and writes all parameters as attributes to that
+    group. Used for storing micro_params and macro_params in v2.0.0 HDF5 format.
+
+    The function converts the data location path to a parameter group name by
+    replacing "_data" with "_params" (e.g., "micro_data" → "micro_params").
+
+    :param data: Dictionary containing parameters to write. Should have structure
+                 {param_group_name: {key: value, ...}}
+    :type data: BaseParamsType
+    :param path: Path to the HDF5 file (full file path)
     :type path: AnyStr
-    :param spec: _description_
+    :param spec: Dataset specification containing the HDF5 group path
     :type spec: DataSetSpec
-    :param params: _description_, defaults to None
+    :param params: Not used for HDF5 attributes, kept for interface consistency
     :type params: BaseParamsType, optional
-    :param sim: _description_, defaults to None
+    :param sim: Simulation index for per-simulation files
     :type sim: int, optional
-    :param file_code: _description_, defaults to ""
+    :param file_code: Additional code to insert into group path
     :type file_code: str, optional
     """
-    with h5py.File(path, "w") as file:
+    with h5py.File(path, "a") as file:
+        # Create or get the HDF5 group for parameters
         group = file.require_group(
             spec.data_location.format(sim=sim, file_code=file_code)
         )
         # Convert data location (e.g., "micro_data/...") to params group (e.g., "micro_params")
         param_group_name = spec.data_location.format(sim=sim, file_code=file_code).replace("_data", "_params")
+        # Write each parameter as a group attribute
         for k, v in data[param_group_name].items():
             group.attrs[k] = v
 
 
+# Registry mapping storage types to their corresponding writer functions
+# This enables the dispatcher pattern in write_dataset() - based on the
+# dataset_storage_type field in a DataSetSpec, the appropriate writer
+# function is automatically selected and called.
+#
+# Each writer function must accept: (data, path, spec, params, sim, file_code)
+# and return None (writes occur as side effects to disk)
+#
+# Note: FILE_BINARY writer is not implemented (Fortran writes its own binary files)
 data_writers: dict[
     DataSetSpec,
     Callable[
@@ -480,10 +707,10 @@ data_writers: dict[
         None,
     ],
 ] = {
-    CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _write_file_text,
-    CONST.DATASET_STORAGE_TYPE.FILE_JSON: _not_implemented,
-    CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _write_hdf5_attr,
-    CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _write_hdf5_dataset,
+    CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _write_file_text,       # Delimited text files (CSV, etc.)
+    CONST.DATASET_STORAGE_TYPE.FILE_JSON: _not_implemented,       # JSON files (TODO: implement)
+    CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _write_hdf5_attr,       # HDF5 group attributes (params)
+    CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _write_hdf5_dataset, # HDF5 datasets (numerical data)
 }
 
 
@@ -496,6 +723,33 @@ def write_dataset(
     sim: int = None,
     file_code: str = "",
 ) -> None:
+    """Write a single dataset using the appropriate writer for its storage type.
+
+    This is the mid-level API for writing individual datasets. It automatically
+    dispatches to the correct writer function based on the dataset_storage_type
+    specified in the DataSetSpec.
+
+    For most use cases, prefer write_data_collection() which handles complete
+    collections automatically.
+
+    :param data: Data to write (array for numerical datasets, dict for parameters)
+    :type data: DataCollectionType
+    :param path: Directory for files (file-based storage) or HDF5 file path
+    :type path: AnyStr
+    :param spec: Dataset specification defining storage type, location, and dtype
+    :type spec: DataSetSpec
+    :param params: Simulation parameters used for validation
+    :type params: BaseParamsType, optional
+    :param sim: Simulation index for per-simulation storage
+    :type sim: int, optional
+    :param file_code: Optional string to insert into filename/path patterns
+    :type file_code: str, optional
+
+    See Also
+    --------
+    :func:`write_data_collection` : Write complete data collections (recommended)
+    :func:`read_dataset` : Read individual datasets
+    """
     data_writers[spec.dataset_storage_type](
         data, path, spec, params=params, sim=sim, file_code=file_code
     )
@@ -507,20 +761,83 @@ def write_data_collection(
     collections: list[DataCollectionSpec],
     file_codes: list[str],
 ):
+    """Write complete data collections to disk.
+
+    This is the high-level API for writing simulation data. It handles:
+    - Writing parameters first
+    - Determining whether simulations should be stored separately or combined
+    - Iterating through all datasets in each collection
+    - Writing per-simulation files for each simulation in the data
+
+    **Recommended** for most use cases as it handles all the complexity of
+    writing multi-collection, multi-simulation data.
+
+    :param data: Dictionary containing all datasets plus a "params" key with
+                 parameters. For per-simulation storage, datasets should be
+                 lists of arrays. For combined storage, datasets should be
+                 single arrays.
+    :type data: DataCollectionType
+    :param path: Directory for files (v1.99.0 Fortran format) or path to HDF5
+                 file (v2.0.0 format)
+    :type path: AnyStr
+    :param collections: List of collection specifications to write. Order should
+                        match how data was organized. Typically from
+                        dataspec[version].values()
+    :type collections: list[DataCollectionSpec]
+    :param file_codes: List of file code strings, one per collection. Use [""]
+                       for no file codes.
+    :type file_codes: list[str]
+
+    Examples
+    --------
+    Writing HDF5 v2.0.0 format::
+
+        >>> from lysis.util.dataspec import dataspec
+        >>> collections = list(dataspec["v2.0.0"].values())
+        >>> write_data_collection(
+        ...     data=simulation_results,
+        ...     path="/path/to/output.h5",
+        ...     collections=collections,
+        ...     file_codes=[""]
+        ... )
+
+    Writing Fortran v1.99.0 format::
+
+        >>> collections = [dataspec["v1.99.0"]["microscale_out"]]
+        >>> write_data_collection(
+        ...     data=fortran_data,
+        ...     path="/path/to/output/directory",
+        ...     collections=collections,
+        ...     file_codes=["_PLG2_tPA01_TB-xiii.dat"]
+        ... )
+
+    See Also
+    --------
+    :func:`write_dataset` : Write individual datasets
+    :func:`read_data_collection` : Read complete data collections
+    """
+    # Process each collection in order
     for idx, collection in enumerate(collections):
+        # Get the file code for this collection (use empty string if not provided)
         if len(file_codes) > idx:
             file_code = file_codes[idx]
         else:
             file_code = ""
+
+        # Write parameters first
         write_dataset(
             data["params"], path, collection.params, params=None, file_code=file_code
         )
+
+        # Write each dataset in the collection
         for name, spec in collection.data.items():
             if collection.simulations_combined is True:
+                # All simulations in a single file/dataset
                 write_dataset(
                     data[name], path, spec, params=data["params"], file_code=file_code
                 )
             else:
+                # Each simulation in a separate file/dataset
                 for sim, table in enumerate(data[name]):
                     write_dataset(
                         table,
