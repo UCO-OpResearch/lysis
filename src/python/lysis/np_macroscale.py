@@ -12,27 +12,9 @@ derived from microscale simulations.
 Simulation Algorithm
 --------------------
 
-The simulation follows these steps each timestep:
-
-1. **Unbinding**: Molecules bound to degraded fibers or whose binding time expired
-   are unbound. Forced unbinds impose a waiting period with restricted movement.
-
-2. **Movement decision**: Each unbound molecule has a probability of moving. Those
-   that move perform a random walk to one of 8 neighboring edges.
-
-3. **Binding decision**: Molecules at intact fibers may bind based on their binding
-   time and fiber status.
-
-4. **Conflict resolution**: When both binding and movement are scheduled, probability
-   favors binding if the molecule is overdue to bind.
-
-5. **Fiber degradation**: Bound molecules may cause their fiber to degrade based on
-   lysis times from microscale data.
-
-6. **Data collection**: Periodic snapshots of fiber and molecule state are saved.
-
-The simulation terminates early if all fibers degrade or runs until the configured
-end time.
+Each timestep involves unbinding, movement, binding, conflict resolution, fiber
+degradation, and data collection. See :meth:`MacroscaleSim.go` for the detailed
+step-by-step algorithm.
 
 Operational Modes
 -----------------
@@ -90,14 +72,9 @@ have already degraded, or remain in place.
 Data Storage
 ------------
 
-The simulation stores periodic snapshots of:
-
-- ``degradation_state``: Degradation time for each fiber (infinity if intact)
-- ``molecule_location``: 1D grid index of each molecule
-- ``molecule_state``: Boolean binding state of each molecule
-- ``save_time``: Simulation time corresponding to each snapshot
-
-Snapshots are taken at regular intervals and saved to disk at simulation end.
+Periodic snapshots of fiber and molecule state are saved at regular intervals.
+See :meth:`MacroscaleSim.save_data` and :meth:`MacroscaleSim.record_data_to_disk`
+for details on which arrays are stored.
 
 Performance Considerations
 --------------------------
@@ -108,10 +85,6 @@ The simulation is optimized for large-scale problems:
 - Vectorized operations: Process all molecules simultaneously when possible
 - Batch RNG: Generate binding times in large batches (1M+ at a time)
 - In-place operations: Minimize memory allocations during time-stepping
-
-For a 100x100 grid with 10,000 molecules over 1M timesteps, expect:
-- ~1-2 hours runtime (native mode, modern CPU)
-- ~2-3 GB RAM usage
 - Linear scaling with molecule count and timestep count
 
 Example Usage
@@ -194,11 +167,10 @@ See Also
 References
 ----------
 
-.. [1] Bannish, B.E., et al. (Year). "Multi-scale modeling of fibrin clot lysis."
-   (Add appropriate reference when available)
+.. TODO:: Add published references for the multi-scale fibrinolysis model.
 
 Notes
------
+------
 
 The simulation can terminate early if all fibers degrade before the configured
 end time. Check ``sim.last_degrade_time`` for the actual termination time.
@@ -308,7 +280,7 @@ class MacroscaleSim:
             self.run.macro_params.empty_rows, self.run.macro_params.full_row
         ):
             self.real_fiber[self.edge_lookup((i, j))] = False
-        # Find the non-existant vertical edges on the top row
+        # Find the non-existent vertical edges on the top row
         for j in range(run.macro_params.cols):
             self.real_fiber[
                 self.edge_lookup(
@@ -946,8 +918,8 @@ class MacroscaleSim:
         ]
         self.total_regular_moves += np.count_nonzero(free_to_move)
 
-        # I think this line is still here in case we want to remove the "follow Fortran"
-        # stuff later
+        # TODO: Determine whether this code can be used if the 'duplicate_fortran'
+        # options are removed.
         #
         # move_to_fiber = free_to_move & (self.m_fiber_status >= current_time)
 
@@ -1103,12 +1075,14 @@ class MacroscaleSim:
             # Determine which molecules should move
             if self.run.macro_params.duplicate_fortran:
                 move_chance = self.random_numbers[RandomDraw.MOVE]
-                # Fortran mode: compare with 1 - probability (reversed logic)
+                # Fortran mode: same probability of moving,
+                #       but which molecules are selected is different,
+                #       e.g., move if x ∈ (0.8, 1.0) instead of move if x ∈ (0.0, 0.2)
                 should_move = (
                     move_chance > 1 - self.run.macro_params.moving_probability
                 ) & ~self.bound
             else:
-                # Native mode: standard probability comparison
+                # Native mode: simpler, but equal probability comparison
                 move_chance = self.rng.random(self.run.macro_params.total_molecules)
                 should_move = (
                     move_chance < self.run.macro_params.moving_probability
@@ -1116,19 +1090,71 @@ class MacroscaleSim:
 
             # Resolve conflicts when both binding and moving are scheduled
             conflict = should_bind & should_move
-            # Binding probability increases linearly with how overdue it is
-            # If binding time is well past current_time, more likely to bind
-            threshold = (
-                current_time - self.binding_time[conflict]
-            ) / self.run.macro_params.time_step
+            # The molecule has been selected to move in this timestep, but the molecule
+            # is also due to bind sometime during this timestep since
+            #        current_time - timestep <= binding_time < current_time.
+            # The question is, which happens first, binding or moving.
+            # Since the molecule is due to move, we choose a random moment in the
+            # interval for that to happen.
+            # If the move is scheduled for after the bind, the molecule binds and the
+            # move is cancelled.
+            # If the move is scheduled for before the bind, the molecule moves and a
+            # new binding_time is chosen.
+            # All of this is normalized to a proportion to simplify calculation.
+            #
+            # Example:
+            #
+            # timestep = 0.042 sec
+            # current_time = 253.383 sec
+            # current interval: [253.341, 253.383)
+            # binding_time = 253.368 sec
+            # threshold = (253.368 - 253.341) / 0.042 = 0.643
+            #
+            # This means that the binding will happen 64.3% of the way through the
+            # current time interval. Since moving can happen at any time during the
+            # interval, there is a 64.3% chance that moving will happen before binding.
+            # So we draw a random number, to determine how far into the interval moving
+            # happens. If that number is in the range [0, 0.643) then moving happens
+            # (because it happens before binding could take place). If that number is in
+            # the range [0.643, 1.0] then binding happens (because it happens before
+            # moving could take place).
+            #
+            # Simulation Time:        (current_time - timestep)          (current_time)
+            #     (seconds)     0            253.341                  |      253.383
+            #                   |----- ... -----|-------------------------------|---...
+            #                                   |------threshold------|
+            #                                            0.643        |
+            #                                                    binding_time
+            #                                                      253.368
+            #                                                         |
+            #                                   |--------move---------|---bind--|
+            # Random number:                    0                   0.643       1
+            #
+            # NOTE: The Fortran code does this same calculation, but reverses the
+            #       interval.
+            #       I.e., move if x ∈ (0.357, 1.0) instead of bind if x ∈ [0.643, 1.0).
+            #
             if self.run.macro_params.duplicate_fortran:
+                # Determine the threshold for binding (how far from the end of the
+                # interval does binding happen?)
+                threshold = (
+                    current_time - self.binding_time[conflict]
+                ) / self.run.macro_params.time_step
+                # Bind if moving happens in that ending part
                 should_bind[conflict] = (
                     self.random_numbers[RandomDraw.CONFLICT_RESOLUTION][conflict]
                     <= threshold
                 )
             else:
+                # Determine the threshold for moving (how far from the beginning of the
+                # interval does binding happen?)
+                threshold = (
+                    self.binding_time[conflict]
+                    - (current_time - self.run.macro_params.time_step)
+                ) / self.run.macro_params.time_step
+                # Bind if movement would happen after binding.
                 should_bind[conflict] = (
-                    self.rng.random(np.count_nonzero(conflict)) <= threshold
+                    self.rng.random(np.count_nonzero(conflict)) >= threshold
                 )
             # Whatever doesn't bind will move
             should_move[conflict] = ~should_bind[conflict]
@@ -1172,7 +1198,7 @@ class MacroscaleSim:
                         f"{self.run.macro_params.total_fibers - unlysed_fibers:,} "
                         f"fibers are degraded ({unlysed_fiber_percent:.1f}% of total) "
                         f"and {self.number_reached_back_row:,} molecules have reached "
-                        f"the back row {reached_back_row_percent:.1f}% of total)."
+                        f"the back row ({reached_back_row_percent:.1f}% of total)."
                     )
 
         # Save final state and write all data to disk
