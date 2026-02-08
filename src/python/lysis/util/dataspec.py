@@ -454,7 +454,7 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
                 # Event log: time, molecule ID, new status, location for each tPA binding event
                 "m_bind_t": DataSetSpec(
                     data_location="{sim:02}/m_bind_t{file_code}_{sim:02}.dat",
-                    dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
+                    dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
                     dtype=np.dtype(
                         [
                             ("Simulation Time Elapsed", np.float64),

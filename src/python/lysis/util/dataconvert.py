@@ -482,6 +482,7 @@ def convert_structured_grid_fields(
     output_dataset: str,
     input_spec: str,
     output_spec: str,
+    field_offsets: dict[str, int] | None = None,
 ) -> list[np.ndarray]:
     """Convert structured arrays between grid indexing systems.
 
@@ -508,6 +509,10 @@ def convert_structured_grid_fields(
     :type input_spec: str
     :param output_spec: Output specification version (e.g., "v2.0.0")
     :type output_spec: str
+    :param field_offsets: Integer offsets to apply to common fields during
+        copy. For example, ``{"tPA Molecule Index": -1}`` converts a
+        1-based Fortran index to 0-based. Applied before dtype casting.
+    :type field_offsets: dict[str, int] or None
     :return: List of structured arrays (one per simulation) with converted
         grid-location fields and matching fields copied directly
     :rtype: list[numpy.ndarray]
@@ -551,10 +556,13 @@ def convert_structured_grid_fields(
         out_table = np.empty(table.shape, dtype=out_dtype)
         in_dtype = table.dtype
 
-        # Copy fields that exist in both dtypes unchanged
+        # Copy fields that exist in both dtypes, applying offsets if specified
         common_fields = set(in_dtype.names) & set(out_dtype.names)
         for field in common_fields:
-            out_table[field] = table[field]
+            if field_offsets and field in field_offsets:
+                out_table[field] = table[field] + field_offsets[field]
+            else:
+                out_table[field] = table[field]
 
         # Check for unhandled fields: any field that is not common to both
         # dtypes and not a recognized grid-location field
@@ -680,6 +688,140 @@ def convert_location_snapshot(
     return output
 
 
+def replay_event_log_to_snapshot(
+    event_log: np.ndarray,
+    snapshot_times: np.ndarray,
+    n_entities: int,
+    entity_field: str,
+    time_field: str,
+    state_mapper: Callable[[np.ndarray], np.ndarray],
+    initial_value: int = 0,
+    output_dtype: np.dtype = np.int32,
+) -> np.ndarray:
+    """Replay a chronologically-sorted event log into a snapshot array.
+
+    Given an event log where each row records a state change for some entity,
+    produces a 2D array of shape ``(n_snapshots, n_entities)`` where cell
+    ``[i, j]`` contains the state of entity ``j`` at snapshot time ``i``.
+
+    The state of each entity at a given snapshot is determined by applying
+    ``state_mapper`` to the entity's most recent event before that snapshot.
+    Entities with no events retain ``initial_value``.
+
+    Events are processed incrementally: for each snapshot, only the events
+    that occurred since the previous snapshot are applied. This gives
+    O(n_events + n_snapshots * n_entities) complexity.
+
+    :param event_log: Structured array of events, sorted chronologically by
+        ``time_field``.
+    :type event_log: np.ndarray
+    :param snapshot_times: 1D array of times at which to capture state.
+    :type snapshot_times: np.ndarray
+    :param n_entities: Total number of entities (determines output width).
+    :type n_entities: int
+    :param entity_field: Name of the structured array field containing
+        0-based entity IDs.
+    :type entity_field: str
+    :param time_field: Name of the field containing event timestamps.
+    :type time_field: str
+    :param state_mapper: Function that accepts a slice of ``event_log``
+        (structured array rows) and returns an array of output values.
+        Called once per batch of new events at each snapshot.
+    :type state_mapper: Callable[[np.ndarray], np.ndarray]
+    :param initial_value: Value to fill the output array with before any
+        events are applied. Defaults to 0.
+    :type initial_value: int
+    :param output_dtype: NumPy dtype for the output array.
+    :type output_dtype: np.dtype
+    :return: Array of shape ``(len(snapshot_times), n_entities)``.
+    :rtype: np.ndarray
+    """
+    n_snapshots = len(snapshot_times)
+    output = np.full((n_snapshots, n_entities), initial_value, dtype=output_dtype)
+
+    if event_log.size == 0:
+        return output
+
+    event_times = event_log[time_field]
+    entity_ids = event_log[entity_field]
+
+    # For each snapshot, find the index of the first event AFTER that time
+    cutoffs = np.searchsorted(event_times, snapshot_times, side="right")
+
+    # Incrementally replay: maintain current state and apply only new events
+    current_state = np.full(n_entities, initial_value, dtype=output_dtype)
+    prev_cutoff = 0
+
+    for i in range(n_snapshots):
+        if cutoffs[i] > prev_cutoff:
+            # Apply events that occurred between previous and current snapshot
+            event_slice = event_log[prev_cutoff : cutoffs[i]]
+            new_ids = entity_ids[prev_cutoff : cutoffs[i]]
+            new_values = state_mapper(event_slice)
+            # Scatter assignment: last write wins for duplicate entity IDs
+            current_state[new_ids] = new_values
+            prev_cutoff = cutoffs[i]
+
+        output[i] = current_state
+
+    return output
+
+
+def convert_bind_events_to_bound(
+    input_data: DataCollectionType,
+    input_dataset: str = "tpa_bind_events",
+    snapshot_dataset: str = "snapshot_time",
+) -> list[np.ndarray]:
+    """Convert tPA binding event logs to binding status snapshot arrays.
+
+    Reconstructs the ``m_bound`` dataset by replaying ``tpa_bind_events``
+    against ``snapshot_time``. For each simulation, produces an array of
+    shape ``(n_snapshots, total_molecules)`` where each cell is 1 if the
+    molecule is bound at that snapshot time, 0 otherwise.
+
+    A molecule is considered bound if its most recent event before the
+    snapshot had ``Molecule New Status == CONST.MOL_STATUS.BOUND``.
+    All molecules start unbound.
+
+    :param input_data: Complete data collection containing the event log,
+        snapshot times, and parameters.
+    :type input_data: DataCollectionType
+    :param input_dataset: Key for the binding events dataset in
+        ``input_data``.
+    :type input_dataset: str
+    :param snapshot_dataset: Key for the snapshot times dataset in
+        ``input_data``.
+    :type snapshot_dataset: str
+    :return: List of arrays (one per simulation), each of shape
+        ``(n_snapshots, total_molecules)`` with dtype ``np.int32``.
+    :rtype: list[np.ndarray]
+    """
+    n_mol = input_data["params"]["macro_params"]["total_molecules"]
+
+    def _is_bound(events: np.ndarray) -> np.ndarray:
+        return (
+            events["Molecule New Status"] == CONST.MOL_STATUS.BOUND
+        ).astype(np.int32)
+
+    output = []
+    for events, snap_times in zip(
+        input_data[input_dataset], input_data[snapshot_dataset]
+    ):
+        m_bound = replay_event_log_to_snapshot(
+            event_log=events,
+            snapshot_times=snap_times,
+            n_entities=n_mol,
+            entity_field="tPA Molecule Index",
+            time_field="Simulation Time Elapsed",
+            state_mapper=_is_bound,
+            initial_value=0,
+            output_dtype=np.int32,
+        )
+        output.append(m_bound)
+
+    return output
+
+
 def _not_implemented(dataset_name: str, input_spec: str, output_spec: str):
     """Create a converter stub that raises NotImplementedError with a clear message.
 
@@ -764,7 +906,9 @@ data_converters: dict[
         # structured arrays and convert_location_snapshot() for location data
         # ------------------------------------------------------------------------
         "macro_log": lambda data: data["macro_log"],  # Direct mapping
-        "Nsave": lambda data: [len(x) for x in data["snapshot_time"]],
+        "Nsave": lambda data: [
+            np.int32(len(x) - 1) for x in data["snapshot_time"]
+        ],  # Fortran Nsave counts save intervals, excludes initial time
         "tsave": lambda data: data["snapshot_time"],  # Direct mapping
         "f_deg_list": functools.partial(
             convert_structured_grid_fields,
@@ -779,6 +923,7 @@ data_converters: dict[
             output_dataset="m_bind_t",
             input_spec="v2.0.0",
             output_spec="v1.99.0",
+            field_offsets={"tPA Molecule Index": 1},  # 0-based → 1-based Fortran
         ),
         "m_loc": functools.partial(
             convert_location_snapshot,
@@ -786,10 +931,13 @@ data_converters: dict[
             input_spec="v2.0.0",
             output_spec="v1.99.0",
         ),
-        # m_bound: binding status at each snapshot (n_snapshots, n_molecules)
-        # Not stored in v2.0.0 — would need to be reconstructed from
-        # tpa_bind_events and snapshot_time by replaying the event log
-        "m_bound": _not_implemented("m_bound", "v2.0.0", "v1.99.0"),
+        # m_bound: reconstructed from tpa_bind_events + snapshot_time
+        # by replaying the event log (see convert_bind_events_to_bound)
+        "m_bound": functools.partial(
+            convert_bind_events_to_bound,
+            input_dataset="tpa_bind_events",
+            snapshot_dataset="snapshot_time",
+        ),
         "mfpt": lambda data: data["tpa_transit_time"],  # Direct mapping
     },
     # ============================================================================
@@ -854,6 +1002,7 @@ data_converters: dict[
             output_dataset="tpa_bind_events",
             input_spec="v1.99.0",
             output_spec="v2.0.0",
+            field_offsets={"tPA Molecule Index": -1},  # 1-based Fortran → 0-based
         ),
         "tpa_location_snapshot": functools.partial(
             convert_location_snapshot,
