@@ -360,11 +360,11 @@ data_readers: dict[
         [AnyStr, DataSetSpec, BaseParamsType, int, str], np.ndarray | BaseParamsType
     ],
 ] = {
-    CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _read_file_text,       # Delimited text files (CSV, etc.)
-    CONST.DATASET_STORAGE_TYPE.FILE_BINARY: _read_file_binary,   # Raw binary files (Fortran)
-    CONST.DATASET_STORAGE_TYPE.FILE_JSON: _read_file_json,       # JSON parameter files
-    CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _read_hdf5_attr,       # HDF5 group attributes (params)
-    CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _read_hdf5_dataset, # HDF5 datasets (numerical data)
+    CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _read_file_text,  # Delimited text files (CSV, etc.)
+    CONST.DATASET_STORAGE_TYPE.FILE_BINARY: _read_file_binary,  # Raw binary files (Fortran)
+    CONST.DATASET_STORAGE_TYPE.FILE_JSON: _read_file_json,  # JSON parameter files
+    CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _read_hdf5_attr,  # HDF5 group attributes (params)
+    CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _read_hdf5_dataset,  # HDF5 datasets (numerical data)
 }
 
 
@@ -526,16 +526,19 @@ def read_data_collection(
             file_code = ""
 
         # Read parameters first - needed for resolving dynamic shapes in later datasets
-        params = read_dataset(path, collection.params, params=None, file_code=file_code)
-        # Merge parameters from this collection with previously loaded params
-        data["params"] = data["params"] | params
+        if not collection.params is None:
+            params = read_dataset(
+                path, collection.params, params=None, file_code=file_code
+            )
+            # Merge parameters from this collection with previously loaded params
+            data["params"] = data["params"] | params
 
         # Read each dataset in the collection
         for name, spec in collection.data.items():
             if collection.simulations_combined is True:
                 # All simulations stored together in a single file/dataset
                 data[name] = read_dataset(
-                    path, spec, params=params, file_code=file_code
+                    path, spec, params=data["params"], file_code=file_code
                 )
             else:
                 # Each simulation stored in a separate file/dataset
@@ -546,7 +549,11 @@ def read_data_collection(
                 while next_sim:
                     try:
                         dataset = read_dataset(
-                            path, spec, params=params, sim=sim, file_code=file_code
+                            path,
+                            spec,
+                            params=data["params"],
+                            sim=sim,
+                            file_code=file_code,
                         )
                     except (FileNotFoundError, KeyError) as e:
                         # If the first simulation file doesn't exist, that's an error
@@ -573,6 +580,9 @@ def _write_file_text(
     """
     Writes an array to disk as a text file
 
+    Uses CONST.get_savetxt_format() to determine the appropriate format string
+    for the data's dtype, ensuring proper precision and representation.
+
     :param data: The array to write.
     :type data: np.ndarray
     :param path: The folder in which to store the file.
@@ -588,15 +598,21 @@ def _write_file_text(
     :param file_code: Any code that needs to be attached to the filename, defaults to ""
     :type file_code: str, optional
     :raises TypeError: Raised if the data does not match the specification.
+    :raises ValueError: Raised if the data's dtype is not supported for text output.
     """
     if not check_dataset_spec(data, spec, params=params):
         raise TypeError(
             f"Data sent for writing does not meet the specification {spec}."
         )
+
+    # Get the appropriate format string for this dtype
+    fmt = CONST.get_savetxt_format(data.dtype)
+
     np.savetxt(
         os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)),
         data,
-        delimiter=spec.delimiter,
+        fmt=fmt,
+        delimiter=spec.delimiter if not spec.delimiter is None else " ",
     )
 
 
@@ -685,7 +701,9 @@ def _write_hdf5_attr(
             spec.data_location.format(sim=sim, file_code=file_code)
         )
         # Convert data location (e.g., "micro_data/...") to params group (e.g., "micro_params")
-        param_group_name = spec.data_location.format(sim=sim, file_code=file_code).replace("_data", "_params")
+        param_group_name = spec.data_location.format(
+            sim=sim, file_code=file_code
+        ).replace("_data", "_params")
         # Write each parameter as a group attribute
         for k, v in data[param_group_name].items():
             group.attrs[k] = v
@@ -707,12 +725,11 @@ data_writers: dict[
         None,
     ],
 ] = {
-    CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _write_file_text,       # Delimited text files (CSV, etc.)
-    CONST.DATASET_STORAGE_TYPE.FILE_JSON: _not_implemented,       # JSON files (TODO: implement)
-    CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _write_hdf5_attr,       # HDF5 group attributes (params)
-    CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _write_hdf5_dataset, # HDF5 datasets (numerical data)
+    CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _write_file_text,  # Delimited text files (CSV, etc.)
+    CONST.DATASET_STORAGE_TYPE.FILE_JSON: _not_implemented,  # JSON files (TODO: implement)
+    CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _write_hdf5_attr,  # HDF5 group attributes (params)
+    CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _write_hdf5_dataset,  # HDF5 datasets (numerical data)
 }
-
 
 
 def write_dataset(
@@ -825,9 +842,14 @@ def write_data_collection(
             file_code = ""
 
         # Write parameters first
-        write_dataset(
-            data["params"], path, collection.params, params=None, file_code=file_code
-        )
+        if not collection.params is None:
+            write_dataset(
+                data["params"],
+                path,
+                collection.params,
+                params=None,
+                file_code=file_code,
+            )
 
         # Write each dataset in the collection
         for name, spec in collection.data.items():
