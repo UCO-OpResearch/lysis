@@ -20,18 +20,37 @@ maps (input_spec, output_spec) tuples to dictionaries of dataset conversion
 functions. Each converter function takes a ``DataCollectionType`` and returns a
 ``DataSetType`` (or list thereof).
 
-Conversion functions can be:
+Converter functions can be:
+
 - Simple lambdas for direct field mapping: ``lambda data: data["field_name"]``
-- Partial functions with fixed parameters: ``functools.partial(converter, input_spec="v1.99.0")``
-- Full converter functions for complex transformations: ``convert_fiber_degrade_time()``
+- Partial functions with fixed parameters: ``functools.partial(converter, ...)``
+- Generic converters for structured arrays: :func:`convert_structured_grid_fields`
+- Generic converters for location snapshots: :func:`convert_location_snapshot`
 - Not-implemented stubs: ``_not_implemented()`` for pending converters
+
+Conversion Routing
+------------------
+
+All conversions currently route through the v1.99.0 <-> v2.0.0 pair. When
+adding support for older spec versions (before v1.99.0), convert to v1.99.0
+first, then to v2.0.0. For newer spec versions (after v2.0.0), convert from
+v2.0.0 first.
+
+If this routing strategy proves insufficient (e.g., if a future spec's grid
+indexing cannot be expressed as either 1D Fortran indices or 2D row/rank
+coordinates), consider refactoring the grid conversion helpers to use a
+normalizer/denormalizer registry, where each spec version registers functions
+to convert its grid indices to/from a canonical intermediate form.
 
 Key Functions
 -------------
 
 - :func:`convert_data`: Main entry point for converting complete data collections
 - :func:`generate_macroscale_in`: Generates macroscale input from microscale output
-- :func:`convert_fiber_degrade_time`: Converts fiber degradation timing data
+- :func:`convert_structured_grid_fields`: Generic converter for structured arrays
+  with grid-location fields (e.g., fiber_degrade_time, tpa_bind_events)
+- :func:`convert_location_snapshot`: Generic converter for molecule location
+  snapshot arrays (m_loc / tpa_location_snapshot)
 - :func:`safe_np_int_conversion`: Safely converts integer arrays with bounds checking
 - :func:`safe_np_bool_conversion`: Safely converts boolean arrays with validation
 - :func:`safe_np_string_conversion`: Safely converts string/object arrays between dtypes
@@ -102,6 +121,7 @@ from .dataspec import (
 from .edge_grid import (
     generate_fortran_neighborhood_structure,
     from_fortran_edge_index_array,
+    to_fortran_edge_index_array,
 )
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -456,92 +476,156 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     return out_data
 
 
-def convert_fiber_degrade_time(
-    input_data: DataCollectionType, input_spec: str, output_spec: str
-) -> DataSetType:
-    """Convert fiber degradation time data between specification formats.
+def convert_structured_grid_fields(
+    input_data: DataCollectionType,
+    input_dataset: str,
+    output_dataset: str,
+    input_spec: str,
+    output_spec: str,
+) -> list[np.ndarray]:
+    """Convert structured arrays between grid indexing systems.
 
-    This function handles the transformation of fiber degradation event data
-    from Fortran's format (using 1D grid indices) to HDF5 format (using 2D
-    row/column coordinates). The data tracks when and where fibers degrade
-    during macroscale simulation.
+    Generic converter for structured arrays that differ primarily in their
+    grid-location fields. Copies fields with matching names directly and
+    converts grid-location fields between indexing systems.
 
-    The Fortran format uses a single "Grid Location Index" that must be
-    converted to separate "Grid Location Row" and "Grid Location Rank" fields
-    in the HDF5 format. The conversion accounts for Fortran's 1-based indexing.
+    Currently handles conversion between:
 
-    :param input_data: Complete data collection containing fiber degradation
-                       events and grid parameters
+    - v1.99.0: 1D "Grid Location Index" (1-based Fortran indexing)
+    - v2.0.0: 2D "Grid Location Row" + "Grid Location Rank" (0-based)
+
+    This single function replaces the need for separate converters for each
+    structured-array dataset (e.g., fiber_degrade_time, tpa_bind_events).
+
+    :param input_data: Complete data collection
     :type input_data: DataCollectionType
+    :param input_dataset: Key for the source dataset in input_data
+    :type input_dataset: str
+    :param output_dataset: Key for the dataset in the output dataspec
+        (used to look up the output dtype)
+    :type output_dataset: str
     :param input_spec: Input specification version (e.g., "v1.99.0")
     :type input_spec: str
     :param output_spec: Output specification version (e.g., "v2.0.0")
     :type output_spec: str
-    :return: List of structured arrays containing converted degradation events,
-             one array per macroscale simulation
+    :return: List of structured arrays (one per simulation) with converted
+        grid-location fields and matching fields copied directly
     :rtype: list[numpy.ndarray]
-
-    Examples
-    --------
-    Converting Fortran macroscale output to HDF5 format::
-
-        # Load Fortran macroscale output
-        fortran_data = load_fortran_macro_output()
-
-        # Convert fiber degradation time data
-        hdf5_degrade_times = convert_fiber_degrade_time(
-            fortran_data, "v1.99.0", "v2.0.0"
-        )
 
     Notes
     -----
-    - Assumes that input data is in Fortran format while output is in HDF5 format
-    - Converts from 1-based (Fortran) to 0-based (Python) indexing
-    - Splits 1D grid indices into 2D row/column coordinates
-    - Preserves timing information unchanged
-    - TODO: Check if simulations_combined = True and handle accordingly
-    - TODO: Implement for other data specifications.
+    Grid-location fields are identified by name prefix "Grid Location".
+
+    Conversion routing: all spec versions should convert through the
+    v1.99.0 <-> v2.0.0 pair. Specs older than v1.99.0 should first convert
+    to v1.99.0; specs newer than v2.0.0 should first convert from v2.0.0.
+    If this routing strategy proves insufficient, consider refactoring to
+    use a normalizer/denormalizer registry where each spec version registers
+    how to convert its grid indices to/from a canonical form.
 
     See Also
     --------
-    :func:`from_fortran_edge_index_array` : Converts 1D grid indices to 2D coordinates
+    :func:`from_fortran_edge_index_array` : 1D Fortran indices to 2D coordinates
+    :func:`to_fortran_edge_index_array` : 2D coordinates to 1D Fortran indices
     """
-    # TODO: Check if simulations_combined = True
-    output_data = []
+    rows = input_data["params"]["macro_params"]["rows"]
+    cols = input_data["params"]["macro_params"]["cols"]
+    out_dtype = dataspec[output_spec]["macroscale_out"].data[output_dataset].dtype
 
-    # Process each macroscale simulation's degradation events
-    for data in input_data["f_deg_list"]:
-        # Create empty array with correct dtype for output specification
-        output_data.append(
-            np.empty(
-                data.shape,
-                dtype=dataspec["v2.0.0"]["macroscale_out"]
-                .data["fiber_degrade_time"]
-                .dtype,
+    output = []
+    for table in input_data[input_dataset]:
+        out_table = np.empty(table.shape, dtype=out_dtype)
+        in_dtype = table.dtype
+
+        # Copy fields that exist in both dtypes unchanged
+        for field in set(in_dtype.names) & set(out_dtype.names):
+            out_table[field] = table[field]
+
+        # Convert grid-location fields between indexing systems
+        if "Grid Location Index" in in_dtype.names:
+            # 1D 1-based Fortran index → 2D 0-based (row, rank)
+            coords = from_fortran_edge_index_array(
+                table["Grid Location Index"] - 1, rows, cols
             )
-        )
+            out_table["Grid Location Row"] = coords[:, 0]
+            out_table["Grid Location Rank"] = coords[:, 1]
+        else:
+            # 2D 0-based (row, rank) → 1D 1-based Fortran index
+            coords = np.column_stack([
+                table["Grid Location Row"],
+                table["Grid Location Rank"],
+            ])
+            out_table["Grid Location Index"] = (
+                to_fortran_edge_index_array(coords, rows, cols) + 1
+            )
 
-        # Copy timing fields directly (no conversion needed)
-        output_data[-1][["Simulation Time Elapsed", "Fiber New Degrade Time"]] = data[
-            ["Simulation Time Elapsed", "Fiber New Degrade Time"]
-        ]
-
-        # Convert 1D Fortran grid index to 2D (row, column) coordinates
-        # Subtract 1 to convert from Fortran's 1-based to Python's 0-based indexing
-        locations = from_fortran_edge_index_array(
-            data["Grid Location Index"] - 1,
-            input_data["params"]["macro_params"]["rows"],
-            input_data["params"]["macro_params"]["cols"],
-        )
-
-        # Assign row and column coordinates to output fields
-        output_data[-1]["Grid Location Row"] = locations[:, 0]
-        output_data[-1]["Grid Location Rank"] = locations[:, 1]
-
-    return output_data
+        output.append(out_table)
+    return output
 
 
-# TODO Do the same thing with the tpa_bind_events from cell 10 of H5-File-Builder.ipynb
+def convert_location_snapshot(
+    input_data: DataCollectionType,
+    input_dataset: str,
+    input_spec: str,
+    output_spec: str,
+) -> list[np.ndarray]:
+    """Convert tPA location snapshot arrays between grid indexing systems.
+
+    Handles conversion of per-timestep molecule location arrays between
+    v1.99.0's flat 1D index format and v2.0.0's 3D coordinate format.
+    The two formats also differ in axis ordering.
+
+    - v1.99.0 ``m_loc``: shape ``(n_snapshots, n_molecules)`` of 1-based
+      1D Fortran edge indices
+    - v2.0.0 ``tpa_location_snapshot``: shape ``(n_molecules, 2, n_snapshots)``
+      of 0-based 2D (row, rank) coordinates
+
+    :param input_data: Complete data collection
+    :type input_data: DataCollectionType
+    :param input_dataset: Key for the source dataset in input_data
+    :type input_dataset: str
+    :param input_spec: Input specification version (e.g., "v1.99.0")
+    :type input_spec: str
+    :param output_spec: Output specification version (e.g., "v2.0.0")
+    :type output_spec: str
+    :return: List of converted location arrays (one per simulation)
+    :rtype: list[numpy.ndarray]
+
+    Notes
+    -----
+    Conversion routing: see :func:`convert_structured_grid_fields` for the
+    routing strategy and future extensibility notes.
+
+    See Also
+    --------
+    :func:`convert_structured_grid_fields` : For structured arrays with
+        grid-location fields (e.g., fiber_degrade_time, tpa_bind_events)
+    """
+    rows = input_data["params"]["macro_params"]["rows"]
+    cols = input_data["params"]["macro_params"]["cols"]
+    n_mol = input_data["params"]["macro_params"]["total_molecules"]
+
+    output = []
+    for table in input_data[input_dataset]:
+        if input_spec == "v1.99.0":
+            # (n_snapshots, n_molecules) of 1D 1-based indices
+            # → (n_molecules, 2, n_snapshots) of 2D 0-based coordinates
+            coords = from_fortran_edge_index_array(
+                (table - 1).ravel(), rows, cols,
+            ).reshape(-1, n_mol, 2)
+            # Rearrange axes: (snapshot, molecule, coord) → (molecule, coord, snapshot)
+            output.append(np.moveaxis(coords, [0, 1, 2], [2, 0, 1]))
+        else:
+            # (n_molecules, 2, n_snapshots) of 2D 0-based coordinates
+            # → (n_snapshots, n_molecules) of 1D 1-based indices
+            # Rearrange axes: (molecule, coord, snapshot) → (snapshot, molecule, coord)
+            coords = np.moveaxis(table, [0, 1, 2], [1, 2, 0])
+            output.append(
+                to_fortran_edge_index_array(
+                    coords.reshape(-1, 2), rows, cols,
+                ).reshape(-1, n_mol) + 1
+            )
+    return output
 
 
 def _not_implemented(dataset_name: str, input_spec: str, output_spec: str):
@@ -572,9 +656,15 @@ def _not_implemented(dataset_name: str, input_spec: str, output_spec: str):
 # Converter functions take a DataCollectionType and return a DataSetType (or list thereof)
 # They can be:
 #   - Lambda functions for direct field mapping: lambda data: data["field_name"]
-#   - Partial functions with preset parameters: functools.partial(func, param="value")
-#   - Full converter functions: convert_fiber_degrade_time
+#   - Partial functions for grid-index conversion:
+#       functools.partial(convert_structured_grid_fields, ...)
+#       functools.partial(convert_location_snapshot, ...)
 #   - Not-implemented stubs: _not_implemented("name", "in_spec", "out_spec")
+#
+# Routing: all conversions go through the v1.99.0 <-> v2.0.0 pair.
+# To add an older spec (e.g., v1.0.0), add ("v1.0.0", "v1.99.0") and
+# ("v1.99.0", "v1.0.0") entries. To add a newer spec (e.g., v3.0.0),
+# add ("v2.0.0", "v3.0.0") and ("v3.0.0", "v2.0.0") entries.
 data_converters: dict[
     tuple[str, str], dict[str, Callable[[DataCollectionType], DataSetType]]
 ] = {
@@ -617,16 +707,33 @@ data_converters: dict[
             (-1, 1),  # Flatten to column vector for Fortran I/O
         ),
         # ------------------------------------------------------------------------
-        # Macroscale output datasets (partially implemented - requires grid index conversion)
+        # Macroscale output datasets
+        # Uses generic converters: convert_structured_grid_fields() for
+        # structured arrays and convert_location_snapshot() for location data
         # ------------------------------------------------------------------------
         "macro_log": lambda data: data["macro_log"],  # Direct mapping
         "Nsave": lambda data: [len(x) for x in data["snapshot_time"]],
-        "tsave": lambda data: data["snapshot_time"],
-        "f_deg_list": _not_implemented("f_deg_list", "v2.0.0", "v1.99.0"),
-        "m_bind_t": _not_implemented("m_bind_t", "v2.0.0", "v1.99.0"),
-        "m_loc": _not_implemented("m_loc", "v2.0.0", "v1.99.0"),
+        "tsave": lambda data: data["snapshot_time"],  # Direct mapping
+        "f_deg_list": functools.partial(
+            convert_structured_grid_fields,
+            input_dataset="fiber_degrade_time", output_dataset="f_deg_list",
+            input_spec="v2.0.0", output_spec="v1.99.0",
+        ),
+        "m_bind_t": functools.partial(
+            convert_structured_grid_fields,
+            input_dataset="tpa_bind_events", output_dataset="m_bind_t",
+            input_spec="v2.0.0", output_spec="v1.99.0",
+        ),
+        "m_loc": functools.partial(
+            convert_location_snapshot,
+            input_dataset="tpa_location_snapshot",
+            input_spec="v2.0.0", output_spec="v1.99.0",
+        ),
+        # m_bound: binding status at each snapshot (n_snapshots, n_molecules)
+        # Not stored in v2.0.0 — would need to be reconstructed from
+        # tpa_bind_events and snapshot_time by replaying the event log
         "m_bound": _not_implemented("m_bound", "v2.0.0", "v1.99.0"),
-        "mfpt": lambda data: data["tpa_transit_time"],
+        "mfpt": lambda data: data["tpa_transit_time"],  # Direct mapping
     },
     # ============================================================================
     # Convert from v1.99.0 (Fortran file-based format) to v2.0.0 (HDF5 unified format)
@@ -671,31 +778,28 @@ data_converters: dict[
             ),  # Unflatten from column vector: one row per edge, 8 neighbors per row
         ),
         # ------------------------------------------------------------------------
-        # Macroscale output datasets (partially implemented - grid coordinate conversion)
+        # Macroscale output datasets
+        # Uses generic converters: convert_structured_grid_fields() for
+        # structured arrays and convert_location_snapshot() for location data
         # ------------------------------------------------------------------------
         "macro_log": lambda data: data["macro_log"],  # Direct mapping
-        "snapshot_time": lambda data: data["tsave"],
+        "snapshot_time": lambda data: data["tsave"],  # Direct mapping
         "fiber_degrade_time": functools.partial(
-            convert_fiber_degrade_time, input_spec="v1.99.0", output_spec="v2.0.0"
+            convert_structured_grid_fields,
+            input_dataset="f_deg_list", output_dataset="fiber_degrade_time",
+            input_spec="v1.99.0", output_spec="v2.0.0",
         ),
-        "tpa_bind_events": _not_implemented("tpa_bind_events", "v1.99.0", "v2.0.0"),
-        "tpa_location_snapshot": lambda data: [
-            np.moveaxis(
-                from_fortran_edge_index_array(  # Convert to 2-D indexing
-                    table - 1,  # Convert to 0-based indexing
-                    data["params"]["macro_params"]["rows"],
-                    data["params"]["macro_params"]["cols"],
-                ).reshape(  # Unstack so each (timestep, molecule) has its own slice
-                    -1,
-                    data["params"]["macro_params"]["total_molecules"],
-                    2,
-                ),
-                [0, 1, 2],  # Rearrange the axes of the array so that they are
-                [2, 0, 1],  # Molecule, position, time
-            )
-            for table in data["m_loc"]
-        ],
-        "tpa_transit_time": lambda data: data["mfpt"],
+        "tpa_bind_events": functools.partial(
+            convert_structured_grid_fields,
+            input_dataset="m_bind_t", output_dataset="tpa_bind_events",
+            input_spec="v1.99.0", output_spec="v2.0.0",
+        ),
+        "tpa_location_snapshot": functools.partial(
+            convert_location_snapshot,
+            input_dataset="m_loc",
+            input_spec="v1.99.0", output_spec="v2.0.0",
+        ),
+        "tpa_transit_time": lambda data: data["mfpt"],  # Direct mapping
     },
 }
 
