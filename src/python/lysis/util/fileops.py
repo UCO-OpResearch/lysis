@@ -616,6 +616,74 @@ def _write_file_text(
     )
 
 
+def _write_file_binary(
+    data: np.ndarray,
+    path: AnyStr,
+    spec: DataSetSpec,
+    params: BaseParamsType = None,
+    sim: int = None,
+    file_code: str = "",
+):
+    """Write an array to disk as a raw binary file.
+
+    Inverse of :func:`_read_file_binary`. Uses :meth:`numpy.ndarray.tofile`
+    to write the array in its native dtype without any header or delimiter.
+
+    :param data: The array to write.
+    :type data: np.ndarray
+    :param path: The folder in which to store the file.
+    :type path: AnyStr
+    :param spec: The specification for the data.
+    :type spec: DataSetSpec
+    :param params: The parameters matching the data, defaults to None
+    :type params: BaseParamsType, optional
+    :param sim: The index of the simulation, defaults to None
+    :type sim: int, optional
+    :param file_code: Code to insert into the filename, defaults to ""
+    :type file_code: str, optional
+    :raises TypeError: Raised if the data does not meet the specification.
+    """
+    if not check_dataset_spec(data, spec, params=params):
+        raise TypeError(
+            f"Data sent for writing does not meet the specification {spec}."
+        )
+    data.tofile(
+        os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code))
+    )
+
+
+def _write_file_json(
+    data: BaseParamsType,
+    path: AnyStr,
+    spec: DataSetSpec,
+    params: BaseParamsType = None,
+    sim: int = None,
+    file_code: str = "",
+):
+    """Write a parameter dictionary to a JSON file.
+
+    Inverse of :func:`_read_file_json`. Writes the data dictionary to a
+    human-readable JSON file with 4-space indentation.
+
+    :param data: Parameter dictionary to write
+    :type data: BaseParamsType
+    :param path: Directory for the output file
+    :type path: AnyStr
+    :param spec: Dataset specification containing filename pattern
+    :type spec: DataSetSpec
+    :param params: Not used for JSON files, kept for interface consistency
+    :type params: BaseParamsType, optional
+    :param sim: Simulation index for per-simulation files
+    :type sim: int, optional
+    :param file_code: Additional code to insert into filename
+    :type file_code: str, optional
+    """
+    with open(
+        os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)), "w"
+    ) as file:
+        json.dump(data, file, indent=4)
+
+
 def _write_hdf5_dataset(
     data: np.ndarray,
     path: AnyStr,
@@ -717,7 +785,7 @@ def _write_hdf5_attr(
 # Each writer function must accept: (data, path, spec, params, sim, file_code)
 # and return None (writes occur as side effects to disk)
 #
-# Note: FILE_BINARY writer is not implemented (Fortran writes its own binary files)
+# All five storage types are now implemented.
 data_writers: dict[
     DataSetSpec,
     Callable[
@@ -726,7 +794,8 @@ data_writers: dict[
     ],
 ] = {
     CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _write_file_text,  # Delimited text files (CSV, etc.)
-    CONST.DATASET_STORAGE_TYPE.FILE_JSON: _not_implemented,  # JSON files (TODO: implement)
+    CONST.DATASET_STORAGE_TYPE.FILE_BINARY: _write_file_binary,  # Raw binary files (Fortran output)
+    CONST.DATASET_STORAGE_TYPE.FILE_JSON: _write_file_json,  # JSON parameter files
     CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _write_hdf5_attr,  # HDF5 group attributes (params)
     CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _write_hdf5_dataset,  # HDF5 datasets (numerical data)
 }

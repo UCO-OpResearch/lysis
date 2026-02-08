@@ -29,7 +29,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lysis.util.fileops import read_data_collection, write_data_collection
 from lysis.util.dataconvert import convert_data
-from lysis.util.dataspec import dataspec
+from lysis.util.dataspec import dataspec, DataSetSpec, parse_shape
+from lysis.util.constants import CONST
 
 
 def compare_arrays(
@@ -135,49 +136,91 @@ def _compare_single_array(
 
 
 def compare_files(
-    file1: Path, file2: Path, dataset_name: str, tolerance: float = 1e-9
+    file1: Path,
+    file2: Path,
+    spec: DataSetSpec,
+    dataset_name: str,
+    params=None,
+    tolerance: float = 1e-9,
 ) -> bool:
-    """Compare two binary data files for equality.
+    """Compare two data files for equality using the dataset specification.
+
+    Reads both files using the appropriate numpy reader for the storage type
+    (binary via ``np.fromfile``, text via ``np.loadtxt``), then compares the
+    resulting arrays. This avoids false negatives from whitespace or
+    formatting differences in text files.
 
     :param file1: Path to first file (reference)
     :type file1: Path
     :param file2: Path to second file (generated)
     :type file2: Path
+    :param spec: Dataset specification (provides dtype, shape, storage type,
+        and delimiter)
+    :type spec: DataSetSpec
     :param dataset_name: Name of dataset for reporting
     :type dataset_name: str
+    :param params: Simulation parameters for resolving dynamic shapes
     :param tolerance: Tolerance for floating point comparisons
     :type tolerance: float
     :return: True if files match, False otherwise
     :rtype: bool
     """
-    with open(file1, "rb") as f:
-        data1 = f.read()
-    with open(file2, "rb") as f:
-        data2 = f.read()
-
-    if data1 == data2:
-        print(f"  \u2713 {dataset_name}: EXACT FILE MATCH")
-        return True
-
-    # Files differ - try to interpret as numeric data for more detail
+    storage = spec.dataset_storage_type
     try:
-        arr1 = np.frombuffer(data1, dtype=np.float64)
-        arr2 = np.frombuffer(data2, dtype=np.float64)
-        if arr1.shape == arr2.shape and np.allclose(
-            arr1, arr2, rtol=tolerance, atol=tolerance
-        ):
-            max_diff = np.max(np.abs(arr1 - arr2))
-            print(
-                f"  ~ {dataset_name}: FILE CLOSE MATCH (max diff: {max_diff:.2e})"
-            )
-            return True
-    except ValueError:
-        pass
+        if storage == CONST.DATASET_STORAGE_TYPE.FILE_BINARY:
+            arr1 = np.fromfile(str(file1), dtype=spec.dtype)
+            arr2 = np.fromfile(str(file2), dtype=spec.dtype)
+            if spec.shape:
+                shape = parse_shape(spec.shape, params=params)
+                arr1 = arr1.reshape(shape)
+                arr2 = arr2.reshape(shape)
+        elif storage == CONST.DATASET_STORAGE_TYPE.FILE_TEXT:
+            delimiter = spec.delimiter if spec.delimiter is not None else " "
+            if spec.dtype == str:
+                # String data: compare raw bytes
+                with open(file1, "rb") as f:
+                    raw1 = f.read()
+                with open(file2, "rb") as f:
+                    raw2 = f.read()
+                if raw1 == raw2:
+                    print(f"  \u2713 {dataset_name}: EXACT FILE MATCH")
+                    return True
+                print(f"  \u2717 {dataset_name}: TEXT FILES DIFFER")
+                return False
+            elif hasattr(spec.dtype, "names") and spec.dtype.names:
+                # Structured array: read as text with delimiter
+                arr1 = np.loadtxt(
+                    str(file1), dtype=spec.dtype, delimiter=delimiter
+                )
+                arr2 = np.loadtxt(
+                    str(file2), dtype=spec.dtype, delimiter=delimiter
+                )
+            else:
+                arr1 = np.loadtxt(
+                    str(file1), dtype=spec.dtype, delimiter=delimiter
+                )
+                arr2 = np.loadtxt(
+                    str(file2), dtype=spec.dtype, delimiter=delimiter
+                )
+        else:
+            # Fallback: raw byte comparison
+            with open(file1, "rb") as f:
+                raw1 = f.read()
+            with open(file2, "rb") as f:
+                raw2 = f.read()
+            if raw1 == raw2:
+                print(f"  \u2713 {dataset_name}: EXACT FILE MATCH")
+                return True
+            print(f"  \u2717 {dataset_name}: FILES DIFFER")
+            return False
+    except Exception as e:
+        print(f"  \u2717 {dataset_name}: FAILED TO READ ({e})")
+        return False
 
-    print(f"  \u2717 {dataset_name}: FILES DIFFER")
-    print(f"    {file1.name}: {len(data1)} bytes")
-    print(f"    {file2.name}: {len(data2)} bytes")
-    return False
+    result = _compare_single_array(arr1, arr2, dataset_name, tolerance)
+    if result:
+        print(f"  \u2713 {dataset_name}: DATA MATCH")
+    return result
 
 
 def test_macroscale_out_conversion(data_path: str, file_code: str) -> bool:
@@ -362,24 +405,17 @@ def test_macroscale_out_conversion(data_path: str, file_code: str) -> bool:
     if write_succeeded and test_output_dir.exists():
         print("\nStep 6: Comparing written files with originals...")
 
-        # Binary datasets that are written to individual files per simulation
-        binary_datasets = ["Nsave", "tsave", "m_bind_t", "m_loc", "m_bound", "mfpt"]
-
-        for dataset_name in binary_datasets:
+        params = original_data["params"]
+        for dataset_name, spec in macro_out_spec_v199.data.items():
             for sim in range(n_sims):
-                orig_file = (
-                    data_path
-                    / f"{sim:02}"
-                    / f"{dataset_name}{file_code}_{sim:02}.dat"
+                loc = spec.data_location.format(
+                    sim=sim, file_code=file_code
                 )
-                test_file = (
-                    test_output_dir
-                    / f"{sim:02}"
-                    / f"{dataset_name}{file_code}_{sim:02}.dat"
-                )
+                orig_file = data_path / loc
+                test_file = test_output_dir / loc
 
                 if not orig_file.exists():
-                    continue  # Skip missing originals silently for per-sim
+                    continue
                 if not test_file.exists():
                     print(
                         f"  \u2717 {dataset_name}[sim {sim:02}]: "
@@ -390,33 +426,9 @@ def test_macroscale_out_conversion(data_path: str, file_code: str) -> bool:
                 if not compare_files(
                     orig_file,
                     test_file,
+                    spec,
                     f"{dataset_name}[sim {sim:02}]",
-                ):
-                    all_passed = False
-
-        # Text datasets (f_deg_list is CSV, macro_log is text)
-        for sim in range(n_sims):
-            orig_log = (
-                data_path / f"{sim:02}" / f"macro{file_code}_{sim:02}.txt"
-            )
-            test_log = (
-                test_output_dir / f"{sim:02}" / f"macro{file_code}_{sim:02}.txt"
-            )
-            if orig_log.exists() and test_log.exists():
-                if not compare_files(orig_log, test_log, f"macro_log[sim {sim:02}]"):
-                    all_passed = False
-
-            orig_fdeg = (
-                data_path / f"{sim:02}" / f"f_deg_list{file_code}_{sim:02}.dat"
-            )
-            test_fdeg = (
-                test_output_dir
-                / f"{sim:02}"
-                / f"f_deg_list{file_code}_{sim:02}.dat"
-            )
-            if orig_fdeg.exists() and test_fdeg.exists():
-                if not compare_files(
-                    orig_fdeg, test_fdeg, f"f_deg_list[sim {sim:02}]"
+                    params=params,
                 ):
                     all_passed = False
     else:
