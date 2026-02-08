@@ -121,10 +121,11 @@ def safe_np_int_conversion(int_array, dtype=np.uint8, copy=True):
     between integer types (e.g., 300 → 44 when converting to uint8). This function
     checks that all values fit within the target dtype's range before converting.
 
-    This is particularly important when converting from signed to unsigned types
-    or when downcasting from larger to smaller integer types.
+    This is particularly important when converting from signed to unsigned types,
+    downcasting from larger to smaller integer types, or converting from float
+    arrays that contain integer values (common when reading from text files).
 
-    :param int_array: Input array or array-like of integers to convert
+    :param int_array: Input array or array-like of integers (or floats with integer values)
     :type int_array: array_like
     :param dtype: Target NumPy integer dtype (e.g., np.int32, np.uint8)
     :type dtype: numpy.dtype, optional
@@ -132,7 +133,7 @@ def safe_np_int_conversion(int_array, dtype=np.uint8, copy=True):
     :type copy: bool, optional
     :return: Array converted to target dtype
     :rtype: numpy.ndarray
-    :raises TypeError: If input cannot be safely converted to target dtype
+    :raises TypeError: If input cannot be safely converted to target dtype (e.g., floats with non-integer values)
     :raises OverflowError: If any values exceed target dtype's min/max bounds
 
     Examples
@@ -155,14 +156,34 @@ def safe_np_int_conversion(int_array, dtype=np.uint8, copy=True):
         >>> safe_np_int_conversion(arr[1:], dtype=np.uint8)
         array([0, 1], dtype=uint8)
 
+    Float array with integer values (e.g., from text file I/O)::
+
+        >>> arr = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+        >>> safe_np_int_conversion(arr, dtype=np.uint8)
+        array([1, 2, 3], dtype=uint8)
+
     Notes
     -----
     Based on: https://stackoverflow.com/questions/56684893/
-    Modified to handle signed→unsigned conversions with bounds checking.
+    Modified to handle:
+    - Signed→unsigned conversions with bounds checking
+    - Float→integer conversions when float values are whole numbers
     """
     int_array = np.array(int_array)
     if int_array.size == 0:
         return int_array.astype(dtype, copy=copy)  # Allow empty arrays of any type
+
+    # Handle float arrays that contain integer values (e.g., from text file I/O)
+    if int_array.dtype.kind == 'f':
+        # Check if all values are whole numbers
+        if not np.all(np.equal(np.mod(int_array, 1), 0)):
+            raise TypeError(
+                f"Cannot convert float array with non-integer values to {dtype}. "
+                f"Values must be whole numbers."
+            )
+        # Convert to int64 first to preserve values, then proceed with bounds checking
+        int_array = int_array.astype(np.int64, copy=False)
+
     try:
         return int_array.astype(dtype, casting="safe", copy=copy)
     except TypeError:
@@ -172,7 +193,7 @@ def safe_np_int_conversion(int_array, dtype=np.uint8, copy=True):
                 # Allow casting from int to unsigned int, since we have checked bounds
                 casting = "unsafe"
             else:
-                # Raise a TypeError when we try to convert from, e.g., a float.
+                # Raise a TypeError when we try to convert from other types
                 casting = "same_kind"
             return int_array.astype(dtype, casting=casting, copy=copy)
         else:
@@ -426,10 +447,10 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     # vs kinetic (spontaneous). This ratio affects macroscale binding dynamics.
     # Formula: forced_unbind_rate = n_forced / (n_forced + n_kinetic)
     out_data["params"]["macro_params"]["forced_unbind"] = np.count_nonzero(
-        in_data["tPA_forced_unbind"]
+        in_data["tpa_unbound_by_pli"]
     ) / (
-        np.count_nonzero(in_data["tPA_forced_unbind"])
-        + np.count_nonzero(in_data["tPA_kinetic_unbind"])
+        np.count_nonzero(in_data["tpa_unbound_by_pli"])
+        + np.count_nonzero(in_data["tpa_unbound_kinetic"])
     )
 
     return out_data
@@ -577,10 +598,15 @@ data_converters: dict[
         # Macroscale input datasets (fully implemented)
         # See dataspec.py and docs/usage/data_specification.rst for field descriptions
         # ------------------------------------------------------------------------
-        "tPAleave": lambda data: data["bin_edge_proportions"],  # Proportion of tPA leaving each edge per bin
-        "tsectPA": lambda data: data["bin_edge_tpa_leaving_time"],  # tPA leaving times per bin
+        "tPAleave": lambda data: data[
+            "bin_edge_proportions"
+        ],  # Proportion of tPA leaving each edge per bin
+        "tsectPA": lambda data: data[
+            "bin_edge_tpa_leaving_time"
+        ],  # tPA leaving times per bin
         "lysismat": lambda data: np.where(
-            data["binned_fiber_degrade_time"] == float("inf"),  # v2.0.0 uses infinity sentinel
+            data["binned_fiber_degrade_time"]
+            == float("inf"),  # v2.0.0 uses infinity sentinel
             6_000,  # v1.99.0/Fortran uses 6,000 sentinel for incomplete degradation
             data["binned_fiber_degrade_time"],
         ),
@@ -623,8 +649,12 @@ data_converters: dict[
         # Generated by generate_macroscale_in() - don't store redundant copies in HDF5
         # See dataspec.py and docs/usage/data_specification.rst for field descriptions
         # ------------------------------------------------------------------------
-        "bin_edge_proportions": lambda data: data["tPAleave"],  # Proportion of tPA leaving each edge per bin
-        "bin_edge_tpa_leaving_time": lambda data: data["tsectPA"],  # tPA leaving times per bin
+        "bin_edge_proportions": lambda data: data[
+            "tPAleave"
+        ],  # Proportion of tPA leaving each edge per bin
+        "bin_edge_tpa_leaving_time": lambda data: data[
+            "tsectPA"
+        ],  # tPA leaving times per bin
         "binned_fiber_degrade_time": lambda data: np.where(
             data["lysismat"] == 6_000,  # v1.99.0/Fortran sentinel
             float("inf"),  # v2.0.0 uses infinity for incomplete degradation
@@ -633,8 +663,12 @@ data_converters: dict[
         "binned_fiber_degraded": lambda data: data["lenlysisvect"]
         - 1,  # Count of degraded fibers per bin (convert Fortran 1-based to 0-based)
         "edge_grid_neighbors": lambda data: np.reshape(
-            data["neighbors"] - 1,  # Grid neighbor indices (convert Fortran 1-based to 0-based)
-            (-1, 8),  # Unflatten from column vector: one row per edge, 8 neighbors per row
+            data["neighbors"]
+            - 1,  # Grid neighbor indices (convert Fortran 1-based to 0-based)
+            (
+                -1,
+                8,
+            ),  # Unflatten from column vector: one row per edge, 8 neighbors per row
         ),
         # ------------------------------------------------------------------------
         # Macroscale output datasets (partially implemented - grid coordinate conversion)
