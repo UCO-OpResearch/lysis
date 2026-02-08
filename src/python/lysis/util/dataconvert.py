@@ -194,7 +194,7 @@ def safe_np_int_conversion(int_array, dtype=np.uint8, copy=True):
         return int_array.astype(dtype, copy=copy)  # Allow empty arrays of any type
 
     # Handle float arrays that contain integer values (e.g., from text file I/O)
-    if int_array.dtype.kind == 'f':
+    if int_array.dtype.kind == "f":
         # Check if all values are whole numbers
         if not np.all(np.equal(np.mod(int_array, 1), 0)):
             raise TypeError(
@@ -511,10 +511,17 @@ def convert_structured_grid_fields(
     :return: List of structured arrays (one per simulation) with converted
         grid-location fields and matching fields copied directly
     :rtype: list[numpy.ndarray]
+    :raises NotImplementedError: If either dtype contains fields that are
+        neither common to both dtypes nor recognized grid-location fields
+        ("Grid Location Index", "Grid Location Row", "Grid Location Rank").
+        This prevents silent data loss when dtypes diverge unexpectedly.
+    :raises NotImplementedError: If the input dtype contains no recognized
+        grid-location fields.
 
     Notes
     -----
-    Grid-location fields are identified by name prefix "Grid Location".
+    Grid-location fields are identified by name: "Grid Location Index"
+    (v1.99.0) and "Grid Location Row"/"Grid Location Rank" (v2.0.0).
 
     Conversion routing: all spec versions should convert through the
     v1.99.0 <-> v2.0.0 pair. Specs older than v1.99.0 should first convert
@@ -532,14 +539,38 @@ def convert_structured_grid_fields(
     cols = input_data["params"]["macro_params"]["cols"]
     out_dtype = dataspec[output_spec]["macroscale_out"].data[output_dataset].dtype
 
+    # Known grid-location field names that this function can convert between
+    grid_location_fields = {
+        "Grid Location Index",
+        "Grid Location Row",
+        "Grid Location Rank",
+    }
+
     output = []
     for table in input_data[input_dataset]:
         out_table = np.empty(table.shape, dtype=out_dtype)
         in_dtype = table.dtype
 
         # Copy fields that exist in both dtypes unchanged
-        for field in set(in_dtype.names) & set(out_dtype.names):
+        common_fields = set(in_dtype.names) & set(out_dtype.names)
+        for field in common_fields:
             out_table[field] = table[field]
+
+        # Check for unhandled fields: any field that is not common to both
+        # dtypes and not a recognized grid-location field
+        handled_fields = common_fields | grid_location_fields
+        unhandled_in = set(in_dtype.names) - handled_fields
+        unhandled_out = set(out_dtype.names) - handled_fields
+        if unhandled_in or unhandled_out:
+            msg = (
+                f"Cannot automatically convert all fields between "
+                f"{input_dataset} and {output_dataset}."
+            )
+            if unhandled_in:
+                msg += f"\n  Unhandled input fields: {unhandled_in}"
+            if unhandled_out:
+                msg += f"\n  Unhandled output fields: {unhandled_out}"
+            raise NotImplementedError(msg)
 
         # Convert grid-location fields between indexing systems
         if "Grid Location Index" in in_dtype.names:
@@ -549,14 +580,21 @@ def convert_structured_grid_fields(
             )
             out_table["Grid Location Row"] = coords[:, 0]
             out_table["Grid Location Rank"] = coords[:, 1]
-        else:
+        elif "Grid Location Row" in in_dtype.names and "Grid Location Rank" in in_dtype.names:
             # 2D 0-based (row, rank) → 1D 1-based Fortran index
-            coords = np.column_stack([
-                table["Grid Location Row"],
-                table["Grid Location Rank"],
-            ])
+            coords = np.column_stack(
+                [
+                    table["Grid Location Row"],
+                    table["Grid Location Rank"],
+                ]
+            )
             out_table["Grid Location Index"] = (
                 to_fortran_edge_index_array(coords, rows, cols) + 1
+            )
+        else:
+            raise NotImplementedError(
+                "Only route v1.99.0 and v2.0.0 specifications through this function. " \
+                "Other specifications should be converted into one of those first."
             )
 
         output.append(out_table)
@@ -584,17 +622,21 @@ def convert_location_snapshot(
     :type input_data: DataCollectionType
     :param input_dataset: Key for the source dataset in input_data
     :type input_dataset: str
-    :param input_spec: Input specification version (e.g., "v1.99.0")
+    :param input_spec: Input specification version — must be "v1.99.0" or "v2.0.0"
     :type input_spec: str
     :param output_spec: Output specification version (e.g., "v2.0.0")
     :type output_spec: str
     :return: List of converted location arrays (one per simulation)
     :rtype: list[numpy.ndarray]
+    :raises NotImplementedError: If input_spec is not "v1.99.0" or "v2.0.0".
+        Other specifications should be converted to one of these first.
 
     Notes
     -----
-    Conversion routing: see :func:`convert_structured_grid_fields` for the
-    routing strategy and future extensibility notes.
+    Only v1.99.0 and v2.0.0 are supported directly. Other spec versions
+    should be converted to one of these before calling this function.
+    See :func:`convert_structured_grid_fields` for the conversion routing
+    strategy and future extensibility notes.
 
     See Also
     --------
@@ -611,19 +653,29 @@ def convert_location_snapshot(
             # (n_snapshots, n_molecules) of 1D 1-based indices
             # → (n_molecules, 2, n_snapshots) of 2D 0-based coordinates
             coords = from_fortran_edge_index_array(
-                (table - 1).ravel(), rows, cols,
+                (table - 1).ravel(),
+                rows,
+                cols,
             ).reshape(-1, n_mol, 2)
             # Rearrange axes: (snapshot, molecule, coord) → (molecule, coord, snapshot)
             output.append(np.moveaxis(coords, [0, 1, 2], [2, 0, 1]))
-        else:
+        elif input_spec == "v2.0.0":
             # (n_molecules, 2, n_snapshots) of 2D 0-based coordinates
             # → (n_snapshots, n_molecules) of 1D 1-based indices
             # Rearrange axes: (molecule, coord, snapshot) → (snapshot, molecule, coord)
             coords = np.moveaxis(table, [0, 1, 2], [1, 2, 0])
             output.append(
                 to_fortran_edge_index_array(
-                    coords.reshape(-1, 2), rows, cols,
-                ).reshape(-1, n_mol) + 1
+                    coords.reshape(-1, 2),
+                    rows,
+                    cols,
+                ).reshape(-1, n_mol)
+                + 1
+            )
+        else:
+            raise NotImplementedError(
+                "Only route v1.99.0 and v2.0.0 specifications through this function. " \
+                "Other specifications should be converted into one of those first."
             )
     return output
 
@@ -716,18 +768,23 @@ data_converters: dict[
         "tsave": lambda data: data["snapshot_time"],  # Direct mapping
         "f_deg_list": functools.partial(
             convert_structured_grid_fields,
-            input_dataset="fiber_degrade_time", output_dataset="f_deg_list",
-            input_spec="v2.0.0", output_spec="v1.99.0",
+            input_dataset="fiber_degrade_time",
+            output_dataset="f_deg_list",
+            input_spec="v2.0.0",
+            output_spec="v1.99.0",
         ),
         "m_bind_t": functools.partial(
             convert_structured_grid_fields,
-            input_dataset="tpa_bind_events", output_dataset="m_bind_t",
-            input_spec="v2.0.0", output_spec="v1.99.0",
+            input_dataset="tpa_bind_events",
+            output_dataset="m_bind_t",
+            input_spec="v2.0.0",
+            output_spec="v1.99.0",
         ),
         "m_loc": functools.partial(
             convert_location_snapshot,
             input_dataset="tpa_location_snapshot",
-            input_spec="v2.0.0", output_spec="v1.99.0",
+            input_spec="v2.0.0",
+            output_spec="v1.99.0",
         ),
         # m_bound: binding status at each snapshot (n_snapshots, n_molecules)
         # Not stored in v2.0.0 — would need to be reconstructed from
@@ -786,18 +843,23 @@ data_converters: dict[
         "snapshot_time": lambda data: data["tsave"],  # Direct mapping
         "fiber_degrade_time": functools.partial(
             convert_structured_grid_fields,
-            input_dataset="f_deg_list", output_dataset="fiber_degrade_time",
-            input_spec="v1.99.0", output_spec="v2.0.0",
+            input_dataset="f_deg_list",
+            output_dataset="fiber_degrade_time",
+            input_spec="v1.99.0",
+            output_spec="v2.0.0",
         ),
         "tpa_bind_events": functools.partial(
             convert_structured_grid_fields,
-            input_dataset="m_bind_t", output_dataset="tpa_bind_events",
-            input_spec="v1.99.0", output_spec="v2.0.0",
+            input_dataset="m_bind_t",
+            output_dataset="tpa_bind_events",
+            input_spec="v1.99.0",
+            output_spec="v2.0.0",
         ),
         "tpa_location_snapshot": functools.partial(
             convert_location_snapshot,
             input_dataset="m_loc",
-            input_spec="v1.99.0", output_spec="v2.0.0",
+            input_spec="v1.99.0",
+            output_spec="v2.0.0",
         ),
         "tpa_transit_time": lambda data: data["mfpt"],  # Direct mapping
     },
