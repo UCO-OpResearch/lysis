@@ -8,12 +8,15 @@ the lysis simulation package. It includes:
 - Enumeration types for boundary conditions, fiber directions, molecule states, etc.
 - Rectilinear grid neighbor calculation constants
 - Random number draw type identifiers for Fortran compatibility
+- NumPy dtype to format string mappings for text file I/O
 
 The module provides a single ``CONST`` object that aggregates commonly used
 constants for convenient access throughout the codebase.
 """
 
 from enum import Enum, IntEnum, unique, Flag, auto
+
+import numpy as np
 
 from pint import UnitRegistry
 
@@ -84,6 +87,8 @@ class Const:
     :vartype MOL_STATUS: MolStatus
     :ivar DATASET_STORAGE_TYPE: Enumeration of data storage formats
     :vartype DATASET_STORAGE_TYPE: DataSetStorageType
+    :ivar NUMPY_SAVETXT_FORMATS: Format strings for numpy.savetxt by dtype
+    :vartype NUMPY_SAVETXT_FORMATS: dict
 
     Example:
         >>> from lysis.util.constants import CONST
@@ -99,6 +104,75 @@ class Const:
         self.NEIGHBORHOOD = Neighbors()
         self.MOL_STATUS = MolStatus
         self.DATASET_STORAGE_TYPE = DataSetStorageType
+        self.NUMPY_SAVETXT_FORMATS = {
+            # Boolean types - save as 0 or 1
+            np.dtype('bool'): '%d',
+            # Signed integer types
+            np.dtype('int8'): '%d',
+            np.dtype('int16'): '%d',
+            np.dtype('int32'): '%d',
+            np.dtype('int64'): '%d',
+            # Unsigned integer types
+            np.dtype('uint8'): '%u',
+            np.dtype('uint16'): '%u',
+            np.dtype('uint32'): '%u',
+            np.dtype('uint64'): '%u',
+            # Floating point types - use scientific notation with full precision
+            np.dtype('float32'): '%.9e',   # 32-bit float: ~7-9 decimal digits
+            np.dtype('float64'): '%.18e',  # 64-bit float: ~15-18 decimal digits
+            # Object and string types - use string representation
+            np.dtype('object'): '%s',
+            np.dtype('U0'): '%s',  # Unicode strings (any length)
+        }
+
+    def get_savetxt_format(self, dtype):
+        """Get the numpy.savetxt format string for a given dtype.
+
+        This method handles dtype matching by trying exact match first, then
+        falling back to dtype kind matching for string types and structured arrays.
+
+        :param dtype: NumPy dtype to get format for
+        :type dtype: numpy.dtype or str
+        :return: Format string for numpy.savetxt
+        :rtype: str
+        :raises ValueError: If dtype is not supported
+
+        Example:
+            >>> from lysis.util.constants import CONST
+            >>> import numpy as np
+            >>> fmt = CONST.get_savetxt_format(np.dtype('float64'))
+            >>> print(fmt)  # '%.18e'
+            >>> fmt = CONST.get_savetxt_format(np.dtype('<U75'))
+            >>> print(fmt)  # '%s'
+        """
+        dtype = np.dtype(dtype)
+
+        # Try exact match first
+        if dtype in self.NUMPY_SAVETXT_FORMATS:
+            return self.NUMPY_SAVETXT_FORMATS[dtype]
+
+        # Handle Unicode strings of any length (e.g., '<U75')
+        if dtype.kind == 'U':
+            return self.NUMPY_SAVETXT_FORMATS[np.dtype('U0')]
+
+        # Handle byte strings (e.g., 'S10')
+        if dtype.kind == 'S':
+            return '%s'
+
+        # Handle structured arrays - return format for each field
+        if dtype.names is not None:
+            # Structured dtype - create format list for all fields
+            formats = []
+            for name in dtype.names:
+                field_dtype = dtype.fields[name][0]
+                formats.append(self.get_savetxt_format(field_dtype))
+            return formats
+
+        # Unknown dtype
+        raise ValueError(
+            f"No numpy.savetxt format defined for dtype: {dtype}\n"
+            f"Consider adding it to CONST.NUMPY_SAVETXT_FORMATS"
+        )
 
 
 class Neighbors:
