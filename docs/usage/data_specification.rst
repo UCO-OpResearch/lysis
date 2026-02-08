@@ -572,7 +572,7 @@ even though these files are only used in Fortran which is 1-indexed.*
   :File Type:
     Space-delimited Text
   :Data Type:
-    integer (``i4``)
+    double precision (``f8``)
   :Units:
     None
   :Dimensions:
