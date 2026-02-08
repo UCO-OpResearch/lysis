@@ -1,0 +1,244 @@
+import os
+
+from enum import Flag, auto, unique
+from typing import Any, AnyStr, List, Mapping, Union
+
+import numpy as np
+import h5py
+
+from ..config.constants import CONST
+from .dataspec import DataCollectionSpec, DataSetSpec, dataspec
+from .fileops import data_readers
+
+__author__ = "Brittany Bannish and Bradley Paynter"
+__copyright__ = "Copyright 2025, Brittany Bannish"
+__credits__ = ["Brittany Bannish", "Bradley Paynter"]
+__license__ = "GPLv3"
+__version__ = "0.1"
+__maintainer__ = "Bradley Paynter"
+__email__ = "bpaynter@uco.edu"
+__status__ = "Development"
+
+
+@unique
+class DataStatus(Flag):
+    NONE = 0
+    INITIALIZED = auto()
+    LOADED = auto()
+    SAVED = auto()
+    FILLED = auto()
+
+
+def h5_tree(val: h5py.Dataset, pre: AnyStr = "") -> str:
+    """Recursively prints the tree of an HDF5 file's contents.
+
+    Copied from https://stackoverflow.com/questions/61133916/is-there-in-python-a-single-function-that-shows-the-full-structure-of-a-hdf5-fi
+
+    Args:
+        val: The item in the HDF5 to print
+        pre: The current indentation
+    """
+    output = ""
+    items = len(val)
+    for key, val in val.items():
+        items -= 1
+        if items == 0:
+            # the last item
+            if type(val) == h5py._hl.group.Group:
+                output += pre + "└── " + key + os.linesep
+                output += h5_tree(val, pre + "    ")
+            else:
+                try:
+                    output += pre + "└── " + key + f" {val.shape}" + os.linesep
+                except TypeError:
+                    output += pre + "└── " + key + " (scalar)" + os.linesep
+        else:
+            if type(val) == h5py._hl.group.Group:
+                output += pre + "├── " + key + os.linesep
+                output += h5_tree(val, pre + "│   ")
+            else:
+                try:
+                    output += pre + "├── " + key + f" {val.shape}" + os.linesep
+                except TypeError:
+                    output += pre + "├── " + key + " (scalar)" + os.linesep
+    return output
+
+
+class DataStore:
+    """
+    A simple data store class that allows for storing and retrieving data.
+    """
+
+    _internal_names: List[str] = [
+        "internal_names",
+        "run_code",
+        "path",
+        "data",
+        "datasets",
+        "views",
+        "status",
+        "mode",
+    ]
+
+    def __init__(self, run_code: AnyStr, path: AnyStr, mode: str = "r") -> None:
+        """
+        Initialize the DataStore with an optional run parameter.
+
+        :param run: The experimental run associated with the data store.
+        :param mode: Mode in which to open the file.
+
+            ``'r'``
+                Read only
+
+            ``'w'``
+                Write (NOTE: This will overwrite any current file contents)
+
+            ``'a'``
+                Append. Will allow the addition of new data only.
+                Will NOT allow the insertion of data if some already exists.
+        """
+        object.__setattr__(self, "_run_code", run_code)
+        object.__setattr__(self, "_path", path)
+        object.__setattr__(self, "_mode", mode)
+        object.__setattr__(
+            self,
+            "_status",
+            {
+                "self": DataStatus.INITIALIZED,
+                "micro": DataStatus.NONE,
+                "macro": DataStatus.NONE,
+            },
+        )
+
+        object.__setattr__(self, "_datasets", [])
+        object.__setattr__(self, "_views", [])
+
+        # Initialize HDF5 file
+        h5py.get_config().track_order = True
+        object.__setattr__(
+            self,
+            "_data",
+            h5py.File(
+                os.path.join(self._path, f"{self._run_code}.h5"),
+                self._mode,
+            ),
+        )
+
+        if "micro_data" in self._data:
+            self._status["micro"] = DataStatus.INITIALIZED
+        else:
+            self._status["micro"] = DataStatus.NONE
+
+        if "macro_data" in self._data:
+            self._status["macro"] = DataStatus.INITIALIZED
+        else:
+            self._status["macro"] = DataStatus.NONE
+
+        # TODO: Add code here to check if there is actually data stored in this HDF5
+        #       and if it matches the current data specification
+
+    def __str__(self) -> str:
+        """Print the datastore in human-readable format."""
+        return h5_tree(self._data)
+
+    def __repr__(self) -> str:
+        """Print the datastore in human-readable format."""
+        return self._path + r"/" + self._run_code + ".h5: " + str(self._status)
+
+    def import_fortran_micro_data(
+        self,
+        path: AnyStr = None,
+        filecode: AnyStr = None,
+        data_version: AnyStr = "current",
+    ) -> None:
+        """
+        Import data from a Fortran Microscale run into the HDF5 storage.
+
+        :param filecode: The file code associated with the Microscale run being imported.
+            This file code should include any leading underscores, but NOT the file extension.
+        """
+        if path is None:
+            path = self._path
+        if self._mode == "r":
+            raise os.UnsupportedOperation("Data is open in read-only mode.")
+        if self._mode == "a" and self._status["micro"] == DataStatus.INITIALIZED:
+            raise os.UnsupportedOperation("Existing data cannot be overwritten.")
+        micro_data = self._data.create_group("micro_data")
+        h5py.get_config().track_order = True
+        h5file = h5py.File(os.path.join(path, f"{self._run_code}.h5"), "a")
+        micro_data = h5file.require_group("micro_data")
+
+   
+
+    def __getattr__(self, key: AnyStr) -> np.ndarray:
+        """
+        Get data from the data store.
+        :param key: The table name to retrieve.
+        :return: The attribute value.
+        """
+        # Check if the attribute exists in the HDF5 file
+        # If it does, return the value
+        # If it doesn't, raise an AttributeError
+        # This is a placeholder implementation
+        # Replace with actual logic to access HDF5 file
+        pass
+
+    def __setattr__(self, key: AnyStr, value: np.ndarray) -> None:
+        """
+        Set data in the data store.
+        :param key: The table name to set.
+        :param value: The value to set.
+        """
+        pass
+
+    def status(self, key: AnyStr) -> dict[str, DataStatus]:
+        """
+        Get the status of the data in the data store.
+        :param key: The table name to check.
+        :return: The status of the data.
+        """
+        # Check if the table exists in the HDF5 file
+        # If it does, return the status
+        # If it doesn't, return DataStatus.NONE
+        # This is a placeholder implementation
+        # Replace with actual logic to access HDF5 file
+        pass
+
+    def delete(self, key: AnyStr):
+        """
+        Delete data from the data store.
+        :param key: The table name to delete.
+        """
+        # Check if the table exists in the HDF5 file
+        # If it does, delete it
+        # If it doesn't, raise an AttributeError
+        # This is a placeholder implementation
+        # Replace with actual logic to access HDF5 file
+        pass
+
+    def overwrite(self, key: AnyStr, value: np.ndarray):
+        """
+        Overwrite data in the data store.
+        :param key: The table name to overwrite.
+        :param value: The value to overwrite with.
+        """
+        # Check if the table exists in the HDF5 file
+        # If it does, overwrite it
+        # If it doesn't, raise an AttributeError
+        # This is a placeholder implementation
+        # Replace with actual logic to access HDF5 file
+        pass
+
+    def append(self, key: AnyStr, value: np.ndarray, axis: int | None = None):
+        """
+        Append data to the data store.
+        :param key: The table name to append to.
+        :param value: The value to append.
+        :param axis: The axis to append along (optional).
+        """
+        # Check if the table exists in the HDF5 file
+        # If it does, append the array
+        # If it doesn't, raise an AttributeError
+        # This is a placeholder implementation
+        # Replace with actual logic to access HDF5 file
+        pass

@@ -11,7 +11,7 @@ octave-workspace
 __pycache__
 fort.*
 *.sublime-*
-data
+/data
 *.h5
 test.ipynb
 docs/usage/Lysis-Component.vpp.bak_000f

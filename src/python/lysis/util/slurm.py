@@ -1,7 +1,2 @@
-import os
-
-import GooseSLURM as gs
-
-
-def start_slurm_job():
-    pass
+"""Backward-compatibility shim. Actual code in lysis.tools.slurm."""
+from ..tools.slurm import *

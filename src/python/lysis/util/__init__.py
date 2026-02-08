@@ -1,18 +1,10 @@
-from .constants import *
-from .datastore import *
-from .kiss import *
-from .parameters import *
-from .util import *
-from .codeutil import *
-from .edge_grid import *
-from .dataspec import *
-from .run import *
-from .fileops import *
-from .dataconvert import *
+"""Backward-compatibility shim. Actual code in lysis.config, lysis.data, etc."""
+from ..config import *
+from ..data import *
+from ..geometry import *
+from ..execution.run import *
+from ..tools import *
 
-try:
-    import matplotlib.pyplot
-    from .curlyBrace import *
-except ImportError:
-    print("Matplotlib import error")
-    pass
+# Import codeutil last: it depends on geometry.edge_grid, which must
+# be loaded first (edge_grid -> execution.run -> data/config/tools).
+from ..execution.codeutil import *
