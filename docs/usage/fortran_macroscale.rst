@@ -24,13 +24,13 @@ First-time setup
 
 #. Copy and paste the following command, then hit enter.
    
-   `git clone https://github.com/UCO-OpResearch/lysis.git`
+   ``git clone https://github.com/UCO-OpResearch/lysis.git``
     
-#. Type `cd lysis` and hit enter, 
-   then run the command `git checkout macro-wrapper`.
+#. Type ``cd lysis`` and hit enter, 
+   then run the command ``git checkout macro-wrapper``.
 
-#. When the `git` command finishes without error,
-   type `exit` and hit enter.
+#. When the ``git`` command finishes without error,
+   type ``exit`` and hit enter.
 
 #. Return to the tab with your files on it
 
@@ -54,12 +54,12 @@ First-time setup
 #. On the bottom-right, is a window titled "main_job.sh". 
    Click on the "Open Editor" button.
 
-#. Copy and paste the text from the `macro_fortran_run.sh` file (link below)
+#. Copy and paste the text from the ``macro_fortran_run.sh`` file (link below)
    into the editor window.
 
    https://github.com/UCO-OpResearch/lysis/blob/macro-wrapper/doc/usage/macro_fortran_run.sh
 
-#. In line 22 (that starts `LYSIS_ROOT=`), paste the path of the lysis
+#. In line 22 (that starts ``LYSIS_ROOT=``), paste the path of the lysis
    folder that you copied earier. Make sure there are no spaces on that line.
    If your path has spaces, put double-quotes around the path.
 
@@ -79,21 +79,23 @@ Running a job
 
 #. In the "main_job.sh" window, click "Open Editor".
 
-#. In line 23, (that starts `MICRO_FILE_CODE=`) type the Run Code for the input microscale model with no spaces.
+#. In line 23, (that starts ``MICRO_FILE_CODE=``) type the Run Code for the input microscale model 
+   with no spaces.
 
-#. In line 24, (that starts `MACRO_RUN_CODE=`) type the Run Code for the macroscale model with no spaces.
+#. In line 24, (that starts ``MACRO_RUN_CODE=``) type the Run Code for the macroscale model with no 
+   spaces.
 
-#. In lines 27-28, (that start `N=` and `F`) type the dimensions (in nodes) of the edge grid 
+#. In lines 27-28, (that start ``N=`` and ``F``) type the dimensions (in nodes) of the edge grid 
    for the macroscale model with no spaces.
 
-#. Do NOT enter the value of `frac_forced` manually in line 51. 
+#. Do NOT enter the value of ``frac_forced`` manually in line 51. 
    This will be calculated by the micro_to_macro.py script and passed automatically.
 
 #. Add any parameters that you want to be different from the defaults,
-   between line 37 (that starts `--frac_forced`) and the line that starts
-   `> data`. These MUST have the following format:
+   between line 37 (that starts ``--frac_forced``) and the line that starts
+   ``> data``. These MUST have the following format:
 
-   - Start with `--`, immediately followed by the name of the parameter 
+   - Start with ``--``, immediately followed by the name of the parameter 
      (see below).
 
    - Add a space after the name of the parameter, then type the value of
@@ -102,7 +104,7 @@ Running a job
    - Finally, place a backslash (``\``) at the end of each line.
 
    - There must *NOT* be any blank lines between parameters, 
-      or between the parameters and the line that starts `> data`.
+      or between the parameters and the line that starts ``> data``.
 
 #. Click "Save", then close the tab to return to the Job Composer.
 
@@ -111,11 +113,11 @@ Running a job
 #. You can immediately start work on another job.
 
 #. Once the status of the job changes to "Completed" or "Failed",
-   check the `macro########.out` file in the "Job Details" window
+   check the ``macro########.out`` file in the "Job Details" window
    to make sure there are no errors.
 
 #. You can find the output data of the macroscale code in the data folder
-   in a folder named with the `MACRO_RUN_CODE`. 
+   in a folder named with the ``MACRO_RUN_CODE``. 
    There will be a separate numbered folder for each simulation and its data.
 
 Parameters
@@ -175,7 +177,7 @@ Physical Parameters
 
 :kon:
 
-   :Description: The binding rate of tPA, :math:`k^\\text{on}_\\text{tPA}`, to fibrin.
+   :Description: The binding rate of tPA, :math:`k^\text{on}_\text{tPA}`, to fibrin.
 
    :Default Value: 0.1 (micromolar*sec)^-1
 

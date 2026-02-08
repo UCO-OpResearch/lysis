@@ -10,9 +10,9 @@ For more information, see the documentation of the Python lysis.util.EdgeGrid cl
 
 https://github.com/UCO-OpResearch/lysis/blob/c1e6b2a92758fb8620d6f5a2223976a1478c3231/src/python/lysis/util/edge_grid.py
 
-^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 v2.0.0 (First HDF5-based specification)
-^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Files
 +++++++++++
@@ -21,7 +21,7 @@ Files
   HDF5 file containing all data for a run
 
 Group Structure
-----------
+--------------------
 
 ``micro_group``
   Contains microscale output datasets.
@@ -33,7 +33,7 @@ Group Structure
   Contains log files for all executions of code
 
 Microscale datasets
-++++++++++++++++
+++++++++++++++++++++++++++++++++
 
 ``pli_first_time``
   Time to first plasmin
@@ -44,7 +44,7 @@ Microscale datasets
     seconds
   :Dimensions: 
     (``micro_params.simulations``,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``firstPLi``
 
 
@@ -57,7 +57,7 @@ Microscale datasets
     None
   :Dimensions: 
     (``micro_params.simulations``,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``lasttPA``
 
 ``fiber_degraded``
@@ -71,7 +71,7 @@ Microscale datasets
     None
   :Dimensions: 
     (``micro_params.simulations``,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``lysis_complete``
 
 ``sim_final_time``
@@ -84,7 +84,7 @@ Microscale datasets
     seconds
   :Dimensions: 
     (``micro_params.simulations``,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``lysis.dat``
 
 ``pli_generated_num``
@@ -97,7 +97,7 @@ Microscale datasets
     None
   :Dimensions: 
     (``micro_params.simulations``,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``PLi``
 
 ``tpa_leaving_time``
@@ -111,7 +111,7 @@ Microscale datasets
     seconds
   :Dimensions: 
     (``micro_params.simulations``,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``tPA_time``
 
 ``tpa_unbound_by_pli``
@@ -125,7 +125,7 @@ Microscale datasets
     None
   :Dimensions: 
     (``micro_params.simulations``,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``tPAPLiunbd``
 
 ``tpa_unbound_kinetic``
@@ -138,14 +138,14 @@ Microscale datasets
     None
   :Dimensions: 
     (``micro_params.simulations``,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``tPAunbind``
 
 Macro to Micro datasets
-++++++++++++++++++++
++++++++++++++++++++++++
 
 :NOTE: These files should NOT be stored in this version of the data specification, 
-but should be generated when needed from the microscale data.
+       but should be generated when needed from the microscale data.
 
 ``bin_edge_proportions``
   The bin boundaries of the Cumulative Density Function for the tPA leaving time distribution.
@@ -158,10 +158,10 @@ but should be generated when needed from the microscale data.
     None
   :Dimensions:
     (101,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``tPAleave.dat``
 
-  ``bin_edge_tpa_leaving_time``
+``bin_edge_tpa_leaving_time``
   The times at the bin boundaries of the tPA leaving time distribution.
   That is, i% of all microscale simulations had their tPA leave in a time <= tsectPA[i].
 
@@ -171,10 +171,10 @@ but should be generated when needed from the microscale data.
     seconds
   :Dimensions:
     (101,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``tsectPA.dat``
 
-  ``binned_fiber_degrade_time``
+``binned_fiber_degrade_time``
   The fiber degrade time of all microscale simulations, binned by their tPA leaving time,
   sorted by their degradation time.
   That is, column ``i`` of this matrix contains the fiber degrade time of all simulations whose
@@ -192,10 +192,10 @@ but should be generated when needed from the microscale data.
     seconds
   :Dimensions:
     (``micro_params.simulations`` // 100, 100)
-  :Fortran equivalent:
+  :Fortran Name:
     ``lysismat.dat``
 
-  ``binned_fiber_degraded``
+``binned_fiber_degraded``
   The number of simulations in a tPA leaving time bin, where full lysis of the fiber occurs.
   That is, ``binned_fiber_degraded[i]`` is the 1-indexed location of the first ``6000`` entry in 
   column ``i`` of ``binned_fiber_degrade_time``.
@@ -206,10 +206,10 @@ but should be generated when needed from the microscale data.
     None
   :Dimensions:
     (100,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``lenlysisvect.dat``
 
-  ``edge_grid_neighbors``
+``edge_grid_neighbors``
   This file contains the fortran (1-D), 0-indexed location of the edges neighboring each edge in the
   edge grid.
   That is, edge_grid_neighbors[i, j] is the index of the jth neighbor of edge i
@@ -225,11 +225,11 @@ but should be generated when needed from the microscale data.
     None
   :Dimensions:
     (``macro_params.total_edges``, 8)
-  :Fortran equivalent:
+  :Fortran Name:
     ``neighbors.dat``
 
 Macroscale datasets
-++++++++++++++++
++++++++++++++++++++
 
 
 ``fiber_degrade_time``
@@ -247,7 +247,7 @@ Macroscale datasets
     (seconds, None, None, seconds)
   :Dimensions: 
     (number of binding events, 4)
-  :Fortran equivalent:
+  :Fortran Name:
     ``f_deg_list``
 
 ``tpa_bind_events``
@@ -273,13 +273,13 @@ Macroscale datasets
     (seconds, None, None, None, None)
   :Dimensions: 
     (number of binding events, 5) 
-  :Fortran equivalent:
+  :Fortran Name:
     ``m_bind_t``
 
 ``tpa_location_snapshot``
-  An array, giving the location (fiber index) row and rank of each molecule at point when a save is made.
-  That is, ``tpa_location_snapshot[i, :, j]`` is the pair of location coordinates for tPA molecule ``i`` when 
-  snapshot ``j`` is recorded.
+  An array, giving the location (fiber index) row and rank of each molecule at point when a save is 
+  made. That is, ``tpa_location_snapshot[i, :, j]`` is the pair of location coordinates for tPA 
+  molecule ``i`` when snapshot ``j`` is recorded.
 
   :Data Type: 
     NumPy uint32 (``u4``)
@@ -287,7 +287,7 @@ Macroscale datasets
     None 
   :Dimensions: 
     (number of molecules, 2, number of snapshots)
-  :Fortran equivalent:
+  :Fortran Name:
     ``m_loc``
 
 ``tpa_transit_time``
@@ -300,7 +300,7 @@ Macroscale datasets
     seconds
   :Dimensions: 
     (number of molecules,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``mfpt``
 
 ``snapshot_time``
@@ -312,7 +312,7 @@ Macroscale datasets
     seconds
   :Dimensions: 
     (number of snapshots,)
-  :Fortran equivalent:
+  :Fortran Name:
     ``tsave``
 
 Log datasets
@@ -326,7 +326,7 @@ Log datasets
   :Dimensions:
     (log events,)
 
-  ``macro_log__sim_XX``
+``macro_log__sim_XX``
   The log from the macroscale execution of simulation XX, stored one line per row.
 
   :Data Type:
@@ -335,22 +335,22 @@ Log datasets
     (log events,)
 
 
-^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 v1.99.0 (Last Fortran-based specification)
-^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 *Note: Grid Locations here are stored in a single-dimension, 1-indexed system. 
 For more information, see the documentation of the Python lysis.util.EdgeGrid class (link below)*
 
 https://github.com/UCO-OpResearch/lysis/blob/c1e6b2a92758fb8620d6f5a2223976a1478c3231/src/python/lysis/util/edge_grid.py
 
 Folder root
------------
+++++++++++++++++
 Purpose:
   Stores all files related to a run
 
 Name:
   First 13 characters are the experiment code, YYYY-MM-DD-hh.
-  Last two caracters are a two-digit number giving the run's position
+  Last two characters are a two-digit number giving the run's position
   in the experiment
 
 Run files
@@ -397,7 +397,7 @@ Microscale files
     seconds
   :Dimensions: 
     (``simulations``,)
-  :Fortran Variable:
+  :Fortran Name:
     ``firstPLi``
 
 
@@ -412,7 +412,7 @@ Microscale files
     None
   :Dimensions: 
     (``simulations``,)
-  :Fortran Variable:
+  :Fortran Name:
     ``ltPA = [tPA(count)]``
 
 ``lyscomplete.dat``
@@ -428,7 +428,7 @@ Microscale files
     None
   :Dimensions: 
     (``simulations``,)
-  :Fortran Variable:
+  :Fortran Name:
     ``lysiscomplete``
 
 ``lysis.dat``
@@ -443,7 +443,7 @@ Microscale files
     seconds
   :Dimensions: 
     (``simulations``,)
-  :Fortran Variable:
+  :Fortran Name:
     ``lysis_time = [tvals(count)]``
 
 ``PLi.dat``
@@ -458,7 +458,7 @@ Microscale files
     None
   :Dimensions: 
     (``simulations``,)
-  :Fortran Variable:
+  :Fortran Name:
     ``Plasmin = [PLi(count)]``
 
 ``tPA_time.dat``
@@ -474,7 +474,7 @@ Microscale files
     seconds
   :Dimensions: 
     (``simulations``,)
-  :Fortran Variable:
+  :Fortran Name:
     ``tPA_time = [tvals(loca)]``
 
 ``tPAPLiunbd.dat``
@@ -490,7 +490,7 @@ Microscale files
     None
   :Dimensions: 
     (``simulations``,)
-  :Fortran Variable:
+  :Fortran Name:
     ``tPAPLiunbd = [reaction3]``
 
 ``tPAunbind.dat``
@@ -505,14 +505,14 @@ Microscale files
     None
   :Dimensions: 
     (``simulations``,)
-  :Fortran name:
+  :Fortran Name:
     ``tPAunbind = [reaction2]``
 
 Macro to Micro files
 ++++++++++++++++++++
 
-:NOTE: These files are needed to input the data from the microscale model into the Fortran macroscale code.
-Historically these were generated with the Matlab ``micro_to_macro`` code.
+:NOTE: These files are needed to input the data from the microscale model into the Fortran 
+       macroscale code. Historically these were generated with the Matlab ``micro_to_macro`` code.
 
 *We continue to use 0-indexing for arrays here to be consistent with the rest of this document, 
 even though these files are only used in Fortran which is 1-indexed.*
@@ -550,7 +550,7 @@ even though these files are only used in Fortran which is 1-indexed.*
   tPA leaving time falls in the bin i of the tPA leaving time distribution.
   Put another way, if a simulation has a tPA leaving time in the interval 
   [``tsectPA[i]``, ``tsectPA[i+1]``], then that simulation's fiber degrade time will be found
-  in column i
+  in column i.
   In that column, the fiber degrade times are sorted in increasing order.
 
   All simulations where degradation did not occur are assigned a value of 6,000 seconds.
@@ -586,7 +586,7 @@ even though these files are only used in Fortran which is 1-indexed.*
 
   *Note: The matrix is (``num``, 8) when generated in Python, 
   stored on disk as a flattened (1-D) array in row-major order, 
-  and read intp memory in Fortran as a (8, ``num``) array*
+  and read into memory in Fortran as a (8, ``num``) array*
 
   :File Type:
     Line-delimited Text
@@ -608,7 +608,7 @@ Subfolders
   Stores all files related to an individual macroscale simulation
 
 :Name: 
-  A two-digit number giving the macroscale simulations's position
+  A two-digit number giving the macroscale simulation's position
   in the run array
 
 ``macro.txt``
@@ -623,7 +623,8 @@ Subfolders
 
   #. The simulation time elapsed when the event occurred.
   #. The fortran location index of the fiber on which the event occurred.
-  #. The new degrade time for the fiber. (the time at which the fiber will degrade if no further updates occur).
+  #. The new degrade time for the fiber. (the time at which the fiber will degrade if no further 
+     updates occur).
 
   :File Type:
     Comma-delimited Text
@@ -633,7 +634,7 @@ Subfolders
     (seconds, None, seconds)
   :Dimensions: 
     (number of binding events which result in an updated degrade time, 3)
-  :Fortran Variable:
+  :Fortran Name:
     ``(t, V(1, j), t_degrade(V(1, j)))``
 
 ``m_bind_t.dat``
@@ -660,7 +661,7 @@ Subfolders
     (seconds, None, None, None)
   :Dimensions: 
     (number of binding and unbinding events, 4) 
-  :Fortran Variable:
+  :Fortran Name:
     ``(t, j, [0-3], V(1, j))``
 
 ``m_loc.dat``
@@ -676,10 +677,10 @@ Subfolders
     None 
   :Dimensions: 
     (``cNsave``, ``M``)
-  :Fortran Variable:
+  :Fortran Name:
     ``V(1, :)``
 
-  ``m_bound.dat``
+``m_bound.dat``
   An array, giving the bound/unbound status of each molecule at point when a save is made.
   That is, ``m_bound[i, j]`` is 1 if tPA molecule ``j`` is bound to a fiber when 
   snapshot ``i`` is recorded, 0 else.
@@ -692,7 +693,7 @@ Subfolders
     None 
   :Dimensions: 
     (``cNsave``, ``M``)
-  :Fortran Variable:
+  :Fortran Name:
     ``V(2, :)``
 
 ``mfpt.dat``
@@ -707,7 +708,7 @@ Subfolders
     seconds
   :Dimensions: 
     (``M``,)
-  :Fortran Variable:
+  :Fortran Name:
     ``mfpt``
 
 ``tsave.dat``
@@ -721,7 +722,7 @@ Subfolders
     seconds
   :Dimensions: 
     (``cNsave``,)
-  :Fortran name:
+  :Fortran Name:
     ``t``
 
 ``Nsave.dat``
@@ -735,5 +736,5 @@ Subfolders
     None
   :Dimensions: 
     (``simulations``,)
-  :Fortran name:
+  :Fortran Name:
     ``Nsavevect = [cNsave]``

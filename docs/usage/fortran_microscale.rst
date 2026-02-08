@@ -24,13 +24,13 @@ First-time setup
 
 #. Copy and paste the following command, then hit enter.
    
-   `git clone https://github.com/UCO-OpResearch/lysis.git`
+   ``git clone https://github.com/UCO-OpResearch/lysis.git``
     
-#. Type `cd lysis` and hit enter, 
-   then run the command `git checkout micro-wrapper`.
+#. Type ``cd lysis`` and hit enter, 
+   then run the command ``git checkout micro-wrapper``.
 
-#. When the `git` command finishes without error,
-   type `exit` and hit enter.
+#. When the ``git`` command finishes without error,
+   type ``exit`` and hit enter.
 
 #. Return to the tab with your files on it
 
@@ -54,12 +54,12 @@ First-time setup
 #. On the bottom-right, is a window titled "main_job.sh". 
    Click on the "Open Editor" button.
 
-#. Copy and paste the text from the `micro_fortran_run.sh` file (link below)
+#. Copy and paste the text from the ``micro_fortran_run.sh`` file (link below)
    into the editor window.
 
    https://github.com/UCO-OpResearch/lysis/blob/macro-wrapper/doc/usage/micro_fortran_run.sh
 
-#. In line 18 (that starts `LYSIS_ROOT=`), paste the path of the lysis
+#. In line 18 (that starts ``LYSIS_ROOT=``), paste the path of the lysis
    folder that you copied earier. Make sure there are no spaces on that line.
    If your path has spaces, put double-quotes around the path.
 
@@ -79,13 +79,13 @@ Running a job
 
 #. In the "main_job.sh" window, click "Open Editor".
 
-#. In line 19, (that starts `RUN_CODE=`) type the Run Code with no spaces.
+#. In line 19, (that starts ``RUN_CODE=``) type the Run Code with no spaces.
 
 #. Add any parameters that you want to be different from the defaults,
-   between line 30 (that starts `--outFileCode`) and the line that starts
-   `> data`. These MUST have the following format:
+   between line 30 (that starts ``--outFileCode``) and the line that starts
+   ``> data``. These MUST have the following format:
 
-   - Start with `--`, immediately followed by the name of the parameter 
+   - Start with ``--``, immediately followed by the name of the parameter 
      (see below).
 
    - Add a space after the name of the parameter, then type the value of
@@ -94,7 +94,7 @@ Running a job
    - Finally, place a backslash (``\``) at the end of each line.
 
    - There must *NOT* be any blank lines between parameters, 
-      or between the parameters and the line that starts `> data`.
+      or between the parameters and the line that starts ``> data``.
 
 #. Click "Save", then close the tab to return to the Job Composer.
 
@@ -103,11 +103,11 @@ Running a job
 #. You can immediately start work on another job.
 
 #. Once the status of the job changes to "Completed" or "Failed",
-   check the `micro_rates_########.out` file in the "Job Details" window
+   check the ``micro_rates_########.out`` file in the "Job Details" window
    to make sure there are no errors.
 
 #. You can find the output data of the microscale code in the data folder
-   in a folder named with the `RUN_CODE`.
+   in a folder named with the ``RUN_CODE``.
 
 Parameters
 +++++++++++++++++
@@ -248,7 +248,7 @@ Experimental Parameters
 
    :Description: The number of independent trials run in the microscale model.
 
-   :Default Value: 50_000
+   :Default Value: 50,000
    
    :Units: None
 

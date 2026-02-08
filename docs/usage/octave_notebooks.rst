@@ -13,11 +13,11 @@ First-time setup
 
 #. Click on the "Open in Terminal" button.
 
-#. Run the command `git branch` and make sure you are on the `micro-wrapper` branch.
+#. Run the command ``git branch`` and make sure you are on the ``micro-wrapper`` branch.
 
-#. Type `source doc/usage/octave_setup.sh`
+#. Type ``source doc/usage/octave_setup.sh``
 
-#. Once the script completes without error, type `exit` and close the tab.
+#. Once the script completes without error, type ``exit`` and close the tab.
 
 #. Back on the Buddy interface, click on "Interactive Apps" and then on "Jupyter".
 
@@ -30,13 +30,13 @@ First-time setup
 #. In the "Commands" box, make sure the following lines are typed in. 
    (Be sure to scroll down to see all commands)
 
-   - `module load Anaconda3`
+   - ``module load Miniforge3``
 
-   - `module load Octave`
+   - ``module load Octave``
 
-   - `source ~/.bashrc`
+   - ``source ~/.bashrc``
 
-   - `conda activate lysis`
+   - ``conda activate lysis``
 
 #. Click the "Launch" button.
 
@@ -58,10 +58,10 @@ Running Octave Notebooks
 
 #. Click on the "Connect to Jupyter" button.
 
-#. In the list of folders on the left, navigate to your `lysis` folder,
-   then go to `src\matlab` and open the `micro_to_macro.ipynb` file.
+#. In the list of folders on the left, navigate to your ``lysis`` folder,
+   then go to ``src\matlab`` and open the ``micro_to_macro.ipynb`` file.
 
-#. Set the `run_code` that you want to analyze and then hit the ">>" 
+#. Set the ``run_code`` that you want to analyze and then hit the ">>" 
    button at the top of the tab. This will restart the kernel and then
    run all code in the workbook. It will prompt for confirmation.
 
