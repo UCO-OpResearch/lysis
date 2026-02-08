@@ -819,6 +819,8 @@ class MacroscaleSim:
         #
         # INCORRECT (race condition):
         #   self.fiber_status[locations] = np.fmin(self.fiber_status[locations], lysis_time)
+        # TODO: Investigate whether this could be prevented by first sorting by
+        #       decreasing lysis time since last write wins.
 
     def move_to_empty_edge(self, m: np.ndarray, current_time: float):
         """Move molecules to a random empty (degraded) neighboring edge.
