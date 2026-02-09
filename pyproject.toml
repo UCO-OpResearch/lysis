@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lysis"
+version = "0.1.0"
+description = "Blood clot lysis simulation and data tools"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24.0",
+    "h5py>=3.0",
+    "pint>=0.20",
+    "click>=8.0",
+    "rich>=13.0",
+]
+
+[project.scripts]
+lysis = "lysis.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src/python"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/python/tests"]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]

@@ -1,0 +1,171 @@
+"""``lysis convert`` — convert simulation data between specification formats."""
+
+import sys
+
+import click
+
+from lysis.cli import cli
+from lysis.data.dataspec import dataspec, tags
+
+
+def _resolve_spec(spec_str):
+    """Resolve a spec name or tag to a version string.
+
+    :param spec_str: Specification version or tag alias
+        (e.g. ``"fortran"``, ``"hdf5"``, ``"v1.99.0"``)
+    :type spec_str: str
+    :return: Resolved version string (e.g. ``"v1.99.0"``)
+    :rtype: str
+    :raises click.BadParameter: If the spec is not recognized
+    """
+    resolved = spec_str
+    while resolved in tags:
+        resolved = tags[resolved]
+    if resolved not in dataspec:
+        available = sorted(
+            k for k in dataspec if not k in tags and k != resolved
+        )
+        tag_list = [f"{k} -> {v}" for k, v in tags.items()]
+        raise click.BadParameter(
+            f"Unknown spec '{spec_str}'.\n"
+            f"  Versions: {', '.join(available)}\n"
+            f"  Tags: {', '.join(tag_list)}"
+        )
+    return resolved
+
+
+@cli.command()
+@click.argument("input_path", type=click.Path(exists=True))
+@click.argument("output_path", type=click.Path())
+@click.option(
+    "-f",
+    "--from",
+    "input_spec",
+    required=True,
+    help="Input spec version or tag (e.g. fortran, hdf5, v1.99.0, v2.0.0).",
+)
+@click.option(
+    "-t",
+    "--to",
+    "output_spec",
+    required=True,
+    help="Output spec version or tag.",
+)
+@click.option(
+    "-c",
+    "--collections",
+    default=None,
+    help="Comma-separated collection names (default: all in input spec).",
+)
+@click.option(
+    "--file-code",
+    default="",
+    help="File code for Fortran file naming (e.g. '_PLG2_tPA01_TB-xiii.dat').",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be converted without writing output.",
+)
+@click.pass_context
+def convert(ctx, input_path, output_path, input_spec, output_spec,
+            collections, file_code, dry_run):
+    """Convert simulation data between specification formats.
+
+    Reads data from INPUT_PATH in the --from format, converts it, and writes
+    it to OUTPUT_PATH in the --to format.
+
+    \b
+    Examples:
+        lysis convert ./fortran_data/ output.h5 -f fortran -t hdf5
+        lysis convert input.h5 ./out/ -f hdf5 -t fortran --file-code "_run01.dat"
+        lysis convert input.h5 output.h5 -f v1.99.0 -t v2.0.0 --dry-run
+    """
+    from lysis.data.dataconvert import convert_data
+    from lysis.data.fileops import read_data_collection, write_data_collection
+
+    console = ctx.obj["console"]
+    verbose = ctx.obj["verbose"]
+
+    # Resolve spec versions
+    try:
+        in_version = _resolve_spec(input_spec)
+        out_version = _resolve_spec(output_spec)
+    except click.BadParameter as e:
+        console.print(f"[red]Error:[/red] {e.format_message()}")
+        ctx.exit(1)
+        return
+
+    # Determine collections to convert
+    if collections:
+        collection_names = [c.strip() for c in collections.split(",")]
+        for name in collection_names:
+            if name not in dataspec[in_version]:
+                available = list(dataspec[in_version].keys())
+                console.print(
+                    f"[red]Error:[/red] Unknown collection '{name}'. "
+                    f"Available: {', '.join(available)}"
+                )
+                ctx.exit(1)
+                return
+    else:
+        collection_names = list(dataspec[in_version].keys())
+
+    in_collections = [dataspec[in_version][n] for n in collection_names]
+    out_collections = [dataspec[out_version][n] for n in collection_names]
+    file_codes = [file_code] * len(collection_names)
+
+    if verbose or dry_run:
+        console.print(f"Converting: {in_version} -> {out_version}")
+        console.print(f"Collections: {', '.join(collection_names)}")
+        console.print(f"Input:  {input_path}")
+        console.print(f"Output: {output_path}")
+        if dry_run:
+            console.print("[yellow]Dry run — no files will be written.[/yellow]")
+
+    # Read
+    try:
+        data = read_data_collection(input_path, in_collections, file_codes)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] Input file not found: {e}")
+        ctx.exit(1)
+        return
+    except KeyError as e:
+        console.print(f"[red]Error:[/red] Missing data in input: {e}")
+        ctx.exit(1)
+        return
+
+    if verbose:
+        n_datasets = sum(
+            1 for k in data if k != "params"
+        )
+        console.print(f"Read {n_datasets} dataset(s) from input.")
+
+    # Convert
+    try:
+        converted = convert_data(data, in_version, out_version)
+    except NotImplementedError as e:
+        console.print(f"[red]Error:[/red] Conversion not implemented: {e}")
+        ctx.exit(1)
+        return
+    except (OverflowError, TypeError) as e:
+        console.print(f"[red]Error:[/red] Type conversion failed: {e}")
+        ctx.exit(1)
+        return
+
+    # Write
+    if dry_run:
+        console.print("[green]Dry run complete. No files written.[/green]")
+        return
+
+    try:
+        write_data_collection(converted, output_path, out_collections, file_codes)
+    except (OSError, TypeError) as e:
+        console.print(f"[red]Error:[/red] Failed to write output: {e}")
+        ctx.exit(1)
+        return
+
+    console.print(
+        f"[green]Converted {in_version} -> {out_version} "
+        f"({', '.join(collection_names)})[/green]"
+    )
