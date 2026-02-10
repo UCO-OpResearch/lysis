@@ -9,6 +9,7 @@ bin
 lib
 octave-workspace
 __pycache__
+*.egg-info
 fort.*
 *.sublime-*
 /data
