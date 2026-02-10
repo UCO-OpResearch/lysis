@@ -1,16 +1,24 @@
-.. Lysis documentation master file, created by
-   sphinx-quickstart on Fri Dec 30 15:38:29 2022.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Welcome to Lysis's documentation!
 =================================
 
+Lysis is a computational model for studying blood clot lysis (breakdown).
+This documentation includes both usage guides and API reference.
+
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Usage Guide
 
-   modules.rst
+   usage/ontology
+   usage/data_specification
+   usage/fortran_microscale
+   usage/fortran_macroscale
+   usage/octave_notebooks
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference
+
+   modules
 
 
 Indices and tables
