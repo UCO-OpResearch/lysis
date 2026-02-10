@@ -4,37 +4,41 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 import os
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join('..', '..', 'src', 'python')))
+
+sys.path.insert(0, os.path.abspath(os.path.join("..", "..", "src", "python")))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'Lysis'
-copyright = '2022, Brittany Bannish <bbannish@uco.edu> & Brad Paynter <bpaynter@uco.edu>'
-author = 'Brittany Bannish <bbannish@uco.edu> & Brad Paynter <bpaynter@uco.edu>'
-release = '0.1'
-version = '0.1'
+project = "Lysis"
+copyright = (
+    "2022, Brittany Bannish <bbannish@uco.edu> & Brad Paynter <bpaynter@uco.edu>"
+)
+author = "Brittany Bannish <bbannish@uco.edu> & Brad Paynter <bpaynter@uco.edu>"
+release = "0.1"
+version = "0.1"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.coverage',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode',  # Add source code links
-    'sphinx.ext.githubpages',  # Create .nojekyll file for GitHub Pages
+    "sphinx.ext.autodoc",
+    "sphinx.ext.coverage",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",  # Add source code links
+    "sphinx.ext.githubpages",  # Create .nojekyll file for GitHub Pages
+    "sphinx.ext.todo",  # Generate todo items
 ]
 
-templates_path = ['_templates']
-exclude_patterns = ['*.ipynb', '.ipynb_checkpoints']
+templates_path = ["_templates"]
+exclude_patterns = ["*.ipynb", ".ipynb_checkpoints"]
 
 # -- Autodoc configuration ---------------------------------------------------
 autodoc_default_options = {
-    'members': True,
-    'member-order': 'bysource',
-    'undoc-members': True,
-    'show-inheritance': True,
+    "members": True,
+    "member-order": "bysource",
+    "undoc-members": True,
+    "show-inheritance": True,
 }
 
 # Mock imports for optional modules that aren't needed for documentation
@@ -43,11 +47,11 @@ autodoc_default_options = {
 # - nvtx: NVIDIA profiling tools (only for performance profiling)
 # - GooseSLURM: SLURM cluster management (only for HPC job submission)
 autodoc_mock_imports = [
-    'cupy',
-    'cp',
-    'nvtx',
-    'GooseSLURM',
-    'gs',
+    "cupy",
+    "cp",
+    "nvtx",
+    "GooseSLURM",
+    "gs",
 ]
 
 # -- Napoleon settings -------------------------------------------------------
@@ -67,5 +71,5 @@ napoleon_use_rtype = True
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'sphinx_rtd_theme'
-html_static_path = ['_static']
+html_theme = "sphinx_rtd_theme"
+html_static_path = ["_static"]
