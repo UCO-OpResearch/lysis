@@ -20,8 +20,8 @@ import os
 import numpy as np
 from pathlib import Path
 
-# Add parent directory (src/python) to path so we can import lysis
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src directory to path so we can import lysis
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 print(f"Path: {sys.path}")
 
 from lysis.util.fileops import read_data_collection, write_data_collection

@@ -54,10 +54,8 @@ First-time setup
 #. On the bottom-right, is a window titled "main_job.sh". 
    Click on the "Open Editor" button.
 
-#. Copy and paste the text from the ``micro_fortran_run.sh`` file (link below)
-   into the editor window.
-
-   https://github.com/UCO-OpResearch/lysis/blob/macro-wrapper/doc/usage/micro_fortran_run.sh
+#. Copy and paste the text from the ``micro_fortran_run.sh`` file
+   (found in the ``scripts/`` directory of the repository) into the editor window.
 
 #. In line 18 (that starts ``LYSIS_ROOT=``), paste the path of the lysis
    folder that you copied earier. Make sure there are no spaces on that line.

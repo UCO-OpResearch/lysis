@@ -27,8 +27,8 @@ import shutil
 import numpy as np
 from pathlib import Path
 
-# Add parent directory (src/python) to path so we can import lysis
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src directory to path so we can import lysis
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from lysis.util.fileops import read_data_collection, write_data_collection
 from lysis.util.dataconvert import convert_data, generate_macroscale_in

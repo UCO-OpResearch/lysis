@@ -15,7 +15,7 @@ First-time setup
 
 #. Run the command ``git branch`` and make sure you are on the ``micro-wrapper`` branch.
 
-#. Type ``source doc/usage/octave_setup.sh``
+#. Type ``source docs/usage/octave_setup.sh``
 
 #. Once the script completes without error, type ``exit`` and close the tab.
 

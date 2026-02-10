@@ -5,10 +5,8 @@ Data Specifications
 *Note: This document is written with NumPy indexing, which is zero-indexed.
 This is especially noteworthy since the Fortran code is one-indexed.*
 
-*Note: Grid Locations in this specification are stored in a two-dimension, 0-indexed system. 
-For more information, see the documentation of the Python lysis.util.EdgeGrid class (link below)*
-
-https://github.com/UCO-OpResearch/lysis/blob/c1e6b2a92758fb8620d6f5a2223976a1478c3231/src/python/lysis/util/edge_grid.py
+*Note: Grid Locations in this specification are stored in a two-dimension, 0-indexed system.
+For more information, see the documentation of the* :class:`~lysis.geometry.edge_grid.EdgeGrid` *class.*
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 v2.0.0 (First HDF5-based specification)
@@ -215,9 +213,7 @@ Macro to Micro datasets
   That is, edge_grid_neighbors[i, j] is the index of the jth neighbor of edge i
   
   *For more detail on how the edge grid co-ordinates are defined in both Fortran and Python,
-  see the documentation of the Python lysis.util.EdgeGrid class (link below)*
-
-  https://github.com/UCO-OpResearch/lysis/blob/c1e6b2a92758fb8620d6f5a2223976a1478c3231/src/python/lysis/util/edge_grid.py
+  see the documentation of the* :class:`~lysis.geometry.edge_grid.EdgeGrid` *class.*
 
   :Data Type:
     NumPy 32-bit unsigned integer (``u4``)
@@ -338,10 +334,8 @@ Log datasets
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 v1.99.0 (Last Fortran-based specification)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-*Note: Grid Locations here are stored in a single-dimension, 1-indexed system. 
-For more information, see the documentation of the Python lysis.util.EdgeGrid class (link below)*
-
-https://github.com/UCO-OpResearch/lysis/blob/c1e6b2a92758fb8620d6f5a2223976a1478c3231/src/python/lysis/util/edge_grid.py
+*Note: Grid Locations here are stored in a single-dimension, 1-indexed system.
+For more information, see the documentation of the* :class:`~lysis.geometry.edge_grid.EdgeGrid` *class.*
 
 Folder root
 ++++++++++++++++
