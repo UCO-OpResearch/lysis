@@ -4,7 +4,7 @@ This module provides utility functions for managing experimental run data,
 including formatting dictionaries into readable string representations.
 
 Example usage:
-    >>> from lysis.util.util import dict_to_formatted_str
+    >>> from lysis.tools.util import dict_to_formatted_str
     >>> measurements = {'Hat': 'Large', 'Pants': {'Waist': 40, 'Inseam': 38}}
     >>> print(dict_to_formatted_str(measurements))
     Hat   : Large

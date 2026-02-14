@@ -92,7 +92,7 @@ Example Usage
 
 Basic simulation setup::
 
-    >>> from lysis.util import Run
+    >>> from lysis.config.run import Run
     >>> from lysis.np_macroscale import MacroscaleSim
     >>>
     >>> # Create run with parameters
@@ -160,9 +160,9 @@ Limitations and Assumptions
 See Also
 --------
 
-- ``util.edge_grid``: Rectilinear grid structure and neighbor calculations
-- ``util.parameters``: MacroParameters configuration class
-- ``util.run``: Run container for parameters and data
+- ``geometry.edge_grid``: Rectilinear grid structure and neighbor calculations
+- ``config.parameters``: MacroParameters configuration class
+- ``config.run``: Run container for parameters and data
 
 References
 ----------
@@ -186,14 +186,10 @@ from functools import partial
 import numpy as np
 from tqdm.auto import tqdm
 
-from .util import (
-    Run,
-    KissRandomGenerator,
-    RandomDraw,
-    EdgeGrid,
-    from_fortran_edge_index,
-    to_fortran_edge_index,
-)
+from .config.constants import RandomDraw
+from .config.run import Run
+from .geometry.edge_grid import EdgeGrid, from_fortran_edge_index, to_fortran_edge_index
+from .tools.kiss import KissRandomGenerator
 
 
 class MacroscaleSim:

@@ -3,7 +3,8 @@ import os
 
 from dataclasses import dataclass
 
-from lysis.util import Run, FortranMacro, FortranMicro
+from lysis.config.run import Run
+from lysis.execution.codeutil import FortranMacro, FortranMicro
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"

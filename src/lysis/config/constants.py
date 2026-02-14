@@ -91,7 +91,7 @@ class Const:
     :vartype NUMPY_SAVETXT_FORMATS: dict
 
     Example:
-        >>> from lysis.util.constants import CONST
+        >>> from lysis.config.constants import CONST
         >>> if boundary == CONST.BOUND.TOP:
         >>>     # Handle top boundary
         >>>     pass
@@ -139,7 +139,7 @@ class Const:
         :raises ValueError: If dtype is not supported
 
         Example:
-            >>> from lysis.util.constants import CONST
+            >>> from lysis.config.constants import CONST
             >>> import numpy as np
             >>> fmt = CONST.get_savetxt_format(np.dtype('float64'))
             >>> print(fmt)  # '%.18e'
@@ -426,7 +426,7 @@ class DataSetStorageType(Enum):
 #: a single import. Use this instead of importing individual enum classes.
 #:
 #: Example:
-#:     >>> from lysis.util.constants import CONST
+#:     >>> from lysis.config.constants import CONST
 #:     >>> if molecule_state == CONST.MOL_STATUS.BOUND:
 #:     >>>     process_bound_molecule()
 CONST = Const()

@@ -64,7 +64,7 @@ Usage Example
 
 Accessing specifications::
 
-    >>> from lysis.util.dataspec import dataspec
+    >>> from lysis.data.dataspec import dataspec
     >>> # Get v2.0.0 microscale output spec
     >>> micro_out_spec = dataspec["v2.0.0"]["microscale_out"]
     >>> # Access individual dataset spec

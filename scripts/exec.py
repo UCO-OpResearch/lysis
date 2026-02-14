@@ -7,10 +7,11 @@ from datetime import datetime
 from typing import AnyStr
 
 import lysis
-import lysis.util
+from lysis.config.constants import default_filenames
+from lysis.config.run import Run
 
 
-def exec(run: lysis.util.Run, timestamp: AnyStr):
+def exec(run: Run, timestamp: AnyStr):
     if __name__ == "__main__":
         logger = logging.getLogger("lysis")
     else:
@@ -28,7 +29,7 @@ def exec(run: lysis.util.Run, timestamp: AnyStr):
     run.read_file()
     logger.debug(f"With parameters {os.linesep}{run}")
     for file in run.macro_params.output_data:
-        filename = lysis.util.default_filenames[file]
+        filename = default_filenames[file]
         if os.path.isfile(os.path.join(run.os_path, filename)):
             os.remove(os.path.join(run.os_path, filename))
     macro = lysis.MacroscaleSim(run)
@@ -47,7 +48,7 @@ def exec(run: lysis.util.Run, timestamp: AnyStr):
 
 
 def main():
-    run = lysis.util.Run(r"../../data", run_code="2026-01-25-1000")
+    run = Run(r"../../data", run_code="2026-01-25-1000")
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     os.makedirs(os.path.join(run.os_path, "log"), exist_ok=True)
     logfile = os.path.join(run.os_path, "log", "lysis-py-" + timestamp + ".log")

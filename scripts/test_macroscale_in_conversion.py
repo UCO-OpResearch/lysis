@@ -30,9 +30,9 @@ from pathlib import Path
 # Add src directory to path so we can import lysis
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from lysis.util.fileops import read_data_collection, write_data_collection
-from lysis.util.dataconvert import convert_data, generate_macroscale_in
-from lysis.util.dataspec import dataspec
+from lysis.data.fileops import read_data_collection, write_data_collection
+from lysis.data.dataconvert import convert_data, generate_macroscale_in
+from lysis.data.dataspec import dataspec
 
 
 def compare_files(file1: Path, file2: Path, dataset_name: str, tolerance: float = 1e-9):

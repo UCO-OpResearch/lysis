@@ -73,7 +73,7 @@ Example Usage
 
 Create an edge grid for a simulation::
 
-    >>> from lysis.util import Run
+    >>> from lysis.config.run import Run
     >>> run = Run(...)  # Configure simulation parameters
     >>> grid = EdgeGrid(run)
     >>>

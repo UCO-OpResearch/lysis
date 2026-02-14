@@ -63,8 +63,8 @@ Example Usage
 
 Reading a complete data collection::
 
-    from lysis.util.fileops import read_data_collection
-    from lysis.util.dataspec import dataspec
+    from lysis.data.fileops import read_data_collection
+    from lysis.data.dataspec import dataspec
 
     # Read v1.99.0 Fortran microscale output
     collections = list(dataspec["v1.99.0"].values())
@@ -80,8 +80,8 @@ Reading a complete data collection::
 
 Writing a complete data collection::
 
-    from lysis.util.fileops import write_data_collection
-    from lysis.util.dataspec import dataspec
+    from lysis.data.fileops import write_data_collection
+    from lysis.data.dataspec import dataspec
 
     # Write v2.0.0 HDF5 format
     collections = list(dataspec["v2.0.0"].values())
@@ -94,7 +94,7 @@ Writing a complete data collection::
 
 Reading/writing individual datasets::
 
-    from lysis.util.fileops import read_dataset, write_dataset
+    from lysis.data.fileops import read_dataset, write_dataset
 
     # Read a single dataset
     spec = dataspec["v1.99.0"]["microscale_out"].data["lysis"]
@@ -138,9 +138,9 @@ Notes
 See Also
 --------
 
-:mod:`lysis.util.dataspec` : Data specification definitions
-:mod:`lysis.util.dataconvert` : Data format conversion utilities
-:mod:`lysis.util.constants` : Storage type constants
+:mod:`lysis.data.dataspec` : Data specification definitions
+:mod:`lysis.data.dataconvert` : Data format conversion utilities
+:mod:`lysis.config.constants` : Storage type constants
 """
 
 import json
@@ -464,7 +464,7 @@ def read_dataset(
     --------
     Reading a single Fortran binary file::
 
-        >>> from lysis.util.dataspec import dataspec
+        >>> from lysis.data.dataspec import dataspec
         >>> spec = dataspec["v1.99.0"]["microscale_out"].data["lysis"]
         >>> data = read_dataset(
         ...     path="/path/to/data",
@@ -528,7 +528,7 @@ def read_data_collection(
     --------
     Reading Fortran v1.99.0 microscale output::
 
-        >>> from lysis.util.dataspec import dataspec
+        >>> from lysis.data.dataspec import dataspec
         >>> collections = [dataspec["v1.99.0"]["microscale_out"]]
         >>> data = read_data_collection(
         ...     path="/path/to/fortran/data",
@@ -939,7 +939,7 @@ def write_data_collection(
     --------
     Writing HDF5 v2.0.0 format::
 
-        >>> from lysis.util.dataspec import dataspec
+        >>> from lysis.data.dataspec import dataspec
         >>> collections = list(dataspec["v2.0.0"].values())
         >>> write_data_collection(
         ...     data=simulation_results,

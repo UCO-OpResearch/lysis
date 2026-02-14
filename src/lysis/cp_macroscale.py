@@ -7,8 +7,8 @@ import numpy as np
 import nvtx
 from tqdm import tqdm
 
-from .util import Run
-from .util.edge_grid import EdgeGrid
+from .config.run import Run
+from .geometry.edge_grid import EdgeGrid
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2022, Brittany Bannish"

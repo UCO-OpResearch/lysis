@@ -27,10 +27,10 @@ from pathlib import Path
 # Add src directory to path so we can import lysis
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from lysis.util.fileops import read_data_collection, write_data_collection
-from lysis.util.dataconvert import convert_data
-from lysis.util.dataspec import dataspec, DataSetSpec, parse_shape
-from lysis.util.constants import CONST
+from lysis.data.fileops import read_data_collection, write_data_collection
+from lysis.data.dataconvert import convert_data
+from lysis.data.dataspec import dataspec, DataSetSpec, parse_shape
+from lysis.config.constants import CONST
 
 
 def compare_arrays(
