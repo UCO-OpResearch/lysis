@@ -1,2 +1,2 @@
-"""Backward-compatibility shim. Actual code in lysis.execution.run."""
-from ..execution.run import *
+"""Backward-compatibility shim. Actual code in lysis.config.run."""
+from ..config.run import *

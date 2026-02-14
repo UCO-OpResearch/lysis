@@ -12,14 +12,6 @@ lysis.execution.codeutil module
    :show-inheritance:
    :undoc-members:
 
-lysis.execution.run module
---------------------------
-
-.. automodule:: lysis.execution.run
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Module contents
 ---------------
 

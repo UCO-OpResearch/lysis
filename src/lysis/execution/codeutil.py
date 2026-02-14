@@ -25,7 +25,7 @@ import numpy as np
 from pint import Quantity
 
 from ..config.parameters import MacroParameters, MicroParameters
-from .run import Run
+from ..config.run import Run
 from ..geometry.edge_grid import generate_fortran_neighborhood_structure
 
 __author__ = "Brittany Bannish and Bradley Paynter"

@@ -20,6 +20,14 @@ lysis.config.parameters module
    :show-inheritance:
    :undoc-members:
 
+lysis.config.run module
+-----------------------
+
+.. automodule:: lysis.config.run
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Module contents
 ---------------
 

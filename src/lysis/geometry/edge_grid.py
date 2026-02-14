@@ -101,15 +101,19 @@ See Also
 - np_macroscale.py: Macroscale simulation that uses EdgeGrid
 """
 
+from __future__ import annotations
+
 from functools import partial
-from typing import Tuple
+from typing import TYPE_CHECKING, Tuple
 
 import numpy as np
 
 from pint import Quantity
 
 from ..config.constants import Const, BoundaryCondition
-from ..execution.run import Run
+
+if TYPE_CHECKING:
+    from ..config.run import Run
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"

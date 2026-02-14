@@ -28,7 +28,7 @@ from typing import Any, Mapping, Union
 
 from ..data.datastore import DataStore
 from ..tools.util import dict_to_formatted_str
-from ..config.parameters import MicroParameters, MacroParameters
+from .parameters import MicroParameters, MacroParameters
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
