@@ -17,6 +17,7 @@ from lysis.config.constants import CONST
 from lysis.data.dataspec import (
     DataCollectionSpec,
     DataSetSpec,
+    DataSpec,
     check_dataset_spec,
     dataspec,
     parse_shape,
@@ -334,3 +335,163 @@ class TestTags:
     def test_current_maps_to_hdf5(self):
         """'current' tag maps to 'hdf5'."""
         assert tags["current"] == "hdf5"
+
+
+# ---------------------------------------------------------------------------
+# DataSpec wrapper class tests
+# ---------------------------------------------------------------------------
+class TestDataSpec:
+    """Tests for the DataSpec wrapper class."""
+
+    def test_version_property(self):
+        """DataSpec.version returns the version string."""
+        spec = dataspec["v2.0.0"]
+        assert spec.version == "v2.0.0"
+
+    def test_v199_version_property(self):
+        """DataSpec.version returns the version string for v1.99.0."""
+        spec = dataspec["v1.99.0"]
+        assert spec.version == "v1.99.0"
+
+    def test_getitem(self):
+        """DataSpec supports dict-style key access."""
+        spec = dataspec["v2.0.0"]
+        coll = spec["microscale_out"]
+        assert isinstance(coll, DataCollectionSpec)
+
+    def test_missing_key_raises(self):
+        """Accessing a nonexistent key raises KeyError."""
+        spec = dataspec["v2.0.0"]
+        with pytest.raises(KeyError):
+            spec["nonexistent"]
+
+    def test_contains(self):
+        """DataSpec supports 'in' operator."""
+        spec = dataspec["v2.0.0"]
+        assert "microscale_out" in spec
+        assert "nonexistent" not in spec
+
+    def test_iter(self):
+        """DataSpec is iterable over collection names."""
+        spec = dataspec["v2.0.0"]
+        names = list(spec)
+        assert "microscale_out" in names
+        assert "macroscale_out" in names
+
+    def test_len(self):
+        """DataSpec has a length equal to the number of collections."""
+        spec = dataspec["v2.0.0"]
+        assert len(spec) == 3
+
+    def test_items(self):
+        """DataSpec.items() yields (name, DataCollectionSpec) pairs."""
+        spec = dataspec["v2.0.0"]
+        items = dict(spec.items())
+        assert "microscale_out" in items
+        assert isinstance(items["microscale_out"], DataCollectionSpec)
+
+    def test_keys(self):
+        """DataSpec.keys() returns collection names."""
+        spec = dataspec["v2.0.0"]
+        assert set(spec.keys()) == {"microscale_out", "macroscale_in", "macroscale_out"}
+
+    def test_values(self):
+        """DataSpec.values() returns DataCollectionSpec objects."""
+        spec = dataspec["v2.0.0"]
+        for v in spec.values():
+            assert isinstance(v, DataCollectionSpec)
+
+    def test_repr(self):
+        """DataSpec repr includes version and collection names."""
+        spec = dataspec["v2.0.0"]
+        r = repr(spec)
+        assert "v2.0.0" in r
+        assert "microscale_out" in r
+
+    def test_tag_alias_shares_object(self):
+        """Tag aliases point to the same DataSpec object."""
+        assert dataspec["hdf5"] is dataspec["v2.0.0"]
+        assert dataspec["fortran"] is dataspec["v1.99.0"]
+
+    def test_tag_alias_version_is_canonical(self):
+        """Tag-aliased DataSpec has the canonical version, not the tag name."""
+        assert dataspec["hdf5"].version == "v2.0.0"
+        assert dataspec["current"].version == "v2.0.0"
+
+
+# ---------------------------------------------------------------------------
+# Hidden field population tests
+# ---------------------------------------------------------------------------
+class TestHiddenFields:
+    """Tests for auto-populated hidden fields on DataCollectionSpec and DataSetSpec."""
+
+    def test_collection_spec_has_version(self):
+        """DataCollectionSpec.version is set by DataSpec."""
+        coll = dataspec["v2.0.0"]["microscale_out"]
+        assert coll.version == "v2.0.0"
+
+    def test_collection_spec_has_collection(self):
+        """DataCollectionSpec.collection is set to its own name."""
+        coll = dataspec["v2.0.0"]["microscale_out"]
+        assert coll.collection == "microscale_out"
+
+    def test_dataset_spec_has_version(self):
+        """DataSetSpec.version is set by DataSpec."""
+        ds = dataspec["v2.0.0"]["microscale_out"].data["pli_first_time"]
+        assert ds.version == "v2.0.0"
+
+    def test_dataset_spec_has_collection(self):
+        """DataSetSpec.collection is set to the parent collection name."""
+        ds = dataspec["v2.0.0"]["microscale_out"].data["pli_first_time"]
+        assert ds.collection == "microscale_out"
+
+    def test_dataset_spec_has_name(self):
+        """DataSetSpec.name is set to the dataset key."""
+        ds = dataspec["v2.0.0"]["microscale_out"].data["pli_first_time"]
+        assert ds.name == "pli_first_time"
+
+    def test_params_spec_has_fields(self):
+        """Params DataSetSpec has version, collection, and name='params'."""
+        params = dataspec["v2.0.0"]["microscale_out"].params
+        assert params.version == "v2.0.0"
+        assert params.collection == "microscale_out"
+        assert params.name == "params"
+
+    def test_standalone_spec_defaults_empty(self):
+        """DataSetSpec created outside DataSpec has empty hidden fields."""
+        spec = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
+            dtype=np.float64,
+        )
+        assert spec.version == ""
+        assert spec.collection == ""
+        assert spec.name == ""
+
+    def test_standalone_collection_spec_defaults_empty(self):
+        """DataCollectionSpec created outside DataSpec has empty hidden fields."""
+        coll = DataCollectionSpec(
+            simulations_combined=True,
+            params=None,
+            data={},
+        )
+        assert coll.version == ""
+        assert coll.collection == ""
+
+    def test_fields_not_in_constructor(self):
+        """Hidden fields cannot be passed as constructor arguments."""
+        with pytest.raises(TypeError):
+            DataSetSpec(
+                dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
+                dtype=np.float64,
+                name="should_fail",
+            )
+
+    def test_v199_fields_populated(self):
+        """Hidden fields work for v1.99.0 specs too."""
+        coll = dataspec["v1.99.0"]["macroscale_out"]
+        assert coll.version == "v1.99.0"
+        assert coll.collection == "macroscale_out"
+        ds = coll.data["tsave"]
+        assert ds.version == "v1.99.0"
+        assert ds.collection == "macroscale_out"
+        assert ds.name == "tsave"

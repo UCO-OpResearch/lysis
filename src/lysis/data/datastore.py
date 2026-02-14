@@ -1,10 +1,12 @@
 import os
+import warnings
 
 from enum import Flag, auto, unique
 from typing import AnyStr
 
 import h5py
 
+from ..config.constants import CONST
 from ..config.parameters import MicroParameters, MacroParameters
 from .dataspec import DataCollectionSpec, DataSetSpec, dataspec
 from .fileops import read_dataset
@@ -17,6 +19,18 @@ __version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
+
+#: The dataspec version that this module is compatible with.
+COMPATIBLE_DATASPEC_VERSION = "v2.0.0"
+
+if dataspec["hdf5"].version != COMPATIBLE_DATASPEC_VERSION:
+    warnings.warn(
+        f"DataStore is built for dataspec '{COMPATIBLE_DATASPEC_VERSION}', "
+        f"but the 'hdf5' tag currently points to '{dataspec['hdf5'].version}'. "
+        f"DataStore may not work correctly with the current HDF5 spec.",
+        UserWarning,
+        stacklevel=1,
+    )
 
 
 @unique
@@ -270,11 +284,27 @@ class DataStore:
         self._hdf5_path = os.path.join(path, f"{run_code}.h5")
         self._file = h5py.File(self._hdf5_path, "r")
 
+        # Validate dataspec version
+        found = self._file.attrs.get(CONST.DATASPEC_VERSION_ATTR)
+        if found is None:
+            self.close()
+            raise ValueError(
+                f"HDF5 file has no '{CONST.DATASPEC_VERSION_ATTR}' attribute: "
+                f"{self._hdf5_path}"
+            )
+        if found != COMPATIBLE_DATASPEC_VERSION:
+            self.close()
+            raise ValueError(
+                f"Dataspec version mismatch: file has '{found}', "
+                f"expected '{COMPATIBLE_DATASPEC_VERSION}'"
+            )
+        self._dataspec_version = found
+
         self._collections = {}
         self._micro_params = None
         self._macro_params = None
 
-        spec = dataspec["v2.0.0"]
+        spec = dataspec[COMPATIBLE_DATASPEC_VERSION]
 
         # Detect which HDF5 groups are present
         present_groups = {}
@@ -329,6 +359,14 @@ class DataStore:
             self._collections[coll_name] = DataCollection(
                 coll_name, self._file, coll_spec, num_sims=num_sims
             )
+
+    @property
+    def dataspec_version(self):
+        """The dataspec version string read from the HDF5 file.
+
+        :rtype: str
+        """
+        return self._dataspec_version
 
     @property
     def collections(self):

@@ -205,6 +205,10 @@ class DataSetSpec:
     data_location: str | None = None
     shape: tuple[int, ...] = (-1,)
     delimiter: str | None = None
+    # Hidden fields — not in constructor, auto-populated by DataSpec
+    version: str = field(init=False, default="")
+    collection: str = field(init=False, default="")
+    name: str = field(init=False, default="")
 
 
 @dataclass(frozen=True)
@@ -279,13 +283,86 @@ class DataCollectionSpec:
     simulations_combined: bool
     params: DataSetSpec
     data: dict[str, DataSetSpec]
+    # Hidden fields — not in constructor, auto-populated by DataSpec
+    version: str = field(init=False, default="")
+    collection: str = field(init=False, default="")
+
+
+class DataSpec:
+    """Versioned specification containing a set of data collections.
+
+    Wraps a dictionary of :class:`DataCollectionSpec` objects and carries the
+    version string. Auto-populates hidden fields (``.version``, ``.collection``,
+    ``.name``) on child specs so they know their own identity.
+
+    Supports dict-like access for backward compatibility::
+
+        spec = DataSpec("v2.0.0", {"microscale_out": ..., ...})
+        spec["microscale_out"]         # DataCollectionSpec
+        spec.version                   # "v2.0.0"
+        for name, coll in spec.items(): ...
+
+    :param version: The version string (e.g., ``"v2.0.0"``).
+    :type version: str
+    :param collections: Mapping of collection names to their specifications.
+    :type collections: dict[str, DataCollectionSpec]
+    """
+
+    def __init__(self, version: str, collections: dict[str, DataCollectionSpec]):
+        self._version = version
+        self._collections: dict[str, DataCollectionSpec] = {}
+        for coll_name, coll_spec in collections.items():
+            # Populate hidden fields on the frozen DataCollectionSpec
+            object.__setattr__(coll_spec, "version", version)
+            object.__setattr__(coll_spec, "collection", coll_name)
+            # Populate hidden fields on the params DataSetSpec
+            if coll_spec.params is not None:
+                object.__setattr__(coll_spec.params, "version", version)
+                object.__setattr__(coll_spec.params, "collection", coll_name)
+                object.__setattr__(coll_spec.params, "name", "params")
+            # Populate hidden fields on each dataset DataSetSpec
+            for ds_name, ds_spec in coll_spec.data.items():
+                object.__setattr__(ds_spec, "version", version)
+                object.__setattr__(ds_spec, "collection", coll_name)
+                object.__setattr__(ds_spec, "name", ds_name)
+            self._collections[coll_name] = coll_spec
+
+    @property
+    def version(self) -> str:
+        """The version string for this specification."""
+        return self._version
+
+    def __getitem__(self, key: str) -> DataCollectionSpec:
+        return self._collections[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._collections
+
+    def __iter__(self):
+        return iter(self._collections)
+
+    def __len__(self) -> int:
+        return len(self._collections)
+
+    def items(self):
+        return self._collections.items()
+
+    def keys(self):
+        return self._collections.keys()
+
+    def values(self):
+        return self._collections.values()
+
+    def __repr__(self) -> str:
+        colls = ", ".join(self._collections.keys())
+        return f"<DataSpec '{self._version}', collections=[{colls}]>"
 
 
 # Master data specification dictionary
 # Structure: dataspec[version][collection_name] -> DataCollectionSpec
 # Versions: "v1.99.0" (Fortran), "v2.0.0" (HDF5), plus tag aliases
 # Collections: "microscale_out", "macroscale_in", "macroscale_out"
-dataspec: dict[str, dict[str, DataCollectionSpec]] = {
+_dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
     # ============================================================================
     # v1.99.0: Fortran-compatible file-based format
     # ============================================================================
@@ -684,6 +761,12 @@ dataspec: dict[str, dict[str, DataCollectionSpec]] = {
     },
 }
 
+# Wrap each version's raw dict in a DataSpec object
+dataspec: dict[str, DataSpec] = {}
+for _version, _collections in _dataspec_raw.items():
+    dataspec[_version] = DataSpec(_version, _collections)
+del _version, _collections
+
 # ============================================================================
 # Tag System: Version Aliases for Forward Compatibility
 # ============================================================================
@@ -696,9 +779,10 @@ tags = {
     "current": "hdf5",  # Alias for current recommended format (can be changed)
 }
 
-# Add tag aliases to the dataspec dictionary by copying the referenced specs
-for k, v in tags.items():
-    dataspec[k] = dataspec[v]
+# Add tag aliases to the dataspec dictionary by copying the referenced DataSpec objects
+for _k, _v in tags.items():
+    dataspec[_k] = dataspec[_v]
+del _k, _v
 
 
 def parse_shape(

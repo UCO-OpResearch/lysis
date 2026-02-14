@@ -30,6 +30,7 @@ from lysis.data.fileops import (
     _read_file_text,
     _read_hdf5_attr,
     _read_hdf5_dataset,
+    _validate_hdf5_version,
     _write_file_binary,
     _write_file_json,
     _write_file_text,
@@ -37,6 +38,7 @@ from lysis.data.fileops import (
     _write_hdf5_dataset,
     data_readers,
     data_writers,
+    ensure_hdf5_version,
     read_data_collection,
     read_dataset,
     write_data_collection,
@@ -534,3 +536,170 @@ class TestWriteReadCollectionRoundTrip:
         assert len(loaded["arr"]) == 3
         for i in range(3):
             np.testing.assert_array_equal(loaded["arr"][i], arrays[i])
+
+
+# ---------------------------------------------------------------------------
+# ensure_hdf5_version tests
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureHdf5Version:
+    """Tests for :func:`ensure_hdf5_version`."""
+
+    def test_creates_new_file_with_version(self, tmp_path):
+        """When file doesn't exist, creates it with the version attribute."""
+        h5_path = str(tmp_path / "new.h5")
+        ensure_hdf5_version(h5_path, "v2.0.0")
+        with h5py.File(h5_path, "r") as f:
+            assert f.attrs[CONST.DATASPEC_VERSION_ATTR] == "v2.0.0"
+
+    def test_existing_file_correct_version(self, tmp_path):
+        """When file exists with correct version, no error raised."""
+        h5_path = str(tmp_path / "ok.h5")
+        with h5py.File(h5_path, "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v2.0.0"
+        ensure_hdf5_version(h5_path, "v2.0.0")  # Should not raise
+
+    def test_existing_file_wrong_version_raises(self, tmp_path):
+        """When file exists with wrong version, raises ValueError."""
+        h5_path = str(tmp_path / "wrong.h5")
+        with h5py.File(h5_path, "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v1.0.0"
+        with pytest.raises(ValueError, match="mismatch"):
+            ensure_hdf5_version(h5_path, "v2.0.0")
+
+    def test_existing_file_missing_version_raises(self, tmp_path):
+        """When file exists with no version attr, raises ValueError."""
+        h5_path = str(tmp_path / "nover.h5")
+        with h5py.File(h5_path, "w"):
+            pass
+        with pytest.raises(ValueError, match=CONST.DATASPEC_VERSION_ATTR):
+            ensure_hdf5_version(h5_path, "v2.0.0")
+
+    def test_skips_when_no_version(self, tmp_path):
+        """When version is empty string, skips all checks."""
+        h5_path = str(tmp_path / "skip.h5")
+        # File doesn't exist, empty version => no file created
+        ensure_hdf5_version(h5_path, "")
+        assert not (tmp_path / "skip.h5").exists()
+
+
+# ---------------------------------------------------------------------------
+# HDF5 version validation in readers
+# ---------------------------------------------------------------------------
+
+
+class TestHdf5VersionValidation:
+    """Tests for version validation in HDF5 read functions."""
+
+    def test_read_hdf5_dataset_with_correct_version(self, tmp_path):
+        """Reading with matching version succeeds."""
+        spec = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
+            dtype=np.float64,
+            data_location="data/arr",
+        )
+        object.__setattr__(spec, "version", "v2.0.0")
+        h5_path = str(tmp_path / "ok.h5")
+        with h5py.File(h5_path, "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v2.0.0"
+            f.create_dataset("data/arr", data=np.array([1.0, 2.0]))
+        result = _read_hdf5_dataset(h5_path, spec)
+        np.testing.assert_array_equal(result, [1.0, 2.0])
+
+    def test_read_hdf5_dataset_wrong_version_raises(self, tmp_path):
+        """Reading with mismatched version raises ValueError."""
+        spec = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
+            dtype=np.float64,
+            data_location="data/arr",
+        )
+        object.__setattr__(spec, "version", "v2.0.0")
+        h5_path = str(tmp_path / "wrong.h5")
+        with h5py.File(h5_path, "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v1.0.0"
+            f.create_dataset("data/arr", data=np.array([1.0, 2.0]))
+        with pytest.raises(ValueError, match="mismatch"):
+            _read_hdf5_dataset(h5_path, spec)
+
+    def test_read_hdf5_attr_wrong_version_raises(self, tmp_path):
+        """Reading attrs with mismatched version raises ValueError."""
+        spec = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_ATTR,
+            dtype=dict,
+            data_location="test_data",
+        )
+        object.__setattr__(spec, "version", "v2.0.0")
+        h5_path = str(tmp_path / "wrong.h5")
+        with h5py.File(h5_path, "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v1.0.0"
+            grp = f.require_group("test_data")
+            grp.attrs["key"] = 42
+        with pytest.raises(ValueError, match="mismatch"):
+            _read_hdf5_attr(h5_path, spec)
+
+    def test_read_skips_validation_for_versionless_spec(self, tmp_path):
+        """When spec.version is empty, validation is skipped."""
+        spec = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
+            dtype=np.float64,
+            data_location="data/arr",
+        )
+        # spec.version defaults to "" — no validation
+        h5_path = str(tmp_path / "nover.h5")
+        with h5py.File(h5_path, "w") as f:
+            f.create_dataset("data/arr", data=np.array([1.0]))
+        result = _read_hdf5_dataset(h5_path, spec)
+        assert result[0] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# HDF5 version in writers
+# ---------------------------------------------------------------------------
+
+
+class TestWriteCreatesVersion:
+    """Tests for version attribute creation by HDF5 writers."""
+
+    def test_write_hdf5_dataset_creates_version_attr(self, tmp_path):
+        """Writing a dataset to a new file creates the version attribute."""
+        spec = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
+            dtype=np.float64,
+            data_location="data/arr",
+        )
+        object.__setattr__(spec, "version", "v2.0.0")
+        h5_path = str(tmp_path / "new.h5")
+        data = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+        _write_hdf5_dataset(data, h5_path, spec)
+        with h5py.File(h5_path, "r") as f:
+            assert f.attrs[CONST.DATASPEC_VERSION_ATTR] == "v2.0.0"
+
+    def test_write_hdf5_attr_creates_version_attr(self, tmp_path):
+        """Writing attrs to a new file creates the version attribute."""
+        spec = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_ATTR,
+            dtype=dict,
+            data_location="test_data",
+        )
+        object.__setattr__(spec, "version", "v2.0.0")
+        h5_path = str(tmp_path / "new.h5")
+        data = {"test_params": {"key1": 3.14}}
+        _write_hdf5_attr(data, h5_path, spec)
+        with h5py.File(h5_path, "r") as f:
+            assert f.attrs[CONST.DATASPEC_VERSION_ATTR] == "v2.0.0"
+
+    def test_write_to_wrong_version_file_raises(self, tmp_path):
+        """Writing to a file with wrong version raises ValueError."""
+        spec = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
+            dtype=np.float64,
+            data_location="data/arr",
+        )
+        object.__setattr__(spec, "version", "v2.0.0")
+        h5_path = str(tmp_path / "wrong.h5")
+        with h5py.File(h5_path, "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v1.0.0"
+        data = np.array([1.0, 2.0], dtype=np.float64)
+        with pytest.raises(ValueError, match="mismatch"):
+            _write_hdf5_dataset(data, h5_path, spec)

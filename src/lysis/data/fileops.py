@@ -279,6 +279,63 @@ def _read_file_json(
     return data
 
 
+def _validate_hdf5_version(file: h5py.File, path: AnyStr, version: str):
+    """Check that an open HDF5 file has the expected dataspec_version attribute.
+
+    Skips validation if ``version`` is empty (e.g., for standalone specs not
+    registered in a :class:`~lysis.data.dataspec.DataSpec`).
+
+    :param file: An already-open HDF5 file handle.
+    :type file: h5py.File
+    :param path: Path to the HDF5 file (used in error messages).
+    :type path: AnyStr
+    :param version: Expected version string (e.g., ``"v2.0.0"``). Empty string
+        skips validation.
+    :type version: str
+    :raises ValueError: If the file has no dataspec_version attribute, or if the
+        attribute does not match the expected version.
+    """
+    if not version:
+        return
+    found = file.attrs.get(CONST.DATASPEC_VERSION_ATTR)
+    if found is None:
+        raise ValueError(
+            f"HDF5 file has no '{CONST.DATASPEC_VERSION_ATTR}' attribute: {path}"
+        )
+    if found != version:
+        raise ValueError(
+            f"Dataspec version mismatch in '{path}': "
+            f"file has '{found}', expected '{version}'"
+        )
+
+
+def ensure_hdf5_version(path: AnyStr, version: str):
+    """Ensure an HDF5 file exists with the correct dataspec_version attribute.
+
+    If the file does not exist, it is created with the version attribute written
+    to the root group. If the file already exists, the version attribute is
+    validated against the expected version.
+
+    Skips all checks if ``version`` is empty.
+
+    :param path: Path to the HDF5 file.
+    :type path: AnyStr
+    :param version: Expected version string (e.g., ``"v2.0.0"``). Empty string
+        skips all checks.
+    :type version: str
+    :raises ValueError: If the existing file has no dataspec_version attribute,
+        or if it does not match the expected version.
+    """
+    if not version:
+        return
+    if os.path.exists(path):
+        with h5py.File(path, "r") as file:
+            _validate_hdf5_version(file, path, version)
+    else:
+        with h5py.File(path, "w") as file:
+            file.attrs[CONST.DATASPEC_VERSION_ATTR] = version
+
+
 def _read_hdf5_attr(
     path: AnyStr,
     spec: DataSetSpec,
@@ -309,6 +366,7 @@ def _read_hdf5_attr(
     out = {}
     out[spec.data_location.format(sim=sim, file_code=file_code)] = {}
     with h5py.File(path, "r") as file:
+        _validate_hdf5_version(file, path, spec.version)
         items = file[
             spec.data_location.format(sim=sim, file_code=file_code)
         ].attrs.items()
@@ -343,6 +401,7 @@ def _read_hdf5_dataset(
     :rtype: np.ndarray
     """
     with h5py.File(path, "r") as file:
+        _validate_hdf5_version(file, path, spec.version)
         table = file[spec.data_location.format(sim=sim, file_code=file_code)][:]
     return table
 
@@ -711,6 +770,7 @@ def _write_hdf5_dataset(
     :type file_code: str, optional
     :raises TypeError: Raised if the data does not match the specification.
     """
+    ensure_hdf5_version(path, spec.version)
     if not check_dataset_spec(data, spec, params=params):
         raise TypeError(
             f"Data sent for writing does not meet the specification {spec, data.dtype, data.shape}."
@@ -763,6 +823,7 @@ def _write_hdf5_attr(
     :param file_code: Additional code to insert into group path
     :type file_code: str, optional
     """
+    ensure_hdf5_version(path, spec.version)
     with h5py.File(path, "a") as file:
         # Create or get the HDF5 group for parameters
         group = file.require_group(

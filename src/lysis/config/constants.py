@@ -104,6 +104,7 @@ class Const:
         self.NEIGHBORHOOD = Neighbors()
         self.MOL_STATUS = MolStatus
         self.DATASET_STORAGE_TYPE = DataSetStorageType
+        self.DATASPEC_VERSION_ATTR = "dataspec_version"
         self.NUMPY_SAVETXT_FORMATS = {
             # Boolean types - save as 0 or 1
             np.dtype('bool'): '%d',

@@ -16,6 +16,7 @@ import h5py
 import pytest
 
 from lysis.data.datastore import (
+    COMPATIBLE_DATASPEC_VERSION,
     DataStore,
     DataCollection,
     SimulationView,
@@ -23,6 +24,7 @@ from lysis.data.datastore import (
     h5_tree,
     _group_path_from_spec,
 )
+from lysis.config.constants import CONST
 from lysis.data.dataspec import DataCollectionSpec, DataSetSpec, dataspec
 from lysis.config.parameters import MicroParameters, MacroParameters
 
@@ -32,11 +34,18 @@ from lysis.config.parameters import MicroParameters, MacroParameters
 # ---------------------------------------------------------------------------
 
 
+def _write_version_attr(h5file, version="v2.0.0"):
+    """Write the dataspec_version root attribute to an HDF5 file."""
+    h5file.attrs[CONST.DATASPEC_VERSION_ATTR] = version
+
+
 def _write_micro_attrs(h5file, **overrides):
     """Write MicroParameters-compatible attributes to micro_data group.
 
     Uses a minimal set of attributes. Override any with keyword args.
+    Also writes the dataspec_version root attribute if not already present.
     """
+    _write_version_attr(h5file)
     grp = h5file.require_group("micro_data")
     defaults = {
         "micro_simulations": 100,
@@ -285,8 +294,8 @@ class TestDataStoreInit:
     def test_open_empty_hdf5(self, tmp_path):
         """Opening an empty HDF5 file produces no collections and no params."""
         filepath = tmp_path / "empty.h5"
-        with h5py.File(filepath, "w"):
-            pass
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
 
         with DataStore("empty", str(tmp_path)) as ds:
             assert ds.collections == {}
@@ -308,6 +317,7 @@ class TestDataStoreInit:
         """Opening a file with macro_data but no micro_data raises ValueError."""
         filepath = tmp_path / "macro.h5"
         with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
             _write_macro_attrs(f, n_sims=2)
             _write_macro_datasets(f, n_sims=2)
 
@@ -342,8 +352,8 @@ class TestDataStoreInit:
     def test_context_manager_closes_file(self, tmp_path):
         """The HDF5 file is closed after exiting the context manager."""
         filepath = tmp_path / "ctx.h5"
-        with h5py.File(filepath, "w"):
-            pass
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
 
         ds = DataStore("ctx", str(tmp_path))
         ds.__enter__()
@@ -354,13 +364,53 @@ class TestDataStoreInit:
     def test_close_method(self, tmp_path):
         """Calling close() closes the HDF5 file."""
         filepath = tmp_path / "close.h5"
-        with h5py.File(filepath, "w"):
-            pass
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
 
         ds = DataStore("close", str(tmp_path))
         assert ds._file.id.valid
         ds.close()
         assert not ds._file.id.valid
+
+
+class TestDataStoreVersioning:
+    """Tests for dataspec_version attribute validation on DataStore."""
+
+    def test_missing_version_raises(self, tmp_path):
+        """HDF5 file with no dataspec_version attribute raises ValueError."""
+        filepath = tmp_path / "nover.h5"
+        with h5py.File(filepath, "w"):
+            pass  # No version attr
+
+        with pytest.raises(ValueError, match=CONST.DATASPEC_VERSION_ATTR):
+            DataStore("nover", str(tmp_path))
+
+    def test_wrong_version_raises(self, tmp_path):
+        """HDF5 file with wrong version raises ValueError."""
+        filepath = tmp_path / "wrongver.h5"
+        with h5py.File(filepath, "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v1.0.0"
+
+        with pytest.raises(ValueError, match="mismatch"):
+            DataStore("wrongver", str(tmp_path))
+
+    def test_correct_version_accepted(self, tmp_path):
+        """HDF5 file with correct version opens successfully."""
+        filepath = tmp_path / "goodver.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
+
+        with DataStore("goodver", str(tmp_path)) as ds:
+            assert ds.collections == {}
+
+    def test_dataspec_version_property(self, tmp_path):
+        """dataspec_version property returns the version from the file."""
+        filepath = tmp_path / "verprop.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
+
+        with DataStore("verprop", str(tmp_path)) as ds:
+            assert ds.dataspec_version == "v2.0.0"
 
 
 class TestDataStoreDotAccess:
@@ -393,8 +443,8 @@ class TestDataStoreDotAccess:
     def test_nonexistent_attribute_raises(self, tmp_path):
         """Accessing a nonexistent attribute raises AttributeError."""
         filepath = tmp_path / "noattr.h5"
-        with h5py.File(filepath, "w"):
-            pass
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
 
         with DataStore("noattr", str(tmp_path)) as ds:
             with pytest.raises(AttributeError, match="no attribute"):
@@ -460,6 +510,7 @@ class TestParameterLoading:
         """micro_data group without parameter attributes raises ValueError."""
         filepath = tmp_path / "noattr.h5"
         with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
             f.create_group("micro_data")
             _write_micro_datasets(f)
 
@@ -512,6 +563,7 @@ class TestParameterLoading:
         """macro_data group without parameter attributes raises ValueError."""
         filepath = tmp_path / "mnoattr.h5"
         with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
             _write_micro_attrs(f)
             _write_micro_datasets(f)
             f.create_group("macro_data")
@@ -525,8 +577,8 @@ class TestParameterLoading:
     def test_no_params_for_empty_file(self, tmp_path):
         """Both params are None when no groups exist."""
         filepath = tmp_path / "empty.h5"
-        with h5py.File(filepath, "w"):
-            pass
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
 
         with DataStore("empty", str(tmp_path)) as ds:
             assert ds.micro_params is None
