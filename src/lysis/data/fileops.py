@@ -902,6 +902,15 @@ def write_data_collection(
     :func:`write_dataset` : Write individual datasets
     :func:`read_data_collection` : Read complete data collections
     """
+    # Validate that parameters are present when required
+    if "params" not in data or not data["params"]:
+        for collection in collections:
+            if collection.params is not None:
+                raise ValueError(
+                    "Data collection requires parameters but data['params'] "
+                    "is missing or empty. Parameters must always accompany data."
+                )
+
     # Process each collection in order
     for idx, collection in enumerate(collections):
         # Get the file code for this collection (use empty string if not provided)
@@ -911,7 +920,7 @@ def write_data_collection(
             file_code = ""
 
         # Write parameters first
-        if not collection.params is None:
+        if collection.params is not None:
             write_dataset(
                 data["params"],
                 path,

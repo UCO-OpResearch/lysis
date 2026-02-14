@@ -447,6 +447,35 @@ class TestReadDataCollectionPerSim:
             )
 
 
+class TestWriteCollectionParamsRequired:
+    """Tests that write_data_collection requires parameters."""
+
+    def test_missing_params_raises(self, tmp_path, combined_collection_spec):
+        """Writing without params key raises ValueError."""
+        data = {"arr": np.array([1.0, 2.0], dtype=np.float64)}
+        with pytest.raises(ValueError, match="parameters"):
+            write_data_collection(
+                data=data,
+                path=str(tmp_path),
+                collections=[combined_collection_spec],
+                file_codes=[""],
+            )
+
+    def test_empty_params_raises(self, tmp_path, combined_collection_spec):
+        """Writing with empty params dict raises ValueError."""
+        data = {
+            "params": {},
+            "arr": np.array([1.0, 2.0], dtype=np.float64),
+        }
+        with pytest.raises(ValueError, match="parameters"):
+            write_data_collection(
+                data=data,
+                path=str(tmp_path),
+                collections=[combined_collection_spec],
+                file_codes=[""],
+            )
+
+
 class TestWriteReadCollectionRoundTrip:
     """Round-trip tests for write_data_collection + read_data_collection."""
 

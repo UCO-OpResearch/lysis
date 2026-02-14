@@ -702,3 +702,20 @@ class TestConvertData:
         assert "pli_first_time" in result
         # Macroscale datasets should not be in the output
         assert "snapshot_time" not in result
+
+    def test_missing_params_raises(self):
+        """Data without parameters raises ValueError."""
+        input_data = {
+            "micro_log": np.array(["sim1"], dtype="<U75"),
+        }
+        with pytest.raises(ValueError, match="parameters"):
+            convert_data(input_data, "v1.99.0", "v2.0.0")
+
+    def test_empty_params_raises(self):
+        """Data with empty parameters dict raises ValueError."""
+        input_data = {
+            "params": {},
+            "micro_log": np.array(["sim1"], dtype="<U75"),
+        }
+        with pytest.raises(ValueError, match="parameters"):
+            convert_data(input_data, "v1.99.0", "v2.0.0")

@@ -1,14 +1,13 @@
 import os
 
 from enum import Flag, auto, unique
-from typing import Any, AnyStr, List, Mapping, Union
+from typing import AnyStr
 
-import numpy as np
 import h5py
 
-from ..config.constants import CONST
+from ..config.parameters import MicroParameters, MacroParameters
 from .dataspec import DataCollectionSpec, DataSetSpec, dataspec
-from .fileops import data_readers
+from .fileops import read_dataset
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -64,181 +63,343 @@ def h5_tree(val: h5py.Dataset, pre: AnyStr = "") -> str:
     return output
 
 
+def _group_path_from_spec(collection_spec):
+    """Extract the top-level HDF5 group path from a collection spec.
+
+    Looks at the collection's params ``data_location`` (e.g., ``"micro_data"``)
+    to determine the HDF5 group that holds this collection's data.
+
+    :param collection_spec: The collection specification to inspect.
+    :type collection_spec: DataCollectionSpec
+    :return: The HDF5 group path, or ``None`` if not determinable.
+    :rtype: str | None
+    """
+    if collection_spec.params is not None and collection_spec.params.data_location:
+        return collection_spec.params.data_location
+    return None
+
+
+class SimulationView:
+    """Read-only view of one simulation's datasets within a per-sim collection.
+
+    Provides dot-access to HDF5 datasets for a single simulation index.
+    Dataset names are resolved via the spec's ``data_location`` field,
+    formatted with the simulation index.
+
+    :param h5file: The open HDF5 file handle.
+    :type h5file: h5py.File
+    :param collection_spec: The collection specification defining available datasets.
+    :type collection_spec: DataCollectionSpec
+    :param sim: The simulation index.
+    :type sim: int
+    """
+
+    def __init__(self, h5file, collection_spec, sim):
+        self._h5file = h5file
+        self._spec = collection_spec
+        self._sim = sim
+
+    @property
+    def datasets(self):
+        """List of dataset names available for this simulation.
+
+        :return: Dataset names from the collection spec (excluding those with
+                 ``data_location=None``).
+        :rtype: list[str]
+        """
+        return [
+            name
+            for name, ds_spec in self._spec.data.items()
+            if ds_spec.data_location is not None
+        ]
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name in self._spec.data:
+            ds_spec = self._spec.data[name]
+            if ds_spec.data_location is None:
+                raise AttributeError(
+                    f"Dataset '{name}' is a derived dataset and not stored on disk."
+                )
+            path = ds_spec.data_location.format(sim=self._sim)
+            return self._h5file[path]
+        raise AttributeError(
+            f"'{type(self).__name__}' has no dataset '{name}'. "
+            f"Available datasets: {self.datasets}"
+        )
+
+    def __repr__(self):
+        return (
+            f"<SimulationView sim={self._sim}, "
+            f"datasets={len(self.datasets)}>"
+        )
+
+
+class DataCollection:
+    """Read-only interface to one data collection within the HDF5 file.
+
+    Behavior depends on whether simulations are combined:
+
+    **Combined** (``simulations_combined=True``, e.g., microscale_out):
+    Dot-access to dataset names returns the ``h5py.Dataset`` object
+    (lazy-loaded — data is not read until sliced).
+
+    **Per-simulation** (``simulations_combined=False``, e.g., macroscale_out):
+    Use ``collection[sim_index]`` to get a :class:`SimulationView`, then
+    access datasets on it. Direct dot-access to dataset names raises
+    ``TypeError`` with a helpful message.
+
+    :param name: The collection name (e.g., ``"microscale_out"``).
+    :type name: str
+    :param h5file: The open HDF5 file handle.
+    :type h5file: h5py.File
+    :param collection_spec: The spec defining this collection's datasets.
+    :type collection_spec: DataCollectionSpec
+    :param num_sims: Number of simulations. Required for per-simulation
+        collections (``simulations_combined=False``). Sourced from
+        ``MacroParameters.macro_simulations``.
+    :type num_sims: int | None
+    """
+
+    def __init__(self, name, h5file, collection_spec, num_sims=None):
+        self._name = name
+        self._h5file = h5file
+        self._spec = collection_spec
+        if not collection_spec.simulations_combined:
+            if num_sims is None:
+                raise ValueError(
+                    f"Per-simulation collection '{name}' requires num_sims."
+                )
+            self._num_sims = num_sims
+
+    @property
+    def datasets(self):
+        """List of dataset names in this collection.
+
+        :return: Dataset names from the spec (excluding those with
+                 ``data_location=None``).
+        :rtype: list[str]
+        """
+        return [
+            name
+            for name, ds_spec in self._spec.data.items()
+            if ds_spec.data_location is not None
+        ]
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name in self._spec.data:
+            if not self._spec.simulations_combined:
+                raise TypeError(
+                    f"Collection '{self._name}' stores data per-simulation. "
+                    f"Index by simulation first: "
+                    f"{self._name}[sim_index].{name}"
+                )
+            ds_spec = self._spec.data[name]
+            if ds_spec.data_location is None:
+                raise AttributeError(
+                    f"Dataset '{name}' is a derived dataset and not stored on disk."
+                )
+            return self._h5file[ds_spec.data_location]
+        raise AttributeError(
+            f"'{type(self).__name__}' has no dataset '{name}'. "
+            f"Available datasets: {self.datasets}"
+        )
+
+    def __getitem__(self, index):
+        if self._spec.simulations_combined:
+            raise TypeError(
+                f"Collection '{self._name}' has combined simulations "
+                f"and does not support indexing. "
+                f"Access datasets directly: {self._name}.dataset_name"
+            )
+        if not isinstance(index, int):
+            raise TypeError(
+                f"Simulation index must be an integer, got {type(index).__name__}"
+            )
+        if index < 0 or index >= self._num_sims:
+            raise IndexError(
+                f"Simulation index {index} out of range "
+                f"(0 to {self._num_sims - 1})"
+            )
+        return SimulationView(self._h5file, self._spec, index)
+
+    def __len__(self):
+        if self._spec.simulations_combined:
+            raise TypeError(
+                f"Collection '{self._name}' has combined simulations "
+                f"and does not have a length. "
+                f"Access datasets directly: {self._name}.dataset_name"
+            )
+        return self._num_sims
+
+    def __contains__(self, name):
+        return name in self._spec.data and self._spec.data[name].data_location is not None
+
+    def __repr__(self):
+        kind = "combined" if self._spec.simulations_combined else "per-simulation"
+        parts = f"<DataCollection '{self._name}', {kind}, datasets={len(self.datasets)}"
+        if not self._spec.simulations_combined:
+            parts += f", simulations={self._num_sims}"
+        parts += ">"
+        return parts
+
+
 class DataStore:
+    """Read-only interface to an HDF5 file following the v2.0.0 data specification.
+
+    Provides dot-access to data collections and parameters::
+
+        with DataStore("run01", "/path/to/data") as ds:
+            ds.microscale_out.tpa_leaving_time[:10]  # lazy h5py.Dataset
+            ds.macroscale_out[3].fiber_degrade_time   # per-simulation access
+            ds.micro_params.fiber_radius              # loaded MicroParameters
+            ds.macro_params.rows                      # loaded MacroParameters
+
+    :param run_code: The run identifier (used to construct the HDF5 filename).
+    :type run_code: str
+    :param path: Directory containing the HDF5 file.
+    :type path: str
     """
-    A simple data store class that allows for storing and retrieving data.
-    """
 
-    _internal_names: List[str] = [
-        "internal_names",
-        "run_code",
-        "path",
-        "data",
-        "datasets",
-        "views",
-        "status",
-        "mode",
-    ]
+    def __init__(self, run_code, path):
+        self._run_code = run_code
+        self._path = path
+        self._hdf5_path = os.path.join(path, f"{run_code}.h5")
+        self._file = h5py.File(self._hdf5_path, "r")
 
-    def __init__(self, run_code: AnyStr, path: AnyStr, mode: str = "r") -> None:
+        self._collections = {}
+        self._micro_params = None
+        self._macro_params = None
+
+        spec = dataspec["v2.0.0"]
+
+        # Detect which HDF5 groups are present
+        present_groups = {}
+        for coll_name, coll_spec in spec.items():
+            group_path = _group_path_from_spec(coll_spec)
+            if group_path is None:
+                # Derived collection (e.g., macroscale_in) — skip
+                continue
+            if group_path in self._file:
+                present_groups[coll_name] = coll_spec
+
+        # Validate collection dependencies
+        if "macroscale_out" in present_groups and "microscale_out" not in present_groups:
+            self.close()
+            raise ValueError(
+                "HDF5 file contains macroscale_out data without microscale_out data. "
+                "Macroscale output requires microscale output to be present."
+            )
+
+        # Load parameters using fileops.read_dataset()
+        # Parameters are required whenever the corresponding data group exists.
+        if "microscale_out" in present_groups:
+            micro_spec = spec["microscale_out"]
+            raw_params = read_dataset(self._hdf5_path, micro_spec.params)
+            inner = raw_params.get(micro_spec.params.data_location, {})
+            if not inner:
+                self.close()
+                raise ValueError(
+                    "microscale_out data is present but the micro_data group "
+                    "has no parameter attributes."
+                )
+            self._micro_params = MicroParameters.parse_from_basedict(inner)
+
+        if "macroscale_out" in present_groups:
+            macro_spec = spec["macroscale_out"]
+            raw_params = read_dataset(self._hdf5_path, macro_spec.params)
+            inner = raw_params.get(macro_spec.params.data_location, {})
+            if not inner:
+                self.close()
+                raise ValueError(
+                    "macroscale_out data is present but the macro_data group "
+                    "has no parameter attributes."
+                )
+            inner["micro_params"] = self._micro_params
+            self._macro_params = MacroParameters.parse_from_basedict(inner)
+
+        # Create DataCollection objects (after params are loaded)
+        for coll_name, coll_spec in present_groups.items():
+            num_sims = None
+            if not coll_spec.simulations_combined:
+                num_sims = self._macro_params.macro_simulations
+            self._collections[coll_name] = DataCollection(
+                coll_name, self._file, coll_spec, num_sims=num_sims
+            )
+
+    @property
+    def collections(self):
+        """Dictionary of available data collections.
+
+        :return: Mapping of collection name to :class:`DataCollection`.
+        :rtype: dict[str, DataCollection]
         """
-        Initialize the DataStore with an optional run parameter.
+        return dict(self._collections)
 
-        :param run: The experimental run associated with the data store.
-        :param mode: Mode in which to open the file.
+    @property
+    def micro_params(self):
+        """Microscale parameters loaded from HDF5 attributes.
 
-            ``'r'``
-                Read only
+        ``None`` only when no microscale data is present.
 
-            ``'w'``
-                Write (NOTE: This will overwrite any current file contents)
-
-            ``'a'``
-                Append. Will allow the addition of new data only.
-                Will NOT allow the insertion of data if some already exists.
+        :rtype: MicroParameters | None
         """
-        object.__setattr__(self, "_run_code", run_code)
-        object.__setattr__(self, "_path", path)
-        object.__setattr__(self, "_mode", mode)
-        object.__setattr__(
-            self,
-            "_status",
-            {
-                "self": DataStatus.INITIALIZED,
-                "micro": DataStatus.NONE,
-                "macro": DataStatus.NONE,
-            },
+        return self._micro_params
+
+    @property
+    def macro_params(self):
+        """Macroscale parameters loaded from HDF5 attributes.
+
+        ``None`` only when no macroscale data is present.
+
+        :rtype: MacroParameters | None
+        """
+        return self._macro_params
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name in ("micro_params", "macro_params", "collections"):
+            # These are properties — if we're here, the object isn't
+            # fully initialized yet. Avoid infinite recursion.
+            raise AttributeError(name)
+        # Check collections
+        try:
+            collections = object.__getattribute__(self, "_collections")
+        except AttributeError:
+            raise AttributeError(name)
+        if name in collections:
+            return collections[name]
+        raise AttributeError(
+            f"'{type(self).__name__}' has no attribute '{name}'. "
+            f"Available collections: {list(collections.keys())}"
         )
 
-        object.__setattr__(self, "_datasets", [])
-        object.__setattr__(self, "_views", [])
+    def __str__(self):
+        """Print the datastore HDF5 structure."""
+        return h5_tree(self._file)
 
-        # Initialize HDF5 file
-        h5py.get_config().track_order = True
-        object.__setattr__(
-            self,
-            "_data",
-            h5py.File(
-                os.path.join(self._path, f"{self._run_code}.h5"),
-                self._mode,
-            ),
-        )
+    def __repr__(self):
+        colls = list(self._collections.keys())
+        return f"<DataStore '{self._run_code}', collections={colls}>"
 
-        if "micro_data" in self._data:
-            self._status["micro"] = DataStatus.INITIALIZED
-        else:
-            self._status["micro"] = DataStatus.NONE
+    def close(self):
+        """Close the underlying HDF5 file."""
+        if self._file:
+            self._file.close()
 
-        if "macro_data" in self._data:
-            self._status["macro"] = DataStatus.INITIALIZED
-        else:
-            self._status["macro"] = DataStatus.NONE
+    def __enter__(self):
+        return self
 
-        # TODO: Add code here to check if there is actually data stored in this HDF5
-        #       and if it matches the current data specification
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
 
-    def __str__(self) -> str:
-        """Print the datastore in human-readable format."""
-        return h5_tree(self._data)
-
-    def __repr__(self) -> str:
-        """Print the datastore in human-readable format."""
-        return self._path + r"/" + self._run_code + ".h5: " + str(self._status)
-
-    def import_fortran_micro_data(
-        self,
-        path: AnyStr = None,
-        filecode: AnyStr = None,
-        data_version: AnyStr = "current",
-    ) -> None:
-        """
-        Import data from a Fortran Microscale run into the HDF5 storage.
-
-        :param filecode: The file code associated with the Microscale run being imported.
-            This file code should include any leading underscores, but NOT the file extension.
-        """
-        if path is None:
-            path = self._path
-        if self._mode == "r":
-            raise os.UnsupportedOperation("Data is open in read-only mode.")
-        if self._mode == "a" and self._status["micro"] == DataStatus.INITIALIZED:
-            raise os.UnsupportedOperation("Existing data cannot be overwritten.")
-        micro_data = self._data.create_group("micro_data")
-        h5py.get_config().track_order = True
-        h5file = h5py.File(os.path.join(path, f"{self._run_code}.h5"), "a")
-        micro_data = h5file.require_group("micro_data")
-
-   
-
-    def __getattr__(self, key: AnyStr) -> np.ndarray:
-        """
-        Get data from the data store.
-        :param key: The table name to retrieve.
-        :return: The attribute value.
-        """
-        # Check if the attribute exists in the HDF5 file
-        # If it does, return the value
-        # If it doesn't, raise an AttributeError
-        # This is a placeholder implementation
-        # Replace with actual logic to access HDF5 file
-        pass
-
-    def __setattr__(self, key: AnyStr, value: np.ndarray) -> None:
-        """
-        Set data in the data store.
-        :param key: The table name to set.
-        :param value: The value to set.
-        """
-        pass
-
-    def status(self, key: AnyStr) -> dict[str, DataStatus]:
-        """
-        Get the status of the data in the data store.
-        :param key: The table name to check.
-        :return: The status of the data.
-        """
-        # Check if the table exists in the HDF5 file
-        # If it does, return the status
-        # If it doesn't, return DataStatus.NONE
-        # This is a placeholder implementation
-        # Replace with actual logic to access HDF5 file
-        pass
-
-    def delete(self, key: AnyStr):
-        """
-        Delete data from the data store.
-        :param key: The table name to delete.
-        """
-        # Check if the table exists in the HDF5 file
-        # If it does, delete it
-        # If it doesn't, raise an AttributeError
-        # This is a placeholder implementation
-        # Replace with actual logic to access HDF5 file
-        pass
-
-    def overwrite(self, key: AnyStr, value: np.ndarray):
-        """
-        Overwrite data in the data store.
-        :param key: The table name to overwrite.
-        :param value: The value to overwrite with.
-        """
-        # Check if the table exists in the HDF5 file
-        # If it does, overwrite it
-        # If it doesn't, raise an AttributeError
-        # This is a placeholder implementation
-        # Replace with actual logic to access HDF5 file
-        pass
-
-    def append(self, key: AnyStr, value: np.ndarray, axis: int | None = None):
-        """
-        Append data to the data store.
-        :param key: The table name to append to.
-        :param value: The value to append.
-        :param axis: The axis to append along (optional).
-        """
-        # Check if the table exists in the HDF5 file
-        # If it does, append the array
-        # If it doesn't, raise an AttributeError
-        # This is a placeholder implementation
-        # Replace with actual logic to access HDF5 file
-        pass
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass

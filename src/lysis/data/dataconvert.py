@@ -1104,6 +1104,13 @@ def convert_data(
     # TODO: Check that `input_set_spec` and `output_set_spec` exist
     # TODO: Add code to check that `input_data` meets the specifications of `input_set_spec`.
 
+    # Validate that parameters are present — data must always include parameters
+    if "params" not in input_data or not input_data["params"]:
+        raise ValueError(
+            "Input data must include parameters (data['params']). "
+            "Data without parameters is not valid."
+        )
+
     # Initialize output dictionary and copy parameters (unchanged across formats)
     out_data = {}
     out_data["params"] = input_data["params"]
