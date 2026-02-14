@@ -1,15 +1,19 @@
 program micromodel
 
+    !! BRITT 2026-02-14: This code has been modified in the following ways:
+    !!                  -tPA Kd is the same whether PLG is present or not (this simplifies code)
+    !!                  (the only change is setting KdtPAyesplg=KdtPAnoplg
+
     !! BRAD 2024-01-13: This code has been modified in the following ways:
     !!                  - Data folder is relative to git repository root
     !!                  - Data is stored in subfolders based on runCode
     !!                  - Data file codes are now set globally from the (in/out)FileCode variables
 
     implicit none
-    character(40) :: runCode = '2024-01-13-0710'
+    character(40) :: runCode = 'variant0p36'
     ! File codes should include any leading underscores, but NOT a file extension.
     ! character(6)  :: inFileCode = '_Q2'
-    character(40) :: outFileCode = '_PLG2_tPA01_Q2'
+    character(40) :: outFileCode = '_PLG2_tPA01_Kd0p36_Q2'
     !!!! This code is the microscale model with lots of opportunities for changing the rate constants and initial concentrations
     !!!! Lines 19-25 allow you to set the various dissociation constants, binding rates, and the concentration of free PLG
     !!!! This code treats degradation and exposure in the gillespie algorithm, rather than separately with
@@ -38,7 +42,7 @@ program micromodel
     integer          :: stats
 
     !Define the Kd's and on rates that will be used in the given run. These will be used to help define the off rates later.
-    double precision  :: KdtPAyesplg = 0.02 !0.02 !units uM, tPA Kd in presence of PLG
+    double precision  :: KdtPAyesplg = 0.36 !0.02 !0.02 !units uM, tPA Kd in presence of PLG
     double precision  :: KdtPAnoplg = 0.36 !0.36 !units uM, tPA Kd in absence of PLG
     double precision  :: KdPLGintact = 38 !10 !units uM, PLG Kd to intact fibrin !38 in original model
     double precision  :: KdPLGnicked = 2.2 !1 !units uM, PLG Kd to nicked fibrin !2.2 in original model
