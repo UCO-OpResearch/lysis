@@ -1362,3 +1362,223 @@ class TestDataStoreInitializeMacroscale:
             assert ds.mode == "a"
         finally:
             ds.close()
+
+
+# ---------------------------------------------------------------------------
+#  Dataset write-through tests (append mode)
+# ---------------------------------------------------------------------------
+
+
+class TestDataStoreWriteThrough:
+    """Tests that HDF5 datasets are writable through DataStore in 'a' mode.
+
+    DataStore.create() returns a store in ``"a"`` mode.  The datasets
+    exposed via DataCollection and SimulationView are live ``h5py.Dataset``
+    objects, so external code should be able to resize them and write data
+    directly.
+    """
+
+    # -- helpers --
+
+    @staticmethod
+    def _create_micro_store(tmp_path, run_code="write_test"):
+        """Create a microscale-only DataStore in append mode."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+        return DataStore.create(run_code, str(tmp_path), micro)
+
+    @staticmethod
+    def _create_full_store(tmp_path, run_code="write_full", n_sims=2):
+        """Create a DataStore with both microscale and macroscale."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+        ds = DataStore.create(run_code, str(tmp_path), micro)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=n_sims
+            )
+        ds.initialize_macroscale(macro)
+        return ds
+
+    # -- combined collection (microscale_out) --
+
+    def test_resize_and_write_combined_float64(self, tmp_path):
+        """Resize a combined float64 dataset and write data through DataStore."""
+        with self._create_micro_store(tmp_path) as ds:
+            dataset = ds.microscale_out.pli_first_time
+            assert dataset.shape == (0,)
+
+            dataset.resize((5,))
+            data = np.array([1.1, 2.2, 3.3, 4.4, 5.5], dtype=np.float64)
+            dataset[:] = data
+
+            assert dataset.shape == (5,)
+            np.testing.assert_array_equal(dataset[:], data)
+
+    def test_resize_and_write_combined_uint8(self, tmp_path):
+        """Resize a combined uint8 dataset and write data through DataStore."""
+        with self._create_micro_store(tmp_path) as ds:
+            dataset = ds.microscale_out.tpa_final_num
+            assert dataset.shape == (0,)
+
+            dataset.resize((3,))
+            data = np.array([10, 20, 30], dtype=np.uint8)
+            dataset[:] = data
+
+            np.testing.assert_array_equal(dataset[:], data)
+
+    def test_resize_and_write_combined_bool(self, tmp_path):
+        """Resize a combined bool dataset and write data through DataStore."""
+        with self._create_micro_store(tmp_path) as ds:
+            dataset = ds.microscale_out.fiber_degraded
+            assert dataset.shape == (0,)
+
+            dataset.resize((4,))
+            data = np.array([True, False, True, False])
+            dataset[:] = data
+
+            np.testing.assert_array_equal(dataset[:], data)
+
+    def test_incremental_resize_combined(self, tmp_path):
+        """Datasets can be resized incrementally, appending rows."""
+        with self._create_micro_store(tmp_path) as ds:
+            dataset = ds.microscale_out.sim_final_time
+
+            # First batch
+            dataset.resize((3,))
+            dataset[:3] = [1.0, 2.0, 3.0]
+
+            # Append more
+            dataset.resize((6,))
+            dataset[3:6] = [4.0, 5.0, 6.0]
+
+            expected = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+            np.testing.assert_array_equal(dataset[:], expected)
+
+    def test_slice_write_combined(self, tmp_path):
+        """Writing to a slice of a combined dataset works."""
+        with self._create_micro_store(tmp_path) as ds:
+            dataset = ds.microscale_out.pli_first_time
+            dataset.resize((5,))
+            dataset[:] = np.zeros(5, dtype=np.float64)
+
+            # Overwrite middle slice
+            dataset[1:4] = [10.0, 20.0, 30.0]
+
+            expected = np.array([0.0, 10.0, 20.0, 30.0, 0.0])
+            np.testing.assert_array_equal(dataset[:], expected)
+
+    def test_write_persists_after_close_and_reopen(self, tmp_path):
+        """Data written through DataStore persists after close and reopen."""
+        data = np.array([7.7, 8.8, 9.9], dtype=np.float64)
+
+        ds = self._create_micro_store(tmp_path)
+        ds.microscale_out.pli_first_time.resize((3,))
+        ds.microscale_out.pli_first_time[:] = data
+        ds.close()
+
+        # Reopen read-only and verify
+        with DataStore("write_test", str(tmp_path)) as ds2:
+            np.testing.assert_array_equal(
+                ds2.microscale_out.pli_first_time[:], data
+            )
+
+    # -- per-simulation collection (macroscale_out) --
+
+    def test_resize_and_write_per_sim_float64(self, tmp_path):
+        """Resize a per-sim float64 dataset and write data through DataStore."""
+        with self._create_full_store(tmp_path) as ds:
+            dataset = ds.macroscale_out[0].snapshot_time
+            assert dataset.shape == (0,)
+
+            dataset.resize((4,))
+            data = np.array([0.1, 0.5, 1.0, 2.0], dtype=np.float64)
+            dataset[:] = data
+
+            np.testing.assert_array_equal(dataset[:], data)
+
+    def test_write_per_sim_structured_dtype(self, tmp_path):
+        """Write to a structured-dtype per-sim dataset through DataStore."""
+        with self._create_full_store(tmp_path) as ds:
+            dataset = ds.macroscale_out[0].fiber_degrade_time
+            assert dataset.shape == (0,)
+
+            record = np.array(
+                [(1.5, 2, 3, 4.5), (6.0, 0, 1, 7.0)],
+                dtype=np.dtype(
+                    [
+                        ("Simulation Time Elapsed", np.float64),
+                        ("Grid Location Row", np.uint32),
+                        ("Grid Location Rank", np.uint32),
+                        ("Fiber New Degrade Time", np.float64),
+                    ]
+                ),
+            )
+            dataset.resize((2,))
+            dataset[:] = record
+
+            result = dataset[:]
+            np.testing.assert_array_equal(
+                result["Simulation Time Elapsed"], [1.5, 6.0]
+            )
+            np.testing.assert_array_equal(
+                result["Grid Location Row"], [2, 0]
+            )
+
+    def test_write_different_simulations_independently(self, tmp_path):
+        """Each simulation's datasets are independent; writing one doesn't affect another."""
+        with self._create_full_store(tmp_path, n_sims=2) as ds:
+            ds0 = ds.macroscale_out[0].snapshot_time
+            ds1 = ds.macroscale_out[1].snapshot_time
+
+            ds0.resize((3,))
+            ds0[:] = [10.0, 20.0, 30.0]
+
+            ds1.resize((2,))
+            ds1[:] = [100.0, 200.0]
+
+            np.testing.assert_array_equal(ds0[:], [10.0, 20.0, 30.0])
+            np.testing.assert_array_equal(ds1[:], [100.0, 200.0])
+
+    def test_write_per_sim_persists_after_reopen(self, tmp_path):
+        """Per-sim data written through DataStore persists after close and reopen."""
+        data = np.array([3.14, 2.72], dtype=np.float64)
+
+        ds = self._create_full_store(tmp_path)
+        ds.macroscale_out[1].snapshot_time.resize((2,))
+        ds.macroscale_out[1].snapshot_time[:] = data
+        ds.close()
+
+        with DataStore("write_full", str(tmp_path)) as ds2:
+            np.testing.assert_array_equal(
+                ds2.macroscale_out[1].snapshot_time[:], data
+            )
+
+    # -- read-only mode blocks writes --
+
+    def test_read_only_dataset_write_raises(self, tmp_path):
+        """Writing to a dataset through a read-only DataStore raises an error."""
+        # Create and populate a dataset, then close
+        ds = self._create_micro_store(tmp_path)
+        ds.microscale_out.pli_first_time.resize((3,))
+        ds.microscale_out.pli_first_time[:] = [1.0, 2.0, 3.0]
+        ds.close()
+
+        # Reopen read-only
+        with DataStore("write_test", str(tmp_path)) as ds2:
+            dataset = ds2.microscale_out.pli_first_time
+            with pytest.raises(OSError):
+                dataset[:] = [9.0, 9.0, 9.0]
+
+    def test_read_only_dataset_resize_raises(self, tmp_path):
+        """Resizing a dataset through a read-only DataStore raises an error."""
+        ds = self._create_micro_store(tmp_path)
+        ds.close()
+
+        with DataStore("write_test", str(tmp_path)) as ds2:
+            dataset = ds2.microscale_out.pli_first_time
+            with pytest.raises((OSError, RuntimeError)):
+                dataset.resize((10,))
