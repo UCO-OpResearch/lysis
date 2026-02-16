@@ -8,8 +8,8 @@ import h5py
 
 from ..config.constants import CONST
 from ..config.parameters import MicroParameters, MacroParameters
-from .dataspec import DataCollectionSpec, DataSetSpec, dataspec
-from .fileops import read_dataset
+from .dataspec import DataCollectionSpec, DataSetSpec, dataspec, parse_shape
+from .fileops import read_dataset, write_dataset
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -262,7 +262,7 @@ class DataCollection:
 
 
 class DataStore:
-    """Read-only interface to an HDF5 file following the v2.0.0 data specification.
+    """Interface to an HDF5 file following the v2.0.0 data specification.
 
     Provides dot-access to data collections and parameters::
 
@@ -272,17 +272,32 @@ class DataStore:
             ds.micro_params.fiber_radius              # loaded MicroParameters
             ds.macro_params.rows                      # loaded MacroParameters
 
+    To create a new DataStore, use the :meth:`create` class method::
+
+        ds = DataStore.create("run01", "/path/to/data", micro_params)
+
+    To add macroscale data to an existing microscale DataStore
+    (modifies the DataStore in place; requires writable mode)::
+
+        ds.initialize_macroscale(macro_params)
+
     :param run_code: The run identifier (used to construct the HDF5 filename).
     :type run_code: str
     :param path: Directory containing the HDF5 file.
     :type path: str
+    :param mode: HDF5 file mode passed directly to :class:`h5py.File`.
+        ``"r"`` (default) opens read-only (file must exist).
+        ``"a"`` opens read/write (creates file if it doesn't exist).
+        ``"w"`` creates a new file (truncates if it exists).
+    :type mode: str
     """
 
-    def __init__(self, run_code, path):
+    def __init__(self, run_code, path, mode="r"):
         self._run_code = run_code
         self._path = path
+        self._mode = mode
         self._hdf5_path = os.path.join(path, f"{run_code}.h5")
-        self._file = h5py.File(self._hdf5_path, "r")
+        self._file = h5py.File(self._hdf5_path, mode)
 
         # Validate dataspec version
         found = self._file.attrs.get(CONST.DATASPEC_VERSION_ATTR)
@@ -360,6 +375,16 @@ class DataStore:
                 coll_name, self._file, coll_spec, num_sims=num_sims
             )
 
+        self._status = DataStatus.INITIALIZED
+
+    @property
+    def mode(self):
+        """The file mode this DataStore was opened with.
+
+        :rtype: str
+        """
+        return self._mode
+
     @property
     def dataspec_version(self):
         """The dataspec version string read from the HDF5 file.
@@ -397,10 +422,18 @@ class DataStore:
         """
         return self._macro_params
 
+    @property
+    def status(self):
+        """The current state of this DataStore.
+
+        :rtype: DataStatus
+        """
+        return self._status
+
     def __getattr__(self, name):
         if name.startswith("_"):
             raise AttributeError(name)
-        if name in ("micro_params", "macro_params", "collections"):
+        if name in ("mode", "micro_params", "macro_params", "collections", "status"):
             # These are properties — if we're here, the object isn't
             # fully initialized yet. Avoid infinite recursion.
             raise AttributeError(name)
@@ -423,6 +456,182 @@ class DataStore:
     def __repr__(self):
         colls = list(self._collections.keys())
         return f"<DataStore '{self._run_code}', collections={colls}>"
+
+    @staticmethod
+    def _create_empty_datasets(hdf5_path, collection_spec, params=None,
+                               num_sims=None):
+        """Create zero-length HDF5 datasets for all storable datasets in a collection.
+
+        Each dataset is created with shape zero in variable dimensions (``-1``
+        in the spec) and ``maxshape=None`` for those dimensions so they can be
+        resized later when data is written.
+
+        :param hdf5_path: Path to the HDF5 file (must already exist).
+        :type hdf5_path: str
+        :param collection_spec: The collection specification.
+        :type collection_spec: DataCollectionSpec
+        :param params: Parameter dictionary for resolving dynamic shape
+            dimensions, in ``{"micro_params": {...}, "macro_params": {...}}``
+            format. Only needed if spec shapes contain string references.
+        :type params: dict, optional
+        :param num_sims: Number of simulations. Required for per-simulation
+            collections (``simulations_combined=False``).
+        :type num_sims: int, optional
+        """
+        with h5py.File(hdf5_path, "a") as f:
+            for ds_name, ds_spec in collection_spec.data.items():
+                if ds_spec.data_location is None:
+                    # Derived dataset — not stored on disk
+                    continue
+
+                # Resolve the spec shape (replace string refs with param values)
+                resolved = parse_shape(ds_spec.shape, params)
+
+                # Build initial (empty) shape and maxshape
+                empty_shape = tuple(
+                    0 if dim == -1 else dim for dim in resolved
+                )
+                maxshape = tuple(
+                    None if dim == -1 else dim for dim in resolved
+                )
+
+                if collection_spec.simulations_combined:
+                    # Combined collection: one dataset at ds_spec.data_location
+                    f.create_dataset(
+                        ds_spec.data_location,
+                        shape=empty_shape,
+                        maxshape=maxshape,
+                        dtype=ds_spec.dtype,
+                        compression="gzip",
+                    )
+                else:
+                    # Per-simulation: create dataset in each sim group
+                    for sim in range(num_sims):
+                        path = ds_spec.data_location.format(sim=sim)
+                        f.create_dataset(
+                            path,
+                            shape=empty_shape,
+                            maxshape=maxshape,
+                            dtype=ds_spec.dtype,
+                            compression="gzip",
+                        )
+
+    @classmethod
+    def create(cls, run_code, path, micro_params):
+        """Create a new DataStore with microscale parameters and empty datasets.
+
+        Creates a new HDF5 file, writes the dataspec version attribute,
+        stores ``micro_params`` as HDF5 attributes on the ``micro_data``
+        group, and creates zero-length datasets for all microscale_out
+        datasets defined in the v2.0.0 specification.
+
+        :param run_code: The Run identifier (used to construct the HDF5
+            filename as ``{run_code}.h5``).
+        :type run_code: str
+        :param path: Directory where the HDF5 file will be created.
+        :type path: str
+        :param micro_params: The microscale parameters to store.
+        :type micro_params: MicroParameters
+        :return: A new DataStore opened in ``"a"`` (read/write) mode with
+            microscale_out collection.
+        :rtype: DataStore
+        :raises FileExistsError: If the HDF5 file already exists.
+        :raises TypeError: If ``micro_params`` is not a
+            :class:`~lysis.config.parameters.MicroParameters` instance.
+        """
+        if not isinstance(micro_params, MicroParameters):
+            raise TypeError(
+                f"Expected MicroParameters, got {type(micro_params).__name__}"
+            )
+
+        hdf5_path = os.path.join(path, f"{run_code}.h5")
+        if os.path.exists(hdf5_path):
+            raise FileExistsError(f"HDF5 file already exists: {hdf5_path}")
+
+        spec = dataspec[COMPATIBLE_DATASPEC_VERSION]
+        micro_spec = spec["microscale_out"]
+
+        # Write micro parameters as HDF5 attributes on the micro_data group.
+        # write_dataset -> _write_hdf5_attr -> ensure_hdf5_version (creates file)
+        param_group_name = micro_spec.params.data_location.replace(
+            "_data", "_params"
+        )
+        params_data = {param_group_name: micro_params.to_basedict()}
+        write_dataset(params_data, hdf5_path, micro_spec.params)
+
+        # Create empty datasets for microscale_out
+        params_dict = {"micro_params": micro_params.to_basedict()}
+        cls._create_empty_datasets(hdf5_path, micro_spec, params=params_dict)
+
+        return cls(run_code, path, mode="a")
+
+    def initialize_macroscale(self, macro_params):
+        """Add macroscale parameters and empty datasets to this DataStore.
+
+        Writes ``macro_params`` as HDF5 attributes on the ``macro_data``
+        group and creates zero-length per-simulation datasets for all
+        macroscale_out datasets defined in the v2.0.0 specification.
+
+        Modifies the DataStore **in place** and returns ``None``.
+        Requires the DataStore to be opened in a writable mode
+        (e.g., ``"a"``)::
+
+            ds.initialize_macroscale(macro_params)
+
+        :param macro_params: The macroscale parameters to store.
+        :type macro_params: MacroParameters
+        :raises IOError: If the DataStore is opened in read-only mode.
+        :raises TypeError: If ``macro_params`` is not a
+            :class:`~lysis.config.parameters.MacroParameters` instance.
+        :raises ValueError: If microscale_out is not present, or if
+            macroscale_out is already present.
+        """
+        if self._mode == "r":
+            raise IOError(
+                "Cannot initialize macroscale on a read-only DataStore. "
+                "Open with mode='a' or use DataStore.create()."
+            )
+        if not isinstance(macro_params, MacroParameters):
+            raise TypeError(
+                f"Expected MacroParameters, got {type(macro_params).__name__}"
+            )
+        if "microscale_out" not in self._collections:
+            raise ValueError(
+                "Cannot add macroscale data: microscale_out is not present. "
+                "Use DataStore.create() first."
+            )
+        if "macroscale_out" in self._collections:
+            raise ValueError(
+                "macroscale_out is already present in this DataStore."
+            )
+
+        spec = dataspec[COMPATIBLE_DATASPEC_VERSION]
+        macro_spec = spec["macroscale_out"]
+        hdf5_path = self._hdf5_path
+        micro_params = self._micro_params
+
+        # Close the file handle before writing (fileops opens its own handles)
+        self._file.close()
+
+        # Write macro parameters as HDF5 attributes on the macro_data group
+        param_group_name = macro_spec.params.data_location.replace(
+            "_data", "_params"
+        )
+        params_data = {param_group_name: macro_params.to_basedict()}
+        write_dataset(params_data, hdf5_path, macro_spec.params)
+
+        # Create empty per-simulation datasets for macroscale_out
+        params_dict = {
+            "micro_params": micro_params.to_basedict(),
+            "macro_params": macro_params.to_basedict(),
+        }
+        num_sims = macro_params.macro_simulations
+        type(self)._create_empty_datasets(
+            hdf5_path, macro_spec, params=params_dict, num_sims=num_sims
+        )
+
+        # Re-initialize in place (reloads all collections, params, etc.)
+        self.__init__(self._run_code, self._path, mode=self._mode)
 
     def close(self):
         """Close the underlying HDF5 file."""

@@ -372,6 +372,25 @@ class TestDataStoreInit:
         ds.close()
         assert not ds._file.id.valid
 
+    def test_default_mode_is_read(self, tmp_path):
+        """Default mode is 'r' (read-only)."""
+        filepath = tmp_path / "defmode.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
+
+        with DataStore("defmode", str(tmp_path)) as ds:
+            assert ds.mode == "r"
+
+    def test_open_append_mode(self, tmp_path):
+        """Opening with mode='a' sets mode property to 'a'."""
+        filepath = tmp_path / "append.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
+
+        with DataStore("append", str(tmp_path), mode="a") as ds:
+            assert ds.mode == "a"
+            assert ds._file.id.valid
+
 
 class TestDataStoreVersioning:
     """Tests for dataspec_version attribute validation on DataStore."""
@@ -908,3 +927,438 @@ class TestSimulationView:
             arr = ds.macroscale_out[1].snapshot_time[:]
             assert isinstance(arr, np.ndarray)
             assert arr.shape == (7,)
+
+
+# ---------------------------------------------------------------------------
+#  DataStore.create() tests
+# ---------------------------------------------------------------------------
+
+
+class TestDataStoreCreate:
+    """Tests for the DataStore.create() factory class method."""
+
+    def test_create_produces_valid_file(self, tmp_path):
+        """create() produces an HDF5 file with the dataspec_version attribute."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        ds = DataStore.create("test_run", str(tmp_path), micro)
+        try:
+            filepath = tmp_path / "test_run.h5"
+            assert filepath.exists()
+            with h5py.File(filepath, "r") as f:
+                assert f.attrs[CONST.DATASPEC_VERSION_ATTR] == COMPATIBLE_DATASPEC_VERSION
+        finally:
+            ds.close()
+
+    def test_create_has_micro_params(self, tmp_path):
+        """create() stores MicroParameters that survive round-trip."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters(micro_simulations=42)
+
+        ds = DataStore.create("micro_rt", str(tmp_path), micro)
+        try:
+            assert isinstance(ds.micro_params, MicroParameters)
+            assert ds.micro_params.micro_simulations == 42
+        finally:
+            ds.close()
+
+    def test_create_has_microscale_out(self, tmp_path):
+        """create() produces a DataStore with microscale_out collection."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        ds = DataStore.create("coll", str(tmp_path), micro)
+        try:
+            assert "microscale_out" in ds.collections
+            assert isinstance(ds.microscale_out, DataCollection)
+        finally:
+            ds.close()
+
+    def test_create_empty_datasets_exist(self, tmp_path):
+        """create() creates zero-length datasets for all microscale_out specs."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        ds = DataStore.create("empty_ds", str(tmp_path), micro)
+        try:
+            spec = dataspec["v2.0.0"]["microscale_out"]
+            for name, ds_spec in spec.data.items():
+                if ds_spec.data_location is None:
+                    continue
+                # Dataset should be accessible via DataCollection
+                dataset = getattr(ds.microscale_out, name)
+                assert isinstance(dataset, h5py.Dataset)
+                # First dimension should be 0 (empty)
+                assert dataset.shape[0] == 0
+        finally:
+            ds.close()
+
+    def test_create_datasets_have_correct_dtype(self, tmp_path):
+        """Empty datasets have the correct dtype from the spec."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        ds = DataStore.create("dtype_check", str(tmp_path), micro)
+        try:
+            # Check a float64 dataset
+            dataset = ds.microscale_out.pli_first_time
+            assert dataset.dtype == np.float64
+            # Check an integer dataset
+            dataset = ds.microscale_out.tpa_final_num
+            assert dataset.dtype == np.uint8
+        finally:
+            ds.close()
+
+    def test_create_datasets_are_resizable(self, tmp_path):
+        """Empty datasets have maxshape=None for variable dimensions."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        ds = DataStore.create("resize", str(tmp_path), micro)
+        try:
+            dataset = ds.microscale_out.pli_first_time
+            # maxshape should have None for variable dims
+            assert dataset.maxshape == (None,)
+        finally:
+            ds.close()
+
+    def test_create_no_macroscale(self, tmp_path):
+        """create() produces no macroscale_out collection."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        ds = DataStore.create("no_macro", str(tmp_path), micro)
+        try:
+            assert "macroscale_out" not in ds.collections
+            assert ds.macro_params is None
+        finally:
+            ds.close()
+
+    def test_create_status_initialized(self, tmp_path):
+        """create() sets status to INITIALIZED."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        ds = DataStore.create("status", str(tmp_path), micro)
+        try:
+            assert ds.status == DataStatus.INITIALIZED
+        finally:
+            ds.close()
+
+    def test_create_file_exists_error(self, tmp_path):
+        """create() raises FileExistsError if file already exists."""
+        filepath = tmp_path / "exists.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        with pytest.raises(FileExistsError, match="already exists"):
+            DataStore.create("exists", str(tmp_path), micro)
+
+    def test_create_type_error(self, tmp_path):
+        """create() raises TypeError for non-MicroParameters."""
+        with pytest.raises(TypeError, match="MicroParameters"):
+            DataStore.create("bad", str(tmp_path), {"not": "params"})
+
+    def test_create_context_manager(self, tmp_path):
+        """DataStore from create() works with context manager."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        with DataStore.create("ctx", str(tmp_path), micro) as ds:
+            assert "microscale_out" in ds.collections
+        assert not ds._file.id.valid
+
+    def test_create_mode_is_append(self, tmp_path):
+        """DataStore from create() is opened in 'a' (read/write) mode."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        with DataStore.create("mode", str(tmp_path), micro) as ds:
+            assert ds.mode == "a"
+
+    def test_create_dataspec_version(self, tmp_path):
+        """DataStore from create() reports correct dataspec_version."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+
+        with DataStore.create("ver", str(tmp_path), micro) as ds:
+            assert ds.dataspec_version == COMPATIBLE_DATASPEC_VERSION
+
+
+# ---------------------------------------------------------------------------
+#  DataStore.initialize_macroscale() tests
+# ---------------------------------------------------------------------------
+
+
+class TestDataStoreInitializeMacroscale:
+    """Tests for the DataStore.initialize_macroscale() instance method."""
+
+    def _create_micro_store(self, tmp_path, run_code="init_macro"):
+        """Helper: create a microscale-only DataStore."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+        return DataStore.create(run_code, str(tmp_path), micro)
+
+    def test_initialize_has_both_collections(self, tmp_path):
+        """initialize_macroscale() produces DataStore with both collections."""
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(micro_params=ds.micro_params, macro_simulations=2)
+        ds.initialize_macroscale(macro)
+        try:
+            assert "microscale_out" in ds.collections
+            assert "macroscale_out" in ds.collections
+        finally:
+            ds.close()
+
+    def test_initialize_has_macro_params(self, tmp_path):
+        """initialize_macroscale() stores MacroParameters that survive round-trip."""
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=3, rows=7
+            )
+        ds.initialize_macroscale(macro)
+        try:
+            assert isinstance(ds.macro_params, MacroParameters)
+            assert ds.macro_params.rows == 7
+            assert ds.macro_params.macro_simulations == 3
+        finally:
+            ds.close()
+
+    def test_initialize_macro_params_has_micro_params(self, tmp_path):
+        """macro_params.micro_params links to the loaded MicroParameters."""
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(micro_params=ds.micro_params, macro_simulations=2)
+        ds.initialize_macroscale(macro)
+        try:
+            assert ds.macro_params.micro_params is ds.micro_params
+        finally:
+            ds.close()
+
+    def test_initialize_sim_groups_exist(self, tmp_path):
+        """initialize_macroscale() creates per-simulation groups in HDF5."""
+        n_sims = 3
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=n_sims
+            )
+        ds.initialize_macroscale(macro)
+        try:
+            filepath = tmp_path / "init_macro.h5"
+            with h5py.File(filepath, "r") as f:
+                for sim in range(n_sims):
+                    assert f"macro_data/sim_{sim:02}" in f
+        finally:
+            ds.close()
+
+    def test_initialize_empty_datasets_exist(self, tmp_path):
+        """initialize_macroscale() creates zero-length per-sim datasets."""
+        n_sims = 2
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=n_sims
+            )
+        ds.initialize_macroscale(macro)
+        try:
+            spec = dataspec["v2.0.0"]["macroscale_out"]
+            for sim in range(n_sims):
+                view = ds.macroscale_out[sim]
+                for name, ds_spec in spec.data.items():
+                    if ds_spec.data_location is None:
+                        continue
+                    dataset = getattr(view, name)
+                    assert isinstance(dataset, h5py.Dataset)
+                    assert dataset.shape[0] == 0
+        finally:
+            ds.close()
+
+    def test_initialize_per_sim_datasets_resizable(self, tmp_path):
+        """Per-sim empty datasets have maxshape=None for variable dims."""
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=2
+            )
+        ds.initialize_macroscale(macro)
+        try:
+            dataset = ds.macroscale_out[0].snapshot_time
+            assert dataset.maxshape == (None,)
+        finally:
+            ds.close()
+
+    def test_initialize_len_matches(self, tmp_path):
+        """len(macroscale_out) matches macro_simulations."""
+        n_sims = 4
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=n_sims
+            )
+        ds.initialize_macroscale(macro)
+        try:
+            assert len(ds.macroscale_out) == n_sims
+        finally:
+            ds.close()
+
+    def test_initialize_status_initialized(self, tmp_path):
+        """initialize_macroscale() sets status to INITIALIZED."""
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=2
+            )
+        ds.initialize_macroscale(macro)
+        try:
+            assert ds.status == DataStatus.INITIALIZED
+        finally:
+            ds.close()
+
+    def test_initialize_returns_none(self, tmp_path):
+        """initialize_macroscale() returns None (modifies in place)."""
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=2
+            )
+        result = ds.initialize_macroscale(macro)
+        try:
+            assert result is None
+        finally:
+            ds.close()
+
+    def test_initialize_no_micro_raises(self, tmp_path):
+        """initialize_macroscale() raises ValueError if no microscale_out."""
+        filepath = tmp_path / "empty.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_version_attr(f)
+
+        ds = DataStore("empty", str(tmp_path), mode="a")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+            macro = MacroParameters(micro_params=micro, macro_simulations=2)
+        try:
+            with pytest.raises(ValueError, match="microscale_out is not present"):
+                ds.initialize_macroscale(macro)
+        finally:
+            ds.close()
+
+    def test_initialize_already_macro_raises(self, tmp_path):
+        """initialize_macroscale() raises ValueError if macroscale_out exists."""
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=2
+            )
+        ds.initialize_macroscale(macro)
+        try:
+            with pytest.raises(ValueError, match="already present"):
+                ds.initialize_macroscale(macro)
+        finally:
+            ds.close()
+
+    def test_initialize_type_error(self, tmp_path):
+        """initialize_macroscale() raises TypeError for non-MacroParameters."""
+        ds = self._create_micro_store(tmp_path)
+        try:
+            with pytest.raises(TypeError, match="MacroParameters"):
+                ds.initialize_macroscale({"not": "params"})
+        finally:
+            ds.close()
+
+    def test_initialize_preserves_micro_data(self, tmp_path):
+        """initialize_macroscale() preserves existing microscale empty datasets."""
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=2
+            )
+        ds.initialize_macroscale(macro)
+        try:
+            # Microscale datasets should still exist and be empty
+            dataset = ds.microscale_out.pli_first_time
+            assert isinstance(dataset, h5py.Dataset)
+            assert dataset.shape[0] == 0
+        finally:
+            ds.close()
+
+    def test_initialize_in_context_manager(self, tmp_path):
+        """initialize_macroscale() works inside a context manager."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+        with DataStore.create("ctx_init", str(tmp_path), micro) as ds:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                macro = MacroParameters(
+                    micro_params=ds.micro_params, macro_simulations=2
+                )
+            ds.initialize_macroscale(macro)
+            assert "macroscale_out" in ds.collections
+        assert not ds._file.id.valid
+
+    def test_initialize_read_only_raises(self, tmp_path):
+        """initialize_macroscale() raises IOError on a read-only DataStore."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+        # Create the file first
+        ds = DataStore.create("ro_init", str(tmp_path), micro)
+        ds.close()
+        # Re-open read-only
+        ds = DataStore("ro_init", str(tmp_path))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(micro_params=ds.micro_params, macro_simulations=2)
+        try:
+            with pytest.raises(IOError, match="read-only"):
+                ds.initialize_macroscale(macro)
+        finally:
+            ds.close()
+
+    def test_initialize_preserves_mode(self, tmp_path):
+        """initialize_macroscale() preserves the DataStore's mode."""
+        ds = self._create_micro_store(tmp_path)
+        assert ds.mode == "a"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=2
+            )
+        ds.initialize_macroscale(macro)
+        try:
+            assert ds.mode == "a"
+        finally:
+            ds.close()
