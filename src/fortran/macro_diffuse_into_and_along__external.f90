@@ -230,6 +230,7 @@ program macrolysis
     integer :: m_bound_unit = 104
     integer :: m_bind_time_unit = 105
     integer :: f_deg_list_unit = 106
+    integer :: deg_per_unit = 107
 
     !! BRAD 2023-12-04:
     !!      Format: simulation time (t), molecule index (j), new status (m_stat), molecule location (V(1,j))
@@ -770,6 +771,7 @@ program macrolysis
 
     !! BRAD 2024-02-02:
     open (f_deg_list_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/f_deg_list'//TRIM(outFileCode)//'.dat'), form='formatted')
+    open (deg_per_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/deg_percent'//TRIM(outFileCode)//'.dat'), form=filetype)
 
     !!!!! COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     ! open(degnextunit,file=degnextfile,form=filetype)
@@ -895,6 +897,7 @@ program macrolysis
         ! write(t_degrade_unit) t_degrade(:)
         write (m_location_unit) V(1, :)
         write (m_bound_unit) V(2, :)
+        write (deg_per_unit) 1  !initially, the clot is completely intact, so the fraction of clot remaining is 1
         Nsave = save_interval
 
         write (*, *) ' save as f_deg_list', outFileCode, '.dat'
@@ -1500,6 +1503,7 @@ program macrolysis
                 ! write(t_degrade_unit) t_degrade(:)
                 write (m_location_unit) V(1, :)
                 write (m_bound_unit) V(2, :)
+                write(deg_per_unit) 1-real(degraded_fibers)/(num - enoFB)
 
                 Nsave = Nsave + save_interval
                 cNsave = cNsave + 1
@@ -2091,6 +2095,7 @@ program macrolysis
     close (m_bound_unit)
     close (m_bind_time_unit)
     close (f_deg_list_unit)
+    close(deg_per_unit)
 
     !!!!! COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     ! close(degnextunit)
