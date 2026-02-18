@@ -10,9 +10,9 @@ The lysis project has a well-architected data handling system with clear separat
 - **dataspec.py**: Complete specification definitions with ``DataSpec`` wrapper class (DONE)
 - **fileops.py**: File I/O operations for all five storage formats (DONE)
 - **dataconvert.py**: Format conversion logic (DONE - all 44 converters implemented)
-- **datastore.py**: High-level Python API (Read-only access implemented; write access pending)
+- **datastore.py**: High-level Python API (Read/write access implemented)
 
-**Overall Status: ~90% Complete**
+**Overall Status: ~95% Complete**
 
 **Recent Updates:**
 
@@ -39,6 +39,14 @@ The lysis project has a well-architected data handling system with clear separat
 - Created test scripts for microscale, macroscale input, and macroscale output
   conversion pipelines
 - Updated data specification documentation
+- Implemented ``DataStore`` initialization: ``create()`` class method for new
+  microscale-only DataStores, ``initialize_macroscale()`` for adding macroscale
+  data in place
+- Added read/write mode support (``"r"``, ``"a"``, ``"w"``) to ``DataStore``;
+  read-only mode blocks write operations
+- Write-through to HDF5 datasets via live ``h5py.Dataset`` objects in ``"a"``
+  mode (resize, slice-write, incremental append)
+- Expanded ``DataStore`` test suite to 105 tests (from 62)
 
 
 Architecture Overview
@@ -53,10 +61,11 @@ Architecture Overview
                       |
    +------------------v-------------------------------+
    |   DataStore API (datastore.py)                   |
-   |   - Read-only: dot-access, collections, params   |
+   |   - Read/write: dot-access, collections, params  |
    |   - Per-simulation and combined views            |
    |   - HDF5 spec version validation on open         |
-   |   Status: READ-ONLY COMPLETE; write access TODO  |
+   |   - Initialization (create, add macroscale)      |
+   |   Status: COMPLETE                               |
    +------------------+-------------------------------+
                       |
    +------------------v-------------------------------+
@@ -131,19 +140,20 @@ The ``DataStore`` class provides read-only access to HDF5 simulation data:
 - ``SimulationView`` - Per-simulation dot-access to datasets
 - ``DataCollection`` - Combined and per-simulation collection interface
 
-Covered by 62 unit tests in ``tests/data/test_datastore.py``.
+Covered by 105 unit tests in ``tests/data/test_datastore.py``.
 
 4. Comprehensive Unit Tests -- COMPLETED
 +++++++++++++++++++++++++++++++++++++++++
 
 :Task: #2
 
-226 unit tests across 6 test files:
+291 unit tests across 6 test files:
 
 - ``tests/data/test_dataspec.py`` (55 tests) - Spec parsing, validation,
   DataSpec wrapper, hidden fields
-- ``tests/data/test_datastore.py`` (62 tests) - DataStore read-only API,
-  collections, parameter loading, version validation
+- ``tests/data/test_datastore.py`` (105 tests) - DataStore read/write API,
+  initialization, collections, parameter loading, version validation,
+  write-through, mode control
 - ``tests/data/test_fileops.py`` (44 tests) - Read/write for all formats
 - ``tests/data/test_dataconvert.py`` (39 tests) - Conversion logic, safe
   type casting, round-trip integrity
@@ -228,28 +238,32 @@ Test script created for macroscale output conversion round-trip testing.
 - Backward-compatibility ``lysis/util/`` shim package removed
 - All imports updated to canonical module paths
 
+12. DataStore Write Access -- COMPLETED
++++++++++++++++++++++++++++++++++++++++
+
+:File: ``datastore.py``
+:Task: #30
+
+The ``DataStore`` class now supports full read/write access:
+
+- ``DataStore.__init__(mode=)`` accepts ``"r"`` (read-only, default),
+  ``"a"`` (read/write), or ``"w"`` (create/truncate), passed directly to
+  ``h5py.File``
+- ``DataStore.create(run_code, path, micro_params)`` class method creates
+  a new HDF5 file with microscale parameters and empty datasets, returned
+  in ``"a"`` mode
+- ``ds.initialize_macroscale(macro_params)`` adds macroscale parameters and
+  empty per-simulation datasets in place; raises ``IOError`` if read-only
+- Write-through via live ``h5py.Dataset`` objects: resize, slice-write,
+  and incremental append in ``"a"`` mode
+- ``DataStatus`` enum wired into ``DataStore`` (``status`` property,
+  ``INITIALIZED`` state set on open)
+
+Covered by 105 unit tests in ``tests/data/test_datastore.py``.
+
 
 Remaining Work
 --------------
-
-12. DataStore Write Access (HIGH)
-+++++++++++++++++++++++++++++++++
-
-:File: ``datastore.py``
-:Impact: Cannot create new HDF5 files or write simulation data
-:Task: #30
-
-The ``DataStore`` currently supports read-only access. Remaining work:
-
-- **Initialization**: Create new HDF5 files with proper structure, write
-  ``dataspec_version`` attribute, create collection groups
-- **Write access**: ``__setattr__()`` or explicit write methods to store
-  datasets, update status tracking (``DataStatus`` enum exists but is unused)
-- **Append**: Extend existing datasets (e.g. adding simulations)
-- **Delete/overwrite**: Remove or replace datasets
-
-This is the primary remaining gap before the system is fully usable for
-simulation workflows.
 
 13. Safe Float Type Conversion (MEDIUM)
 +++++++++++++++++++++++++++++++++++++++
@@ -317,6 +331,25 @@ Four Jupyter notebooks in ``notebooks/`` still reference the removed
 Set up continuous integration pipeline to execute the pytest unit test suite
 automatically on commits and pull requests.
 
+20. Handle Missing Parameters in Deserialization (MEDIUM)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+:File: ``parameters.py``
+:Impact: Silent data loss when parameters are missing from stored files
+:Task: #31
+
+When ``MicroParameters`` or ``MacroParameters`` are deserialized via
+``parse_from_basedict()``, any parameters missing from the on-disk
+JSON or HDF5 attributes silently fall back to dataclass default values.
+This can mask data loss or version mismatches between the code and stored
+data.
+
+Needs logic to detect missing parameters and either:
+
+- Convert or compute them from other available data
+- Warn the user about parameters that were defaulted
+- Raise an error for required parameters that have no sensible default
+
 
 Implementation Priority
 -----------------------
@@ -354,7 +387,8 @@ Phase 3: Write Access & Polish (Current)
 
 Active work:
 
-13. **Task #30**: Implement DataStore initialization and write access
+13. **Task #30**: Implement DataStore initialization and write access -- COMPLETED
+#.  **Task #31**: Handle missing parameters in deserialization
 #.  **Task #6**: Add safe float type conversion
 #.  **Task #8**: Extract hard-coded constants
 #.  **Task #29**: Update notebooks to remove lysis.util imports
@@ -399,13 +433,18 @@ Ready for Use
 #. Multi-simulation file handling
 #. Format string lookup for text file output (``NUMPY_SAVETXT_FORMATS``)
 #. CLI commands: ``lysis convert``, ``lysis validate``
-#. 226 automated unit tests
+#. DataStore initialization: ``create()`` for new files,
+   ``initialize_macroscale()`` for adding macroscale in place
+#. DataStore read/write mode (``"r"``, ``"a"``, ``"w"``) with read-only
+   protection
+#. Write-through to HDF5 datasets (resize, slice-write, incremental append)
+#. 291 automated unit tests (105 for DataStore alone)
 
 Needs Work
 ++++++++++
 
-#. DataStore write access (initialization, dataset writing, append, delete)
 #. Float-to-float type conversion (not implemented)
+#. Missing parameter handling during deserialization
 #. Notebook imports (still reference removed ``lysis.util``)
 
 Not Implemented
@@ -433,15 +472,13 @@ Design Strengths
    ``convert_location_snapshot`` with field validation
 #. **Conversion Routing**: All specs route through v1.99.0 <-> v2.0.0 pair,
    extensible to future versions
-#. **Comprehensive Testing**: 226 unit tests covering all modules
+#. **Comprehensive Testing**: 291 unit tests covering all modules
 #. **Clean Package Structure**: Canonical imports with no shim layers;
    ``config/`` houses Run per project ontology
 
 Design Weaknesses
 -----------------
 
-#. **No Write Access**: ``DataStore`` is read-only; cannot create or modify
-   HDF5 files through the high-level API
 #. **Tight Path Coupling**: Format strings in spec definitions
 #. **Hard-Coded Values**: Magic numbers should be constants (e.g. ``n_bins = 100``)
 #. **No CI**: Tests must be executed manually
@@ -459,9 +496,9 @@ Risk Assessment
      - Impact
      - Mitigation
    * - DataStore write bugs due to untested write path
-     - MEDIUM
+     - LOW
      - HIGH
-     - Implement write access with comprehensive tests (Phase 3) - Task #30
+     - MITIGATED: 105 tests cover initialization, write-through, and mode control (Task #30)
    * - Float conversion blocks workflows
      - LOW
      - MEDIUM
@@ -510,8 +547,9 @@ Phase 2 Success -- ACHIEVED
 Phase 3 Success
 +++++++++++++++
 
-- [ ] DataStore can create new HDF5 files with proper structure
-- [ ] DataStore can write simulation datasets
+- [x] DataStore can create new HDF5 files with proper structure
+- [x] DataStore can write simulation datasets
+- [ ] Missing parameters detected and handled during deserialization
 - [ ] Float-to-float type conversion works
 - [ ] Constants extracted from code
 - [ ] Notebooks updated to canonical imports
@@ -532,7 +570,7 @@ Recommended Next Steps
 
 #. **Immediate**:
 
-   - Implement DataStore initialization and write access (Task #30)
+   - Handle missing parameters in deserialization (Task #31)
    - Add safe float type conversion (Task #6)
 
 #. **Short-term**:
@@ -559,26 +597,28 @@ implemented:
 
 #. All 44 data converters are complete and tested, including ``m_bound``
    event-log reconstruction
-#. The ``DataStore`` provides a clean read-only API with dot-access to
-   collections, per-simulation views, parameter loading, and spec version
-   validation
+#. The ``DataStore`` provides a full read/write API with dot-access to
+   collections, per-simulation views, parameter loading, spec version
+   validation, initialization (``create()``, ``initialize_macroscale()``),
+   and write-through to HDF5 datasets
 #. ``DataSpec`` wrapper class provides version-aware specification management
    with hidden field auto-population
 #. HDF5 specification versioning ensures version consistency on every
    read and write operation
 #. All five storage backends (HDF5, text, binary, JSON, Fortran) support
    both reading and writing
-#. 226 unit tests cover all modules with automated testing
+#. 291 unit tests cover all modules with automated testing
 #. CLI tools (``lysis convert``, ``lysis validate``) provide command-line
    access to conversion and validation
 #. Clean package structure with ``run.py`` in ``config/`` per project ontology
    and no backward-compatibility shim layers
 
-The primary remaining gap is **DataStore write access** (Task #30), which will
-enable creating new HDF5 files and writing simulation data through the
-high-level API. Once implemented, the system will be fully functional for
-end-to-end simulation workflows.
+With DataStore write access now complete (Task #30), the system is functional
+for end-to-end simulation workflows. The remaining gaps are **missing parameter
+handling** during deserialization (Task #31) and **float-to-float type
+conversion** (Task #6), followed by polish items (constants extraction,
+notebook updates, CI, documentation).
 
-:Remaining Effort: ~3-5 weeks for all remaining phases
-:Next Milestone: DataStore write access (Phase 3)
+:Remaining Effort: ~2-3 weeks for all remaining phases
+:Next Milestone: Missing parameter handling and float conversion (Phase 3)
 :Production Readiness: Phase 4 completion
