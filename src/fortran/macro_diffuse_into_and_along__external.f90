@@ -245,6 +245,7 @@ program macrolysis
     !! BRAD 2024-02-02:
     !!      Format: simulation time (t), fiber index (j), new degrade time (t_degrade)
     character(40) :: f_deg_list_format = '(f23.15, a, i0, a, f23.15)'
+    character(40) :: deg_per_format = '(f23.15)'
 
     !! BRAD 2023-02-02
 
@@ -771,7 +772,7 @@ program macrolysis
 
     !! BRAD 2024-02-02:
     open (f_deg_list_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/f_deg_list'//TRIM(outFileCode)//'.dat'), form='formatted')
-    open (deg_per_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/deg_percent'//TRIM(outFileCode)//'.dat'), form=filetype)
+    open (deg_per_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/deg_percent'//TRIM(outFileCode)//'.dat'), form='formatted')
 
     !!!!! COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     ! open(degnextunit,file=degnextfile,form=filetype)
@@ -897,7 +898,7 @@ program macrolysis
         ! write(t_degrade_unit) t_degrade(:)
         write (m_location_unit) V(1, :)
         write (m_bound_unit) V(2, :)
-        write (deg_per_unit) 1  !initially, the clot is completely intact, so the fraction of clot remaining is 1
+        write (deg_per_unit,deg_per_format) 1.0  !initially, the clot is completely intact, so the fraction of clot remaining is 1
         Nsave = save_interval
 
         write (*, *) ' save as f_deg_list', outFileCode, '.dat'
@@ -1503,7 +1504,8 @@ program macrolysis
                 ! write(t_degrade_unit) t_degrade(:)
                 write (m_location_unit) V(1, :)
                 write (m_bound_unit) V(2, :)
-                write(deg_per_unit) 1-real(degraded_fibers)/(num - enoFB)
+                !! BB 2026-02-14
+                write(deg_per_unit,deg_per_format) 1.0-real(degraded_fibers)/(num - enoFB)
 
                 Nsave = Nsave + save_interval
                 cNsave = cNsave + 1
