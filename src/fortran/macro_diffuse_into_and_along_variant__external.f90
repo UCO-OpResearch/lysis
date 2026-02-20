@@ -187,7 +187,7 @@ program macrolysis
     ! integer, dimension(:,:), allocatable  :: X2plot, Y2plot
     ! integer, dimension(:), allocatable  :: Xvplot, Yvplot
     ! double precision, dimension(:,:), allocatable  :: bdtPA, freetPA
-    double precision, dimension(:, :), allocatable :: lysismat !(100,100) if only did 10,000 micro simulations, (500,100) if did 50,000
+    double precision, dimension(:, :), allocatable :: lysismat_big, lysismat_small !(100,100) if only did 10,000 micro simulations, (500,100) if did 50,000
     integer, dimension(100)  :: lenlysismat_big, lenlysismat_small
     integer  :: r400
     ! integer  :: x1unit = 31
@@ -1057,13 +1057,13 @@ program macrolysis
                         r5 = urcw1()
 
                         !! BB 2026-02-14. Depending on whether the tPA initially bound to an intact or partially degraded edge, figure out the avgwait time
-                        if (edgetype(j)==0) !if the tPA was bound to a fiber that was intact
+                        if (edgetype(j)==0) then !if the tPA was bound to a fiber that was intact
                            frac_forced = frac_forced_big !use the big (weak) Kd
                            avgwait = avgwait_big
                         else !if the tPA was bound to a partially degraded fiber
                            frac_forced = frac_forced_small !use the small (strong) Kd
                            avgwait = avgwait_small
-                        else
+                        end if
 
                         if (r5 .le. frac_forced) then
                             ! if the random number is less than the fraction of time tPA is forced to unbind, consider tPA "forced" to unbind, and temporarily remove it from the simulation by assigning it a waiting time
@@ -1151,11 +1151,11 @@ program macrolysis
                                 ! countbind=countbind+1
 
                                 !! BB 2026-02-14. When molecule binds, determine if it's bound to intact or partially degraded fibrin
-                                if (t_degrade(V(1,j))==9.9d+100) !if the edge is intact (no degradation has started)
+                                if (t_degrade(V(1,j))==9.9d+100) then !if the edge is intact (no degradation has started)
                                   edgetype(j)=0
                                 else !if the edge has already been partially degraded
                                   edgetype(j)=1
-                                end
+                                end if
 
                                 !! BRAD 2023-01-04:
                                 total_binds = total_binds + 1
@@ -1165,7 +1165,7 @@ program macrolysis
                                 ! bind1(V(1,j))=1
 
                                 !! BB 2026-02-14. Determine which set of microscale data to use, big or small Kd
-                               if (edgetype(j)==0) !if the tPA is binding to an intact edge, use the big (weak) Kd
+                               if (edgetype(j)==0) then !if the tPA is binding to an intact edge, use the big (weak) Kd
                                 ! find the time that tPA will unbind:
                                 colr2 = 0
                                 do i = 1, 101
@@ -1318,7 +1318,7 @@ program macrolysis
                                ! end if
 
                                 end if ! for if(r400.le.lenlysismat) loop
-                               end !end edgetype statement
+                               end if !end edgetype statement
 
                                 ! if the molecule canNOT bind this timestep, it stays unbound on the current edge so we don't have to
                                 ! change anything. It remains V(1,j)=V(1,j), V(2,j)=0.
@@ -1413,18 +1413,18 @@ program macrolysis
                                 total_binds = total_binds + 1
 
                                 !! BB 2026-02-14. When molecule binds, determine if it's bound to intact or partially degraded fibrin
-                                if (t_degrade(V(1,j))==9.9d+100) !if the edge is intact (no degradation has started)
+                                if (t_degrade(V(1,j))==9.9d+100) then !if the edge is intact (no degradation has started)
                                    edgetype(j)=0
                                 else !if the edge has already been partially degraded
                                    edgetype(j)=1
-                                end
+                                end if
 
                                 ! put a 1 in entry equal to edge number. each second I'll sum up the number of 1 entries, which
                                 ! will tell me the number of independent bindings (not necessarily successful ones) at each second
                                 ! bind1(V(1,j))=1
 
                              !! BB 2026-02-14. Determine which set of microscale data to use, big or small Kd
-                             if (edgetype(j)==0) !if the tPA is binding to an intact edge, use the big (weak) Kd
+                             if (edgetype(j)==0) then !if the tPA is binding to an intact edge, use the big (weak) Kd
                              ! find the time that tPA will unbind:
 
                                 ! find the time that tPA will unbind:
@@ -1582,7 +1582,7 @@ program macrolysis
 
 
                                 end if ! for if(r400.le.lenlysismat) loop
-                             end !end edgetype statement
+                             end if !end edgetype statement
 
                             end if  ! end r2 statement
 
