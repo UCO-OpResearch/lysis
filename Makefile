@@ -65,6 +65,7 @@ FORT_SRC_DIR = ./src/fortran
 FORT_MICRO = micro_rates.f90
 FORT_MACRO = macro_diffuse_into_and_along__internal \
              macro_diffuse_into_and_along__external \
+             macro_diffuse_into_and_along_variant__external \
             #  macro_Q2_diffuse_into \
             #  macro_Q2_diffuse_along \
             #  macro_Q2_always_rebind \
@@ -124,6 +125,9 @@ $(BUILD_DIR)/macro_diffuse_into_and_along__external: $(FORT_SRC_DIR)/macro_diffu
     
 $(BUILD_DIR)/macro_diffuse_into_and_along__internal: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__internal
+	
+$(BUILD_DIR)/macro_diffuse_into_and_along_variant__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along_variant__external.f90 $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along_variant__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along_variant__external
         
 # $(BUILD_DIR)/macro_Q2_diffuse_into: $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 $(BUILD_DIR)/kiss.o
 # 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into
