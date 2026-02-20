@@ -4,6 +4,8 @@ program macrolysis
     !! BRITT 2026-02-14: This code has been modified in the following ways:
     !!                  - Adjusted to consider a tPA variant that binds
     !!                    differently to intact or partially degraded fibrin
+    !! **WARNING: avgwait and frac_forced change throughout the simulation (they are defined as avgwait = avgwait_big or avgwait = avgwait_small)
+    !!            anyone adjusting this code in the future should be aware of that!!
     !! BRAD 2023-01-15: This code has been modified in the following ways:
     !!                  - Data folder is relative to git repository root
     !!                  - Data is stored in subfolders based on runCode
