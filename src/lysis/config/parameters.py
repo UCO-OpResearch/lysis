@@ -431,7 +431,7 @@ class MicroParameters(Parameters):
     """The binding rate of PLG, :math:`k^\\text{on}_\\text{PLG}`, to fibrin.
 
     :Units: (micromolar*sec)^-1
-    :Fortran: kPLGon"""
+    :Fortran: kplgon"""
 
     conc_free_PLG: Quantity = Q_("2 micromolar")
     """The concentration of free plasminogen.
@@ -793,12 +793,31 @@ class MacroParameters(Parameters):
     """The number of fibrin-free rows at the top of the grid.
 
     This represents the depth of the fibrin-free region where tPA molecules
-    enter the simulation domain. Equivalent to the 0-based index of the first
-    row containing fibers (first_fiber_row in Fortran, which uses 1-based indexing).
-
+    enter the simulation domain. 
+    
     For example, if empty_rows = 28, then rows 0-27 contain no fibers, and
     row 28 is the first row with fibers.
 
+    Note: In the Fortran code, there was no variable for 'The number of empty rows'.
+    Instead, the variable `Ffree` gave the 1-indexed location of the first non-empty row.
+    In 0-indexing, the number of empty rows is the same as the index of the first 
+    non-empty row, but in 1-indexing, this is not the case.
+    Thus, `empty_rows` and `Ffree` are not exactly translatable, but
+    `empty_rows = Ffree - 1`
+
+    Here is a graphical (rotated) example with four fiber-free rows and 
+    five rows of fibrin. 
+    In Python, this would give: rows = 9, fiber_rows = 6, and empty_rows = 3.
+    In Fortran, the equivalent would be: F = 9, Fhat = 6, and Ffree = 4
+    
+                      empty_rows
+                       ^^^^^^^
+    Python indexing:   0  1  2  3  4  5  6  7  8
+                       .  .  .  |  |  |  |  |  |
+    Fortran indexing:  1  2  3  4  5  6  7  8  9
+                                ^
+                              Ffree
+                                
     :Units: None
     :Fortran: Ffree-1"""
 
