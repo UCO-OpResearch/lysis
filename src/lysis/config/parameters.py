@@ -579,7 +579,7 @@ class MicroParameters(Parameters):
     Used for tracking and logging purposes to distinguish between different
     microscale implementations or parameter sets."""
 
-    log_lvl: int = logging.WARNING
+    micro_log_lvl: int = logging.WARNING
     """The logging level for console output.
 
     Controls the verbosity of debugging and status information. Uses Python's
@@ -990,7 +990,7 @@ class MacroParameters(Parameters):
     macroscale implementations. This string was historically included in data
     filenames by the legacy Fortran code."""
 
-    log_lvl: int = logging.WARNING
+    macro_log_lvl: int = logging.WARNING
     """The logging level for console output.
 
     Controls the verbosity of debugging and status information. Uses Python's
