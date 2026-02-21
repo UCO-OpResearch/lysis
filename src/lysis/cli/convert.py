@@ -1,5 +1,6 @@
 """``lysis convert`` — convert simulation data between specification formats."""
 
+import json
 import sys
 
 import click
@@ -22,9 +23,7 @@ def _resolve_spec(spec_str):
     while resolved in tags:
         resolved = tags[resolved]
     if resolved not in dataspec:
-        available = sorted(
-            k for k in dataspec if not k in tags and k != resolved
-        )
+        available = sorted(k for k in dataspec if not k in tags and k != resolved)
         tag_list = [f"{k} -> {v}" for k, v in tags.items()]
         raise click.BadParameter(
             f"Unknown spec '{spec_str}'.\n"
@@ -67,9 +66,30 @@ def _resolve_spec(spec_str):
     is_flag=True,
     help="Show what would be converted without writing output.",
 )
+@click.option(
+    "--param-override",
+    "param_overrides",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help=(
+        "Override a parameter during validation (repeatable). "
+        "KEY must be a member of MicroParameters or MacroParameters."
+        "VALUE can be a scalar, a string that will parse as a Pint Quantity, or a Fortran-name aliases. "
+        "Example: --param-override n_tPA=100 --param-override bind_rate_tPA=kon"
+    ),
+)
 @click.pass_context
-def convert(ctx, input_path, output_path, input_spec, output_spec,
-            collections, file_code, dry_run):
+def convert(
+    ctx,
+    input_path,
+    output_path,
+    input_spec,
+    output_spec,
+    collections,
+    file_code,
+    dry_run,
+    param_overrides,
+):
     """Convert simulation data between specification formats.
 
     Reads data from INPUT_PATH in the --from format, converts it, and writes
@@ -80,6 +100,9 @@ def convert(ctx, input_path, output_path, input_spec, output_spec,
         lysis convert ./fortran_data/ output.h5 -f fortran -t hdf5
         lysis convert input.h5 ./out/ -f hdf5 -t fortran --file-code "_run01.dat"
         lysis convert input.h5 output.h5 -f v1.99.0 -t v2.0.0 --dry-run
+        lysis convert ./data/ out.h5 -f fortran -t hdf5 --param-override total_molecules=100
+        lysis convert ./data/ out.h5 -f fortran -t hdf5 --param-override pore_size=1.0135um
+        lysis convert ./data/ out.h5 -f fortran -t hdf5 --param-override bind_rate_tPA=kon
     """
     from lysis.data.dataconvert import convert_data
     from lysis.data.fileops import read_data_collection, write_data_collection
@@ -123,9 +146,28 @@ def convert(ctx, input_path, output_path, input_spec, output_spec,
         if dry_run:
             console.print("[yellow]Dry run — no files will be written.[/yellow]")
 
+    # Parse --param-override KEY=VALUE pairs
+    overrides = None
+    if param_overrides:
+        overrides = {}
+        for item in param_overrides:
+            if "=" not in item:
+                console.print(
+                    f"[red]Error:[/red] --param-override must be KEY=VALUE, got: {item!r}"
+                )
+                ctx.exit(1)
+                return
+            key, raw = item.split("=", 1)
+            try:
+                overrides[key] = json.loads(raw)
+            except json.JSONDecodeError:
+                overrides[key] = raw  # treat as bare string
+
     # Read
     try:
-        data = read_data_collection(input_path, in_collections, file_codes)
+        data = read_data_collection(
+            input_path, in_collections, file_codes, param_overrides=overrides
+        )
     except FileNotFoundError as e:
         console.print(f"[red]Error:[/red] Input file not found: {e}")
         ctx.exit(1)
@@ -134,11 +176,13 @@ def convert(ctx, input_path, output_path, input_spec, output_spec,
         console.print(f"[red]Error:[/red] Missing data in input: {e}")
         ctx.exit(1)
         return
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] Parameter validation failed: {e}")
+        ctx.exit(1)
+        return
 
     if verbose:
-        n_datasets = sum(
-            1 for k in data if k != "params"
-        )
+        n_datasets = sum(1 for k in data if k != "params")
         console.print(f"Read {n_datasets} dataset(s) from input.")
 
     # Convert
