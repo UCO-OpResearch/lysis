@@ -608,22 +608,6 @@ class MicroParameters(Parameters):
             during object construction.
         """
 
-        # These names must be elements of the Run's DataStore
-        object.__setattr__(
-            self,
-            "output_data",
-            [
-                "lysis_complete_time",  # Fortran: lysis_time
-                "tPA_leaving_time",  # Fortran: tPA_time
-                "PLi_generated",  # Fortran: Plasmin
-                "lysis_completed",  # Fortran: lysiscomplete
-                "tPA_kinetic_unbound",  # Fortran: tPAunbind
-                "tPA_forced_unbound",  # Fortran: tPAPLiunbd
-                "tPA_still_bound",  # Fortran: ltPA
-                "first_PLi",  # Fortran: firstPLi
-            ],
-        )
-
         # One protofibril is two fibrinogens
         object.__setattr__(
             self,
@@ -950,19 +934,6 @@ class MacroParameters(Parameters):
     # Data Parameters
     #####################################
 
-    input_data: List[str] = field(init=False)
-    """The dataset names required as input from the microscale model.
-
-    List of strings identifying which microscale output datasets must be loaded
-    before running the macroscale simulation. This is a dependent parameter
-    set in __post_init__()."""
-
-    output_data: List[str] = field(init=False)
-    """The dataset names that will be output by the macroscale model.
-
-    List of strings identifying which datasets the macroscale simulation will
-    save. This is a dependent parameter set in __post_init__()."""
-
     save_interval: Quantity = Q_("10 sec")
     """How often to record data from the model.
     
@@ -1052,29 +1023,6 @@ class MacroParameters(Parameters):
         #
         object.__setattr__(
             self, "average_bound_time", 1.0 / self.micro_params.unbind_rate_tPA_woPLG
-        )
-
-        # These names must be elements of the Run's DataStore
-        object.__setattr__(
-            self,
-            "input_data",
-            [
-                "unbinding_time",  # Fortran: tsec1
-                # 'leaving_time',           # Fortran: CDFtPA
-                "lysis_time_dist",  # Fortran: lysismat
-                "total_lyses",  # Fortran: lenlysismat
-            ],
-        )
-        # These names must be elements of the Run's DataStore
-        object.__setattr__(
-            self,
-            "output_data",
-            [
-                "degradation_state",  # Fortran: degnext
-                "molecule_location",
-                "molecule_state",
-                "save_time",  # Fortran: tsave
-            ],
         )
 
         # A full row of the fiber grid contains a 'right', 'up', and 'out' edge

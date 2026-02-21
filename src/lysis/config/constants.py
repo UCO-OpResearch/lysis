@@ -37,36 +37,6 @@ ureg = UnitRegistry()
 # Shorthand for creating Quantity objects with units
 Q_ = ureg.Quantity
 
-#: Default filenames for simulation data files.
-#:
-#: Maps logical dataset names (keys) to filename prefixes (values) used when
-#: saving/loading data. Comments indicate the corresponding Fortran variable names
-#: for cross-reference with legacy code.
-#:
-#: Microscale outputs become macroscale inputs, which is why some datasets appear
-#: in both sections with different logical names.
-default_filenames = {
-    ## Microscale Out
-    "lysis_complete_time": "lysis",  # Fortran: lysis_time
-    "tPA_leaving_time": "tPA_time",  # Fortran: tPA_time
-    "PLi_generated": "PLi",  # Fortran: Plasmin
-    "lysis_completed": "lyscomplete",  # Fortran: lysiscomplete
-    "tPA_kinetic_unbound": "tPAunbind",  # Fortran: tPAunbind
-    "tPA_forced_unbound": "tPAPLiunbind",  # Fortran: tPAPLiunbd
-    "tPA_still_bound": "lasttPA",  # Fortran: ltPA
-    "first_PLi": "firstPLi",  # Fortran: firstPLi
-    ## Macroscale In
-    "unbinding_time_dist": "tsectPA",  # Fortran: tsec1
-    # 'leaving_time': "tPAleave",  # Fortran: CDFtPA
-    "lysis_time_dist": "lysismat",  # Fortran: lysismat
-    "total_lyses": "lenlysisvect",  # Fortran: lenlysismat
-    ## Macroscale Out
-    "degradation_state": "deg",  # Fortran: degnext
-    "molecule_location": "m_loc",
-    "molecule_state": "m_bound",
-    "save_time": "tsave",  # Fortran: tsave
-}
-
 
 class Const:
     """Aggregator class for commonly used constants and enumerations.
