@@ -13,6 +13,7 @@ All physical assertions use pytest.approx() with default tolerances unless a
 tighter or looser tolerance is explicitly justified.
 """
 
+import dataclasses
 import warnings
 
 import pytest
@@ -445,3 +446,19 @@ class TestMacroParametersSerialization:
         with pytest.raises(TypeError, match="micro_params"):
             MacroParameters.parse_from_basedict(bd)
         capsys.readouterr()
+
+
+# ===========================================================================
+# MicroParameters vs MacroParameters — key separation
+# ===========================================================================
+
+
+class TestParametersKeySeparation:
+    """MicroParameters and MacroParameters must not share any field names."""
+
+    def test_no_overlapping_field_names(self):
+        """MicroParameters and MacroParameters define no fields with the same name."""
+        micro_keys = {f.name for f in dataclasses.fields(MicroParameters)}
+        macro_keys = {f.name for f in dataclasses.fields(MacroParameters)}
+        overlap = micro_keys & macro_keys
+        assert overlap == set(), f"Overlapping field names: {overlap}"
