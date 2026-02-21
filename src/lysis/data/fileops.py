@@ -152,11 +152,13 @@ import numpy as np
 import h5py
 
 from ..config.constants import CONST
+from ..config.paramcheck import load_macro_params, load_micro_params
 from .dataspec import (
     DataCollectionSpec,
     DataSetSpec,
     DataCollectionType,
     BaseParamsType,
+    fortran_versions,
     parse_shape,
     check_dataset_spec,
 )
@@ -177,6 +179,55 @@ def _not_implemented(*args, **kwargs):
     :raises NotImplementedError: Always raised when called
     """
     raise NotImplementedError("This function is not yet implemented.")
+
+
+def _validate_fortran_params(params: BaseParamsType, overrides: dict | None = None) -> None:
+    """Strictly validate parameters loaded from a Fortran data collection.
+
+    Called automatically by :func:`read_data_collection` whenever any collection
+    in the request belongs to a Fortran spec version (i.e. its version is in
+    :data:`~lysis.data.dataspec.fortran_versions`).
+
+    Delegates to :func:`~lysis.config.paramcheck.load_micro_params` and, when
+    macro parameters are present, to
+    :func:`~lysis.config.paramcheck.load_macro_params`.  Both functions raise
+    :exc:`ValueError` on missing independent parameters or inconsistent dependent
+    parameters.
+
+    :param params: Merged parameter dict as built by :func:`read_data_collection`.
+        Expected structure: ``{"micro_params": {...}, "macro_params": {...}}``.
+        Either sub-dict may be absent if that collection was not read.
+    :type params: BaseParamsType
+    :param overrides: Optional ``{python_name: value}`` substitutions forwarded
+        to both :func:`~lysis.config.paramcheck.load_micro_params` and
+        :func:`~lysis.config.paramcheck.load_macro_params`.  Use this to supply
+        missing parameters or correct known discrepancies in legacy data without
+        modifying the data files.  Because micro and macro independent parameter
+        names do not overlap (except ``log_lvl``, which has the same meaning in
+        both), a single combined dict is safe to pass to both functions.
+    :type overrides: dict | None
+    :raises ValueError: If any independent parameter is missing from the stored
+        data, or if any stored dependent parameter is inconsistent with the value
+        recalculated from the independent parameters.
+    :raises ValueError: If ``macro_params`` are present but ``micro_params`` are
+        not — macro validation requires a
+        :class:`~lysis.config.parameters.MicroParameters` instance.
+    """
+    micro_base = params.get("micro_params")
+    macro_base = params.get("macro_params")
+
+    micro_instance = None
+    if micro_base:
+        micro_instance = load_micro_params(micro_base, overrides=overrides)
+
+    if macro_base:
+        if micro_instance is None:
+            raise ValueError(
+                "Cannot validate macro_params: micro_params were not loaded. "
+                "Include the microscale_out collection when reading Fortran data "
+                "that contains macro_params."
+            )
+        load_macro_params(macro_base, micro_instance, overrides=overrides)
 
 
 def _read_file_text(
@@ -494,6 +545,7 @@ def read_data_collection(
     path: AnyStr,
     collections: list[DataCollectionSpec],
     file_codes: list[str],
+    param_overrides: dict | None = None,
 ) -> DataCollectionType:
     """Read complete data collections from disk.
 
@@ -517,12 +569,22 @@ def read_data_collection(
     :param file_codes: List of file code strings, one per collection. Use [""] for
                        no file codes. Example: ["_PLG2_tPA01_TB-xiii.dat"] for Fortran.
     :type file_codes: list[str]
+    :param param_overrides: Optional ``{python_name: value}`` substitutions passed to
+                            :func:`~lysis.config.paramcheck.load_micro_params` and
+                            :func:`~lysis.config.paramcheck.load_macro_params` when
+                            reading Fortran (≤v1.99.0) data.  Use this to supply
+                            missing parameters or correct known discrepancies in legacy
+                            data without modifying the data files.  Ignored for
+                            non-Fortran spec versions.
+    :type param_overrides: dict | None
     :return: Dictionary containing all loaded datasets plus a "params" key with merged
              parameters. For per-simulation storage, datasets are lists of arrays.
              For combined storage, datasets are single arrays.
     :rtype: DataCollectionType
     :raises FileNotFoundError: If sim=0 file is not found (no data exists)
     :raises KeyError: If required HDF5 dataset/group is not found
+    :raises ValueError: If Fortran parameters fail strict validation (missing independent
+                        parameters or inconsistent dependent parameters)
 
     Examples
     --------
@@ -625,6 +687,16 @@ def read_data_collection(
                         # Successfully read this simulation, add to list
                         data[name].append(dataset)
                         sim += 1
+
+    # Validate parameters for any Fortran-versioned collection that carries params.
+    # This mirrors the HDF5 version check (_validate_hdf5_version) and ensures
+    # paramcheck validation runs automatically — it is not possible to read Fortran
+    # data through this function without validation.
+    if any(
+        c.version in fortran_versions and c.params is not None for c in collections
+    ):
+        _validate_fortran_params(data["params"], overrides=param_overrides)
+
     return data
 
 

@@ -784,6 +784,11 @@ for _k, _v in tags.items():
     dataspec[_k] = dataspec[_v]
 del _k, _v
 
+# Spec versions that use Fortran file-based storage.
+# Derived from the tag system so this set stays in sync if tags are updated.
+# Used by fileops.read_data_collection to trigger paramcheck validation at read time.
+fortran_versions: frozenset[str] = frozenset({tags["fortran"]})
+
 
 def parse_shape(
     shape: tuple[int | str, ...], params: BaseParamsType = None
