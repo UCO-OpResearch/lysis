@@ -83,7 +83,8 @@ See Also
 - datastore.py : High-level interface using these specs
 """
 
-import os
+import copy
+import dataclasses
 
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -142,7 +143,7 @@ Represents all data in a collection (e.g., all microscale output datasets).
 """
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class DataSetSpec:
     """Specification for a single dataset's storage and structure.
 
@@ -210,8 +211,29 @@ class DataSetSpec:
     collection: str = field(init=False, default="")
     name: str = field(init=False, default="")
 
+    def __copy__(self):
+        # dataclasses.replace creates a new instance with the same init field values.
+        # Hidden fields (init=False) must be copied manually since they're not in __init__.
+        new = dataclasses.replace(self)
+        object.__setattr__(new, "version", self.version)
+        object.__setattr__(new, "collection", self.collection)
+        object.__setattr__(new, "name", self.name)
+        return new
 
-@dataclass(frozen=True)
+    def __deepcopy__(self, memo):
+        new = dataclasses.replace(
+            self,
+            dtype=copy.deepcopy(self.dtype, memo),
+            shape=copy.deepcopy(self.shape, memo),
+        )
+        object.__setattr__(new, "version", self.version)
+        object.__setattr__(new, "collection", self.collection)
+        object.__setattr__(new, "name", self.name)
+        memo[id(self)] = new
+        return new
+
+
+@dataclass(frozen=True, kw_only=True)
 class DataCollectionSpec:
     """Specification for a collection of related datasets.
 
@@ -286,6 +308,160 @@ class DataCollectionSpec:
     # Hidden fields — not in constructor, auto-populated by DataSpec
     version: str = field(init=False, default="")
     collection: str = field(init=False, default="")
+
+    def replace(self, **changes):
+        """Create a modified copy of this collection spec.
+
+        A recursive version of :func:`dataclasses.replace` that accepts changes
+        both to the fields of this :class:`DataCollectionSpec` *and* to the
+        :class:`DataSetSpec` entries stored inside ``self.data``. The original
+        object is never mutated.
+
+        Each keyword argument key must be one of:
+
+        - A named *init* field of :class:`DataCollectionSpec`
+          (``simulations_combined``, ``params``, or ``data``).
+        - A key present in ``self.data`` (i.e. a dataset name such as
+          ``"pli_first_time"``).
+
+        Each keyword argument value may be one of:
+
+        - A replacement object used directly (a :class:`DataSetSpec` or a
+          :class:`bool` for boolean fields such as ``simulations_combined``).
+        - A :class:`dict` of field changes forwarded to
+          :func:`dataclasses.replace` on the *current* child
+          :class:`DataSetSpec` — unspecified fields keep their original values.
+
+        :param changes: Keyword arguments mapping field names or dataset names
+            to their new values or dicts of sub-field changes.
+        :raises KeyError: If a key is not an init field of this class and not a
+            key in ``self.data``.
+        :raises ValueError: If a value is not a :class:`DataSetSpec`, :class:`bool`,
+            or :class:`dict`.
+        :return: A new, frozen :class:`DataCollectionSpec` with the specified
+            changes applied. All unchanged ``data`` entries are deep-copied.
+        :rtype: DataCollectionSpec
+
+        Examples
+        --------
+        Toggle the ``simulations_combined`` flag::
+
+            new_coll = coll.replace(simulations_combined=False)
+
+        Replace the ``params`` spec with a new :class:`DataSetSpec`::
+
+            new_coll = coll.replace(
+                params=DataSetSpec(
+                    dataset_storage_type=DataSetStorageType.FILE_JSON,
+                    dtype=float,
+                )
+            )
+
+        Update only selected fields of the existing ``params`` spec::
+
+            new_coll = coll.replace(params={"dtype": np.float64})
+
+        Replace a named dataset entry with a new :class:`DataSetSpec`::
+
+            new_coll = coll.replace(pli_first_time=DataSetSpec(...))
+
+        Update only selected fields of a named dataset entry::
+
+            new_coll = coll.replace(pli_first_time={"dtype": np.float64})
+
+        Apply multiple changes in one call::
+
+            new_coll = coll.replace(
+                simulations_combined=False,
+                params={"dtype": np.float64},
+                pli_first_time={"data_location": "micro_data/pli_first_time"},
+            )
+
+        Replace the entire ``data`` dict (all entries at once)::
+
+            new_coll = coll.replace(
+                data={"pli_first_time": DataSetSpec(...), "sim_final_time": DataSetSpec(...)}
+            )
+
+        """
+        own_changes = {}
+        if "data" in changes.keys():
+            # Caller supplied a full replacement dict: deep-copy it so the new
+            # spec is fully independent of the caller's object, then remove the
+            # key from changes so the loop below does not encounter "data"
+            # (whose generic type dict[str, DataSetSpec] is not compatible with
+            # isinstance()).
+            new_data = copy.deepcopy(changes.pop("data"))
+        else:
+            # No full replacement supplied: start from a deep copy of the current
+            # data dict so that individual entry changes below are isolated from
+            # the original and unchanged entries are not shared with the new spec.
+            new_data = copy.deepcopy(self.data)
+
+        # Build a {field_name: field_type} lookup for every constructor-visible
+        # field.  Using the declared type lets us validate values via
+        # isinstance(v, field_types[k]) without a per-field if-statement.
+        #
+        # Note: the "data" field has type dict[str, DataSetSpec], a generic alias
+        # that isinstance() cannot accept.  That field is always popped from
+        # `changes` before this loop, so field_types["data"] is never passed to
+        # isinstance() here.
+        field_types = {f.name: f.type for f in dataclasses.fields(self) if f.init}
+
+        for k, v in changes.items():
+            if k in field_types:
+                # --- Change targets a field on this DataCollectionSpec ---
+                if isinstance(v, dict):
+                    # Dict form: apply the sub-field changes to the existing child
+                    # DataSetSpec via dataclasses.replace, preserving all other fields.
+                    own_changes[k] = dataclasses.replace(getattr(self, k), **v)
+                elif isinstance(v, field_types[k]):
+                    # Direct replacement: value must match the field's declared type.
+                    own_changes[k] = v
+                else:
+                    raise ValueError(
+                        f"Expected a {field_types[k].__name__} or dict for field "
+                        f"'{k}', got {type(v).__name__}: {v!r}"
+                    )
+            elif k in self.data.keys():
+                # --- Change targets a named dataset inside self.data ---
+                if isinstance(v, DataSetSpec):
+                    # Use the provided value directly, replacing the existing entry.
+                    new_data[k] = v
+                elif isinstance(v, dict):
+                    # Dict form: apply the sub-field changes to the existing entry,
+                    # based on the *original* spec (self.data[k]), not the copy.
+                    new_data[k] = dataclasses.replace(self.data[k], **v)
+                else:
+                    raise ValueError(
+                        f"Changes should be fields of this class, this class's data, "
+                        f"or a dict of changes for a DataSetSpec. {k, v}"
+                    )
+            else:
+                raise KeyError(k)
+
+        # Construct the new frozen DataCollectionSpec with the updated fields and
+        # data dict; dataclasses.replace handles the frozen constraint via object.__setattr__.
+        return dataclasses.replace(self, data=new_data, **own_changes)
+
+    def __copy__(self):
+        # dataclasses.replace creates a new instance with the same init field values.
+        # Hidden fields (init=False) must be copied manually since they're not in __init__.
+        new = dataclasses.replace(self)
+        object.__setattr__(new, "version", self.version)
+        object.__setattr__(new, "collection", self.collection)
+        return new
+
+    def __deepcopy__(self, memo):
+        new = dataclasses.replace(
+            self,
+            params=copy.deepcopy(self.params, memo),
+            data={k: copy.deepcopy(v, memo) for k, v in self.data.items()},
+        )
+        object.__setattr__(new, "version", self.version)
+        object.__setattr__(new, "collection", self.collection)
+        memo[id(self)] = new
+        return new
 
 
 class DataSpec:
