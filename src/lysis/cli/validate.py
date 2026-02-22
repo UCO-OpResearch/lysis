@@ -1,5 +1,6 @@
 """``lysis validate`` — validate simulation data against a specification."""
 
+import json
 import sys
 
 import click
@@ -29,8 +30,31 @@ from lysis.data.dataspec import dataspec, check_dataset_spec
     default="",
     help="File code for Fortran file naming.",
 )
+@click.option(
+    "--param-override",
+    "param_overrides",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help=(
+        "Override a parameter value during validation (repeatable). "
+        "KEY must be a member of MicroParameters or MacroParameters. "
+        "VALUE can be a scalar or a string that will parse as a Pint Quantity. "
+        "Example: --param-override total_molecules=100"
+    ),
+)
+@click.option(
+    "--param-alias",
+    "param_aliases",
+    multiple=True,
+    metavar="KEY=FORTRAN_NAME",
+    help=(
+        "Alias a Fortran variable name to a Python parameter (repeatable). "
+        "KEY is a Python parameter name; FORTRAN_NAME is the name in the log file. "
+        "Example: --param-alias bind_rate_tPA=kon"
+    ),
+)
 @click.pass_context
-def validate(ctx, data_path, spec, collections, file_code):
+def validate(ctx, data_path, spec, collections, file_code, param_overrides, param_aliases):
     """Validate simulation data against a specification.
 
     Reads data from DATA_PATH and checks each dataset against the expected
@@ -76,9 +100,43 @@ def validate(ctx, data_path, spec, collections, file_code):
 
     console.print(f"Validating against [bold]{spec_version}[/bold]...\n")
 
+    # Parse --param-override KEY=VALUE pairs
+    overrides = None
+    if param_overrides:
+        overrides = {}
+        for item in param_overrides:
+            if "=" not in item:
+                console.print(
+                    f"[red]Error:[/red] --param-override must be KEY=VALUE, got: {item!r}"
+                )
+                ctx.exit(1)
+                return
+            key, raw = item.split("=", 1)
+            try:
+                overrides[key] = json.loads(raw)
+            except json.JSONDecodeError:
+                overrides[key] = raw  # treat as bare string
+
+    # Parse --param-alias KEY=FORTRAN_NAME pairs
+    aliases = None
+    if param_aliases:
+        aliases = {}
+        for item in param_aliases:
+            if "=" not in item:
+                console.print(
+                    f"[red]Error:[/red] --param-alias must be KEY=FORTRAN_NAME, got: {item!r}"
+                )
+                ctx.exit(1)
+                return
+            key, fortran_name = item.split("=", 1)
+            aliases[key] = fortran_name
+
     # Read data
     try:
-        data = read_data_collection(data_path, spec_collections, file_codes)
+        data = read_data_collection(
+            data_path, spec_collections, file_codes,
+            param_overrides=overrides, param_aliases=aliases,
+        )
     except FileNotFoundError as e:
         console.print(f"[red]Error:[/red] Data file not found: {e}")
         ctx.exit(1)

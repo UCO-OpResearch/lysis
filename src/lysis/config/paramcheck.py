@@ -28,16 +28,17 @@ Log verification
 with comparison against a parameter object, raising :exc:`ValueError` on any
 mismatch.
 
-Overrides
----------
+Aliases and overrides
+---------------------
 
-All public functions accept an ``overrides`` keyword argument—a dict mapping
-Python parameter names to either:
+The public functions accept two optional keyword arguments:
 
-* **A direct value** (int, float, Quantity-string, etc.) — used as-is.
-* **A Fortran-name alias** (a bare identifier string, e.g. ``"runs"``) — the
-  parser looks up that Fortran name in the log file and uses its value.  This
-  also suppresses the "unknown Fortran name" error for the aliased entry.
+* ``aliases`` — a ``{python_name: fortran_name}`` dict that tells the parser
+  to look up an alternative Fortran name in the log file.  This also suppresses
+  the "unknown Fortran name" error for the aliased entry.  Used by the parse
+  and verify functions.
+* ``overrides`` — a ``{python_name: value}`` dict of direct values (int, float,
+  Quantity-string, etc.) used as-is.  Used by the load and verify functions.
 
 Note on ``kon`` in macro logs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -46,7 +47,7 @@ The Fortran macroscale code writes ``kon=`` for the tPA binding rate, while the
 microscale code writes ``ktPAon=``.  Only ``ktPAon`` appears in
 :meth:`~.parameters.MicroParameters.fortran_names`.  When parsing macro logs
 that contain ``kon=``, pass
-``overrides={"bind_rate_tPA": "kon"}`` to resolve it.
+``aliases={"bind_rate_tPA": "kon"}`` to resolve it.
 """
 
 import dataclasses
@@ -164,37 +165,6 @@ def _parse_fortran_kv(lines):
             result[m.group(1).lower()] = m.group(2).strip()
     return result
 
-
-_ALIAS_RE = re.compile(r'^[A-Za-z_]\w*$')
-
-
-def _split_overrides(overrides):
-    """Separate *overrides* into alias and direct-value dicts.
-
-    An override value that is a bare identifier string (matching
-    ``r'^[A-Za-z_]\\w*$'``) is treated as a Fortran-name alias: the parser
-    will look up that name in the log's raw key=value pairs.  Any other value
-    (int, float, Quantity-string, etc.) is used directly.
-
-    :param overrides: Raw overrides dict, or ``None``.
-    :return: ``(alias_map, direct_map)`` where *alias_map* maps
-        ``fortran_alias_lower → python_name`` and *direct_map* maps
-        ``python_name → value``.
-    :rtype: tuple[dict[str, str], dict[str, object]]
-    """
-    alias_map = {}   # fortran_alias_lower → python_name
-    direct_map = {}  # python_name → value
-
-    if not overrides:
-        return alias_map, direct_map
-
-    for py_name, val in overrides.items():
-        if isinstance(val, str) and _ALIAS_RE.match(val):
-            alias_map[val.lower()] = py_name
-        else:
-            direct_map[py_name] = val
-
-    return alias_map, direct_map
 
 
 def _apply_transform(raw_num, transform):
@@ -345,9 +315,8 @@ def load_micro_params(base_params, *, overrides=None, tolerance=1e-9):
         an HDF5 attribute group.
     :type base_params: dict[str, int | float | str]
     :param overrides: Optional ``{python_name: value}`` to supply missing
-        independent parameters or replace stored values.  A bare-identifier
-        string value is treated as a Fortran alias (looked up in *base_params*
-        as a key); any other value is used directly.
+        independent parameters or replace stored values.  Values are used
+        directly (int, float, Quantity-string, etc.).
     :type overrides: dict | None
     :param tolerance: Relative tolerance for comparing dependent parameter
         values (absolute when the calculated value is zero).
@@ -357,7 +326,7 @@ def load_micro_params(base_params, *, overrides=None, tolerance=1e-9):
     :raises ValueError: If required independent parameters are missing, or if
         stored dependent parameters do not match recalculated values.
     """
-    _, direct_overrides = _split_overrides(overrides)
+    direct_overrides = overrides if overrides else {}
 
     independent = set(inspect.signature(MicroParameters).parameters.keys())
 
@@ -402,7 +371,8 @@ def load_macro_params(base_params, micro_params, *, overrides=None, tolerance=1e
     :param micro_params: The associated :class:`~.parameters.MicroParameters`
         instance.  Must not be ``None``.
     :type micro_params: MicroParameters
-    :param overrides: Optional ``{python_name: value}`` overrides.
+    :param overrides: Optional ``{python_name: value}`` overrides.  Values are
+        used directly (int, float, Quantity-string, etc.).
     :type overrides: dict | None
     :param tolerance: Relative tolerance for dependent parameter comparison.
     :type tolerance: float
@@ -414,7 +384,7 @@ def load_macro_params(base_params, micro_params, *, overrides=None, tolerance=1e
     if micro_params is None:
         raise ValueError("micro_params is required for load_macro_params")
 
-    _, direct_overrides = _split_overrides(overrides)
+    direct_overrides = overrides if overrides else {}
 
     independent = set(inspect.signature(MacroParameters).parameters.keys())
     independent.discard('micro_params')  # Injected separately, not in base_params
@@ -528,7 +498,7 @@ def _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map):
 # Public log-parsing functions
 # ─────────────────────────────────────────────────────────────────────────────
 
-def parse_micro_log(path, *, overrides=None):
+def parse_micro_log(path, *, aliases=None):
     """Parse a Fortran microscale log file into Python parameter values.
 
     Reads from the start of *path* until the first ``stats =`` line (exclusive).
@@ -538,23 +508,23 @@ def parse_micro_log(path, *, overrides=None):
     :param path: Path to the micro log file
         (e.g. ``micro_PLG2_tPA01_TB-xiii.txt``).
     :type path: str | Path
-    :param overrides: Optional ``{python_name: value_or_alias}`` overrides.
-        A bare-identifier string value (e.g. ``"runs"``) causes that Fortran
-        name to map to *python_name* instead of raising an unknown-name error.
-    :type overrides: dict | None
+    :param aliases: Optional ``{python_name: fortran_name}`` aliases.
+        Each entry causes *fortran_name* in the log to map to *python_name*
+        instead of raising an unknown-name error.
+    :type aliases: dict | None
     :return: ``{python_name: value}`` for all recognized parameters.
     :rtype: dict
     :raises ValueError: If any numeric-valued Fortran name cannot be mapped to
         a Python parameter.
     """
-    alias_map, _ = _split_overrides(overrides)
+    alias_map = {v.lower(): k for k, v in aliases.items()} if aliases else {}
     inverse_map = _build_inverse_map(MicroParameters)
     units_dict = MicroParameters.units()
     stop_pattern = re.compile(r'^\s*stats\s*=')
     return _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map)
 
 
-def parse_macro_log(path, *, overrides=None):
+def parse_macro_log(path, *, aliases=None):
     """Parse a Fortran macroscale log file into Python parameter values.
 
     Reads from the start of *path* until the first line beginning with
@@ -572,18 +542,18 @@ def parse_macro_log(path, *, overrides=None):
         ``bind_rate_tPA`` maps to ``ktPAon`` in
         :meth:`~.parameters.MicroParameters.fortran_names`, so ``kon=`` lines
         in macro logs will raise :exc:`ValueError` unless you pass
-        ``overrides={"bind_rate_tPA": "kon"}``.
+        ``aliases={"bind_rate_tPA": "kon"}``.
 
     :param path: Path to the macro log file
         (e.g. ``macro_TB-xiii__21_105_00.txt``).
     :type path: str | Path
-    :param overrides: Optional ``{python_name: value_or_alias}`` overrides.
-    :type overrides: dict | None
+    :param aliases: Optional ``{python_name: fortran_name}`` aliases.
+    :type aliases: dict | None
     :return: ``{python_name: value}`` for all recognized parameters.
     :rtype: dict
     :raises ValueError: If any numeric-valued Fortran name cannot be mapped.
     """
-    alias_map, _ = _split_overrides(overrides)
+    alias_map = {v.lower(): k for k, v in aliases.items()} if aliases else {}
     # MacroParameters takes precedence for shared names (e.g. seed, simulations)
     inverse_map = _build_inverse_map(MacroParameters, extra_cls=MicroParameters)
     units_dict = {**MicroParameters.units(), **MacroParameters.units()}
@@ -632,7 +602,7 @@ def _verify_params(params_obj, log_params, units_dict, tolerance, direct_overrid
 # Public verification functions
 # ─────────────────────────────────────────────────────────────────────────────
 
-def verify_micro_params(micro_params, log_path, *, overrides=None, tolerance=1e-9):
+def verify_micro_params(micro_params, log_path, *, aliases=None, overrides=None, tolerance=1e-9):
     """Verify that a :class:`~.parameters.MicroParameters` matches a micro log.
 
     Parses *log_path* and compares every recognized parameter value against
@@ -643,10 +613,13 @@ def verify_micro_params(micro_params, log_path, *, overrides=None, tolerance=1e-
     :type micro_params: MicroParameters
     :param log_path: Path to the Fortran micro log file.
     :type log_path: str | Path
-    :param overrides: Optional ``{python_name: value_or_alias}``.  A
-        direct-value override replaces the stored attribute in the comparison
-        (e.g. to accept a known corrected value).  A string alias remaps an
-        otherwise-unknown Fortran name.
+    :param aliases: Optional ``{python_name: fortran_name}`` aliases for the
+        log parser.  Each entry causes *fortran_name* in the log to map to
+        *python_name* instead of raising an unknown-name error.
+    :type aliases: dict | None
+    :param overrides: Optional ``{python_name: value}`` direct overrides.
+        Each entry replaces the stored attribute in the comparison (e.g. to
+        accept a known corrected value).
     :type overrides: dict | None
     :param tolerance: Relative (or absolute when zero) numeric tolerance.
     :type tolerance: float
@@ -654,8 +627,8 @@ def verify_micro_params(micro_params, log_path, *, overrides=None, tolerance=1e-
     :raises ValueError: If any log parameter value does not match
         *micro_params* within *tolerance*.
     """
-    _, direct_overrides = _split_overrides(overrides)
-    log_params = parse_micro_log(log_path, overrides=overrides)
+    direct_overrides = overrides if overrides else {}
+    log_params = parse_micro_log(log_path, aliases=aliases)
     units_dict = MicroParameters.units()
 
     mismatches = _verify_params(
@@ -669,7 +642,7 @@ def verify_micro_params(micro_params, log_path, *, overrides=None, tolerance=1e-
         raise ValueError(f"MicroParameters do not match log: {details}")
 
 
-def verify_macro_params(macro_params, log_path, *, overrides=None, tolerance=1e-9):
+def verify_macro_params(macro_params, log_path, *, aliases=None, overrides=None, tolerance=1e-9):
     """Verify that a :class:`~.parameters.MacroParameters` matches a macro log.
 
     Like :func:`verify_micro_params` but for macroscale parameters.
@@ -681,7 +654,10 @@ def verify_macro_params(macro_params, log_path, *, overrides=None, tolerance=1e-
     :type macro_params: MacroParameters
     :param log_path: Path to the Fortran macro log file.
     :type log_path: str | Path
-    :param overrides: Optional ``{python_name: value_or_alias}`` overrides.
+    :param aliases: Optional ``{python_name: fortran_name}`` aliases for the
+        log parser.
+    :type aliases: dict | None
+    :param overrides: Optional ``{python_name: value}`` direct overrides.
     :type overrides: dict | None
     :param tolerance: Relative (or absolute when zero) numeric tolerance.
     :type tolerance: float
@@ -689,8 +665,8 @@ def verify_macro_params(macro_params, log_path, *, overrides=None, tolerance=1e-
     :raises ValueError: If any log parameter value does not match
         *macro_params* (or its associated *micro_params*) within *tolerance*.
     """
-    _, direct_overrides = _split_overrides(overrides)
-    log_params = parse_macro_log(log_path, overrides=overrides)
+    direct_overrides = overrides if overrides else {}
+    log_params = parse_macro_log(log_path, aliases=aliases)
 
     units_dict = {**MicroParameters.units(), **MacroParameters.units()}
     micro_field_names = {f.name for f in dataclasses.fields(MicroParameters)}

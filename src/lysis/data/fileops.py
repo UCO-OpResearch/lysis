@@ -346,7 +346,7 @@ def _read_file_parsed(
     params: BaseParamsType = None,
     sim: int = None,
     file_code: str = "",
-    overrides: dict | None = None,
+    aliases: dict | None = None,
 ) -> BaseParamsType:
     """Read parameters by parsing a Fortran log file.
 
@@ -368,9 +368,9 @@ def _read_file_parsed(
     :type sim: int, optional
     :param file_code: Code inserted into the filename template.
     :type file_code: str, optional
-    :param overrides: Optional ``{python_name: value_or_alias}`` forwarded to
-        the underlying parser (e.g. to resolve unknown Fortran names).
-    :type overrides: dict | None
+    :param aliases: Optional ``{python_name: fortran_name}`` aliases forwarded
+        to the underlying parser (e.g. to resolve unknown Fortran names).
+    :type aliases: dict | None
     :return: ``{params_key: {python_name: base_value, ...}}`` ready for
         merging into the data-collection params dict.
     :rtype: BaseParamsType
@@ -385,7 +385,7 @@ def _read_file_parsed(
     filepath = os.path.join(
         path, spec.data_location.format(sim=sim, file_code=file_code)
     )
-    parsed = parser(filepath, overrides=overrides)
+    parsed = parser(filepath, aliases=aliases)
 
     base_dict = {}
     for k, v in parsed.items():
@@ -614,6 +614,7 @@ def read_data_collection(
     collections: list[DataCollectionSpec],
     file_codes: list[str],
     param_overrides: dict | None = None,
+    param_aliases: dict | None = None,
 ) -> DataCollectionType:
     """Read complete data collections from disk.
 
@@ -645,6 +646,12 @@ def read_data_collection(
                             data without modifying the data files.  Ignored for
                             non-Fortran spec versions.
     :type param_overrides: dict | None
+    :param param_aliases: Optional ``{python_name: fortran_name}`` aliases passed to
+                          the log parser when reading Fortran data.  Each entry causes
+                          *fortran_name* in the log to map to *python_name* instead of
+                          raising an unknown-name error.  Ignored for non-Fortran spec
+                          versions.
+    :type param_aliases: dict | None
     :return: Dictionary containing all loaded datasets plus a "params" key with merged
              parameters. For per-simulation storage, datasets are lists of arrays.
              For combined storage, datasets are single arrays.
@@ -724,7 +731,7 @@ def read_data_collection(
                     path,
                     collection.params,
                     file_code=file_code,
-                    overrides=param_overrides,
+                    aliases=param_aliases,
                 )
             else:
                 params = read_dataset(

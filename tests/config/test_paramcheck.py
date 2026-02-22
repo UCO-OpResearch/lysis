@@ -345,12 +345,12 @@ class TestParseMicroLog:
         # The later nodes=13 should overwrite Setting nodes=99
         assert result["nodes_in_micro_row"] == pytest.approx(13)
 
-    def test_alias_override_resolves_unknown(self, tmp_path):
-        """overrides={"micro_simulations": "runs"} maps runs= to micro_simulations."""
+    def test_alias_resolves_unknown(self, tmp_path):
+        """aliases={"micro_simulations": "runs"} maps runs= to micro_simulations."""
         content = " runs=       50000\n stats=1\n"
         path = _write_log(content, tmp_path)
 
-        result = parse_micro_log(path, overrides={"micro_simulations": "runs"})
+        result = parse_micro_log(path, aliases={"micro_simulations": "runs"})
 
         assert "micro_simulations" in result
         assert result["micro_simulations"] == pytest.approx(50000)
@@ -463,6 +463,24 @@ class TestVerifyMicroParams:
         # With override: 0.5 µM is used as the expected value → matches log
         verify_micro_params(
             micro, path, overrides={"diss_const_tPA_woPLG": "0.5 micromolar"}
+        )
+
+    def test_alias_and_override_together(self, tmp_path):
+        """Both aliases and overrides can be used in a single verify call."""
+        # Log has 'runs=' (unknown) and a non-default KdtPAnoplg
+        content = " runs=       50000\n KdtPAnoplg=  0.500000000000000\n stats=1\n"
+        path = _write_log(content, tmp_path)
+        micro = MicroParameters(micro_simulations=50000)
+
+        # Without alias: 'runs' is unknown → raises
+        with pytest.raises(ValueError, match="runs"):
+            verify_micro_params(micro, path)
+
+        # With alias + override: alias resolves 'runs', override accepts 0.5 µM
+        verify_micro_params(
+            micro, path,
+            aliases={"micro_simulations": "runs"},
+            overrides={"diss_const_tPA_woPLG": "0.5 micromolar"},
         )
 
 

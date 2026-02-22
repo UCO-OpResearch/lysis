@@ -77,11 +77,21 @@ def _resolve_spec(spec_str):
     multiple=True,
     metavar="KEY=VALUE",
     help=(
-        "Override a parameter during validation (repeatable). "
-        "KEY must be a member of MicroParameters or MacroParameters."
-        "VALUE can be a scalar, a string that will parse as a Pint Quantity, or a Fortran-name alias. "
+        "Override a parameter value during validation (repeatable). "
+        "KEY must be a member of MicroParameters or MacroParameters. "
+        "VALUE can be a scalar or a string that will parse as a Pint Quantity. "
         "Example: --param-override total_molecules=100 --param-override pore_size=1.0135um"
-        "--param-override bind_rate_tPA=kon"
+    ),
+)
+@click.option(
+    "--param-alias",
+    "param_aliases",
+    multiple=True,
+    metavar="KEY=FORTRAN_NAME",
+    help=(
+        "Alias a Fortran variable name to a Python parameter (repeatable). "
+        "KEY is a Python parameter name; FORTRAN_NAME is the name in the log file. "
+        "Example: --param-alias bind_rate_tPA=kon"
     ),
 )
 @click.pass_context
@@ -95,6 +105,7 @@ def convert(
     file_code,
     dry_run,
     param_overrides,
+    param_aliases,
 ):
     """Convert simulation data between specification formats.
 
@@ -108,7 +119,7 @@ def convert(
         lysis convert input.h5 output.h5 -f v1.99.0 -t v2.0.0 --dry-run
         lysis convert ./data/ out.h5 -f fortran -t hdf5 --param-override total_molecules=100
         lysis convert ./data/ out.h5 -f fortran -t hdf5 --param-override pore_size=1.0135um
-        lysis convert ./data/ out.h5 -f fortran -t hdf5 --param-override bind_rate_tPA=kon
+        lysis convert ./data/ out.h5 -f fortran -t hdf5 --param-alias bind_rate_tPA=kon
         lysis convert ./data/ out.h5 -f fortran -t hdf5 --micro-log micro_PLG2_tPA01.txt
         lysis convert ./data/ out.h5 -f fortran -t hdf5 --macro-log macro_TB-xiii__21_105.txt
         lysis convert ./data/ out.h5 -f fortran -t hdf5 --micro-log micro.txt --macro-log macro.txt
@@ -183,10 +194,25 @@ def convert(
             except json.JSONDecodeError:
                 overrides[key] = raw  # treat as bare string
 
+    # Parse --param-alias KEY=FORTRAN_NAME pairs
+    aliases = None
+    if param_aliases:
+        aliases = {}
+        for item in param_aliases:
+            if "=" not in item:
+                console.print(
+                    f"[red]Error:[/red] --param-alias must be KEY=FORTRAN_NAME, got: {item!r}"
+                )
+                ctx.exit(1)
+                return
+            key, fortran_name = item.split("=", 1)
+            aliases[key] = fortran_name
+
     # Read
     try:
         data = read_data_collection(
-            input_path, in_collections, file_codes, param_overrides=overrides
+            input_path, in_collections, file_codes,
+            param_overrides=overrides, param_aliases=aliases,
         )
     except FileNotFoundError as e:
         console.print(f"[red]Error:[/red] Input file not found: {e}")

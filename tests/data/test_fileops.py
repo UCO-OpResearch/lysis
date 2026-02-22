@@ -787,9 +787,9 @@ class TestReadFileParsed:
         with pytest.raises(NotImplementedError, match="unknown_collection"):
             _read_file_parsed(str(tmp_path), spec)
 
-    def test_overrides_passed_through(self, tmp_path):
-        """Overrides resolve unknown Fortran names via the parser."""
-        # Log with 'runs=' instead of 'simulations=' — would fail without override
+    def test_aliases_passed_through(self, tmp_path):
+        """Aliases resolve unknown Fortran names via the parser."""
+        # Log with 'runs=' instead of 'simulations=' — would fail without alias
         content = textwrap.dedent("""\
          runs=       50000
           stats=        1000
@@ -798,7 +798,7 @@ class TestReadFileParsed:
         spec = _make_parsed_spec()
         result = _read_file_parsed(
             str(tmp_path), spec,
-            overrides={"micro_simulations": "runs"},
+            aliases={"micro_simulations": "runs"},
         )
         assert result["micro_params"]["micro_simulations"] == pytest.approx(50000)
 
