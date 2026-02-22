@@ -23,6 +23,9 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "real_data: tests requiring the full ~665MB dataset (skipped if missing)",
+]
 
 [tool.black]
 line-length = 88

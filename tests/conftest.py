@@ -1,5 +1,7 @@
 """Shared fixtures for lysis.data unit tests."""
 
+import pathlib
+
 import pytest
 import numpy as np
 
@@ -105,3 +107,36 @@ def per_sim_collection_spec(json_spec):
         params=json_spec,
         data={"arr": sim_spec},
     )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Real data fixtures
+# ──────────────────────────────────────────────────────────────────────
+
+_REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+_FIXTURE_DIR = _REPO_ROOT / "tests" / "fixtures" / "fortran_sample"
+_FULL_DATA_DIR = _REPO_ROOT / "data" / "2026-02-18-1723"
+
+
+@pytest.fixture
+def fortran_sample_path():
+    """Path to the committed truncated Fortran data fixture.
+
+    Returns the path to tests/fixtures/fortran_sample/, which contains
+    a truncated subset of real Fortran simulation output.
+    """
+    if not _FIXTURE_DIR.exists():
+        pytest.skip("Truncated fixture not found at tests/fixtures/fortran_sample/")
+    return str(_FIXTURE_DIR)
+
+
+@pytest.fixture
+def full_data_path():
+    """Path to the full (~665MB) Fortran data directory (local only).
+
+    Tests using this fixture should be marked with @pytest.mark.real_data
+    so they are skipped in CI.
+    """
+    if not _FULL_DATA_DIR.exists():
+        pytest.skip("Full dataset not found at data/2026-02-18-1723/")
+    return str(_FULL_DATA_DIR)
