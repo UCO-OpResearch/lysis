@@ -152,7 +152,9 @@ import numpy as np
 import h5py
 
 from ..config.constants import CONST
-from ..config.paramcheck import load_macro_params, load_micro_params
+from pint import Quantity
+
+from ..config.paramcheck import load_macro_params, load_micro_params, parse_micro_log
 from .dataspec import (
     DataCollectionSpec,
     DataSetSpec,
@@ -332,6 +334,69 @@ def _read_file_json(
     return data
 
 
+_COLLECTION_LOG_PARSER = {
+    ("v1.99.0", "microscale_out"): (parse_micro_log, "micro_params"),
+}
+"""(spec, Map collection name) → (parser_function, params_key) for FILE_PARSED storage."""
+
+
+def _read_file_parsed(
+    path: AnyStr,
+    spec: DataSetSpec,
+    params: BaseParamsType = None,
+    sim: int = None,
+    file_code: str = "",
+    overrides: dict | None = None,
+) -> BaseParamsType:
+    """Read parameters by parsing a Fortran log file.
+
+    Delegates to the appropriate log parser based on the collection name
+    in *spec*.  The parser returns ``{python_name: value}`` (with
+    :class:`~pint.Quantity` objects for dimensioned parameters).  This
+    function converts those to base types (strings for Quantities, numbers
+    for unitless params) so the result matches the format produced by
+    :meth:`~lysis.config.parameters.Parameters.to_basedict`.
+
+    :param path: Directory containing the log file.
+    :type path: AnyStr
+    :param spec: Dataset specification; ``spec.collection`` selects the parser
+        and ``spec.data_location`` provides the filename template.
+    :type spec: DataSetSpec
+    :param params: Not used; kept for interface consistency.
+    :type params: BaseParamsType, optional
+    :param sim: Not used; kept for interface consistency.
+    :type sim: int, optional
+    :param file_code: Code inserted into the filename template.
+    :type file_code: str, optional
+    :param overrides: Optional ``{python_name: value_or_alias}`` forwarded to
+        the underlying parser (e.g. to resolve unknown Fortran names).
+    :type overrides: dict | None
+    :return: ``{params_key: {python_name: base_value, ...}}`` ready for
+        merging into the data-collection params dict.
+    :rtype: BaseParamsType
+    :raises NotImplementedError: If ``spec.collection`` is not supported.
+    """
+    if (spec.version, spec.collection) not in _COLLECTION_LOG_PARSER:
+        raise NotImplementedError(
+            f"FILE_PARSED not supported for collection '{spec.collection}'"
+        )
+
+    parser, params_key = _COLLECTION_LOG_PARSER[spec.version, spec.collection]
+    filepath = os.path.join(
+        path, spec.data_location.format(sim=sim, file_code=file_code)
+    )
+    parsed = parser(filepath, overrides=overrides)
+
+    base_dict = {}
+    for k, v in parsed.items():
+        if isinstance(v, Quantity):
+            base_dict[k] = str(v)
+        else:
+            base_dict[k] = v
+
+    return {params_key: base_dict}
+
+
 def _validate_hdf5_version(file: h5py.File, path: AnyStr, version: str):
     """Check that an open HDF5 file has the expected dataspec_version attribute.
 
@@ -473,7 +538,7 @@ data_readers: dict[
     ],
 ] = {
     CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _read_file_text,  # Delimited text files (CSV, etc.)
-    CONST.DATASET_STORAGE_TYPE.FILE_PARSED: _not_implemented,  # Parameters printed in log files
+    CONST.DATASET_STORAGE_TYPE.FILE_PARSED: _read_file_parsed,  # Parameters parsed from log files
     CONST.DATASET_STORAGE_TYPE.FILE_BINARY: _read_file_binary,  # Raw binary files (Fortran)
     CONST.DATASET_STORAGE_TYPE.FILE_JSON: _read_file_json,  # JSON parameter files
     CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _read_hdf5_attr,  # HDF5 group attributes (params)
@@ -650,10 +715,21 @@ def read_data_collection(
             file_code = ""
 
         # Read parameters first - needed for resolving dynamic shapes in later datasets
-        if not collection.params is None:
-            params = read_dataset(
-                path, collection.params, params=None, file_code=file_code
-            )
+        if collection.params is not None:
+            if (
+                collection.params.dataset_storage_type
+                == CONST.DATASET_STORAGE_TYPE.FILE_PARSED
+            ):
+                params = _read_file_parsed(
+                    path,
+                    collection.params,
+                    file_code=file_code,
+                    overrides=param_overrides,
+                )
+            else:
+                params = read_dataset(
+                    path, collection.params, params=None, file_code=file_code
+                )
             # Merge parameters from this collection with previously loaded params
             data["params"] = data["params"] | params
 

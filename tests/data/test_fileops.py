@@ -3,7 +3,8 @@
 Tests cover:
 
 * Low-level readers (``_read_file_text``, ``_read_file_binary``,
-  ``_read_file_json``, ``_read_hdf5_dataset``, ``_read_hdf5_attr``)
+  ``_read_file_json``, ``_read_file_parsed``, ``_read_hdf5_dataset``,
+  ``_read_hdf5_attr``)
 * Low-level writers (``_write_file_text``, ``_write_file_binary``,
   ``_write_file_json``, ``_write_hdf5_dataset``, ``_write_hdf5_attr``)
 * Mid-level dispatch (``read_dataset``, ``write_dataset``)
@@ -12,21 +13,26 @@ Tests cover:
 """
 
 import json
+import textwrap
 
 import h5py
 import numpy as np
 import pytest
+
+from pint import Quantity
 
 from lysis.config.constants import CONST
 from lysis.data.dataspec import (
     DataCollectionSpec,
     DataSetSpec,
     check_dataset_spec,
+    dataspec,
     parse_shape,
 )
 from lysis.data.fileops import (
     _read_file_binary,
     _read_file_json,
+    _read_file_parsed,
     _read_file_text,
     _read_hdf5_attr,
     _read_hdf5_dataset,
@@ -703,3 +709,136 @@ class TestWriteCreatesVersion:
         data = np.array([1.0, 2.0], dtype=np.float64)
         with pytest.raises(ValueError, match="mismatch"):
             _write_hdf5_dataset(data, h5_path, spec)
+
+
+# ---------------------------------------------------------------------------
+# _read_file_parsed tests
+# ---------------------------------------------------------------------------
+
+# Minimal micro log content for _read_file_parsed tests.
+# Uses a subset of parameters that parse_micro_log can handle.
+_MICRO_LOG_FOR_FILEOPS = textwrap.dedent("""\
+ seed=  2133256963
+ nodes=          13
+ KdtPAnoplg=  0.360000000000000
+ simulations=       50000
+ KdtPAyesplg=  2.000000000000000E-002
+ KdPLGnicked=   2.20000000000000
+ KdPLGintact=   38.0000000000000
+  kncat=   5.00000000000000
+  kapcat=  0.100000000000000
+  ktPAon=  0.100000000000000
+  kaoff10=  3.600000000000000E-002
+  kaoff12=  2.000000000000000E-003
+  kplioff=   57.6000000000000
+  kplgoffnick=  0.220000000000000
+  kplgon=  0.100000000000000
+  kplgoff=   3.80000000000000
+  freeplg=   2.00000000000000
+  kdeg=   5.00000000000000
+  stats=        1000
+""")
+
+
+def _make_parsed_spec(version="v1.99.0", collection="microscale_out"):
+    """Build a FILE_PARSED DataSetSpec with the given version and collection name."""
+    spec = DataSetSpec(
+        dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_PARSED,
+        dtype=Quantity,
+        data_location="micro{file_code}.txt",
+    )
+    object.__setattr__(spec, "version", version)
+    object.__setattr__(spec, "collection", collection)
+    return spec
+
+
+class TestReadFileParsed:
+    """Tests for :func:`_read_file_parsed`."""
+
+    def test_parses_micro_log_to_params_dict(self, tmp_path):
+        """Parsed log returns dict with 'micro_params' key and expected values."""
+        (tmp_path / "micro.txt").write_text(_MICRO_LOG_FOR_FILEOPS)
+        spec = _make_parsed_spec()
+        result = _read_file_parsed(str(tmp_path), spec)
+
+        assert "micro_params" in result
+        micro = result["micro_params"]
+        # nodes=13 maps to nodes_in_micro_row
+        assert micro["nodes_in_micro_row"] == pytest.approx(13)
+        # simulations=50000 maps to micro_simulations
+        assert micro["micro_simulations"] == pytest.approx(50000)
+
+    def test_quantities_converted_to_strings(self, tmp_path):
+        """Quantity values are converted to string representations (not Quantity objects)."""
+        (tmp_path / "micro.txt").write_text(_MICRO_LOG_FOR_FILEOPS)
+        spec = _make_parsed_spec()
+        result = _read_file_parsed(str(tmp_path), spec)
+
+        micro = result["micro_params"]
+        # KdtPAnoplg → diss_const_tPA_woPLG is a Quantity in the parser output
+        assert "diss_const_tPA_woPLG" in micro
+        val = micro["diss_const_tPA_woPLG"]
+        assert isinstance(val, str)
+        assert "0.36" in val
+
+    def test_unsupported_collection_raises(self, tmp_path):
+        """NotImplementedError raised for unknown collection."""
+        spec = _make_parsed_spec(collection="unknown_collection")
+        with pytest.raises(NotImplementedError, match="unknown_collection"):
+            _read_file_parsed(str(tmp_path), spec)
+
+    def test_overrides_passed_through(self, tmp_path):
+        """Overrides resolve unknown Fortran names via the parser."""
+        # Log with 'runs=' instead of 'simulations=' — would fail without override
+        content = textwrap.dedent("""\
+         runs=       50000
+          stats=        1000
+        """)
+        (tmp_path / "micro.txt").write_text(content)
+        spec = _make_parsed_spec()
+        result = _read_file_parsed(
+            str(tmp_path), spec,
+            overrides={"micro_simulations": "runs"},
+        )
+        assert result["micro_params"]["micro_simulations"] == pytest.approx(50000)
+
+
+class TestReadDataCollectionFileParsed:
+    """Integration test: read_data_collection with FILE_PARSED params."""
+
+    def test_read_collection_file_parsed(self, tmp_path):
+        """End-to-end: read v1.99.0 microscale_out with parsed params and binary data."""
+        # Write micro log file
+        (tmp_path / "micro.txt").write_text(_MICRO_LOG_FOR_FILEOPS)
+
+        # Write a simple binary data file for one of the datasets (lysis)
+        lysis_data = np.array([100.0, 200.0, 300.0], dtype=np.float64)
+        lysis_data.tofile(tmp_path / "lysis.dat")
+
+        # Use the real v1.99.0 microscale_out spec but only read 'lysis' dataset
+        # to keep the test simple. Build a trimmed collection spec.
+        real_spec = dataspec["v1.99.0"]["microscale_out"]
+        trimmed = DataCollectionSpec(
+            simulations_combined=True,
+            params=real_spec.params,
+            data={"lysis": real_spec.data["lysis"]},
+        )
+        # Use empty version to skip _validate_fortran_params (tested separately
+        # in test_paramcheck.py). This test focuses on the FILE_PARSED read path.
+        object.__setattr__(trimmed, "version", "")
+        object.__setattr__(trimmed, "collection", "microscale_out")
+
+        data = read_data_collection(
+            str(tmp_path),
+            collections=[trimmed],
+            file_codes=[""],
+        )
+
+        # Verify params were parsed
+        assert "micro_params" in data["params"]
+        assert data["params"]["micro_params"]["micro_simulations"] == pytest.approx(
+            50000
+        )
+
+        # Verify data was read
+        np.testing.assert_array_equal(data["lysis"], lysis_data)
