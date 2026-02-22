@@ -328,7 +328,6 @@ class Parameters:
                     quant_params[k] = Q_(v)
             else:
                 quant_params[k] = v
-        print(quant_params)
         return cls(**quant_params)
 
 

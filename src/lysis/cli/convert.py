@@ -59,7 +59,12 @@ def _resolve_spec(spec_str):
 @click.option(
     "--file-code",
     default="",
-    help="File code for Fortran file naming (e.g. '_PLG2_tPA01_TB-xiii.dat').",
+    help=(
+        "File code(s) for Fortran file naming (e.g. '_PLG2_tPA01_TB-xiii.dat')."
+        "Can be blank (default), a single string that will be used for all collections, "
+        "or a comma-separated list matching the list of collections."
+        "Example: --file-code _PLG2_tPA01_TB-xiii,_PLG2_tPA01_TB-xiii,_TB-xiii__21_105"
+    ),
 )
 @click.option(
     "--dry-run",
@@ -74,8 +79,9 @@ def _resolve_spec(spec_str):
     help=(
         "Override a parameter during validation (repeatable). "
         "KEY must be a member of MicroParameters or MacroParameters."
-        "VALUE can be a scalar, a string that will parse as a Pint Quantity, or a Fortran-name aliases. "
-        "Example: --param-override n_tPA=100 --param-override bind_rate_tPA=kon"
+        "VALUE can be a scalar, a string that will parse as a Pint Quantity, or a Fortran-name alias. "
+        "Example: --param-override total_molecules=100 --param-override pore_size=1.0135um"
+        "--param-override bind_rate_tPA=kon"
     ),
 )
 @click.pass_context
@@ -103,6 +109,9 @@ def convert(
         lysis convert ./data/ out.h5 -f fortran -t hdf5 --param-override total_molecules=100
         lysis convert ./data/ out.h5 -f fortran -t hdf5 --param-override pore_size=1.0135um
         lysis convert ./data/ out.h5 -f fortran -t hdf5 --param-override bind_rate_tPA=kon
+        lysis convert ./data/ out.h5 -f fortran -t hdf5 --micro-log micro_PLG2_tPA01.txt
+        lysis convert ./data/ out.h5 -f fortran -t hdf5 --macro-log macro_TB-xiii__21_105.txt
+        lysis convert ./data/ out.h5 -f fortran -t hdf5 --micro-log micro.txt --macro-log macro.txt
     """
     from lysis.data.dataconvert import convert_data
     from lysis.data.fileops import read_data_collection, write_data_collection
@@ -136,7 +145,18 @@ def convert(
 
     in_collections = [dataspec[in_version][n] for n in collection_names]
     out_collections = [dataspec[out_version][n] for n in collection_names]
-    file_codes = [file_code] * len(collection_names)
+    if file_code:
+        file_codes = [f.strip() for f in file_code.split(",")]
+        if len(file_codes) == 1:
+            file_codes = file_codes * len(collection_names)
+        elif not len(file_codes) == len(collection_names):
+            console.print(
+                f"[red]Error:[/red] --file-code must be none, one, or one-per-collection, got: {item!r}"
+            )
+            ctx.exit(1)
+            return
+    else:
+        file_codes = [""] * len(collection_names)
 
     if verbose or dry_run:
         console.print(f"Converting: {in_version} -> {out_version}")
