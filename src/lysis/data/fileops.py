@@ -730,8 +730,14 @@ def read_data_collection(
                 params = read_dataset(
                     path, collection.params, params=None, file_code=file_code
                 )
-            # Merge parameters from this collection with previously loaded params
-            data["params"] = data["params"] | params
+            # Merge parameters from this collection with previously loaded params.
+            # Skip None values so old-spec macroscale collections don't erase
+            # microscale parameters that were already loaded.
+            data["params"] = data["params"] | {
+                k: v
+                for k, v in params.items()
+                if v is not None or k not in data["params"]
+            }
 
         # Read each dataset in the collection
         for name, spec in collection.data.items():
