@@ -374,8 +374,8 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
         "microscale_out": DataCollectionSpec(
             simulations_combined=True,
             params=DataSetSpec(
-                data_location="params.json",
-                dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_JSON,
+                data_location="micro{file_code}.txt",
+                dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_PARSED,
                 dtype=Quantity,
             ),
             data={

@@ -77,23 +77,23 @@ class Const:
         self.DATASPEC_VERSION_ATTR = "dataspec_version"
         self.NUMPY_SAVETXT_FORMATS = {
             # Boolean types - save as 0 or 1
-            np.dtype('bool'): '%d',
+            np.dtype("bool"): "%d",
             # Signed integer types
-            np.dtype('int8'): '%d',
-            np.dtype('int16'): '%d',
-            np.dtype('int32'): '%d',
-            np.dtype('int64'): '%d',
+            np.dtype("int8"): "%d",
+            np.dtype("int16"): "%d",
+            np.dtype("int32"): "%d",
+            np.dtype("int64"): "%d",
             # Unsigned integer types
-            np.dtype('uint8'): '%u',
-            np.dtype('uint16'): '%u',
-            np.dtype('uint32'): '%u',
-            np.dtype('uint64'): '%u',
+            np.dtype("uint8"): "%u",
+            np.dtype("uint16"): "%u",
+            np.dtype("uint32"): "%u",
+            np.dtype("uint64"): "%u",
             # Floating point types - use scientific notation with full precision
-            np.dtype('float32'): '%.9e',   # 32-bit float: ~7-9 decimal digits
-            np.dtype('float64'): '%.18e',  # 64-bit float: ~15-18 decimal digits
+            np.dtype("float32"): "%.9e",  # 32-bit float: ~7-9 decimal digits
+            np.dtype("float64"): "%.18e",  # 64-bit float: ~15-18 decimal digits
             # Object and string types - use string representation
-            np.dtype('object'): '%s',
-            np.dtype('U0'): '%s',  # Unicode strings (any length)
+            np.dtype("object"): "%s",
+            np.dtype("U0"): "%s",  # Unicode strings (any length)
         }
 
     def get_savetxt_format(self, dtype):
@@ -123,12 +123,12 @@ class Const:
             return self.NUMPY_SAVETXT_FORMATS[dtype]
 
         # Handle Unicode strings of any length (e.g., '<U75')
-        if dtype.kind == 'U':
-            return self.NUMPY_SAVETXT_FORMATS[np.dtype('U0')]
+        if dtype.kind == "U":
+            return self.NUMPY_SAVETXT_FORMATS[np.dtype("U0")]
 
         # Handle byte strings (e.g., 'S10')
-        if dtype.kind == 'S':
-            return '%s'
+        if dtype.kind == "S":
+            return "%s"
 
         # Handle structured arrays - return format for each field
         if dtype.names is not None:
@@ -218,6 +218,7 @@ class RandomDraw(IntEnum):
     :cvar CONFLICT_RESOLUTION: Random number for resolving bind/move conflicts
     :cvar RESTRICTED_MOVE: Random number for restricted movement to degraded edges
     """
+
     BINDING_TIME_WHEN_UNBINDING = 0
     BINDING_TIME_WHEN_MOVING = 1
     MICRO_UNBIND = 2
@@ -243,6 +244,7 @@ class BoundaryDirection(IntEnum):
     :cvar FRONT: Front boundary (negative depth direction, where tPA enters)
     :cvar BACK: Back boundary (positive depth direction, far side of clot)
     """
+
     TOP = 0
     BOTTOM = 1
     LEFT = 2
@@ -262,6 +264,7 @@ class BoundaryCondition(Enum):
     :cvar PERIODIC: Molecules wrap around to the opposite boundary (toroidal topology)
     :cvar CONTINUING: Molecules can pass through the boundary freely (open boundary)
     """
+
     REFLECTING = 0
     PERIODIC = 1
     CONTINUING = 2
@@ -289,6 +292,7 @@ class FiberDirection(Enum):
         The numeric values' signs indicate opposite directions, allowing
         direction reversal via negation: -FiberDirection.UP == FiberDirection.DOWN
     """
+
     UP = 1
     DOWN = -1
     LEFT = 2
@@ -325,6 +329,7 @@ class RunComponent(Flag):
         >>> if RunComponent.MACRO in components:
         >>>     run_macroscale()
     """
+
     NONE = 0
     MICRO = 1
     MICRO_POSTPROCESSING = 2
@@ -352,6 +357,7 @@ class MolStatus(IntEnum):
     :cvar MICRO_UNBOUND: Molecule was forcibly unbound during natural unbinding
         event, restricted movement until waiting period expires
     """
+
     UNBOUND = 0
     BOUND = 1
     MACRO_UNBOUND = 2
@@ -375,17 +381,20 @@ class DataSetStorageType(Enum):
     :cvar HDF5_DATASET: Store as HDF5 dataset (large numerical arrays, primary data storage)
     :cvar FILE_HDF5: Store as standalone HDF5 file
     :cvar FILE_TEXT: Store as human-readable text file
+    :cvar FILE_PARSED: Store as human-readable text file that must be parsed for values
     :cvar FILE_BINARY: Store as binary file (compact but not human-readable)
     :cvar FILE_JSON: Store as JSON file (human-readable, good for metadata)
 
     Note:
         HDF5 options require the h5py library. File options use standard Python I/O.
     """
+
     HDF5_ATTR = auto()
     HDF5_GROUP = auto()
     HDF5_DATASET = auto()
     FILE_HDF5 = auto()
     FILE_TEXT = auto()
+    FILE_PARSED = auto()
     FILE_BINARY = auto()
     FILE_JSON = auto()
 

@@ -181,7 +181,9 @@ def _not_implemented(*args, **kwargs):
     raise NotImplementedError("This function is not yet implemented.")
 
 
-def _validate_fortran_params(params: BaseParamsType, overrides: dict | None = None) -> None:
+def _validate_fortran_params(
+    params: BaseParamsType, overrides: dict | None = None
+) -> None:
     """Strictly validate parameters loaded from a Fortran data collection.
 
     Called automatically by :func:`read_data_collection` whenever any collection
@@ -471,6 +473,7 @@ data_readers: dict[
     ],
 ] = {
     CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _read_file_text,  # Delimited text files (CSV, etc.)
+    CONST.DATASET_STORAGE_TYPE.FILE_PARSED: _not_implemented,  # Parameters printed in log files
     CONST.DATASET_STORAGE_TYPE.FILE_BINARY: _read_file_binary,  # Raw binary files (Fortran)
     CONST.DATASET_STORAGE_TYPE.FILE_JSON: _read_file_json,  # JSON parameter files
     CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _read_hdf5_attr,  # HDF5 group attributes (params)
@@ -692,9 +695,7 @@ def read_data_collection(
     # This mirrors the HDF5 version check (_validate_hdf5_version) and ensures
     # paramcheck validation runs automatically — it is not possible to read Fortran
     # data through this function without validation.
-    if any(
-        c.version in fortran_versions and c.params is not None for c in collections
-    ):
+    if any(c.version in fortran_versions and c.params is not None for c in collections):
         _validate_fortran_params(data["params"], overrides=param_overrides)
 
     return data
@@ -927,6 +928,7 @@ data_writers: dict[
     ],
 ] = {
     CONST.DATASET_STORAGE_TYPE.FILE_TEXT: _write_file_text,  # Delimited text files (CSV, etc.)
+    CONST.DATASET_STORAGE_TYPE.FILE_PARSED: _not_implemented,  # Parameters printed in log files
     CONST.DATASET_STORAGE_TYPE.FILE_BINARY: _write_file_binary,  # Raw binary files (Fortran output)
     CONST.DATASET_STORAGE_TYPE.FILE_JSON: _write_file_json,  # JSON parameter files
     CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _write_hdf5_attr,  # HDF5 group attributes (params)
