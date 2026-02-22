@@ -1022,6 +1022,7 @@ data_writers: dict[
     CONST.DATASET_STORAGE_TYPE.FILE_JSON: _write_file_json,  # JSON parameter files
     CONST.DATASET_STORAGE_TYPE.HDF5_ATTR: _write_hdf5_attr,  # HDF5 group attributes (params)
     CONST.DATASET_STORAGE_TYPE.HDF5_DATASET: _write_hdf5_dataset,  # HDF5 datasets (numerical data)
+    None: lambda *args, **kwargs: None,
 }
 
 
