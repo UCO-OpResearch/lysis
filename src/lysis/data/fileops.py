@@ -335,7 +335,7 @@ def _read_file_json(
 
 
 _COLLECTION_LOG_PARSER = {
-    ("v1.99.0", "microscale_out"): (parse_micro_log, "micro_params"),
+    ("v1.95.0", "microscale_out"): (parse_micro_log, "micro_params"),
 }
 """(spec, Map collection name) → (parser_function, params_key) for FILE_PARSED storage."""
 

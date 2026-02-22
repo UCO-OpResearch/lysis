@@ -107,7 +107,10 @@ from typing import Any, AnyStr, List, Mapping, Union, Callable
 import numpy as np
 import h5py
 
-from ..config.constants import CONST
+from pint import Quantity
+
+from ..config.constants import CONST, Q_
+from ..config.parameters import Parameters
 from .dataspec import (
     DataCollectionSpec,
     DataCollectionType,
@@ -844,6 +847,71 @@ def _not_implemented(dataset_name: str, input_spec: str, output_spec: str):
     return _raise_error
 
 
+def _convert_params_add_units(params: dict) -> dict:
+    """Convert parameters from v1.95.0 (bare magnitudes) to v1.99.0 (with units).
+
+    For each parameter section that is a dict, wraps numeric values that have
+    known units (from :meth:`Parameters.units`) as Pint Quantity strings
+    (e.g., ``0.000534`` → ``"0.000534 centimeter"``). Non-numeric values and
+    parameters without known units pass through unchanged.
+
+    :param params: Parameters dict with bare magnitude values
+    :type params: dict
+    :return: Parameters dict with dimensioned values as unit strings
+    :rtype: dict
+    """
+    units = Parameters.units()
+    out = {}
+    for section_key, section in params.items():
+        if not isinstance(section, dict):
+            out[section_key] = section
+            continue
+        out[section_key] = {}
+        for key, value in section.items():
+            if key in units and isinstance(value, (int, float)):
+                out[section_key][key] = str(Q_(value, units[key]))
+            else:
+                out[section_key][key] = value
+    return out
+
+
+def _convert_params_strip_units(params: dict) -> dict:
+    """Convert parameters from v1.99.0 (with units) to v1.95.0 (bare magnitudes).
+
+    For each parameter section that is a dict, strips units from string values
+    that have known units (from :meth:`Parameters.units`), converting them to
+    bare magnitudes in the canonical unit (e.g., ``"0.000534 centimeter"`` →
+    ``0.000534``). Non-string values and parameters without known units pass
+    through unchanged.
+
+    :param params: Parameters dict with dimensioned string values
+    :type params: dict
+    :return: Parameters dict with bare magnitude values
+    :rtype: dict
+    """
+    units = Parameters.units()
+    out = {}
+    for section_key, section in params.items():
+        if not isinstance(section, dict):
+            out[section_key] = section
+            continue
+        out[section_key] = {}
+        for key, value in section.items():
+            if key in units and isinstance(value, str):
+                out[section_key][key] = Q_(value).to(units[key]).magnitude
+            else:
+                out[section_key][key] = value
+    return out
+
+
+# Registry mapping (input_spec, output_spec) pairs to parameter converter functions.
+# Used by convert_data() to transform parameter dictionaries between spec versions.
+params_converters: dict[tuple[str, str], Callable] = {
+    ("v1.95.0", "v1.99.0"): _convert_params_add_units,
+    ("v1.99.0", "v1.95.0"): _convert_params_strip_units,
+}
+
+
 # Dictionary mapping (input_spec, output_spec) pairs to dataset converter functions
 # Structure: {(input_version, output_version): {dataset_name: converter_function}}
 #
@@ -862,6 +930,22 @@ def _not_implemented(dataset_name: str, input_spec: str, output_spec: str):
 data_converters: dict[
     tuple[str, str], dict[str, Callable[[DataCollectionType], DataSetType]]
 ] = {
+    # ============================================================================
+    # Convert from v1.95.0 to v1.99.0 (identity — data datasets are identical)
+    # ============================================================================
+    ("v1.95.0", "v1.99.0"): {
+        name: (lambda data, n=name: data[n])
+        for collection in dataspec["v1.95.0"].values()
+        for name in collection.data
+    },
+    # ============================================================================
+    # Convert from v1.99.0 to v1.95.0 (identity — data datasets are identical)
+    # ============================================================================
+    ("v1.99.0", "v1.95.0"): {
+        name: (lambda data, n=name: data[n])
+        for collection in dataspec["v1.99.0"].values()
+        for name in collection.data
+    },
     # ============================================================================
     # Convert from v2.0.0 (HDF5 unified format) to v1.99.0 (Fortran file-based format)
     # ============================================================================
@@ -1111,9 +1195,14 @@ def convert_data(
             "Data without parameters is not valid."
         )
 
-    # Initialize output dictionary and copy parameters (unchanged across formats)
+    # Initialize output dictionary and convert/copy parameters
     out_data = {}
-    out_data["params"] = input_data["params"]
+    if (input_set_spec, output_set_spec) in params_converters:
+        out_data["params"] = params_converters[input_set_spec, output_set_spec](
+            input_data["params"]
+        )
+    else:
+        out_data["params"] = input_data["params"]
 
     # Iterate through all data collections in the output specification
     # (e.g., microscale_out, macroscale_in, macroscale_out)

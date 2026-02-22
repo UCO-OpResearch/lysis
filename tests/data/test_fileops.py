@@ -69,9 +69,7 @@ class TestReadFileText:
 
     def test_structured_array_with_delimiter(self, tmp_path):
         """Read a structured array from a delimited text file."""
-        dt = np.dtype(
-            [("time", np.float64), ("idx", np.int32), ("val", np.float64)]
-        )
+        dt = np.dtype([("time", np.float64), ("idx", np.int32), ("val", np.float64)])
         spec = DataSetSpec(
             dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
             dtype=dt,
@@ -85,9 +83,7 @@ class TestReadFileText:
         )
         np.savetxt(
             tmp_path / "struct.dat",
-            np.column_stack(
-                [rows["time"], rows["idx"], rows["val"]]
-            ),
+            np.column_stack([rows["time"], rows["idx"], rows["val"]]),
             delimiter=",",
         )
         result = _read_file_text(str(tmp_path), spec)
@@ -137,9 +133,7 @@ class TestReadFileBinary:
         # total_molecules = 10 in sample_params
         original = np.arange(30, dtype=np.float64).reshape(3, 10)
         original.tofile(tmp_path / "param_shape.dat")
-        result = _read_file_binary(
-            str(tmp_path), spec, params=sample_params
-        )
+        result = _read_file_binary(str(tmp_path), spec, params=sample_params)
         np.testing.assert_array_equal(result, original)
         assert result.shape == (3, 10)
 
@@ -339,9 +333,7 @@ class TestReadWriteDatasetDispatch:
 class TestReadDataCollectionCombined:
     """Tests for :func:`read_data_collection` with simulations_combined=True."""
 
-    def test_combined_single_array(
-        self, tmp_path, combined_collection_spec, json_spec
-    ):
+    def test_combined_single_array(self, tmp_path, combined_collection_spec, json_spec):
         """Combined collection returns a single array (not a list)."""
         # Write params file
         params = {"micro_params": {"micro_simulations": 10}}
@@ -410,9 +402,7 @@ class TestReadDataCollectionPerSim:
             arrays.append(arr)
         return arrays
 
-    def test_per_sim_list_of_arrays(
-        self, tmp_path, per_sim_collection_spec
-    ):
+    def test_per_sim_list_of_arrays(self, tmp_path, per_sim_collection_spec):
         """Per-sim read with 3 files returns list of 3 arrays."""
         expected = self._setup_per_sim_files(tmp_path, n_sims=3)
         data = read_data_collection(
@@ -425,9 +415,7 @@ class TestReadDataCollectionPerSim:
         for i in range(3):
             np.testing.assert_array_equal(data["arr"][i], expected[i])
 
-    def test_per_sim_graceful_stop(
-        self, tmp_path, per_sim_collection_spec
-    ):
+    def test_per_sim_graceful_stop(self, tmp_path, per_sim_collection_spec):
         """Reading stops gracefully when sim file does not exist (after sim 0)."""
         self._setup_per_sim_files(tmp_path, n_sims=3)
         # Only 3 directories exist (00, 01, 02). Reading stops at 03.
@@ -438,9 +426,7 @@ class TestReadDataCollectionPerSim:
         )
         assert len(data["arr"]) == 3
 
-    def test_per_sim_sim0_missing_raises(
-        self, tmp_path, per_sim_collection_spec
-    ):
+    def test_per_sim_sim0_missing_raises(self, tmp_path, per_sim_collection_spec):
         """Raise FileNotFoundError when sim 0 file is missing."""
         # Only write params, no sim directories
         params = {"micro_params": {"micro_simulations": 10}}
@@ -487,9 +473,7 @@ class TestWriteCollectionParamsRequired:
 class TestWriteReadCollectionRoundTrip:
     """Round-trip tests for write_data_collection + read_data_collection."""
 
-    def test_combined_round_trip(
-        self, tmp_path, combined_collection_spec
-    ):
+    def test_combined_round_trip(self, tmp_path, combined_collection_spec):
         """Write then read a combined collection; data matches."""
         original_data = {
             "params": {"micro_params": {"micro_simulations": 10}},
@@ -506,19 +490,12 @@ class TestWriteReadCollectionRoundTrip:
             collections=[combined_collection_spec],
             file_codes=[""],
         )
-        np.testing.assert_array_almost_equal(
-            loaded["arr"], original_data["arr"]
-        )
-        assert (
-            loaded["params"]["micro_params"]["micro_simulations"] == 10
-        )
+        np.testing.assert_array_almost_equal(loaded["arr"], original_data["arr"])
+        assert loaded["params"]["micro_params"]["micro_simulations"] == 10
 
     def test_per_sim_round_trip(self, tmp_path, per_sim_collection_spec):
         """Write 3 per-sim arrays then read back; all 3 match."""
-        arrays = [
-            np.arange(5, dtype=np.float64) + i * 100.0
-            for i in range(3)
-        ]
+        arrays = [np.arange(5, dtype=np.float64) + i * 100.0 for i in range(3)]
         original_data = {
             "params": {"micro_params": {"micro_simulations": 10}},
             "arr": arrays,
@@ -717,7 +694,8 @@ class TestWriteCreatesVersion:
 
 # Minimal micro log content for _read_file_parsed tests.
 # Uses a subset of parameters that parse_micro_log can handle.
-_MICRO_LOG_FOR_FILEOPS = textwrap.dedent("""\
+_MICRO_LOG_FOR_FILEOPS = textwrap.dedent(
+    """\
  seed=  2133256963
  nodes=          13
  KdtPAnoplg=  0.360000000000000
@@ -737,10 +715,11 @@ _MICRO_LOG_FOR_FILEOPS = textwrap.dedent("""\
   freeplg=   2.00000000000000
   kdeg=   5.00000000000000
   stats=        1000
-""")
+"""
+)
 
 
-def _make_parsed_spec(version="v1.99.0", collection="microscale_out"):
+def _make_parsed_spec(version="v1.95.0", collection="microscale_out"):
     """Build a FILE_PARSED DataSetSpec with the given version and collection name."""
     spec = DataSetSpec(
         dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_PARSED,
@@ -790,14 +769,17 @@ class TestReadFileParsed:
     def test_aliases_passed_through(self, tmp_path):
         """Aliases resolve unknown Fortran names via the parser."""
         # Log with 'runs=' instead of 'simulations=' — would fail without alias
-        content = textwrap.dedent("""\
+        content = textwrap.dedent(
+            """\
          runs=       50000
           stats=        1000
-        """)
+        """
+        )
         (tmp_path / "micro.txt").write_text(content)
         spec = _make_parsed_spec()
         result = _read_file_parsed(
-            str(tmp_path), spec,
+            str(tmp_path),
+            spec,
             aliases={"micro_simulations": "runs"},
         )
         assert result["micro_params"]["micro_simulations"] == pytest.approx(50000)
@@ -807,7 +789,7 @@ class TestReadDataCollectionFileParsed:
     """Integration test: read_data_collection with FILE_PARSED params."""
 
     def test_read_collection_file_parsed(self, tmp_path):
-        """End-to-end: read v1.99.0 microscale_out with parsed params and binary data."""
+        """End-to-end: read v1.95.0 microscale_out with parsed params and binary data."""
         # Write micro log file
         (tmp_path / "micro.txt").write_text(_MICRO_LOG_FOR_FILEOPS)
 
@@ -815,9 +797,9 @@ class TestReadDataCollectionFileParsed:
         lysis_data = np.array([100.0, 200.0, 300.0], dtype=np.float64)
         lysis_data.tofile(tmp_path / "lysis.dat")
 
-        # Use the real v1.99.0 microscale_out spec but only read 'lysis' dataset
+        # Use the real v1.95.0 microscale_out spec but only read 'lysis' dataset
         # to keep the test simple. Build a trimmed collection spec.
-        real_spec = dataspec["v1.99.0"]["microscale_out"]
+        real_spec = dataspec["v1.95.0"]["microscale_out"]
         trimmed = DataCollectionSpec(
             simulations_combined=True,
             params=real_spec.params,

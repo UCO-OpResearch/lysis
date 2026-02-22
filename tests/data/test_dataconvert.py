@@ -15,7 +15,8 @@ Tests cover:
 import numpy as np
 import pytest
 
-from lysis.config.constants import CONST
+from lysis.config.constants import CONST, Q_
+from lysis.config.parameters import Parameters
 from lysis.data.dataspec import DataSetSpec, DataCollectionSpec, dataspec, tags
 from lysis.data.dataconvert import (
     safe_np_int_conversion,
@@ -26,6 +27,9 @@ from lysis.data.dataconvert import (
     convert_location_snapshot,
     convert_bind_events_to_bound,
     convert_data,
+    params_converters,
+    _convert_params_add_units,
+    _convert_params_strip_units,
 )
 from lysis.geometry.edge_grid import (
     from_fortran_edge_index_array,
@@ -628,18 +632,31 @@ class TestConvertBindEventsToBound:
 
 
 class TestConvertData:
-    """Tests for :func:`convert_data`."""
+    """Tests for :func:`convert_data`.
 
-    def test_params_preserved(self):
-        """Parameters are copied directly without conversion."""
-        params = {
-            "micro_params": {"micro_simulations": 100},
-            "macro_params": {"rows": 5, "cols": 3, "total_edges": 57, "total_molecules": 10},
-        }
-        # Create minimal microscale data for v1.99.0
+    Synthetic v1.99.0 data: dimensioned params are stored as unit strings
+    (e.g., ``"0.000534 centimeter"``); unitless params are plain types.
+    """
+
+    @pytest.fixture
+    def v199_microscale_data(self):
+        """Minimal v1.99.0 microscale data with unit-string params."""
         n = 100
-        input_data = {
-            "params": params,
+        return {
+            "params": {
+                "micro_params": {
+                    "pore_size": "0.000534 centimeter",
+                    "total_time": "3600.0 second",
+                    "micro_simulations": 100,
+                },
+                "macro_params": {
+                    "diffusion_coeff": "5e-07 centimeter ** 2 / second",
+                    "rows": 5,
+                    "cols": 3,
+                    "total_edges": 57,
+                    "total_molecules": 10,
+                },
+            },
             "micro_log": np.array(["sim1", "sim2"], dtype="<U75"),
             "firstPLi": np.array([1.0] * n, dtype=np.float64),
             "lasttPA": np.array([0] * n, dtype=np.int32),
@@ -650,55 +667,25 @@ class TestConvertData:
             "tPAPLiunbd": np.array([0] * n, dtype=np.int32),
             "tPAunbind": np.array([1] * n, dtype=np.int32),
         }
-        result = convert_data(input_data, "v1.99.0", "v2.0.0")
-        assert result["params"] is input_data["params"]
 
-    def test_tag_resolution(self):
+    def test_params_preserved(self, v199_microscale_data):
+        """v1.99.0 → v2.0.0: params (including unit strings) are copied by reference."""
+        result = convert_data(v199_microscale_data, "v1.99.0", "v2.0.0")
+        assert result["params"] is v199_microscale_data["params"]
+        # Unit strings pass through unchanged
+        assert result["params"]["micro_params"]["pore_size"] == "0.000534 centimeter"
+
+    def test_tag_resolution(self, v199_microscale_data):
         """Tag aliases are resolved before conversion."""
-        params = {
-            "micro_params": {"micro_simulations": 100},
-            "macro_params": {"rows": 5, "cols": 3, "total_edges": 57, "total_molecules": 10},
-        }
-        n = 100
-        input_data = {
-            "params": params,
-            "micro_log": np.array(["sim1"], dtype="<U75"),
-            "firstPLi": np.array([1.0] * n, dtype=np.float64),
-            "lasttPA": np.array([0] * n, dtype=np.int32),
-            "lyscomplete": np.array([1] * n, dtype=np.int32),
-            "lysis": np.array([10.0] * n, dtype=np.float64),
-            "PLi": np.array([5] * n, dtype=np.int32),
-            "tPA_time": np.array([2.0] * n, dtype=np.float64),
-            "tPAPLiunbd": np.array([0] * n, dtype=np.int32),
-            "tPAunbind": np.array([1] * n, dtype=np.int32),
-        }
         # "fortran" should resolve to "v1.99.0", "hdf5" to "v2.0.0"
-        result = convert_data(input_data, "fortran", "hdf5")
+        result = convert_data(v199_microscale_data, "fortran", "hdf5")
         # If it didn't raise, tags resolved correctly
         assert "pli_first_time" in result  # v2.0.0 dataset name
 
-    def test_partial_data_skips_missing_collections(self):
+    def test_partial_data_skips_missing_collections(self, v199_microscale_data):
         """Collections not in input data are skipped without error."""
-        params = {
-            "micro_params": {"micro_simulations": 100},
-            "macro_params": {"rows": 5, "cols": 3, "total_edges": 57, "total_molecules": 10},
-        }
-        n = 100
-        # Only microscale data, no macroscale
-        input_data = {
-            "params": params,
-            "micro_log": np.array(["sim1"], dtype="<U75"),
-            "firstPLi": np.array([1.0] * n, dtype=np.float64),
-            "lasttPA": np.array([0] * n, dtype=np.int32),
-            "lyscomplete": np.array([1] * n, dtype=np.int32),
-            "lysis": np.array([10.0] * n, dtype=np.float64),
-            "PLi": np.array([5] * n, dtype=np.int32),
-            "tPA_time": np.array([2.0] * n, dtype=np.float64),
-            "tPAPLiunbd": np.array([0] * n, dtype=np.int32),
-            "tPAunbind": np.array([1] * n, dtype=np.int32),
-        }
         # Should not raise even though macroscale data is missing
-        result = convert_data(input_data, "v1.99.0", "v2.0.0")
+        result = convert_data(v199_microscale_data, "v1.99.0", "v2.0.0")
         assert "pli_first_time" in result
         # Macroscale datasets should not be in the output
         assert "snapshot_time" not in result
@@ -719,3 +706,320 @@ class TestConvertData:
         }
         with pytest.raises(ValueError, match="parameters"):
             convert_data(input_data, "v1.99.0", "v2.0.0")
+
+
+# ---------------------------------------------------------------------------
+# _convert_params_add_units  (v1.95.0 → v1.99.0)
+# ---------------------------------------------------------------------------
+
+
+class TestConvertParamsAddUnits:
+    """Tests for :func:`_convert_params_add_units`."""
+
+    def test_bare_magnitude_gets_units(self):
+        """Numeric value for a known unit key becomes a Quantity string."""
+        params = {
+            "micro_params": {"pore_size": 0.000534},
+        }
+        result = _convert_params_add_units(params)
+        assert isinstance(result["micro_params"]["pore_size"], str)
+        q = Q_(result["micro_params"]["pore_size"])
+        assert q.magnitude == pytest.approx(0.000534)
+        assert str(q.units) == "centimeter"
+
+    def test_unitless_int_passes_through(self):
+        """Integer value for a key NOT in Parameters.units() is unchanged."""
+        params = {
+            "macro_params": {"rows": 19, "cols": 3},
+        }
+        result = _convert_params_add_units(params)
+        assert result["macro_params"]["rows"] == 19
+        assert result["macro_params"]["cols"] == 3
+
+    def test_non_dict_section_passes_through(self):
+        """Non-dict sections (None, strings, lists) are copied verbatim."""
+        params = {
+            "micro_params": {"pore_size": 0.000534},
+            "metadata": "some string",
+            "extra_list": [1, 2, 3],
+        }
+        result = _convert_params_add_units(params)
+        assert result["metadata"] == "some string"
+        assert result["extra_list"] == [1, 2, 3]
+
+    def test_string_value_for_unit_key_passes_through(self):
+        """A string value (already has units) is not double-wrapped."""
+        params = {
+            "micro_params": {"pore_size": "0.000534 centimeter"},
+        }
+        result = _convert_params_add_units(params)
+        assert result["micro_params"]["pore_size"] == "0.000534 centimeter"
+
+    def test_unknown_key_passes_through(self):
+        """Keys not in Parameters.units() are copied as-is."""
+        params = {
+            "micro_params": {"custom_key": 42.0},
+        }
+        result = _convert_params_add_units(params)
+        assert result["micro_params"]["custom_key"] == 42.0
+
+    def test_multiple_sections(self):
+        """Both micro_params and macro_params are converted."""
+        units = Parameters.units()
+        params = {
+            "micro_params": {"pore_size": 0.000534, "micro_simulations": 100},
+            "macro_params": {"total_time": 3600.0, "rows": 19},
+        }
+        result = _convert_params_add_units(params)
+        # Dimensioned values become strings
+        assert isinstance(result["micro_params"]["pore_size"], str)
+        assert isinstance(result["macro_params"]["total_time"], str)
+        # Unitless values unchanged
+        assert result["micro_params"]["micro_simulations"] == 100
+        assert result["macro_params"]["rows"] == 19
+
+
+# ---------------------------------------------------------------------------
+# _convert_params_strip_units  (v1.99.0 → v1.95.0)
+# ---------------------------------------------------------------------------
+
+
+class TestConvertParamsStripUnits:
+    """Tests for :func:`_convert_params_strip_units`."""
+
+    def test_unit_string_becomes_magnitude(self):
+        """String value for a known unit key becomes a bare magnitude."""
+        params = {
+            "micro_params": {"pore_size": "0.000534 centimeter"},
+        }
+        result = _convert_params_strip_units(params)
+        assert isinstance(result["micro_params"]["pore_size"], float)
+        assert result["micro_params"]["pore_size"] == pytest.approx(0.000534)
+
+    def test_unit_conversion_to_canonical(self):
+        """Value in compatible units is converted to the canonical unit."""
+        # pore_size canonical unit is "centimeters"
+        params = {
+            "micro_params": {"pore_size": "5.34 micrometer"},
+        }
+        result = _convert_params_strip_units(params)
+        expected = Q_("5.34 micrometer").to("centimeters").magnitude
+        assert result["micro_params"]["pore_size"] == pytest.approx(expected)
+
+    def test_unitless_int_passes_through(self):
+        """Integer value for a key NOT in Parameters.units() is unchanged."""
+        params = {
+            "macro_params": {"rows": 19},
+        }
+        result = _convert_params_strip_units(params)
+        assert result["macro_params"]["rows"] == 19
+
+    def test_non_dict_section_passes_through(self):
+        """Non-dict sections are copied verbatim."""
+        params = {
+            "micro_params": {"pore_size": "0.000534 centimeter"},
+            "metadata": "some string",
+        }
+        result = _convert_params_strip_units(params)
+        assert result["metadata"] == "some string"
+
+    def test_numeric_value_for_unit_key_passes_through(self):
+        """A numeric value (already bare) is not re-stripped."""
+        params = {
+            "micro_params": {"pore_size": 0.000534},
+        }
+        result = _convert_params_strip_units(params)
+        assert result["micro_params"]["pore_size"] == pytest.approx(0.000534)
+
+    def test_string_value_for_non_unit_key_passes_through(self):
+        """A string value for a key not in Parameters.units() passes through."""
+        params = {
+            "micro_params": {"micro_version": "micro_rates"},
+        }
+        result = _convert_params_strip_units(params)
+        assert result["micro_params"]["micro_version"] == "micro_rates"
+
+
+# ---------------------------------------------------------------------------
+# params_converters registry
+# ---------------------------------------------------------------------------
+
+
+class TestParamsConvertersRegistry:
+    """Tests for the :data:`params_converters` registry."""
+
+    def test_both_directions_registered(self):
+        """Both v1.95.0↔v1.99.0 entries exist."""
+        assert ("v1.95.0", "v1.99.0") in params_converters
+        assert ("v1.99.0", "v1.95.0") in params_converters
+
+    def test_functions_match(self):
+        """Registry entries point to the correct functions."""
+        assert params_converters["v1.95.0", "v1.99.0"] is _convert_params_add_units
+        assert params_converters["v1.99.0", "v1.95.0"] is _convert_params_strip_units
+
+
+# ---------------------------------------------------------------------------
+# Round-trip params conversion
+# ---------------------------------------------------------------------------
+
+
+class TestParamsRoundTrip:
+    """Round-trip tests for params conversion."""
+
+    def test_add_then_strip_recovers_magnitudes(self):
+        """v1.95.0 → v1.99.0 → v1.95.0 recovers original bare magnitudes."""
+        original = {
+            "micro_params": {
+                "pore_size": 0.000534,
+                "total_time": 3600.0,
+                "micro_simulations": 100,
+                "micro_version": "micro_rates",
+            },
+            "macro_params": {
+                "rows": 19,
+                "cols": 3,
+                "diffusion_coeff": 5e-7,
+            },
+        }
+        with_units = _convert_params_add_units(original)
+        recovered = _convert_params_strip_units(with_units)
+
+        # Dimensioned values recovered
+        assert recovered["micro_params"]["pore_size"] == pytest.approx(0.000534)
+        assert recovered["micro_params"]["total_time"] == pytest.approx(3600.0)
+        assert recovered["macro_params"]["diffusion_coeff"] == pytest.approx(5e-7)
+
+        # Unitless values unchanged
+        assert recovered["micro_params"]["micro_simulations"] == 100
+        assert recovered["micro_params"]["micro_version"] == "micro_rates"
+        assert recovered["macro_params"]["rows"] == 19
+        assert recovered["macro_params"]["cols"] == 3
+
+    def test_strip_then_add_recovers_strings(self):
+        """v1.99.0 → v1.95.0 → v1.99.0 recovers original unit strings."""
+        original = {
+            "micro_params": {
+                "pore_size": "0.000534 centimeter",
+                "total_time": "3600.0 second",
+                "micro_simulations": 100,
+            },
+        }
+        stripped = _convert_params_strip_units(original)
+        recovered = _convert_params_add_units(stripped)
+
+        # Parse both to Quantity and compare magnitudes and units
+        orig_ps = Q_(original["micro_params"]["pore_size"])
+        recov_ps = Q_(recovered["micro_params"]["pore_size"])
+        assert recov_ps.magnitude == pytest.approx(orig_ps.magnitude)
+        assert recov_ps.units == orig_ps.units
+
+        assert recovered["micro_params"]["micro_simulations"] == 100
+
+
+# ---------------------------------------------------------------------------
+# convert_data with v1.95.0 spec
+# ---------------------------------------------------------------------------
+
+
+class TestConvertDataV195:
+    """Tests for :func:`convert_data` with v1.95.0 ↔ v1.99.0 conversion."""
+
+    @pytest.fixture
+    def v195_microscale_data(self):
+        """Minimal v1.95.0 microscale data with bare-magnitude params."""
+        n = 100
+        return {
+            "params": {
+                "micro_params": {
+                    "pore_size": 0.000534,
+                    "total_time": 3600.0,
+                    "micro_simulations": 100,
+                },
+                "macro_params": {
+                    "rows": 5,
+                    "cols": 3,
+                    "total_edges": 57,
+                    "total_molecules": 10,
+                    "diffusion_coeff": 5e-7,
+                },
+            },
+            "micro_log": np.array(["sim1", "sim2"], dtype="<U75"),
+            "firstPLi": np.array([1.0] * n, dtype=np.float64),
+            "lasttPA": np.array([0] * n, dtype=np.int32),
+            "lyscomplete": np.array([1] * n, dtype=np.int32),
+            "lysis": np.array([10.0] * n, dtype=np.float64),
+            "PLi": np.array([5] * n, dtype=np.int32),
+            "tPA_time": np.array([2.0] * n, dtype=np.float64),
+            "tPAPLiunbd": np.array([0] * n, dtype=np.int32),
+            "tPAunbind": np.array([1] * n, dtype=np.int32),
+        }
+
+    def test_v195_to_v199_params_converted(self, v195_microscale_data):
+        """v1.95.0 → v1.99.0 wraps bare magnitudes as unit strings."""
+        result = convert_data(v195_microscale_data, "v1.95.0", "v1.99.0")
+        # Params should be a new dict (not same object)
+        assert result["params"] is not v195_microscale_data["params"]
+        # Dimensioned param now has units
+        assert isinstance(result["params"]["micro_params"]["pore_size"], str)
+        q = Q_(result["params"]["micro_params"]["pore_size"])
+        assert q.magnitude == pytest.approx(0.000534)
+        # Unitless param unchanged
+        assert result["params"]["micro_params"]["micro_simulations"] == 100
+
+    def test_v195_to_v199_data_identity(self, v195_microscale_data):
+        """v1.95.0 → v1.99.0 data datasets are passed through unchanged."""
+        result = convert_data(v195_microscale_data, "v1.95.0", "v1.99.0")
+        np.testing.assert_array_equal(
+            result["firstPLi"], v195_microscale_data["firstPLi"]
+        )
+        np.testing.assert_array_equal(
+            result["lysis"], v195_microscale_data["lysis"]
+        )
+
+    def test_v199_to_v195_params_converted(self):
+        """v1.99.0 → v1.95.0 strips unit strings to bare magnitudes."""
+        n = 100
+        input_data = {
+            "params": {
+                "micro_params": {
+                    "pore_size": "0.000534 centimeter",
+                    "micro_simulations": 100,
+                },
+                "macro_params": {
+                    "rows": 5,
+                    "cols": 3,
+                    "total_edges": 57,
+                    "total_molecules": 10,
+                },
+            },
+            "micro_log": np.array(["sim1"], dtype="<U75"),
+            "firstPLi": np.array([1.0] * n, dtype=np.float64),
+            "lasttPA": np.array([0] * n, dtype=np.int32),
+            "lyscomplete": np.array([1] * n, dtype=np.int32),
+            "lysis": np.array([10.0] * n, dtype=np.float64),
+            "PLi": np.array([5] * n, dtype=np.int32),
+            "tPA_time": np.array([2.0] * n, dtype=np.float64),
+            "tPAPLiunbd": np.array([0] * n, dtype=np.int32),
+            "tPAunbind": np.array([1] * n, dtype=np.int32),
+        }
+        result = convert_data(input_data, "v1.99.0", "v1.95.0")
+        assert isinstance(result["params"]["micro_params"]["pore_size"], float)
+        assert result["params"]["micro_params"]["pore_size"] == pytest.approx(0.000534)
+
+    def test_v195_to_v199_to_v200_chained(self, v195_microscale_data):
+        """v1.95.0 → v1.99.0 → v2.0.0 chained conversion produces valid output."""
+        intermediate = convert_data(v195_microscale_data, "v1.95.0", "v1.99.0")
+        result = convert_data(intermediate, "v1.99.0", "v2.0.0")
+        # v2.0.0 dataset names should be present
+        assert "pli_first_time" in result
+        assert "sim_final_time" in result
+        # Params carried through
+        assert result["params"]["micro_params"]["micro_simulations"] == 100
+
+    def test_partial_data_skips_missing_collections(self, v195_microscale_data):
+        """Collections not in input data are skipped without error."""
+        result = convert_data(v195_microscale_data, "v1.95.0", "v1.99.0")
+        assert "firstPLi" in result
+        # macroscale datasets should not be in the output
+        assert "tsave" not in result

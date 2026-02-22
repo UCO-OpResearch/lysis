@@ -529,8 +529,12 @@ class DataSpec:
     def values(self):
         return self._collections.values()
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         colls = ", ".join(self._collections.keys())
+        return f"<DataSpec '{self._version}', collections=[{colls}]>"
+
+    def __repr__(self) -> str:
+        colls = ", ".join(c.__repr__() for c in self._collections.values())
         return f"<DataSpec '{self._version}', collections=[{colls}]>"
 
 
@@ -539,6 +543,11 @@ class DataSpec:
 # Versions: "v1.99.0" (Fortran), "v2.0.0" (HDF5), plus tag aliases
 # Collections: "microscale_out", "macroscale_in", "macroscale_out"
 _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
+    # ============================================================================
+    # v1.95.0: Identical to v1.99.0, except pre Pint Quantity implementation
+    # NOTE: This spec will be added below as a copy of v1.99.0
+    # ============================================================================
+    "v1.95.0": {},
     # ============================================================================
     # v1.99.0: Fortran-compatible file-based format
     # ============================================================================
@@ -550,8 +559,8 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
         "microscale_out": DataCollectionSpec(
             simulations_combined=True,
             params=DataSetSpec(
-                data_location="micro{file_code}.txt",
-                dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_PARSED,
+                data_location="params.json",
+                dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_JSON,
                 dtype=Quantity,
             ),
             data={
@@ -937,6 +946,29 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
     },
 }
 
+
+# ============================================================================
+# Adding Derived DataSpecs
+# ============================================================================
+# v1.95.00 <-- v1.99.0
+def _create_v1_95():
+    v1_95 = copy.deepcopy(_dataspec_raw["v1.99.0"])
+    v1_95["microscale_out"] = v1_95["microscale_out"].replace(
+        params=DataSetSpec(
+            data_location="micro{file_code}.txt",
+            dtype=np.float64,
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_PARSED,
+        )
+    )
+    v1_95["macroscale_out"] = v1_95["macroscale_out"].replace(
+        params={"dtype": np.float64}
+    )
+    return v1_95
+
+
+_dataspec_raw["v1.95.0"] = _create_v1_95()
+
+
 # Wrap each version's raw dict in a DataSpec object
 dataspec: dict[str, DataSpec] = {}
 for _version, _collections in _dataspec_raw.items():
@@ -963,7 +995,7 @@ del _k, _v
 # Spec versions that use Fortran file-based storage.
 # Derived from the tag system so this set stays in sync if tags are updated.
 # Used by fileops.read_data_collection to trigger paramcheck validation at read time.
-fortran_versions: frozenset[str] = frozenset({tags["fortran"]})
+fortran_versions: frozenset[str] = frozenset({tags["fortran"], "v1.95.0"})
 
 
 def parse_shape(
