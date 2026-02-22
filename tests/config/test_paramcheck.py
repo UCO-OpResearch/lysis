@@ -33,8 +33,22 @@ from lysis.config.paramcheck import (
 # All values match MicroParameters defaults except:
 #   nodes=13  (nodes_in_micro_row=7 by default)
 #   seed=2133256963  (micro_seed=0 by default)
+# Includes "Setting" lines from command-line argument parsing at the top,
+# followed by the standard key=value parameter echo.
 MICRO_LOG_CONTENT = textwrap.dedent("""\
  number of command arguments =            8
+ command arg            1 = nodes
+ command arg            2 =           13
+ Setting nodes =           13
+ command arg            3 = simulations
+ command arg            4 =        50000
+ Setting simulations =        50000
+ command arg            5 = seed
+ command arg            6 =   2133256963
+ Setting seed =   2133256963
+ command arg            7 = outFileCode
+ command arg            8 = _PLG2_tPA01_TB-xiii
+ Setting outFileCode = _PLG2_tPA01_TB-xiii
  command line processed
   filetype=binary
   seed=  2133256963
@@ -296,6 +310,40 @@ class TestParseMicroLog:
 
         with pytest.raises(ValueError, match="runs"):
             parse_micro_log(path)
+
+    def test_setting_lines_parsed(self, tmp_path):
+        """'Setting key = value' lines from command-line parsing are extracted."""
+        content = textwrap.dedent("""\
+             Setting nodes =           13
+             Setting simulations =        50000
+             Setting seed =   2133256963
+             Setting outFileCode = _PLG2_tPA01_TB-xiii
+              stats=        1000
+        """)
+        path = _write_log(content, tmp_path)
+        result = parse_micro_log(path)
+
+        assert "nodes_in_micro_row" in result
+        assert result["nodes_in_micro_row"] == pytest.approx(13)
+        assert "micro_simulations" in result
+        assert result["micro_simulations"] == pytest.approx(50000)
+        assert "micro_seed" in result
+        assert result["micro_seed"] == pytest.approx(2133256963)
+        # String-valued Setting lines (outFileCode) are silently skipped
+        assert "outFileCode" not in result
+
+    def test_setting_overwritten_by_later_kv(self, tmp_path):
+        """A later key=value line overwrites an earlier Setting line."""
+        content = textwrap.dedent("""\
+             Setting nodes =           99
+             nodes=          13
+              stats=        1000
+        """)
+        path = _write_log(content, tmp_path)
+        result = parse_micro_log(path)
+
+        # The later nodes=13 should overwrite Setting nodes=99
+        assert result["nodes_in_micro_row"] == pytest.approx(13)
 
     def test_alias_override_resolves_unknown(self, tmp_path):
         """overrides={"micro_simulations": "runs"} maps runs= to micro_simulations."""

@@ -138,18 +138,28 @@ def _build_inverse_map(cls, extra_cls=None):
 def _parse_fortran_kv(lines):
     """Extract ``key = value`` pairs from Fortran log lines.
 
-    Uses the pattern ``r'^\\s*(\\w+)\\s*=\\s*(.+?)\\s*$'``.  Lines that do
-    not match (e.g. file-path lines, lines with spaces in the key, multi-line
-    values) are silently skipped.
+    Matches two formats:
+
+    * ``key = value`` — standard Fortran output (pattern
+      ``r'^\\s*(\\w+)\\s*=\\s*(.+?)\\s*$'``).
+    * ``Setting key = value`` — command-line argument echoes written by the
+      Fortran code during startup (pattern
+      ``r'^\\s*Setting\\s+(\\w+)\\s*=\\s*(.+?)\\s*$'``).
+
+    Lines that match neither pattern (e.g. file-path lines, multi-line values)
+    are silently skipped.  When the same key appears in both a ``Setting`` line
+    and a later ``key = value`` line, the later value overwrites the earlier
+    one.
 
     :param lines: Iterable of text lines from a Fortran log file.
     :return: ``{fortran_name_lower: raw_value_str}``.
     :rtype: dict[str, str]
     """
-    pattern = re.compile(r'^\s*(\w+)\s*=\s*(.+?)\s*$')
+    kv_pattern = re.compile(r'^\s*(\w+)\s*=\s*(.+?)\s*$')
+    setting_pattern = re.compile(r'^\s*Setting\s+(\w+)\s*=\s*(.+?)\s*$')
     result = {}
     for line in lines:
-        m = pattern.match(line)
+        m = setting_pattern.match(line) or kv_pattern.match(line)
         if m:
             result[m.group(1).lower()] = m.group(2).strip()
     return result
