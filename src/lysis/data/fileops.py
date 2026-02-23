@@ -186,7 +186,7 @@ def _not_implemented(*args, **kwargs):
 def _validate_fortran_params(
     params: BaseParamsType, overrides: dict | None = None
 ) -> None:
-    """Strictly validate parameters loaded from a Fortran data collection.
+    """Validate and normalize parameters loaded from a Fortran data collection.
 
     Called automatically by :func:`read_data_collection` whenever any collection
     in the request belongs to a Fortran spec version (i.e. its version is in
@@ -198,9 +198,17 @@ def _validate_fortran_params(
     :exc:`ValueError` on missing independent parameters or inconsistent dependent
     parameters.
 
+    After successful validation, *params* is updated **in place** with the
+    complete set of parameters (independent + recalculated dependent) from
+    the validated :class:`~lysis.config.parameters.MicroParameters` and
+    :class:`~lysis.config.parameters.MacroParameters` instances.  This ensures
+    that any *overrides* and any dependent parameters not present in the
+    original data are carried forward into the converted output.
+
     :param params: Merged parameter dict as built by :func:`read_data_collection`.
         Expected structure: ``{"micro_params": {...}, "macro_params": {...}}``.
         Either sub-dict may be absent if that collection was not read.
+        **Modified in place** on successful validation.
     :type params: BaseParamsType
     :param overrides: Optional ``{python_name: value}`` substitutions forwarded
         to both :func:`~lysis.config.paramcheck.load_micro_params` and
@@ -223,6 +231,7 @@ def _validate_fortran_params(
     micro_instance = None
     if micro_base:
         micro_instance = load_micro_params(micro_base, overrides=overrides)
+        params["micro_params"] = micro_instance.to_basedict()
 
     if macro_base:
         if micro_instance is None:
@@ -231,7 +240,10 @@ def _validate_fortran_params(
                 "Include the microscale_out collection when reading Fortran data "
                 "that contains macro_params."
             )
-        load_macro_params(macro_base, micro_instance, overrides=overrides)
+        macro_instance = load_macro_params(
+            macro_base, micro_instance, overrides=overrides
+        )
+        params["macro_params"] = macro_instance.to_basedict()
 
 
 def _read_file_text(

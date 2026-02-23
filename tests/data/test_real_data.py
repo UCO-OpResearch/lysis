@@ -97,6 +97,15 @@ class TestReadMicroscale:
         assert micro["micro_simulations"] == pytest.approx(50000)
         assert micro["nodes_in_micro_row"] == pytest.approx(13)
 
+    def test_overridden_params_present(self, micro_data):
+        """Parameters supplied via param_overrides appear in the output."""
+        micro = micro_data["params"]["micro_params"]
+        assert "fibrinogen_length" in micro
+        assert "fibrinogen_radius" in micro
+        assert micro["micro_log_lvl"] == 40
+        assert micro["micro_version"] == "micro_rates"
+        assert micro["snap_proportion"] == pytest.approx(0.66666667)
+
     @pytest.mark.parametrize("dataset,dtype", [
         ("firstPLi", np.float64),
         ("lysis", np.float64),
@@ -240,6 +249,17 @@ class TestConvertTruncatedData:
         raw = _read_all(fortran_sample_path)
         v199 = convert_data(raw, "v1.95.0", "v1.99.0")
         return convert_data(v199, "v1.99.0", "v2.0.0")
+
+    # ── Parameters ───────────────────────────────────────────────────
+
+    def test_overridden_params_survive_conversion(self, converted):
+        """Parameters supplied via param_overrides are in the converted output."""
+        micro = converted["params"]["micro_params"]
+        assert "fibrinogen_length" in micro
+        assert "fibrinogen_radius" in micro
+        assert micro["micro_log_lvl"] == 40
+        assert micro["micro_version"] == "micro_rates"
+        assert micro["snap_proportion"] == pytest.approx(0.66666667)
 
     # ── Microscale datasets ──────────────────────────────────────────
 
