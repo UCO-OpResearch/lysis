@@ -31,16 +31,32 @@ Converter functions can be:
 Conversion Routing
 ------------------
 
-All conversions currently route through the v1.99.0 <-> v2.0.0 pair. When
-adding support for older spec versions (before v1.99.0), convert to v1.99.0
-first, then to v2.0.0. For newer spec versions (after v2.0.0), convert from
-v2.0.0 first.
+Conversions are routed automatically via a spanning tree built from the
+``data_converters`` registry.  At module load time the module:
 
-If this routing strategy proves insufficient (e.g., if a future spec's grid
-indexing cannot be expressed as either 1D Fortran indices or 2D row/rank
-coordinates), consider refactoring the grid conversion helpers to use a
-normalizer/denormalizer registry, where each spec version registers functions
-to convert its grid indices to/from a canonical intermediate form.
+1. Builds an undirected graph whose vertices are spec versions and whose
+   edges are ``(a, b)`` pairs that have *both* directions in
+   ``data_converters``.
+2. Computes a BFS spanning tree rooted at ``min(versions)`` for
+   determinism.
+3. Precomputes every pairwise path and stores them in the public
+   ``conversion_paths`` dict.
+
+``convert_data()`` looks up the path and chains through intermediate
+single-step conversions automatically.  For example, converting from
+v1.95.0 to v2.0.0 chains through v1.99.0 without the caller needing to
+know about intermediate versions.
+
+To add a new spec version, register ``(new, existing)`` and
+``(existing, new)`` converters in ``data_converters``; the spanning tree
+and paths will be rebuilt on next import.
+
+If the spanning-tree routing strategy proves insufficient (e.g., if a
+future spec's grid indexing cannot be expressed as either 1D Fortran
+indices or 2D row/rank coordinates), consider refactoring the grid
+conversion helpers to use a normalizer/denormalizer registry, where each
+spec version registers functions to convert its grid indices to/from a
+canonical intermediate form.
 
 Key Functions
 -------------
@@ -99,6 +115,7 @@ See Also
 
 import functools
 import warnings
+from collections import deque
 
 from dataclasses import asdict
 from enum import Flag, auto, unique
@@ -1099,95 +1116,191 @@ data_converters: dict[
 }
 
 
-def convert_data(
+def _build_conversion_graph() -> dict[str, set[str]]:
+    """Build an undirected adjacency dict from ``data_converters`` keys.
+
+    An undirected edge ``(a, b)`` exists only when **both** ``(a, b)`` and
+    ``(b, a)`` are present in ``data_converters``.  If only one direction
+    exists, a :func:`warnings.warn` is emitted.
+
+    :return: Adjacency dict mapping each version to its set of neighbours.
+    :rtype: dict[str, set[str]]
+    """
+    directed_edges = set(data_converters.keys())
+    graph: dict[str, set[str]] = {}
+
+    # Collect all version strings that appear
+    for a, b in directed_edges:
+        graph.setdefault(a, set())
+        graph.setdefault(b, set())
+
+    for a, b in directed_edges:
+        if (b, a) in directed_edges:
+            graph[a].add(b)
+            graph[b].add(a)
+        else:
+            warnings.warn(
+                f"data_converters has ({a!r}, {b!r}) but not the reverse "
+                f"({b!r}, {a!r}). This edge will be excluded from the "
+                f"conversion graph.",
+                stacklevel=2,
+            )
+
+    return graph
+
+
+def _build_spanning_tree(
+    graph: dict[str, set[str]], root: str
+) -> dict[str, str | None]:
+    """BFS spanning tree from *root*.
+
+    :param graph: Undirected adjacency dict.
+    :type graph: dict[str, set[str]]
+    :param root: Starting vertex (must be a key in *graph*).
+    :type root: str
+    :return: Parent-pointer dict ``{node: parent}``.  Root's parent is
+        ``None``.
+    :rtype: dict[str, str | None]
+    """
+    parent: dict[str, str | None] = {root: None}
+    queue: deque[str] = deque([root])
+
+    while queue:
+        node = queue.popleft()
+        for neighbour in sorted(graph[node]):
+            if neighbour not in parent:
+                parent[neighbour] = node
+                queue.append(neighbour)
+
+    return parent
+
+
+def _extract_tree_path(
+    parent: dict[str, str | None], src: str, dst: str
+) -> list[str]:
+    """Find the unique path between *src* and *dst* in a spanning tree.
+
+    Uses the lowest-common-ancestor (LCA) approach: walk both nodes up
+    to the root, then splice the two half-paths at the LCA.
+
+    :param parent: Parent-pointer dict produced by :func:`_build_spanning_tree`.
+    :type parent: dict[str, str | None]
+    :param src: Start version.
+    :type src: str
+    :param dst: End version.
+    :type dst: str
+    :return: Ordered list of versions from *src* to *dst* (inclusive).
+    :rtype: list[str]
+    """
+    # Ancestors of src (in root-first order)
+    ancestors_src: list[str] = []
+    node = src
+    while node is not None:
+        ancestors_src.append(node)
+        node = parent[node]
+    ancestors_src.reverse()  # root → ... → src
+
+    ancestors_dst: list[str] = []
+    node = dst
+    while node is not None:
+        ancestors_dst.append(node)
+        node = parent[node]
+    ancestors_dst.reverse()  # root → ... → dst
+
+    # Find LCA (last common prefix element)
+    lca_idx = 0
+    for i in range(min(len(ancestors_src), len(ancestors_dst))):
+        if ancestors_src[i] == ancestors_dst[i]:
+            lca_idx = i
+        else:
+            break
+
+    # Path = src → ... → LCA → ... → dst
+    path_src_to_lca = list(reversed(ancestors_src[lca_idx:]))  # src → LCA
+    path_lca_to_dst = ancestors_dst[lca_idx + 1 :]  # LCA children → dst
+    return path_src_to_lca + path_lca_to_dst
+
+
+def _build_conversion_paths() -> dict[tuple[str, str], list[str]]:
+    """Build all pairwise conversion paths from the ``data_converters`` graph.
+
+    Picks ``min(graph.keys())`` as the BFS root for determinism, builds
+    a spanning tree, and precomputes all reachable ``(src, dst)`` paths.
+
+    Warns about versions that are unreachable from the root (disconnected
+    graph components).
+
+    :return: Dict mapping ``(src_version, dst_version)`` to a list of
+        intermediate version strings (inclusive of both endpoints).
+    :rtype: dict[tuple[str, str], list[str]]
+    """
+    graph = _build_conversion_graph()
+
+    if not graph:
+        return {}
+
+    root = min(graph.keys())
+    parent = _build_spanning_tree(graph, root)
+
+    # Warn about unreachable versions
+    unreachable = set(graph.keys()) - set(parent.keys())
+    if unreachable:
+        warnings.warn(
+            f"The following spec versions are not reachable from the "
+            f"spanning-tree root {root!r} and cannot participate in "
+            f"multi-step conversion: {sorted(unreachable)}",
+            stacklevel=2,
+        )
+
+    reachable = sorted(parent.keys())
+    paths: dict[tuple[str, str], list[str]] = {}
+    for src in reachable:
+        for dst in reachable:
+            if src != dst:
+                paths[src, dst] = _extract_tree_path(parent, src, dst)
+
+    return paths
+
+
+conversion_paths: dict[tuple[str, str], list[str]] = _build_conversion_paths()
+"""Pre-computed conversion paths between all reachable spec version pairs.
+
+Each key is a ``(src_version, dst_version)`` tuple and each value is the
+ordered list of versions to traverse (inclusive), e.g.
+``("v1.95.0", "v2.0.0")`` → ``["v1.95.0", "v1.99.0", "v2.0.0"]``.
+"""
+
+
+def _convert_single_step(
     input_data: DataCollectionType,
     input_set_spec: str,
     output_set_spec: str,
 ) -> DataCollectionType:
-    """Convert a complete data collection between specification versions.
+    """Perform a single-step conversion between adjacent specification versions.
 
-    This is the main entry point for data conversion. It converts an entire
-    data collection from one specification format to another by applying
-    appropriate converter functions to each dataset. The function:
+    This handles one hop in the conversion graph: it applies the converter
+    functions registered in ``data_converters[(input_set_spec, output_set_spec)]``
+    and converts parameters via ``params_converters`` if an entry exists.
 
-    1. Resolves tag aliases (like "current", "fortran") to version numbers
-    2. Iterates through all datasets required by the output specification
-    3. **Skips collections that don't exist in the input data** (allows partial conversion)
-    4. Applies the appropriate converter function for each dataset
-    5. Performs safe type conversions to match output specification dtypes
-    6. Handles both combined and per-simulation data structures
-
-    The function gracefully handles partial data by checking if each collection
-    exists before attempting conversion. This allows converting only microscale
-    data without requiring macroscale data to be present.
+    The caller (``convert_data``) is responsible for tag resolution and for
+    chaining multiple single-step conversions together.
 
     :param input_data: Complete data collection to convert, including all
                        datasets and parameters
     :type input_data: DataCollectionType
-    :param input_set_spec: Input specification version (e.g., "v1.99.0", "v2.0.0")
-                           or tag alias (e.g., "fortran", "current")
+    :param input_set_spec: Input specification version (e.g., "v1.99.0").
+        Must already be resolved (no tags).
     :type input_set_spec: str
-    :param output_set_spec: Output specification version (e.g., "v1.99.0", "v2.0.0")
-                            or tag alias (e.g., "fortran", "current")
+    :param output_set_spec: Output specification version (e.g., "v2.0.0").
+        Must already be resolved (no tags).
     :type output_set_spec: str
     :return: Converted data collection meeting the output specification
     :rtype: DataCollectionType
+    :raises ValueError: If input data has no parameters
     :raises NotImplementedError: If a required converter is not implemented
     :raises TypeError: If type conversion fails
     :raises OverflowError: If numerical values don't fit in target dtype
-
-    Examples
-    --------
-    Convert Fortran format to HDF5 format::
-
-        >>> fortran_data = load_fortran_files()
-        >>> hdf5_data = convert_data(fortran_data, "v1.99.0", "v2.0.0")
-        >>> write_hdf5(hdf5_data, "output.h5")
-
-    Using tag aliases::
-
-        >>> convert_data(data, "fortran", "current")  # fortran → latest version
-
-    Convert microscale results for macroscale input::
-
-        >>> micro_results = load_microscale_output()
-        >>> macro_input = generate_macroscale_in(micro_results)
-        >>> fortran_input = convert_data(macro_input, "v2.0.0", "v1.99.0")
-
-    Partial data conversion (only microscale, no macroscale)::
-
-        >>> # Load only microscale output (no macroscale data)
-        >>> micro_only = read_data_collection(path, [microscale_out_spec], [""])
-        >>> # Convert successfully - macroscale collections are skipped automatically
-        >>> hdf5_data = convert_data(micro_only, "v1.99.0", "v2.0.0")
-
-    Notes
-    -----
-    - Tag aliases are automatically resolved before conversion
-    - Parameters are copied directly without conversion
-    - **Collections that don't exist in input data are skipped** (no error raised)
-    - Type conversions use safe methods that check bounds to prevent overflow
-    - Supports partial data conversion (e.g., microscale only, without macroscale)
-    - TODO: Validate input_data against input_set_spec before conversion
-    - TODO: Validate that input_set_spec and output_set_spec exist
-
-    See Also
-    --------
-    :func:`generate_macroscale_in` : Generate macroscale input from microscale output
-    :func:`safe_np_int_conversion` : Safe integer type conversion
-    :func:`safe_np_bool_conversion` : Safe boolean type conversion
-    :data:`data_converters` : Registry of converter functions
     """
-    # Resolve any tag aliases to actual version numbers
-    # E.g., "fortran" → "v1.99.0", "current" → "v2.0.0"
-    while input_set_spec in tags:
-        input_set_spec = tags[input_set_spec]
-    while output_set_spec in tags:
-        output_set_spec = tags[output_set_spec]
-
-    # TODO: Check that `input_set_spec` and `output_set_spec` exist
-    # TODO: Add code to check that `input_data` meets the specifications of `input_set_spec`.
-
     # Validate that parameters are present — data must always include parameters
     if "params" not in input_data or not input_data["params"]:
         raise ValueError(
@@ -1209,7 +1322,7 @@ def convert_data(
     for name, collection in dataspec[output_set_spec].items():
         # Check if this collection exists in the input data
         # A collection is considered to exist if at least one of its datasets is present
-        # This allows convert_data() to work with partial data (e.g., only microscale_out
+        # This allows conversion to work with partial data (e.g., only microscale_out
         # without macroscale_in/out), preventing NotImplementedError for missing collections
         collection_exists = True
         for dataset in dataspec[input_set_spec][name].data.keys():
@@ -1270,3 +1383,124 @@ def convert_data(
                 out_data[dataset_needed] = out_data[dataset_needed][0]
 
     return out_data
+
+
+def convert_data(
+    input_data: DataCollectionType,
+    input_set_spec: str,
+    output_set_spec: str,
+) -> DataCollectionType:
+    """Convert a complete data collection between specification versions.
+
+    This is the main entry point for data conversion. It converts an entire
+    data collection from one specification format to another by applying
+    appropriate converter functions to each dataset. Multi-step conversions
+    are handled automatically by chaining through intermediate versions
+    using the precomputed :data:`conversion_paths`. The function:
+
+    1. Resolves tag aliases (like "current", "fortran") to version numbers
+    2. Short-circuits if input and output specs are identical
+    3. Looks up the conversion path in ``conversion_paths``
+    4. Chains through consecutive single-step conversions along the path
+    5. Each step: applies converters, performs safe type conversions, handles
+       both combined and per-simulation data structures
+
+    The function gracefully handles partial data by checking if each collection
+    exists before attempting conversion. This allows converting only microscale
+    data without requiring macroscale data to be present.
+
+    :param input_data: Complete data collection to convert, including all
+                       datasets and parameters
+    :type input_data: DataCollectionType
+    :param input_set_spec: Input specification version (e.g., "v1.99.0", "v2.0.0")
+                           or tag alias (e.g., "fortran", "current")
+    :type input_set_spec: str
+    :param output_set_spec: Output specification version (e.g., "v1.99.0", "v2.0.0")
+                            or tag alias (e.g., "fortran", "current")
+    :type output_set_spec: str
+    :return: Converted data collection meeting the output specification
+    :rtype: DataCollectionType
+    :raises ValueError: If no conversion path exists between the two specs
+    :raises NotImplementedError: If a required converter is not implemented
+    :raises TypeError: If type conversion fails
+    :raises OverflowError: If numerical values don't fit in target dtype
+
+    Examples
+    --------
+    Convert Fortran format to HDF5 format::
+
+        >>> fortran_data = load_fortran_files()
+        >>> hdf5_data = convert_data(fortran_data, "v1.99.0", "v2.0.0")
+        >>> write_hdf5(hdf5_data, "output.h5")
+
+    Using tag aliases::
+
+        >>> convert_data(data, "fortran", "current")  # fortran → latest version
+
+    Multi-step conversion (automatically routed)::
+
+        >>> convert_data(data, "v1.95.0", "v2.0.0")
+        # Automatically chains: v1.95.0 → v1.99.0 → v2.0.0
+
+    Convert microscale results for macroscale input::
+
+        >>> micro_results = load_microscale_output()
+        >>> macro_input = generate_macroscale_in(micro_results)
+        >>> fortran_input = convert_data(macro_input, "v2.0.0", "v1.99.0")
+
+    Partial data conversion (only microscale, no macroscale)::
+
+        >>> # Load only microscale output (no macroscale data)
+        >>> micro_only = read_data_collection(path, [microscale_out_spec], [""])
+        >>> # Convert successfully - macroscale collections are skipped automatically
+        >>> hdf5_data = convert_data(micro_only, "v1.99.0", "v2.0.0")
+
+    Notes
+    -----
+    - Tag aliases are automatically resolved before conversion
+    - If input and output specs resolve to the same version, input data is
+      returned as-is
+    - Parameters are converted at each step if a ``params_converters`` entry exists
+    - **Collections that don't exist in input data are skipped** (no error raised)
+    - Type conversions use safe methods that check bounds to prevent overflow
+    - Supports partial data conversion (e.g., microscale only, without macroscale)
+    - TODO: Validate input_data against input_set_spec before conversion
+    - TODO: Validate that input_set_spec and output_set_spec exist
+
+    See Also
+    --------
+    :func:`generate_macroscale_in` : Generate macroscale input from microscale output
+    :func:`safe_np_int_conversion` : Safe integer type conversion
+    :func:`safe_np_bool_conversion` : Safe boolean type conversion
+    :data:`data_converters` : Registry of converter functions
+    :data:`conversion_paths` : Precomputed multi-step conversion routes
+    """
+    # Resolve any tag aliases to actual version numbers
+    # E.g., "fortran" → "v1.99.0", "current" → "v2.0.0"
+    while input_set_spec in tags:
+        input_set_spec = tags[input_set_spec]
+    while output_set_spec in tags:
+        output_set_spec = tags[output_set_spec]
+
+    # TODO: Check that `input_set_spec` and `output_set_spec` exist
+    # TODO: Add code to check that `input_data` meets the specifications of `input_set_spec`.
+
+    # Short-circuit: if input and output specs are the same, return data as-is
+    if input_set_spec == output_set_spec:
+        return input_data
+
+    # Look up the precomputed conversion path
+    path = conversion_paths.get((input_set_spec, output_set_spec))
+    if path is None:
+        raise ValueError(
+            f"No conversion path from {input_set_spec!r} to "
+            f"{output_set_spec!r}. Available paths: "
+            f"{sorted(conversion_paths.keys())}"
+        )
+
+    # Chain through consecutive pairs in the path
+    data = input_data
+    for step_in, step_out in zip(path[:-1], path[1:]):
+        data = _convert_single_step(data, step_in, step_out)
+
+    return data

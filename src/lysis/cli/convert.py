@@ -169,8 +169,25 @@ def convert(
     else:
         file_codes = [""] * len(collection_names)
 
+    # Validate that a conversion path exists before reading any data
+    if in_version != out_version:
+        from lysis.data.dataconvert import conversion_paths
+
+        if (in_version, out_version) not in conversion_paths:
+            console.print(
+                f"[red]Error:[/red] No conversion path from "
+                f"{in_version} to {out_version}."
+            )
+            ctx.exit(1)
+            return
+        path = conversion_paths[in_version, out_version]
+    else:
+        path = [in_version]
+
     if verbose or dry_run:
         console.print(f"Converting: {in_version} -> {out_version}")
+        if len(path) > 2:
+            console.print(f"Path: {' -> '.join(path)}")
         console.print(f"Collections: {', '.join(collection_names)}")
         console.print(f"Input:  {input_path}")
         console.print(f"Output: {output_path}")
@@ -234,6 +251,10 @@ def convert(
     # Convert
     try:
         converted = convert_data(data, in_version, out_version)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] Conversion error: {e}")
+        ctx.exit(1)
+        return
     except NotImplementedError as e:
         console.print(f"[red]Error:[/red] Conversion not implemented: {e}")
         ctx.exit(1)

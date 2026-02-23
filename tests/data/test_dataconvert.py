@@ -10,7 +10,16 @@ Tests cover:
 * convert_location_snapshot — molecule location shape/index transform
 * convert_bind_events_to_bound — event log to bound status snapshots
 * convert_data — main entry point, tag resolution, params copy
+* _build_conversion_graph — undirected graph from data_converters
+* _build_spanning_tree — BFS spanning tree
+* _extract_tree_path — LCA-based path extraction
+* _build_conversion_paths — orchestrator for precomputed paths
+* conversion_paths — module-level precomputed paths
+* _convert_single_step — single-hop conversion
+* convert_data multi-step — chaining, short-circuit, ValueError
 """
+
+import warnings
 
 import numpy as np
 import pytest
@@ -27,7 +36,14 @@ from lysis.data.dataconvert import (
     convert_location_snapshot,
     convert_bind_events_to_bound,
     convert_data,
+    conversion_paths,
+    data_converters,
     params_converters,
+    _build_conversion_graph,
+    _build_spanning_tree,
+    _extract_tree_path,
+    _build_conversion_paths,
+    _convert_single_step,
     _convert_params_add_units,
     _convert_params_strip_units,
 )
@@ -1023,3 +1039,556 @@ class TestConvertDataV195:
         assert "firstPLi" in result
         # macroscale datasets should not be in the output
         assert "tsave" not in result
+
+
+# ---------------------------------------------------------------------------
+# _build_conversion_graph
+# ---------------------------------------------------------------------------
+
+
+class TestBuildConversionGraph:
+    """Tests for :func:`_build_conversion_graph`."""
+
+    def test_returns_undirected_graph(self):
+        """Graph has symmetric edges for all bidirectional converter pairs."""
+        graph = _build_conversion_graph()
+        for node, neighbors in graph.items():
+            for neighbor in neighbors:
+                assert node in graph[neighbor], (
+                    f"{node!r} has neighbor {neighbor!r} but not vice-versa"
+                )
+
+    def test_all_converter_versions_present(self):
+        """Every version mentioned in data_converters appears in the graph."""
+        graph = _build_conversion_graph()
+        for a, b in data_converters:
+            assert a in graph
+            assert b in graph
+
+    def test_bidirectional_edges_included(self):
+        """Pairs that exist in both directions appear as edges."""
+        graph = _build_conversion_graph()
+        # v1.99.0 ↔ v2.0.0 is bidirectional
+        assert "v2.0.0" in graph["v1.99.0"]
+        assert "v1.99.0" in graph["v2.0.0"]
+
+    def test_known_edges(self):
+        """Known bidirectional pairs are present in the graph."""
+        graph = _build_conversion_graph()
+        # v1.95.0 ↔ v1.99.0
+        assert "v1.99.0" in graph["v1.95.0"]
+        assert "v1.95.0" in graph["v1.99.0"]
+        # v1.99.0 ↔ v2.0.0
+        assert "v2.0.0" in graph["v1.99.0"]
+        assert "v1.99.0" in graph["v2.0.0"]
+
+    def test_one_way_edge_warns(self, monkeypatch):
+        """A converter pair with only one direction emits a warning."""
+        # Temporarily add a one-way edge
+        fake_converters = dict(data_converters)
+        fake_converters[("v99.0.0", "v2.0.0")] = {}
+        monkeypatch.setattr(
+            "lysis.data.dataconvert.data_converters", fake_converters
+        )
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            graph = _build_conversion_graph()
+
+        warning_messages = [str(x.message) for x in w]
+        assert any("v99.0.0" in msg and "v2.0.0" in msg for msg in warning_messages)
+        # The one-way edge should NOT appear in the undirected graph
+        assert "v2.0.0" not in graph.get("v99.0.0", set())
+
+
+# ---------------------------------------------------------------------------
+# _build_spanning_tree
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSpanningTree:
+    """Tests for :func:`_build_spanning_tree`."""
+
+    def test_root_parent_is_none(self):
+        """Root node has None as parent."""
+        graph = {"A": {"B"}, "B": {"A", "C"}, "C": {"B"}}
+        parent = _build_spanning_tree(graph, "A")
+        assert parent["A"] is None
+
+    def test_all_reachable_nodes_included(self):
+        """All reachable nodes appear in the parent dict."""
+        graph = {"A": {"B"}, "B": {"A", "C"}, "C": {"B"}}
+        parent = _build_spanning_tree(graph, "A")
+        assert set(parent.keys()) == {"A", "B", "C"}
+
+    def test_parent_pointers_form_valid_tree(self):
+        """Every non-root node's parent is in the tree."""
+        graph = {"A": {"B", "C"}, "B": {"A"}, "C": {"A", "D"}, "D": {"C"}}
+        parent = _build_spanning_tree(graph, "A")
+        for node, par in parent.items():
+            if par is not None:
+                assert par in parent
+
+    def test_disconnected_component_excluded(self):
+        """Nodes unreachable from root are not in the parent dict."""
+        graph = {
+            "A": {"B"},
+            "B": {"A"},
+            "X": {"Y"},
+            "Y": {"X"},
+        }
+        parent = _build_spanning_tree(graph, "A")
+        assert "A" in parent
+        assert "B" in parent
+        assert "X" not in parent
+        assert "Y" not in parent
+
+    def test_deterministic_with_sorted_neighbors(self):
+        """Sorted neighbor iteration produces deterministic tree."""
+        graph = {"A": {"C", "B"}, "B": {"A"}, "C": {"A"}}
+        parent1 = _build_spanning_tree(graph, "A")
+        parent2 = _build_spanning_tree(graph, "A")
+        assert parent1 == parent2
+
+    def test_single_node(self):
+        """Single-node graph produces tree with just the root."""
+        graph = {"A": set()}
+        parent = _build_spanning_tree(graph, "A")
+        assert parent == {"A": None}
+
+    def test_linear_chain(self):
+        """A → B → C → D produces linear parent chain."""
+        graph = {
+            "A": {"B"},
+            "B": {"A", "C"},
+            "C": {"B", "D"},
+            "D": {"C"},
+        }
+        parent = _build_spanning_tree(graph, "A")
+        assert parent["B"] == "A"
+        assert parent["C"] == "B"
+        assert parent["D"] == "C"
+
+
+# ---------------------------------------------------------------------------
+# _extract_tree_path
+# ---------------------------------------------------------------------------
+
+
+class TestExtractTreePath:
+    """Tests for :func:`_extract_tree_path`."""
+
+    @pytest.fixture
+    def linear_tree(self):
+        """Linear tree: A → B → C → D."""
+        return {"A": None, "B": "A", "C": "B", "D": "C"}
+
+    @pytest.fixture
+    def branching_tree(self):
+        """Branching tree:
+              A
+             / \\
+            B   C
+           /     \\
+          D       E
+        """
+        return {"A": None, "B": "A", "C": "A", "D": "B", "E": "C"}
+
+    def test_adjacent_nodes(self, linear_tree):
+        """Path between adjacent nodes is just the two nodes."""
+        path = _extract_tree_path(linear_tree, "A", "B")
+        assert path == ["A", "B"]
+
+    def test_same_direction_as_tree(self, linear_tree):
+        """Path following tree direction: A → B → C."""
+        path = _extract_tree_path(linear_tree, "A", "C")
+        assert path == ["A", "B", "C"]
+
+    def test_reverse_direction(self, linear_tree):
+        """Path against tree direction: D → C → B → A."""
+        path = _extract_tree_path(linear_tree, "D", "A")
+        assert path == ["D", "C", "B", "A"]
+
+    def test_middle_nodes(self, linear_tree):
+        """Path between two non-root nodes: B → C → D."""
+        path = _extract_tree_path(linear_tree, "B", "D")
+        assert path == ["B", "C", "D"]
+
+    def test_cross_branch_path(self, branching_tree):
+        """Path across branches goes through LCA: D → B → A → C → E."""
+        path = _extract_tree_path(branching_tree, "D", "E")
+        assert path == ["D", "B", "A", "C", "E"]
+
+    def test_node_to_root(self, branching_tree):
+        """Path from leaf to root: E → C → A."""
+        path = _extract_tree_path(branching_tree, "E", "A")
+        assert path == ["E", "C", "A"]
+
+    def test_root_to_leaf(self, branching_tree):
+        """Path from root to leaf: A → C → E."""
+        path = _extract_tree_path(branching_tree, "A", "E")
+        assert path == ["A", "C", "E"]
+
+    def test_sibling_path(self, branching_tree):
+        """Path between siblings (same parent): B → A → C."""
+        path = _extract_tree_path(branching_tree, "B", "C")
+        assert path == ["B", "A", "C"]
+
+    def test_path_start_equals_end(self, linear_tree):
+        """Path from a node to itself is just that node."""
+        path = _extract_tree_path(linear_tree, "B", "B")
+        assert path == ["B"]
+
+
+# ---------------------------------------------------------------------------
+# _build_conversion_paths
+# ---------------------------------------------------------------------------
+
+
+class TestBuildConversionPaths:
+    """Tests for :func:`_build_conversion_paths`."""
+
+    def test_returns_dict(self):
+        """Return type is a dict."""
+        paths = _build_conversion_paths()
+        assert isinstance(paths, dict)
+
+    def test_all_pairs_present(self):
+        """Every (src, dst) pair where src != dst is covered."""
+        paths = _build_conversion_paths()
+        graph = _build_conversion_graph()
+        parent = _build_spanning_tree(graph, min(graph.keys()))
+        reachable = set(parent.keys())
+        for src in reachable:
+            for dst in reachable:
+                if src != dst:
+                    assert (src, dst) in paths
+
+    def test_no_self_loops(self):
+        """No (x, x) entries exist."""
+        paths = _build_conversion_paths()
+        for src, dst in paths:
+            assert src != dst
+
+    def test_path_endpoints_match_key(self):
+        """Each path starts with src and ends with dst."""
+        paths = _build_conversion_paths()
+        for (src, dst), path in paths.items():
+            assert path[0] == src, f"Path for ({src}, {dst}) doesn't start with {src}"
+            assert path[-1] == dst, f"Path for ({src}, {dst}) doesn't end with {dst}"
+
+    def test_consecutive_pairs_have_converters(self):
+        """Each consecutive pair in a path has a direct converter."""
+        paths = _build_conversion_paths()
+        for (src, dst), path in paths.items():
+            for step_in, step_out in zip(path[:-1], path[1:]):
+                assert (step_in, step_out) in data_converters, (
+                    f"Path ({src} → {dst}): no converter for "
+                    f"({step_in}, {step_out})"
+                )
+
+    def test_known_multi_step_path(self):
+        """v1.95.0 → v2.0.0 routes through v1.99.0."""
+        paths = _build_conversion_paths()
+        assert paths[("v1.95.0", "v2.0.0")] == ["v1.95.0", "v1.99.0", "v2.0.0"]
+
+    def test_known_reverse_multi_step_path(self):
+        """v2.0.0 → v1.95.0 routes through v1.99.0."""
+        paths = _build_conversion_paths()
+        assert paths[("v2.0.0", "v1.95.0")] == ["v2.0.0", "v1.99.0", "v1.95.0"]
+
+    def test_direct_paths_have_length_two(self):
+        """Adjacent versions produce paths of length 2."""
+        paths = _build_conversion_paths()
+        assert len(paths[("v1.99.0", "v2.0.0")]) == 2
+        assert len(paths[("v1.95.0", "v1.99.0")]) == 2
+
+    def test_warns_on_disconnected_graph(self, monkeypatch):
+        """Unreachable versions produce a warning."""
+        # Add a disconnected island
+        fake_converters = dict(data_converters)
+        fake_converters[("v99.0.0", "v98.0.0")] = {}
+        fake_converters[("v98.0.0", "v99.0.0")] = {}
+        monkeypatch.setattr(
+            "lysis.data.dataconvert.data_converters", fake_converters
+        )
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            paths = _build_conversion_paths()
+
+        warning_messages = [str(x.message) for x in w]
+        assert any("not reachable" in msg for msg in warning_messages)
+
+    def test_empty_converters(self, monkeypatch):
+        """Empty data_converters produces empty paths."""
+        monkeypatch.setattr("lysis.data.dataconvert.data_converters", {})
+        paths = _build_conversion_paths()
+        assert paths == {}
+
+
+# ---------------------------------------------------------------------------
+# conversion_paths (module-level precomputed)
+# ---------------------------------------------------------------------------
+
+
+class TestConversionPaths:
+    """Tests for the module-level :data:`conversion_paths` variable."""
+
+    def test_is_dict(self):
+        """Module-level conversion_paths is a dict."""
+        assert isinstance(conversion_paths, dict)
+
+    def test_contains_direct_pairs(self):
+        """Direct conversion pairs are present."""
+        assert ("v1.99.0", "v2.0.0") in conversion_paths
+        assert ("v2.0.0", "v1.99.0") in conversion_paths
+        assert ("v1.95.0", "v1.99.0") in conversion_paths
+        assert ("v1.99.0", "v1.95.0") in conversion_paths
+
+    def test_contains_multi_step_pairs(self):
+        """Multi-step pairs are present."""
+        assert ("v1.95.0", "v2.0.0") in conversion_paths
+        assert ("v2.0.0", "v1.95.0") in conversion_paths
+
+    def test_v195_to_v200_path(self):
+        """v1.95.0 → v2.0.0 path goes through v1.99.0."""
+        assert conversion_paths[("v1.95.0", "v2.0.0")] == [
+            "v1.95.0",
+            "v1.99.0",
+            "v2.0.0",
+        ]
+
+    def test_v200_to_v195_path(self):
+        """v2.0.0 → v1.95.0 path goes through v1.99.0."""
+        assert conversion_paths[("v2.0.0", "v1.95.0")] == [
+            "v2.0.0",
+            "v1.99.0",
+            "v1.95.0",
+        ]
+
+
+# ---------------------------------------------------------------------------
+# _convert_single_step
+# ---------------------------------------------------------------------------
+
+
+class TestConvertSingleStep:
+    """Tests for :func:`_convert_single_step`."""
+
+    @pytest.fixture
+    def v199_microscale_data(self):
+        """Minimal v1.99.0 microscale data."""
+        n = 100
+        return {
+            "params": {
+                "micro_params": {
+                    "pore_size": "0.000534 centimeter",
+                    "total_time": "3600.0 second",
+                    "micro_simulations": 100,
+                },
+                "macro_params": {
+                    "diffusion_coeff": "5e-07 centimeter ** 2 / second",
+                    "rows": 5,
+                    "cols": 3,
+                    "total_edges": 57,
+                    "total_molecules": 10,
+                },
+            },
+            "micro_log": np.array(["sim1", "sim2"], dtype="<U75"),
+            "firstPLi": np.array([1.0] * n, dtype=np.float64),
+            "lasttPA": np.array([0] * n, dtype=np.int32),
+            "lyscomplete": np.array([1] * n, dtype=np.int32),
+            "lysis": np.array([10.0] * n, dtype=np.float64),
+            "PLi": np.array([5] * n, dtype=np.int32),
+            "tPA_time": np.array([2.0] * n, dtype=np.float64),
+            "tPAPLiunbd": np.array([0] * n, dtype=np.int32),
+            "tPAunbind": np.array([1] * n, dtype=np.int32),
+        }
+
+    def test_single_step_produces_correct_datasets(self, v199_microscale_data):
+        """Single step v1.99.0 → v2.0.0 produces v2.0.0 dataset names."""
+        result = _convert_single_step(
+            v199_microscale_data, "v1.99.0", "v2.0.0"
+        )
+        assert "pli_first_time" in result
+        assert "sim_final_time" in result
+
+    def test_single_step_converts_params(self):
+        """Single step v1.95.0 → v1.99.0 converts params."""
+        n = 100
+        input_data = {
+            "params": {
+                "micro_params": {
+                    "pore_size": 0.000534,
+                    "micro_simulations": 100,
+                },
+                "macro_params": {
+                    "rows": 5,
+                    "cols": 3,
+                    "total_edges": 57,
+                    "total_molecules": 10,
+                },
+            },
+            "micro_log": np.array(["sim1"], dtype="<U75"),
+            "firstPLi": np.array([1.0] * n, dtype=np.float64),
+            "lasttPA": np.array([0] * n, dtype=np.int32),
+            "lyscomplete": np.array([1] * n, dtype=np.int32),
+            "lysis": np.array([10.0] * n, dtype=np.float64),
+            "PLi": np.array([5] * n, dtype=np.int32),
+            "tPA_time": np.array([2.0] * n, dtype=np.float64),
+            "tPAPLiunbd": np.array([0] * n, dtype=np.int32),
+            "tPAunbind": np.array([1] * n, dtype=np.int32),
+        }
+        result = _convert_single_step(input_data, "v1.95.0", "v1.99.0")
+        assert isinstance(result["params"]["micro_params"]["pore_size"], str)
+
+    def test_single_step_missing_params_raises(self):
+        """Missing params raises ValueError."""
+        input_data = {"micro_log": np.array(["sim1"], dtype="<U75")}
+        with pytest.raises(ValueError, match="parameters"):
+            _convert_single_step(input_data, "v1.99.0", "v2.0.0")
+
+    def test_single_step_preserves_params_without_converter(self, v199_microscale_data):
+        """When no params_converter exists, params are copied by reference."""
+        result = _convert_single_step(
+            v199_microscale_data, "v1.99.0", "v2.0.0"
+        )
+        assert result["params"] is v199_microscale_data["params"]
+
+
+# ---------------------------------------------------------------------------
+# convert_data — multi-step conversion
+# ---------------------------------------------------------------------------
+
+
+class TestConvertDataMultiStep:
+    """Tests for multi-step conversion via :func:`convert_data`."""
+
+    @pytest.fixture
+    def v195_microscale_data(self):
+        """Minimal v1.95.0 microscale data with bare-magnitude params."""
+        n = 100
+        return {
+            "params": {
+                "micro_params": {
+                    "pore_size": 0.000534,
+                    "total_time": 3600.0,
+                    "micro_simulations": 100,
+                },
+                "macro_params": {
+                    "rows": 5,
+                    "cols": 3,
+                    "total_edges": 57,
+                    "total_molecules": 10,
+                    "diffusion_coeff": 5e-7,
+                },
+            },
+            "micro_log": np.array(["sim1", "sim2"], dtype="<U75"),
+            "firstPLi": np.array([1.0] * n, dtype=np.float64),
+            "lasttPA": np.array([0] * n, dtype=np.int32),
+            "lyscomplete": np.array([1] * n, dtype=np.int32),
+            "lysis": np.array([10.0] * n, dtype=np.float64),
+            "PLi": np.array([5] * n, dtype=np.int32),
+            "tPA_time": np.array([2.0] * n, dtype=np.float64),
+            "tPAPLiunbd": np.array([0] * n, dtype=np.int32),
+            "tPAunbind": np.array([1] * n, dtype=np.int32),
+        }
+
+    def test_v195_to_v200_auto_chains(self, v195_microscale_data):
+        """v1.95.0 → v2.0.0 chains through v1.99.0 automatically."""
+        result = convert_data(v195_microscale_data, "v1.95.0", "v2.0.0")
+        # v2.0.0 dataset names present
+        assert "pli_first_time" in result
+        assert "sim_final_time" in result
+        assert "tpa_leaving_time" in result
+
+    def test_v195_to_v200_params_converted_through_chain(self, v195_microscale_data):
+        """Multi-step conversion applies params converter at each step."""
+        result = convert_data(v195_microscale_data, "v1.95.0", "v2.0.0")
+        # v1.95.0 → v1.99.0 adds units, v1.99.0 → v2.0.0 has no params converter
+        # so params should have unit strings from the v1.95.0 → v1.99.0 step
+        assert isinstance(result["params"]["micro_params"]["pore_size"], str)
+        q = Q_(result["params"]["micro_params"]["pore_size"])
+        assert q.magnitude == pytest.approx(0.000534)
+
+    def test_v200_to_v195_auto_chains(self):
+        """v2.0.0 → v1.95.0 chains through v1.99.0 automatically."""
+        n = 100
+        input_data = {
+            "params": {
+                "micro_params": {
+                    "pore_size": "0.000534 centimeter",
+                    "total_time": "3600.0 second",
+                    "micro_simulations": 100,
+                },
+                "macro_params": {
+                    "diffusion_coeff": "5e-07 centimeter ** 2 / second",
+                    "rows": 5,
+                    "cols": 3,
+                    "total_edges": 57,
+                    "total_molecules": 10,
+                },
+            },
+            "micro_log": np.array(["sim1", "sim2"], dtype="<U75"),
+            "pli_first_time": np.array([1.0] * n, dtype=np.float64),
+            "tpa_final_num": np.array([0] * n, dtype=np.int32),
+            "fiber_degraded": np.array([1] * n, dtype=np.int32),
+            "sim_final_time": np.array([10.0] * n, dtype=np.float64),
+            "pli_generated_num": np.array([5] * n, dtype=np.int32),
+            "tpa_leaving_time": np.array([2.0] * n, dtype=np.float64),
+            "tpa_unbound_by_pli": np.array([0] * n, dtype=np.int32),
+            "tpa_unbound_kinetic": np.array([1] * n, dtype=np.int32),
+        }
+        result = convert_data(input_data, "v2.0.0", "v1.95.0")
+        # v1.95.0 dataset names present
+        assert "firstPLi" in result
+        assert "lysis" in result
+        # Params should have bare magnitudes (units stripped)
+        assert isinstance(result["params"]["micro_params"]["pore_size"], float)
+        assert result["params"]["micro_params"]["pore_size"] == pytest.approx(0.000534)
+
+    def test_v195_to_v200_data_values_correct(self, v195_microscale_data):
+        """Multi-step conversion preserves data values through chain."""
+        result = convert_data(v195_microscale_data, "v1.95.0", "v2.0.0")
+        np.testing.assert_array_equal(
+            result["pli_first_time"],
+            v195_microscale_data["firstPLi"],
+        )
+
+    def test_same_spec_short_circuit(self, v195_microscale_data):
+        """Same input and output spec returns data as-is."""
+        result = convert_data(
+            v195_microscale_data, "v1.95.0", "v1.95.0"
+        )
+        assert result is v195_microscale_data
+
+    def test_same_spec_via_tags_short_circuit(self):
+        """Tags that resolve to the same version short-circuit."""
+        data = {
+            "params": {"micro_params": {}, "macro_params": {}},
+            "micro_log": np.array(["sim1"], dtype="<U75"),
+        }
+        result = convert_data(data, "hdf5", "current")
+        # "hdf5" and "current" both resolve to "v2.0.0"
+        assert result is data
+
+    def test_no_path_raises_valueerror(self):
+        """Requesting a conversion with no path raises ValueError."""
+        data = {
+            "params": {"micro_params": {}},
+            "micro_log": np.array(["sim1"], dtype="<U75"),
+        }
+        with pytest.raises(ValueError, match="No conversion path"):
+            convert_data(data, "v1.95.0", "v999.0.0")
+
+    def test_tag_resolution_with_multi_step(self, v195_microscale_data):
+        """Tag aliases work with multi-step conversion."""
+        # "current" resolves to "hdf5" → "v2.0.0"
+        result = convert_data(v195_microscale_data, "v1.95.0", "current")
+        assert "pli_first_time" in result
+
+    def test_partial_data_through_chain(self, v195_microscale_data):
+        """Partial data (microscale only) converts through multi-step chain."""
+        result = convert_data(v195_microscale_data, "v1.95.0", "v2.0.0")
+        assert "pli_first_time" in result
+        # Macroscale datasets should not be present
+        assert "snapshot_time" not in result
