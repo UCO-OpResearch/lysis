@@ -261,6 +261,86 @@ class DataCollection:
         return parts
 
 
+class DerivedDataCollection:
+    """Read-only interface to a lazily-generated derived data collection.
+
+    Provides the same dot-access interface as :class:`DataCollection` for
+    combined collections, but stores numpy arrays in memory rather than
+    ``h5py.Dataset`` objects.  Data is generated on first access by calling
+    the supplied *generator* callable, and cached for subsequent accesses.
+
+    :param name: The collection name (e.g., ``"macroscale_in"``).
+    :type name: str
+    :param collection_spec: The spec defining this collection's datasets.
+    :type collection_spec: DataCollectionSpec
+    :param generator: A callable that returns a :class:`DataCollectionType`
+        dict mapping dataset names (and ``"params"``) to numpy arrays.
+    :type generator: callable
+    """
+
+    def __init__(self, name, collection_spec, generator):
+        self._name = name
+        self._spec = collection_spec
+        self._generator = generator
+        self._data = None  # populated on first access
+
+    def _ensure_generated(self):
+        """Call the generator if data has not yet been generated."""
+        if self._data is None:
+            self._data = self._generator()
+
+    @property
+    def datasets(self):
+        """List of dataset names in this collection.
+
+        Unlike :attr:`DataCollection.datasets`, this includes *all* datasets
+        from the spec regardless of ``data_location``, since derived
+        collections have no on-disk storage.
+
+        :return: All dataset names from the spec.
+        :rtype: list[str]
+        """
+        return list(self._spec.data.keys())
+
+    @property
+    def params(self):
+        """Parameters dict computed during generation.
+
+        Triggers generation if data has not yet been generated.
+
+        :return: The ``"params"`` entry from the generator output.
+        :rtype: dict
+        """
+        self._ensure_generated()
+        return self._data.get("params")
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name in self._spec.data:
+            self._ensure_generated()
+            if name in self._data:
+                return self._data[name]
+            raise AttributeError(
+                f"Dataset '{name}' is in the spec but was not produced "
+                f"by the generator."
+            )
+        raise AttributeError(
+            f"'{type(self).__name__}' has no dataset '{name}'. "
+            f"Available datasets: {self.datasets}"
+        )
+
+    def __contains__(self, name):
+        return name in self._spec.data
+
+    def __repr__(self):
+        status = "generated" if self._data is not None else "pending"
+        return (
+            f"<DerivedDataCollection '{self._name}', "
+            f"status={status}, datasets={len(self.datasets)}>"
+        )
+
+
 class DataStore:
     """Interface to an HDF5 file following the v2.0.0 data specification.
 
@@ -373,6 +453,15 @@ class DataStore:
                 num_sims = self._macro_params.macro_simulations
             self._collections[coll_name] = DataCollection(
                 coll_name, self._file, coll_spec, num_sims=num_sims
+            )
+
+        # Register derived collections (lazy generation)
+        if self._can_generate_macroscale_in():
+            macro_in_spec = spec["macroscale_in"]
+            self._collections["macroscale_in"] = DerivedDataCollection(
+                "macroscale_in",
+                macro_in_spec,
+                self._build_macroscale_in_generator(),
             )
 
         self._status = DataStatus.INITIALIZED
@@ -632,6 +721,91 @@ class DataStore:
 
         # Re-initialize in place (reloads all collections, params, etc.)
         self.__init__(self._run_code, self._path, mode=self._mode)
+
+    # ------------------------------------------------------------------
+    #  Derived collection helpers
+    # ------------------------------------------------------------------
+
+    def _can_generate_macroscale_in(self):
+        """Check whether macroscale_in can be generated from available data.
+
+        Requires microscale_out to be present, macro_params to be loaded,
+        and the six datasets used by :func:`generate_macroscale_in` to exist
+        with non-zero first dimension.
+
+        :return: ``True`` if all preconditions are met.
+        :rtype: bool
+        """
+        if "microscale_out" not in self._collections:
+            return False
+        if self._macro_params is None:
+            return False
+
+        required = [
+            "pli_first_time",
+            "tpa_leaving_time",
+            "fiber_degraded",
+            "sim_final_time",
+            "tpa_unbound_by_pli",
+            "tpa_unbound_kinetic",
+        ]
+        micro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["microscale_out"]
+        for name in required:
+            ds_spec = micro_spec.data.get(name)
+            if ds_spec is None or ds_spec.data_location is None:
+                return False
+            if ds_spec.data_location not in self._file:
+                return False
+            if self._file[ds_spec.data_location].shape[0] == 0:
+                return False
+        return True
+
+    def _build_macroscale_in_generator(self):
+        """Build a closure that generates macroscale_in data on demand.
+
+        The closure reads the six required microscale_out datasets from
+        HDF5 (as numpy copies to avoid in-place mutation of HDF5 data),
+        builds the params dict, and calls
+        :func:`~lysis.data.dataconvert.generate_macroscale_in`.
+
+        :return: A zero-argument callable returning a
+            :class:`DataCollectionType` dict.
+        :rtype: callable
+        """
+        # Capture references needed by the closure
+        h5file = self._file
+        micro_params = self._micro_params
+        macro_params = self._macro_params
+        micro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["microscale_out"]
+
+        dataset_names = [
+            "pli_first_time",
+            "tpa_leaving_time",
+            "fiber_degraded",
+            "sim_final_time",
+            "tpa_unbound_by_pli",
+            "tpa_unbound_kinetic",
+        ]
+
+        def _generate():
+            # Import inside closure to avoid circular imports
+            from .dataconvert import generate_macroscale_in
+
+            # Read datasets as numpy copies ([:] triggers full read)
+            in_data = {}
+            for name in dataset_names:
+                ds_spec = micro_spec.data[name]
+                in_data[name] = h5file[ds_spec.data_location][:]
+
+            # Build params dict as expected by generate_macroscale_in
+            in_data["params"] = {
+                "micro_params": micro_params.to_basedict(),
+                "macro_params": macro_params.to_basedict(),
+            }
+
+            return generate_macroscale_in(in_data)
+
+        return _generate
 
     def close(self):
         """Close the underlying HDF5 file."""

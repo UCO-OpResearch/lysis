@@ -19,6 +19,7 @@ from lysis.data.datastore import (
     COMPATIBLE_DATASPEC_VERSION,
     DataStore,
     DataCollection,
+    DerivedDataCollection,
     SimulationView,
     DataStatus,
     h5_tree,
@@ -337,8 +338,9 @@ class TestDataStoreInit:
             assert "microscale_out" in ds.collections
             assert "macroscale_out" in ds.collections
 
-    def test_macroscale_in_not_detected(self, tmp_path):
-        """macroscale_in (derived collection) is never in collections."""
+    def test_macroscale_in_detected_when_conditions_met(self, tmp_path):
+        """macroscale_in (derived collection) is advertised when microscale_out
+        has non-empty required datasets and macro_params is present."""
         filepath = tmp_path / "both.h5"
         with h5py.File(filepath, "w") as f:
             _write_micro_attrs(f)
@@ -347,6 +349,18 @@ class TestDataStoreInit:
             _write_macro_datasets(f, n_sims=2)
 
         with DataStore("both", str(tmp_path)) as ds:
+            assert "macroscale_in" in ds.collections
+            assert isinstance(ds.collections["macroscale_in"], DerivedDataCollection)
+
+    def test_macroscale_in_absent_without_macro_params(self, tmp_path):
+        """macroscale_in is NOT present when only microscale_out exists
+        (no macro_params)."""
+        filepath = tmp_path / "micro_only.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+
+        with DataStore("micro_only", str(tmp_path)) as ds:
             assert "macroscale_in" not in ds.collections
 
     def test_context_manager_closes_file(self, tmp_path):
@@ -1582,3 +1596,312 @@ class TestDataStoreWriteThrough:
             dataset = ds2.microscale_out.pli_first_time
             with pytest.raises((OSError, RuntimeError)):
                 dataset.resize((10,))
+
+
+# ---------------------------------------------------------------------------
+#  DerivedDataCollection unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestDerivedDataCollection:
+    """Unit tests for DerivedDataCollection using a mock generator."""
+
+    @staticmethod
+    def _make_spec():
+        """Return the macroscale_in spec from the v2.0.0 dataspec."""
+        return dataspec["v2.0.0"]["macroscale_in"]
+
+    @staticmethod
+    def _make_generator(call_counter=None):
+        """Return a mock generator that produces fake macroscale_in data.
+
+        :param call_counter: If provided, a list that gets an item appended
+            on each call (to count invocations).
+        """
+
+        def _gen():
+            if call_counter is not None:
+                call_counter.append(1)
+            return {
+                "bin_edge_proportions": np.arange(101, dtype=np.float64),
+                "bin_edge_tpa_leaving_time": np.arange(101, dtype=np.float64),
+                "binned_fiber_degrade_time": np.zeros((50, 100), dtype=np.float64),
+                "binned_fiber_degraded": np.zeros(100, dtype=np.uint16),
+                "edge_grid_neighbors": np.zeros((10, 8), dtype=np.uint32),
+                "params": {"micro_params": {}, "macro_params": {"forced_unbind": 0.5}},
+            }
+
+        return _gen
+
+    def test_datasets_lists_all_spec_datasets(self):
+        """datasets property returns all dataset names from the spec."""
+        spec = self._make_spec()
+        dc = DerivedDataCollection("macroscale_in", spec, self._make_generator())
+        assert set(dc.datasets) == set(spec.data.keys())
+
+    def test_repr_shows_pending_before_access(self):
+        """__repr__ shows 'pending' before any dataset is accessed."""
+        spec = self._make_spec()
+        dc = DerivedDataCollection("macroscale_in", spec, self._make_generator())
+        r = repr(dc)
+        assert "pending" in r
+        assert "macroscale_in" in r
+
+    def test_repr_shows_generated_after_access(self):
+        """__repr__ shows 'generated' after a dataset is accessed."""
+        spec = self._make_spec()
+        dc = DerivedDataCollection("macroscale_in", spec, self._make_generator())
+        _ = dc.bin_edge_proportions
+        r = repr(dc)
+        assert "generated" in r
+
+    def test_contains_for_spec_datasets(self):
+        """__contains__ returns True for spec dataset names."""
+        spec = self._make_spec()
+        dc = DerivedDataCollection("macroscale_in", spec, self._make_generator())
+        assert "bin_edge_proportions" in dc
+        assert "binned_fiber_degraded" in dc
+        assert "totally_fake" not in dc
+
+    def test_getattr_triggers_generator_once(self):
+        """Accessing a dataset triggers the generator exactly once."""
+        counter = []
+        spec = self._make_spec()
+        dc = DerivedDataCollection(
+            "macroscale_in", spec, self._make_generator(call_counter=counter)
+        )
+        assert len(counter) == 0
+
+        _ = dc.bin_edge_proportions
+        assert len(counter) == 1
+
+        # Second access should not call again
+        _ = dc.binned_fiber_degraded
+        assert len(counter) == 1
+
+    def test_multiple_accesses_reuse_cached_data(self):
+        """Multiple dataset accesses return the same cached arrays."""
+        spec = self._make_spec()
+        dc = DerivedDataCollection("macroscale_in", spec, self._make_generator())
+        a = dc.bin_edge_proportions
+        b = dc.bin_edge_proportions
+        assert a is b
+
+    def test_returns_numpy_arrays(self):
+        """Accessed datasets are numpy arrays."""
+        spec = self._make_spec()
+        dc = DerivedDataCollection("macroscale_in", spec, self._make_generator())
+        assert isinstance(dc.bin_edge_proportions, np.ndarray)
+        assert isinstance(dc.binned_fiber_degrade_time, np.ndarray)
+
+    def test_unknown_dataset_raises_attribute_error(self):
+        """Accessing a name not in the spec raises AttributeError."""
+        spec = self._make_spec()
+        dc = DerivedDataCollection("macroscale_in", spec, self._make_generator())
+        with pytest.raises(AttributeError, match="no dataset"):
+            _ = dc.totally_fake
+
+    def test_params_property(self):
+        """params property returns the params dict from the generator."""
+        spec = self._make_spec()
+        dc = DerivedDataCollection("macroscale_in", spec, self._make_generator())
+        params = dc.params
+        assert isinstance(params, dict)
+        assert "macro_params" in params
+        assert params["macro_params"]["forced_unbind"] == 0.5
+
+
+# ---------------------------------------------------------------------------
+#  DataStore macroscale_in integration tests
+# ---------------------------------------------------------------------------
+
+
+def _write_micro_datasets_for_macro_in(h5file, n_sims=100):
+    """Create microscale_out datasets suitable for generate_macroscale_in.
+
+    Requires n_sims divisible by 100.  Creates non-empty datasets with
+    at least one True in both tpa_unbound_by_pli and tpa_unbound_kinetic
+    to avoid division by zero in forced_unbind calculation.
+    """
+    spec = dataspec["v2.0.0"]["microscale_out"]
+    rng = np.random.default_rng(42)
+    for name, ds_spec in spec.data.items():
+        if ds_spec.data_location is None:
+            continue
+        path = ds_spec.data_location
+        if name == "pli_first_time":
+            data = rng.uniform(0, 100, n_sims).astype(ds_spec.dtype)
+        elif name == "tpa_leaving_time":
+            data = rng.uniform(0, 100, n_sims).astype(ds_spec.dtype)
+        elif name == "fiber_degraded":
+            data = rng.choice([True, False], n_sims)
+        elif name == "sim_final_time":
+            data = rng.uniform(50, 200, n_sims).astype(ds_spec.dtype)
+        elif name == "tpa_unbound_by_pli":
+            # Ensure at least one True
+            data = np.zeros(n_sims, dtype=bool)
+            data[:n_sims // 2] = True
+        elif name == "tpa_unbound_kinetic":
+            # Ensure at least one True
+            data = np.zeros(n_sims, dtype=bool)
+            data[n_sims // 2:] = True
+        elif ds_spec.dtype == h5py.string_dtype():
+            data = np.array(["log line"] * n_sims, dtype=object)
+            h5file.create_dataset(path, data=data, dtype=h5py.string_dtype())
+            continue
+        elif ds_spec.dtype == np.bool:
+            data = rng.choice([True, False], n_sims)
+        elif np.issubdtype(ds_spec.dtype, np.integer):
+            data = np.arange(n_sims, dtype=ds_spec.dtype)
+        else:
+            data = rng.random(n_sims).astype(ds_spec.dtype)
+        h5file.create_dataset(path, data=data)
+
+
+class TestDataStoreMacroscaleIn:
+    """Integration tests for macroscale_in via DataStore."""
+
+    def test_macroscale_in_in_collections(self, tmp_path):
+        """macroscale_in appears in ds.collections when conditions are met."""
+        filepath = tmp_path / "macro_in.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, micro_simulations=100)
+            _write_micro_datasets_for_macro_in(f, n_sims=100)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+
+        with DataStore("macro_in", str(tmp_path)) as ds:
+            assert "macroscale_in" in ds.collections
+
+    def test_macroscale_in_absent_without_macro_params(self, tmp_path):
+        """macroscale_in absent when only microscale_out present (no macro_params)."""
+        filepath = tmp_path / "no_macro.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, micro_simulations=100)
+            _write_micro_datasets_for_macro_in(f, n_sims=100)
+
+        with DataStore("no_macro", str(tmp_path)) as ds:
+            assert "macroscale_in" not in ds.collections
+
+    def test_macroscale_in_absent_when_datasets_empty(self, tmp_path):
+        """macroscale_in absent when microscale_out datasets are empty."""
+        filepath = tmp_path / "empty_ds.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, micro_simulations=0)
+            # Write empty (zero-length) datasets
+            spec = dataspec["v2.0.0"]["microscale_out"]
+            for name, ds_spec in spec.data.items():
+                if ds_spec.data_location is None:
+                    continue
+                if ds_spec.dtype == h5py.string_dtype():
+                    f.create_dataset(
+                        ds_spec.data_location,
+                        shape=(0,),
+                        maxshape=(None,),
+                        dtype=h5py.string_dtype(),
+                    )
+                else:
+                    f.create_dataset(
+                        ds_spec.data_location,
+                        shape=(0,),
+                        maxshape=(None,),
+                        dtype=ds_spec.dtype,
+                    )
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+
+        with DataStore("empty_ds", str(tmp_path)) as ds:
+            assert "macroscale_in" not in ds.collections
+
+    def test_dot_access_returns_derived_collection(self, tmp_path):
+        """ds.macroscale_in returns a DerivedDataCollection."""
+        filepath = tmp_path / "dot_acc.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, micro_simulations=100)
+            _write_micro_datasets_for_macro_in(f, n_sims=100)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+
+        with DataStore("dot_acc", str(tmp_path)) as ds:
+            assert isinstance(ds.macroscale_in, DerivedDataCollection)
+
+    def test_bin_edge_proportions_shape(self, tmp_path):
+        """ds.macroscale_in.bin_edge_proportions has shape (101,)."""
+        filepath = tmp_path / "bep.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, micro_simulations=100)
+            _write_micro_datasets_for_macro_in(f, n_sims=100)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+
+        with DataStore("bep", str(tmp_path)) as ds:
+            arr = ds.macroscale_in.bin_edge_proportions
+            assert isinstance(arr, np.ndarray)
+            assert arr.shape == (101,)
+
+    def test_datasets_lists_all_five(self, tmp_path):
+        """ds.macroscale_in.datasets returns all five dataset names."""
+        filepath = tmp_path / "dslist.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, micro_simulations=100)
+            _write_micro_datasets_for_macro_in(f, n_sims=100)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+
+        with DataStore("dslist", str(tmp_path)) as ds:
+            names = ds.macroscale_in.datasets
+            expected = {
+                "bin_edge_proportions",
+                "bin_edge_tpa_leaving_time",
+                "binned_fiber_degrade_time",
+                "binned_fiber_degraded",
+                "edge_grid_neighbors",
+            }
+            assert set(names) == expected
+
+    def test_lazy_generation(self, tmp_path):
+        """Data is lazily generated — _data is None before first access."""
+        filepath = tmp_path / "lazy.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, micro_simulations=100)
+            _write_micro_datasets_for_macro_in(f, n_sims=100)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+
+        with DataStore("lazy", str(tmp_path)) as ds:
+            coll = ds.macroscale_in
+            assert coll._data is None
+
+            # Trigger generation
+            _ = coll.bin_edge_proportions
+            assert coll._data is not None
+
+    def test_params_has_forced_unbind(self, tmp_path):
+        """Generated params contain the forced_unbind calculation."""
+        filepath = tmp_path / "params.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, micro_simulations=100)
+            _write_micro_datasets_for_macro_in(f, n_sims=100)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+
+        with DataStore("params", str(tmp_path)) as ds:
+            params = ds.macroscale_in.params
+            assert "macro_params" in params
+            assert "forced_unbind" in params["macro_params"]
+            fu = params["macro_params"]["forced_unbind"]
+            assert 0.0 < fu < 1.0
+
+    def test_binned_fiber_degrade_time_shape(self, tmp_path):
+        """binned_fiber_degrade_time has shape (n_per_bin, 100)."""
+        filepath = tmp_path / "bfdt.h5"
+        n_sims = 100
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, micro_simulations=n_sims)
+            _write_micro_datasets_for_macro_in(f, n_sims=n_sims)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+
+        with DataStore("bfdt", str(tmp_path)) as ds:
+            arr = ds.macroscale_in.binned_fiber_degrade_time
+            assert arr.shape == (n_sims // 100, 100)
