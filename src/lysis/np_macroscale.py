@@ -386,7 +386,7 @@ class MacroscaleSim:
 
         # Pre-allocate arrays to store simulation snapshots at save intervals
         # Stores fiber degradation times at each save point
-        self.run.data.degradation_state = np.empty(
+        self.degradation_state = np.empty(
             (
                 self.run.macro_params.number_of_saves,
                 self.run.macro_params.rows * self.run.macro_params.full_row,
@@ -394,7 +394,7 @@ class MacroscaleSim:
             dtype=np.float64,
         )
         # Stores molecule locations (as flat indices) at each save point
-        self.run.data.molecule_location = np.empty(
+        self.molecule_location = np.empty(
             (
                 self.run.macro_params.number_of_saves,
                 self.run.macro_params.total_molecules,
@@ -402,7 +402,7 @@ class MacroscaleSim:
             dtype=np.int_,
         )
         # Stores molecule binding state (True=bound, False=unbound) at each save point
-        self.run.data.molecule_state = np.empty(
+        self.molecule_state = np.empty(
             (
                 self.run.macro_params.number_of_saves,
                 self.run.macro_params.total_molecules,
@@ -410,7 +410,7 @@ class MacroscaleSim:
             dtype=np.bool_,
         )
         # Stores the simulation time corresponding to each save point
-        self.run.data.save_time = np.empty(
+        self.save_time_array = np.empty(
             (self.run.macro_params.number_of_saves,),
             dtype=np.float64,
         )
@@ -506,14 +506,15 @@ class MacroscaleSim:
             # All operations done in-place for memory efficiency
             binding_time_list = np.log(binding_time_list, out=binding_time_list)
             denominator = (
-                self.run.macro_params.binding_rate * self.run.macro_params.binding_sites
-            )
+                self.run.macro_params.micro_params.bind_rate_tPA
+                * self.run.macro_params.micro_params.binding_sites
+            ).magnitude
             binding_time_list = np.divide(
                 binding_time_list, denominator, out=binding_time_list
             )
             # Use subtract instead of negating then adding (equivalent but cleaner)
             binding_time_list = np.subtract(
-                -self.run.macro_params.time_step / 2,
+                -self.run.macro_params.time_step.magnitude / 2,
                 binding_time_list,
                 out=binding_time_list,
             )
@@ -602,8 +603,8 @@ class MacroscaleSim:
         # plus the average bind time, minus half a timestep
         self.waiting_time[m] = (
             current_time
-            + self.run.macro_params.average_bound_time
-            - self.run.macro_params.time_step / 2
+            + self.run.macro_params.average_bound_time.magnitude
+            - self.run.macro_params.time_step.magnitude / 2
         )
         # Set the binding/unbinding time of the selected molecules to infinite
         # The fiber in their current location just degraded, so they can never
@@ -655,8 +656,8 @@ class MacroscaleSim:
         # Forced unbinds: molecules must wait before moving (like macro unbind)
         self.waiting_time[forced] = (
             current_time
-            + self.run.macro_params.average_bound_time
-            - self.run.macro_params.time_step / 2
+            + self.run.macro_params.average_bound_time.magnitude
+            - self.run.macro_params.time_step.magnitude / 2
         )
         self.binding_time[forced] = float("inf")
         num_forced = np.count_nonzero(forced)
@@ -712,8 +713,12 @@ class MacroscaleSim:
         :return: Array of absolute unbinding times (current_time + relative_time - time_step/2)
         :rtype: np.ndarray
         """
-        interp = np.interp(unbinding_time_bin, self.xp, self.run.data.unbinding_time)
-        return interp + (current_time - self.run.macro_params.time_step / 2)
+        interp = np.interp(
+            unbinding_time_bin,
+            self.xp,
+            self.run.data.macroscale_in.bin_edge_tpa_leaving_time,
+        )
+        return interp + (current_time - self.run.macro_params.time_step.magnitude / 2)
 
     def find_lysis_time(
         self,
@@ -745,13 +750,17 @@ class MacroscaleSim:
         else:
             lysis_time_bin = self.rng.random(count)
         # Scale to match the number of microscale simulation runs
-        lysis_time_bin = lysis_time_bin * (self.run.macro_params.microscale_runs / 100)
+        lysis_time_bin = lysis_time_bin * (
+            self.run.macro_params.micro_params.micro_simulations / 100
+        )
         # Initialize all lysis times to infinity (no lysis by default)
         interp = np.full(count, float("inf"), dtype=np.double)
         # Convert unbinding bins to integer indices
         unbinding_time_bin = unbinding_time_bin.astype(int)
         # Get the number of lysis events recorded for each unbinding bin
-        total_lyses = self.run.data.total_lyses[unbinding_time_bin] - 1
+        total_lyses = self.run.data.macroscale_in.binned_fiber_degraded[
+            unbinding_time_bin
+        ]
         # Check if lysis actually occurs (random draw < number of recorded lyses)
         lysis_happens = lysis_time_bin < total_lyses
         # Keep infinity for molecules that don't cause lysis
@@ -766,9 +775,11 @@ class MacroscaleSim:
             interp[i] = np.interp(
                 lysis_time_bin[i],
                 np.arange(total_lyses[i]),
-                self.run.data.lysis_time[unbinding_time_bin[i], : total_lyses[i]],
+                self.run.data.macroscale_in.binned_fiber_degrade_time[
+                    : total_lyses[i], unbinding_time_bin[i]
+                ],
             )
-        return interp + (current_time - self.run.macro_params.time_step / 2)
+        return interp + (current_time - self.run.macro_params.time_step.magnitude / 2)
 
     def bind(self, m: np.ndarray, current_time: float):
         """Bind molecules to fibers at their current locations.
@@ -986,10 +997,10 @@ class MacroscaleSim:
         :param current_time: The current simulation time to record
         :type current_time: float
         """
-        self.run.data.degradation_state[self.current_save_interval] = self.fiber_status
-        self.run.data.molecule_location[self.current_save_interval] = self.location
-        self.run.data.molecule_state[self.current_save_interval] = self.bound
-        self.run.data.save_time[self.current_save_interval] = current_time
+        self.degradation_state[self.current_save_interval] = self.fiber_status
+        self.molecule_location[self.current_save_interval] = self.location
+        self.molecule_state[self.current_save_interval] = self.bound
+        self.save_time_array[self.current_save_interval] = current_time
         self.current_save_interval += 1
 
     def record_data_to_disk(self):
@@ -999,11 +1010,14 @@ class MacroscaleSim:
         save_time arrays to disk using the Run object's save_to_disk method.
         Called at the end of the simulation.
         """
-        self.logger.info(f"Saving data to disk.")
-        self.run.data.save_to_disk("degradation_state")
-        self.run.data.save_to_disk("molecule_location")
-        self.run.data.save_to_disk("molecule_state")
-        self.run.data.save_to_disk("save_time")
+        # TODO: Implement DataStore v2.0.0 write path for macroscale_out.
+        #       Output arrays are available as self.degradation_state,
+        #       self.molecule_location, self.molecule_state, self.save_time_array.
+        self.logger.info(
+            "record_data_to_disk called — data is available on the "
+            "MacroscaleSim instance (degradation_state, molecule_location, "
+            "molecule_state, save_time_array). DataStore write not yet implemented."
+        )
 
     def go(self):
         """Execute the main simulation loop.
@@ -1027,10 +1041,10 @@ class MacroscaleSim:
             np.arange(self.run.macro_params.total_time_steps), mininterval=2
         ):
             # Calculate current simulation time
-            current_time = ts * self.run.macro_params.time_step
+            current_time = ts * self.run.macro_params.time_step.magnitude
             if self.run.macro_params.duplicate_fortran:
                 # Fortran starts at timestep 1 instead of 0
-                current_time += self.run.macro_params.time_step
+                current_time += self.run.macro_params.time_step.magnitude
 
             # The Fortran code processes all events for one molecule at a time
             # This code processes each event for all molecules at the same time
@@ -1137,7 +1151,7 @@ class MacroscaleSim:
                 # interval does binding happen?)
                 threshold = (
                     current_time - self.binding_time[conflict]
-                ) / self.run.macro_params.time_step
+                ) / self.run.macro_params.time_step.magnitude
                 # Bind if moving happens in that ending part
                 should_bind[conflict] = (
                     self.random_numbers[RandomDraw.CONFLICT_RESOLUTION][conflict]
@@ -1148,8 +1162,8 @@ class MacroscaleSim:
                 # interval does binding happen?)
                 threshold = (
                     self.binding_time[conflict]
-                    - (current_time - self.run.macro_params.time_step)
-                ) / self.run.macro_params.time_step
+                    - (current_time - self.run.macro_params.time_step.magnitude)
+                ) / self.run.macro_params.time_step.magnitude
                 # Bind if movement would happen after binding.
                 should_bind[conflict] = (
                     self.rng.random(np.count_nonzero(conflict)) >= threshold
@@ -1164,7 +1178,7 @@ class MacroscaleSim:
             # Save simulation state at regular intervals
             if (
                 current_time
-                >= self.run.macro_params.save_interval * self.current_save_interval
+                >= self.run.macro_params.save_interval.magnitude * self.current_save_interval
             ):
                 self.save_data(current_time)
 
@@ -1200,7 +1214,9 @@ class MacroscaleSim:
                     )
 
         # Save final state and write all data to disk
-        self.save_data(self.run.macro_params.total_time)
+        self.save_data(
+            self.run.macro_params.total_time.to_reduced_units().magnitude
+        )
         self.record_data_to_disk()
 
         # Log final statistics

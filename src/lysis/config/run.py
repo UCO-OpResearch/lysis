@@ -102,7 +102,7 @@ class Run(object):
         # self.sequence: ExpComponent = ExpComponent.NONE
         self.micro_params = None
         self.macro_params = None
-        # self.data = DataStore(self.os_path, default_filenames)
+        self.data = None
 
     def __str__(self) -> str:
         """Gives a human-readable, formatted string of the current run's
@@ -159,6 +159,22 @@ class Run(object):
             self.macro_params = MacroParameters(self.micro_params, **params)
         else:
             self.macro_params = MacroParameters(micro_params=self.micro_params)
+
+    def open_data(self, mode: str = "r") -> DataStore:
+        """Open the HDF5 DataStore for this run.
+
+        Creates a :class:`~lysis.data.datastore.DataStore` backed by the HDF5
+        file ``{run_code}.h5`` in the run's data directory. The DataStore is
+        stored as ``self.data`` and also returned for convenience.
+
+        :param mode: HDF5 file mode passed to :class:`DataStore`.
+            ``"r"`` (default) for read-only, ``"a"`` for read/write.
+        :type mode: str
+        :return: The opened DataStore.
+        :rtype: DataStore
+        """
+        self.data = DataStore(self.run_code, self.os_path, mode=mode)
+        return self.data
 
     def to_dict(self) -> dict:
         """Returns the internally stored data as a dictionary.
