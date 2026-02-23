@@ -7,8 +7,10 @@ from datetime import datetime
 from typing import AnyStr
 
 import lysis
-from lysis.config.constants import default_filenames
+from lysis.config.constants import Q_
+from lysis.config.parameters import MacroParameters
 from lysis.config.run import Run
+from lysis.data.datastore import DataStore
 
 
 def exec(run: Run, timestamp: AnyStr):
@@ -17,38 +19,46 @@ def exec(run: Run, timestamp: AnyStr):
     else:
         logger = logging.getLogger(__name__)
     logger.info(f"Initialized Run '{run.run_code}'")
-    # p = {
-    #     "rows": 12,
-    #     "cols": 9,
-    #     "empty_rows": 3,
-    #     "total_molecules": 430,
-    #     "total_time": 10 * 60,
-    #     "duplicate_fortran": False,
-    # }
-    # e.initialize_macro_param(p)
-    run.read_file()
+
+    # Open DataStore directly from data_root (HDF5 file lives in the root,
+    # not inside the run subfolder).
+    run.data = DataStore(run.run_code, run.os_data_root)
+    logger.info(f"Opened DataStore: {run.data!r}")
+
+    # Load micro_params from the HDF5 file
+    run.micro_params = run.data.micro_params
+
+    # Build macro_params from the HDF5 values, overriding total_time to 2 min
+    base_macro = run.data.macro_params.to_basedict()
+    base_macro["total_time"] = "120 second"
+    base_macro["micro_params"] = run.micro_params
+    run.macro_params = MacroParameters.parse_from_basedict(base_macro)
+
     logger.debug(f"With parameters {os.linesep}{run}")
-    for file in run.macro_params.output_data:
-        filename = default_filenames[file]
-        if os.path.isfile(os.path.join(run.os_path, filename)):
-            os.remove(os.path.join(run.os_path, filename))
-    macro = lysis.MacroscaleSim(run)
-    os.makedirs(os.path.join(run.os_path, "macro_pstats"), exist_ok=True)
-
-    filename = "macro_pstats_" + timestamp + ".sts"
-
-    cProfile.runctx(
-        "macro.exec()",
-        globals(),
-        locals(),
-        filename=os.path.join(run.os_path, "macro_pstats", filename),
+    logger.info(
+        f"Simulation: {run.macro_params.total_time_steps:,} timesteps "
+        f"({run.macro_params.total_time} total, "
+        f"dt={run.macro_params.time_step})"
     )
 
-    logger.info(f"cProfile stats saved as {filename}.")
+    macro = lysis.MacroscaleSim(run)
+    # os.makedirs(os.path.join(run.os_path, "macro_pstats"), exist_ok=True)
+
+    # filename = "macro_pstats_" + timestamp + ".sts"
+
+    # cProfile.runctx(
+    #     "macro.go()",
+    #     globals(),
+    #     locals(),
+    #     filename=os.path.join(run.os_path, "macro_pstats", filename),
+    # )
+    macro.go()
+
+    # logger.info(f"cProfile stats saved as {filename}.")
 
 
 def main():
-    run = Run(r"../../data", run_code="2026-01-25-1000")
+    run = Run(r"data", run_code="2026-02-18-1723")
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     os.makedirs(os.path.join(run.os_path, "log"), exist_ok=True)
     logfile = os.path.join(run.os_path, "log", "lysis-py-" + timestamp + ".log")
