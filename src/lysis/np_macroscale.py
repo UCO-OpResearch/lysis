@@ -119,10 +119,10 @@ Fortran compatibility mode for validation::
 Access saved data::
 
     >>> # Data is saved to disk after simulation
-    >>> degradation = run.data.degradation_state
-    >>> locations = run.data.molecule_location
-    >>> states = run.data.molecule_state
-    >>> times = run.data.save_time
+    >>> sim_view = run.data.macroscale_out[0]
+    >>> times = sim_view.snapshot_time[:]
+    >>> locations = sim_view.tpa_location_snapshot[:]
+    >>> events = sim_view.tpa_bind_events[:]
 
 Algorithm Details
 -----------------
@@ -186,10 +186,34 @@ from functools import partial
 import numpy as np
 from tqdm.auto import tqdm
 
-from .config.constants import RandomDraw
+from .config.constants import MolStatus, RandomDraw
 from .config.run import Run
 from .geometry.edge_grid import EdgeGrid, from_fortran_edge_index, to_fortran_edge_index
 from .tools.kiss import KissRandomGenerator
+
+#: NumPy structured dtype for tPA bind/unbind event logging.
+#: Compatible with the HDF5 enum dtype in the v2.0.0 dataspec
+#: (the ``Molecule New Status`` field uses uint8 values matching
+#: :class:`~lysis.config.constants.MolStatus`).
+_BIND_EVENT_DTYPE = np.dtype(
+    [
+        ("Simulation Time Elapsed", np.float64),
+        ("tPA Molecule Index", np.int64),
+        ("Molecule New Status", np.uint8),
+        ("Grid Location Row", np.uint32),
+        ("Grid Location Rank", np.uint32),
+    ]
+)
+
+#: NumPy structured dtype for fiber degrade-time event logging.
+_FIBER_DEGRADE_DTYPE = np.dtype(
+    [
+        ("Simulation Time Elapsed", np.float64),
+        ("Grid Location Row", np.uint32),
+        ("Grid Location Rank", np.uint32),
+        ("Fiber New Degrade Time", np.float64),
+    ]
+)
 
 
 class MacroscaleSim:
@@ -212,7 +236,7 @@ class MacroscaleSim:
     - Periodic data snapshots for analysis
     """
 
-    def __init__(self, run: Run):
+    def __init__(self, run: Run, sim_number: int = 0):
         """Initialize a macroscale simulation.
 
         Sets up the simulation grid, places molecules, initializes fiber states,
@@ -221,9 +245,13 @@ class MacroscaleSim:
         :param run: The Run object containing simulation parameters and data storage.
             Must have macro_params defined.
         :type run: Run
+        :param sim_number: The simulation index within the Run (0-based). Used to
+            select the correct per-simulation datasets in macroscale_out.
+        :type sim_number: int
         :raises AssertionError: If run.macro_params is None
         """
         self.run = run
+        self.sim_number = sim_number
         # Check that the run has macro parameters
         assert self.run.macro_params is not None
 
@@ -385,35 +413,24 @@ class MacroscaleSim:
         self.current_save_interval = 0
 
         # Pre-allocate arrays to store simulation snapshots at save intervals
-        # Stores fiber degradation times at each save point
-        self.degradation_state = np.empty(
+        # Stores molecule locations as (row, rank) at each save point
+        self.tpa_location_snapshot = np.empty(
             (
                 self.run.macro_params.number_of_saves,
-                self.run.macro_params.rows * self.run.macro_params.full_row,
-            ),
-            dtype=np.float64,
-        )
-        # Stores molecule locations (as flat indices) at each save point
-        self.molecule_location = np.empty(
-            (
-                self.run.macro_params.number_of_saves,
+                2,
                 self.run.macro_params.total_molecules,
             ),
-            dtype=np.int_,
-        )
-        # Stores molecule binding state (True=bound, False=unbound) at each save point
-        self.molecule_state = np.empty(
-            (
-                self.run.macro_params.number_of_saves,
-                self.run.macro_params.total_molecules,
-            ),
-            dtype=np.bool_,
+            dtype=np.int32,
         )
         # Stores the simulation time corresponding to each save point
-        self.save_time_array = np.empty(
+        self.snapshot_time = np.empty(
             (self.run.macro_params.number_of_saves,),
             dtype=np.float64,
         )
+
+        # Event accumulation lists — each element is a structured numpy array
+        self._bind_events = []
+        self._fiber_degrade_events = []
 
         self.logger.debug(f"Initialization complete.")
 
@@ -611,6 +628,21 @@ class MacroscaleSim:
         # bind to it.
         self.binding_time[m] = float("inf")
 
+        # Record MACRO_UNBOUND events
+        mol_ids = np.where(m)[0]
+        locations = self.location[m]
+        rows, ranks = np.unravel_index(
+            locations,
+            (self.run.macro_params.rows, self.run.macro_params.full_row),
+        )
+        events = np.empty(count, dtype=_BIND_EVENT_DTYPE)
+        events["Simulation Time Elapsed"] = current_time
+        events["tPA Molecule Index"] = mol_ids
+        events["Molecule New Status"] = MolStatus.MACRO_UNBOUND.value
+        events["Grid Location Row"] = rows
+        events["Grid Location Rank"] = ranks
+        self._bind_events.append(events)
+
     def unbind_by_time(self, m: np.ndarray, current_time: float):
         """Unbind molecules whose binding duration has expired (micro unbind).
 
@@ -677,6 +709,40 @@ class MacroscaleSim:
                 self.binding_time[m & ~forced] = (
                     current_time + self.binding_time_factory.next(count - num_forced)
                 )
+
+        # Record unbind events for forced (MICRO_UNBOUND) molecules
+        if num_forced > 0:
+            mol_ids = np.where(forced)[0]
+            locations = self.location[forced]
+            rows, ranks = np.unravel_index(
+                locations,
+                (self.run.macro_params.rows, self.run.macro_params.full_row),
+            )
+            events = np.empty(num_forced, dtype=_BIND_EVENT_DTYPE)
+            events["Simulation Time Elapsed"] = current_time
+            events["tPA Molecule Index"] = mol_ids
+            events["Molecule New Status"] = MolStatus.MICRO_UNBOUND.value
+            events["Grid Location Row"] = rows
+            events["Grid Location Rank"] = ranks
+            self._bind_events.append(events)
+
+        # Record unbind events for non-forced (UNBOUND) molecules
+        non_forced = m & ~forced
+        num_non_forced = count - num_forced
+        if num_non_forced > 0:
+            mol_ids = np.where(non_forced)[0]
+            locations = self.location[non_forced]
+            rows, ranks = np.unravel_index(
+                locations,
+                (self.run.macro_params.rows, self.run.macro_params.full_row),
+            )
+            events = np.empty(num_non_forced, dtype=_BIND_EVENT_DTYPE)
+            events["Simulation Time Elapsed"] = current_time
+            events["tPA Molecule Index"] = mol_ids
+            events["Molecule New Status"] = MolStatus.UNBOUND.value
+            events["Grid Location Row"] = rows
+            events["Grid Location Rank"] = ranks
+            self._bind_events.append(events)
 
     def find_unbinding_time(
         self, unbinding_time_bin: np.ndarray, current_time: float
@@ -812,11 +878,22 @@ class MacroscaleSim:
 
         lysis_time = self.find_lysis_time(m, unbinding_time_bin, current_time, count)
         locations = self.location[m]
+
+        # Record fiber degrade events where lysis_time actually changes fiber_status
+        fiber_degrade_batch = []
         for i in range(count):
             if lysis_time[i] < float("inf"):
-                self.fiber_status[locations[i]] = min(
-                    self.fiber_status[locations[i]], lysis_time[i]
-                )
+                new_val = min(self.fiber_status[locations[i]], lysis_time[i])
+                if new_val < self.fiber_status[locations[i]]:
+                    self.fiber_status[locations[i]] = new_val
+                    fiber_degrade_batch.append(
+                        (current_time, *np.unravel_index(
+                            int(locations[i]),
+                            (self.run.macro_params.rows,
+                             self.run.macro_params.full_row),
+                        ), new_val)
+                    )
+                # fiber_status unchanged if new_val == old_val (same min)
         # CRITICAL - DO NOT VECTORIZE:
         # We must use a loop here to handle the case where multiple molecules bind to
         # the same fiber in the same timestep. The vectorized approach below would allow
@@ -828,6 +905,25 @@ class MacroscaleSim:
         #   self.fiber_status[locations] = np.fmin(self.fiber_status[locations], lysis_time)
         # TODO: Investigate whether this could be prevented by first sorting by
         #       decreasing lysis time since last write wins.
+
+        # Record tpa_bind_events for all molecules that bound
+        mol_ids = np.where(m)[0]
+        rows, ranks = np.unravel_index(
+            locations,
+            (self.run.macro_params.rows, self.run.macro_params.full_row),
+        )
+        events = np.empty(count, dtype=_BIND_EVENT_DTYPE)
+        events["Simulation Time Elapsed"] = current_time
+        events["tPA Molecule Index"] = mol_ids
+        events["Molecule New Status"] = MolStatus.BOUND.value
+        events["Grid Location Row"] = rows
+        events["Grid Location Rank"] = ranks
+        self._bind_events.append(events)
+
+        # Record fiber degrade events
+        if fiber_degrade_batch:
+            fd_events = np.array(fiber_degrade_batch, dtype=_FIBER_DEGRADE_DTYPE)
+            self._fiber_degrade_events.append(fd_events)
 
     def move_to_empty_edge(self, m: np.ndarray, current_time: float):
         """Move molecules to a random empty (degraded) neighboring edge.
@@ -988,35 +1084,69 @@ class MacroscaleSim:
             self.number_reached_back_row += np.count_nonzero(first_time)
 
     def save_data(self, current_time):
-        """Save the current simulation state to the Run's data arrays.
+        """Save the current simulation state as a v2.0.0 snapshot.
 
-        Stores a snapshot of the fiber degradation state, molecule locations,
-        molecule binding state, and current time at the next save interval index.
-        Increments the save interval counter.
+        Stores molecule locations as (row, rank) coordinates and the simulation
+        time at the next save interval index. Increments the save interval counter.
 
         :param current_time: The current simulation time to record
         :type current_time: float
         """
-        self.degradation_state[self.current_save_interval] = self.fiber_status
-        self.molecule_location[self.current_save_interval] = self.location
-        self.molecule_state[self.current_save_interval] = self.bound
-        self.save_time_array[self.current_save_interval] = current_time
+        rows, ranks = np.unravel_index(
+            self.location,
+            (self.run.macro_params.rows, self.run.macro_params.full_row),
+        )
+        self.tpa_location_snapshot[self.current_save_interval, 0, :] = rows
+        self.tpa_location_snapshot[self.current_save_interval, 1, :] = ranks
+        self.snapshot_time[self.current_save_interval] = current_time
         self.current_save_interval += 1
 
     def record_data_to_disk(self):
-        """Write all collected simulation data to disk.
+        """Write all collected simulation data to HDF5 via the DataStore.
 
-        Saves the degradation_state, molecule_location, molecule_state, and
-        save_time arrays to disk using the Run object's save_to_disk method.
-        Called at the end of the simulation.
+        Writes snapshot_time, tpa_location_snapshot, tpa_bind_events,
+        fiber_degrade_time, and tpa_transit_time datasets to the per-simulation
+        macroscale_out group. Called at the end of the simulation.
         """
-        # TODO: Implement DataStore v2.0.0 write path for macroscale_out.
-        #       Output arrays are available as self.degradation_state,
-        #       self.molecule_location, self.molecule_state, self.save_time_array.
+        sim_view = self.run.data.macroscale_out[self.sim_number]
+        n = self.current_save_interval
+
+        # snapshot_time
+        ds = sim_view.snapshot_time
+        ds.resize((n,))
+        ds[:] = self.snapshot_time[:n]
+
+        # tpa_location_snapshot
+        ds = sim_view.tpa_location_snapshot
+        ds.resize((n, 2, self.run.macro_params.total_molecules))
+        ds[:] = self.tpa_location_snapshot[:n]
+
+        # tpa_bind_events
+        if self._bind_events:
+            all_events = np.concatenate(self._bind_events)
+            ds = sim_view.tpa_bind_events
+            ds.resize((len(all_events),))
+            ds[:] = all_events
+
+        # fiber_degrade_time
+        if self._fiber_degrade_events:
+            all_events = np.concatenate(self._fiber_degrade_events)
+            ds = sim_view.fiber_degrade_time
+            ds.resize((len(all_events),))
+            ds[:] = all_events
+
+        # tpa_transit_time
+        reached = self.time_to_reach_back_row[self.reached_back_row]
+        if len(reached) > 0:
+            ds = sim_view.tpa_transit_time
+            ds.resize((len(reached),))
+            ds[:] = reached
+
         self.logger.info(
-            "record_data_to_disk called — data is available on the "
-            "MacroscaleSim instance (degradation_state, molecule_location, "
-            "molecule_state, save_time_array). DataStore write not yet implemented."
+            f"Wrote macroscale_out for sim {self.sim_number}: "
+            f"{n} snapshots, {sum(len(e) for e in self._bind_events)} bind events, "
+            f"{sum(len(e) for e in self._fiber_degrade_events)} fiber degrade events, "
+            f"{len(reached)} transit times."
         )
 
     def go(self):

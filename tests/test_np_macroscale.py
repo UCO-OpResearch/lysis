@@ -4,7 +4,9 @@ Tests cover:
 - MacroscaleSim initialization with DataStore
 - Data reads from macroscale_in (unbinding time, lysis time)
 - Molecule state transitions (bind, unbind_by_degradation, unbind_by_time)
-- Data snapshots via save_data
+- Event logging (tpa_bind_events, fiber_degrade_time)
+- Data snapshots via save_data (v2.0.0 format)
+- Writing to HDF5 via record_data_to_disk
 - Short end-to-end simulation via go()
 """
 
@@ -12,12 +14,12 @@ import numpy as np
 import h5py
 import pytest
 
-from lysis.config.constants import Q_
+from lysis.config.constants import MolStatus, Q_
 from lysis.config.parameters import MicroParameters, MacroParameters
 from lysis.config.run import Run
 from lysis.data.datastore import DataStore
 from lysis.data.dataspec import dataspec
-from lysis.np_macroscale import MacroscaleSim
+from lysis.np_macroscale import MacroscaleSim, _BIND_EVENT_DTYPE, _FIBER_DEGRADE_DTYPE
 
 
 # ---------------------------------------------------------------------------
@@ -162,25 +164,32 @@ class TestMacroscaleSimInit:
         assert sim.waiting_time.shape == (mp.total_molecules,)
 
     def test_output_arrays_on_sim_instance(self, sim):
-        """Output arrays live on the MacroscaleSim, not on run.data."""
+        """v2.0.0 output arrays live on the MacroscaleSim."""
         mp = sim.run.macro_params
-        total_edges = mp.rows * mp.full_row
 
-        assert hasattr(sim, "degradation_state")
-        assert hasattr(sim, "molecule_location")
-        assert hasattr(sim, "molecule_state")
-        assert hasattr(sim, "save_time_array")
+        assert hasattr(sim, "tpa_location_snapshot")
+        assert hasattr(sim, "snapshot_time")
 
-        assert sim.degradation_state.shape == (mp.number_of_saves, total_edges)
-        assert sim.molecule_location.shape == (
+        assert sim.tpa_location_snapshot.shape == (
             mp.number_of_saves,
+            2,
             mp.total_molecules,
         )
-        assert sim.molecule_state.shape == (
-            mp.number_of_saves,
-            mp.total_molecules,
-        )
-        assert sim.save_time_array.shape == (mp.number_of_saves,)
+        assert sim.snapshot_time.shape == (mp.number_of_saves,)
+
+    def test_event_lists_initialized(self, sim):
+        """Event accumulation lists start empty."""
+        assert sim._bind_events == []
+        assert sim._fiber_degrade_events == []
+
+    def test_sim_number_default(self, sim):
+        """Default sim_number is 0."""
+        assert sim.sim_number == 0
+
+    def test_sim_number_custom(self, run_with_data):
+        """sim_number can be set via constructor."""
+        sim = MacroscaleSim(run_with_data, sim_number=0)
+        assert sim.sim_number == 0
 
     def test_no_molecules_bound_initially(self, sim):
         """All molecules start unbound."""
@@ -357,29 +366,150 @@ class TestBindUnbind:
 
 
 # ---------------------------------------------------------------------------
+#  Event logging tests
+# ---------------------------------------------------------------------------
+
+
+class TestEventLogging:
+    """Tests for event recording in bind/unbind methods."""
+
+    def test_bind_records_events(self, sim):
+        """bind() records tpa_bind_events with BOUND status."""
+        mp = sim.run.macro_params
+        first_fiber_idx = mp.empty_rows * mp.full_row
+        sim.location[:2] = first_fiber_idx
+        sim.m_fiber_status = sim.fiber_status[sim.location]
+
+        m = np.zeros(mp.total_molecules, dtype=bool)
+        m[:2] = True
+        sim.bind(m, current_time=1.0)
+
+        assert len(sim._bind_events) >= 1
+        events = np.concatenate(sim._bind_events)
+        bound_events = events[events["Molecule New Status"] == MolStatus.BOUND.value]
+        assert len(bound_events) == 2
+        assert np.all(bound_events["Simulation Time Elapsed"] == 1.0)
+        assert set(bound_events["tPA Molecule Index"]) == {0, 1}
+
+        # Verify row/rank coordinates are valid
+        row, rank = np.unravel_index(first_fiber_idx, (mp.rows, mp.full_row))
+        assert np.all(bound_events["Grid Location Row"] == row)
+        assert np.all(bound_events["Grid Location Rank"] == rank)
+
+    def test_bind_records_fiber_degrade(self, sim):
+        """bind() records fiber_degrade_time when lysis_time changes fiber_status."""
+        mp = sim.run.macro_params
+        first_fiber_idx = mp.empty_rows * mp.full_row
+        sim.location[0] = first_fiber_idx
+        sim.m_fiber_status = sim.fiber_status[sim.location]
+
+        m = np.zeros(mp.total_molecules, dtype=bool)
+        m[0] = True
+
+        # Use a fixed seed so bind() produces lysis
+        np.random.seed(42)
+        sim.bind(m, current_time=1.0)
+
+        # If lysis happened, fiber_degrade_events should have entries
+        if sim.fiber_status[first_fiber_idx] < float("inf"):
+            assert len(sim._fiber_degrade_events) > 0
+            fd_events = np.concatenate(sim._fiber_degrade_events)
+            assert fd_events.dtype == _FIBER_DEGRADE_DTYPE
+            assert np.all(fd_events["Simulation Time Elapsed"] == 1.0)
+            assert np.all(np.isfinite(fd_events["Fiber New Degrade Time"]))
+
+    def test_unbind_by_degradation_records_events(self, sim):
+        """unbind_by_degradation records MACRO_UNBOUND events."""
+        mp = sim.run.macro_params
+
+        sim.bound[0] = True
+        m = np.zeros(mp.total_molecules, dtype=bool)
+        m[0] = True
+
+        sim.unbind_by_degradation(m, current_time=10.0)
+
+        assert len(sim._bind_events) == 1
+        events = sim._bind_events[0]
+        assert len(events) == 1
+        assert events[0]["Molecule New Status"] == MolStatus.MACRO_UNBOUND.value
+        assert events[0]["Simulation Time Elapsed"] == 10.0
+        assert events[0]["tPA Molecule Index"] == 0
+
+    def test_unbind_by_time_forced_records_events(self, tmp_path):
+        """unbind_by_time records MICRO_UNBOUND events for forced unbinds."""
+        run = _make_run_and_datastore(
+            tmp_path,
+            run_code="forced_unbind",
+            macro_overrides={"forced_unbind": 1.0},
+        )
+        sim = MacroscaleSim(run)
+        mp = sim.run.macro_params
+
+        sim.bound[0] = True
+        m = np.zeros(mp.total_molecules, dtype=bool)
+        m[0] = True
+
+        sim.unbind_by_time(m, current_time=10.0)
+
+        events = np.concatenate(sim._bind_events)
+        micro_events = events[
+            events["Molecule New Status"] == MolStatus.MICRO_UNBOUND.value
+        ]
+        assert len(micro_events) == 1
+        assert micro_events[0]["tPA Molecule Index"] == 0
+
+    def test_unbind_by_time_non_forced_records_events(self, tmp_path):
+        """unbind_by_time records UNBOUND events for non-forced unbinds."""
+        run = _make_run_and_datastore(
+            tmp_path,
+            run_code="non_forced_unbind",
+            macro_overrides={"forced_unbind": 0.0},
+        )
+        sim = MacroscaleSim(run)
+        mp = sim.run.macro_params
+
+        sim.bound[0] = True
+        m = np.zeros(mp.total_molecules, dtype=bool)
+        m[0] = True
+
+        sim.unbind_by_time(m, current_time=10.0)
+
+        events = np.concatenate(sim._bind_events)
+        unbound_events = events[
+            events["Molecule New Status"] == MolStatus.UNBOUND.value
+        ]
+        assert len(unbound_events) == 1
+        assert unbound_events[0]["tPA Molecule Index"] == 0
+
+
+# ---------------------------------------------------------------------------
 #  save_data tests
 # ---------------------------------------------------------------------------
 
 
 class TestSaveData:
-    """Tests for save_data snapshot method."""
+    """Tests for save_data snapshot method (v2.0.0 format)."""
 
     def test_save_data_stores_snapshot(self, sim):
-        """save_data records fiber_status, location, bound, and time."""
+        """save_data records tpa_location_snapshot and snapshot_time."""
+        mp = sim.run.macro_params
         current_time = 5.0
         sim.save_data(current_time)
 
-        np.testing.assert_array_equal(
-            sim.degradation_state[0], sim.fiber_status
-        )
-        np.testing.assert_array_equal(
-            sim.molecule_location[0], sim.location
-        )
-        np.testing.assert_array_equal(
-            sim.molecule_state[0], sim.bound
-        )
-        assert sim.save_time_array[0] == current_time
+        # Verify snapshot_time
+        assert sim.snapshot_time[0] == current_time
         assert sim.current_save_interval == 1
+
+        # Verify tpa_location_snapshot contains valid (row, rank) coords
+        expected_rows, expected_ranks = np.unravel_index(
+            sim.location, (mp.rows, mp.full_row)
+        )
+        np.testing.assert_array_equal(
+            sim.tpa_location_snapshot[0, 0, :], expected_rows
+        )
+        np.testing.assert_array_equal(
+            sim.tpa_location_snapshot[0, 1, :], expected_ranks
+        )
 
     def test_save_data_increments_index(self, sim):
         """Multiple save_data calls fill successive rows."""
@@ -387,8 +517,111 @@ class TestSaveData:
         sim.save_data(5.0)
 
         assert sim.current_save_interval == 2
-        assert sim.save_time_array[0] == 0.0
-        assert sim.save_time_array[1] == 5.0
+        assert sim.snapshot_time[0] == 0.0
+        assert sim.snapshot_time[1] == 5.0
+
+    def test_save_data_row_rank_roundtrip(self, sim):
+        """Saved (row, rank) coords correctly round-trip from flat indices."""
+        mp = sim.run.macro_params
+        sim.save_data(0.0)
+
+        rows = sim.tpa_location_snapshot[0, 0, :]
+        ranks = sim.tpa_location_snapshot[0, 1, :]
+        flat = np.ravel_multi_index(
+            (rows.astype(int), ranks.astype(int)),
+            (mp.rows, mp.full_row),
+        )
+        np.testing.assert_array_equal(flat, sim.location)
+
+
+# ---------------------------------------------------------------------------
+#  record_data_to_disk tests
+# ---------------------------------------------------------------------------
+
+
+class TestRecordDataToDisk:
+    """Tests for writing macroscale_out data to HDF5 via record_data_to_disk."""
+
+    def test_writes_snapshot_time(self, sim):
+        """record_data_to_disk writes snapshot_time to HDF5."""
+        sim.save_data(0.0)
+        sim.save_data(5.0)
+        sim.record_data_to_disk()
+
+        sv = sim.run.data.macroscale_out[sim.sim_number]
+        ds = sv.snapshot_time
+        assert ds.shape == (2,)
+        np.testing.assert_array_equal(ds[:], sim.snapshot_time[:2])
+
+    def test_writes_tpa_location_snapshot(self, sim):
+        """record_data_to_disk writes tpa_location_snapshot with correct shape."""
+        mp = sim.run.macro_params
+        sim.save_data(0.0)
+        sim.record_data_to_disk()
+
+        sv = sim.run.data.macroscale_out[sim.sim_number]
+        ds = sv.tpa_location_snapshot
+        assert ds.shape == (1, 2, mp.total_molecules)
+        np.testing.assert_array_equal(
+            ds[:], sim.tpa_location_snapshot[:1]
+        )
+
+    def test_writes_bind_events(self, sim):
+        """record_data_to_disk writes tpa_bind_events to HDF5."""
+        mp = sim.run.macro_params
+        first_fiber_idx = mp.empty_rows * mp.full_row
+        sim.location[:2] = first_fiber_idx
+        sim.m_fiber_status = sim.fiber_status[sim.location]
+
+        m = np.zeros(mp.total_molecules, dtype=bool)
+        m[:2] = True
+        sim.bind(m, current_time=1.0)
+
+        sim.save_data(1.0)
+        sim.record_data_to_disk()
+
+        sv = sim.run.data.macroscale_out[sim.sim_number]
+        ds = sv.tpa_bind_events
+        assert ds.shape[0] >= 2  # at least the 2 BOUND events
+
+    def test_writes_fiber_degrade_events(self, sim):
+        """record_data_to_disk writes fiber_degrade_time when events exist."""
+        # Manually add a fiber degrade event
+        event = np.array(
+            [(1.0, 3, 5, 42.0)], dtype=_FIBER_DEGRADE_DTYPE
+        )
+        sim._fiber_degrade_events.append(event)
+
+        sim.save_data(1.0)
+        sim.record_data_to_disk()
+
+        sv = sim.run.data.macroscale_out[sim.sim_number]
+        ds = sv.fiber_degrade_time
+        assert ds.shape == (1,)
+        assert ds[0]["Fiber New Degrade Time"] == 42.0
+
+    def test_writes_tpa_transit_time(self, sim):
+        """record_data_to_disk writes tpa_transit_time for molecules that reached back row."""
+        sim.reached_back_row[0] = True
+        sim.time_to_reach_back_row[0] = 99.5
+
+        sim.save_data(100.0)
+        sim.record_data_to_disk()
+
+        sv = sim.run.data.macroscale_out[sim.sim_number]
+        ds = sv.tpa_transit_time
+        assert ds.shape == (1,)
+        assert ds[0] == 99.5
+
+    def test_no_events_leaves_datasets_empty(self, sim):
+        """With no events, bind/degrade/transit datasets remain size 0."""
+        sim.save_data(0.0)
+        sim.record_data_to_disk()
+
+        sv = sim.run.data.macroscale_out[sim.sim_number]
+        assert sv.tpa_bind_events.shape == (0,)
+        assert sv.fiber_degrade_time.shape == (0,)
+        assert sv.tpa_transit_time.shape == (0,)
 
 
 # ---------------------------------------------------------------------------
@@ -414,7 +647,7 @@ class TestShortSimulation:
 
         # Verify final save was recorded
         assert sim.current_save_interval >= 1
-        assert sim.save_time_array[0] == 0.0
+        assert sim.snapshot_time[0] == 0.0
 
     def test_go_fiber_status_changes(self, tmp_path):
         """After simulation, at least some fiber status values may have changed."""
@@ -433,3 +666,44 @@ class TestShortSimulation:
         assert sim.current_save_interval >= 1
         # Total binds should be non-negative (may be 0 for very short sim)
         assert sim.total_binds >= 0
+
+    def test_go_writes_data_to_hdf5(self, tmp_path):
+        """go() writes snapshot data to HDF5 via record_data_to_disk."""
+        run = _make_run_and_datastore(
+            tmp_path,
+            run_code="hdf5_sim",
+            macro_overrides={
+                "total_time": Q_("0.01 sec"),
+                "save_interval": Q_("0.01 sec"),
+            },
+        )
+        sim = MacroscaleSim(run)
+        sim.go()
+
+        sv = run.data.macroscale_out[0]
+        # snapshot_time should have been written
+        assert sv.snapshot_time.shape[0] == sim.current_save_interval
+        # tpa_location_snapshot should match
+        assert sv.tpa_location_snapshot.shape[0] == sim.current_save_interval
+
+    def test_go_event_lists_populated(self, tmp_path):
+        """After go(), event lists should contain data if binding occurred."""
+        run = _make_run_and_datastore(
+            tmp_path,
+            run_code="event_sim",
+            macro_overrides={
+                "total_time": Q_("0.1 sec"),
+                "save_interval": Q_("0.1 sec"),
+            },
+        )
+        sim = MacroscaleSim(run)
+        sim.go()
+
+        # If binds occurred, bind_events should be populated
+        if sim.total_binds > 0:
+            all_events = np.concatenate(sim._bind_events)
+            assert len(all_events) >= sim.total_binds
+            # Every BOUND event should have a valid MolStatus value
+            statuses = set(all_events["Molecule New Status"])
+            valid = {s.value for s in MolStatus}
+            assert statuses.issubset(valid)

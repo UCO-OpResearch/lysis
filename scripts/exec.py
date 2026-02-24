@@ -20,9 +20,10 @@ def exec(run: Run, timestamp: AnyStr):
         logger = logging.getLogger(__name__)
     logger.info(f"Initialized Run '{run.run_code}'")
 
-    # Open DataStore directly from data_root (HDF5 file lives in the root,
-    # not inside the run subfolder).
-    run.data = DataStore(run.run_code, run.os_data_root)
+    # Open DataStore in read/write mode so record_data_to_disk can write
+    # macroscale_out datasets.  The HDF5 file lives in data_root, not
+    # inside the run subfolder.
+    run.data = DataStore(run.run_code, run.os_data_root, mode="a")
     logger.info(f"Opened DataStore: {run.data!r}")
 
     # Load micro_params from the HDF5 file
@@ -41,20 +42,14 @@ def exec(run: Run, timestamp: AnyStr):
         f"dt={run.macro_params.time_step})"
     )
 
-    macro = lysis.MacroscaleSim(run)
-    # os.makedirs(os.path.join(run.os_path, "macro_pstats"), exist_ok=True)
-
-    # filename = "macro_pstats_" + timestamp + ".sts"
-
-    # cProfile.runctx(
-    #     "macro.go()",
-    #     globals(),
-    #     locals(),
-    #     filename=os.path.join(run.os_path, "macro_pstats", filename),
-    # )
-    macro.go()
-
-    # logger.info(f"cProfile stats saved as {filename}.")
+    for sim_number in range(run.macro_params.macro_simulations):
+        logger.info(
+            f"Starting simulation {sim_number + 1} of "
+            f"{run.macro_params.macro_simulations}"
+        )
+        macro = lysis.MacroscaleSim(run, sim_number=sim_number)
+        macro.go()
+        logger.info(f"Simulation {sim_number + 1} complete.")
 
 
 def main():
