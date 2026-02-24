@@ -483,6 +483,116 @@ class TestEventLogging:
 
 
 # ---------------------------------------------------------------------------
+#  expire_waiting_period tests
+# ---------------------------------------------------------------------------
+
+
+class TestExpireWaitingPeriod:
+    """Tests for expire_waiting_period (MACRO_UNBOUND/MICRO_UNBOUND -> UNBOUND)."""
+
+    def test_macro_unbound_expiration(self, sim):
+        """MACRO_UNBOUND molecule records UNBOUND event and clears state."""
+        mp = sim.run.macro_params
+
+        # Simulate a macro-unbound molecule whose waiting period has expired
+        sim.waiting_time[0] = 5.0
+        sim.unbound_by_degradation[0] = True
+
+        sim.expire_waiting_period(current_time=6.0)
+
+        # State cleared
+        assert sim.waiting_time[0] == 0
+        assert not sim.unbound_by_degradation[0]
+
+        # UNBOUND event recorded
+        assert len(sim._bind_events) == 1
+        events = sim._bind_events[0]
+        assert len(events) == 1
+        assert events[0]["Molecule New Status"] == MolStatus.UNBOUND.value
+        assert events[0]["Simulation Time Elapsed"] == 6.0
+        assert events[0]["tPA Molecule Index"] == 0
+
+    def test_micro_unbound_expiration(self, sim):
+        """MICRO_UNBOUND molecule records UNBOUND event and clears waiting_time."""
+        mp = sim.run.macro_params
+
+        # Simulate a micro-unbound molecule (no degradation flag, but has
+        # waiting_time set by unbind_by_time forced path)
+        sim.waiting_time[2] = 3.0
+        sim.unbound_by_degradation[2] = False
+
+        sim.expire_waiting_period(current_time=4.0)
+
+        assert sim.waiting_time[2] == 0
+
+        assert len(sim._bind_events) == 1
+        events = sim._bind_events[0]
+        assert len(events) == 1
+        assert events[0]["Molecule New Status"] == MolStatus.UNBOUND.value
+        assert events[0]["tPA Molecule Index"] == 2
+
+    def test_no_event_if_still_waiting(self, sim):
+        """No event if waiting_time > current_time."""
+        sim.waiting_time[0] = 10.0
+
+        sim.expire_waiting_period(current_time=5.0)
+
+        assert sim.waiting_time[0] == 10.0
+        assert len(sim._bind_events) == 0
+
+    def test_no_event_if_waiting_time_zero(self, sim):
+        """No event if waiting_time is 0 (molecule never waited)."""
+        assert sim.waiting_time[0] == 0
+
+        sim.expire_waiting_period(current_time=5.0)
+
+        assert len(sim._bind_events) == 0
+
+    def test_no_event_if_bound(self, sim):
+        """No event if molecule is bound (defensive guard)."""
+        sim.bound[0] = True
+        sim.waiting_time[0] = 3.0
+
+        sim.expire_waiting_period(current_time=5.0)
+
+        # Bound molecule should be excluded by ~self.bound
+        assert sim.waiting_time[0] == 3.0
+        assert len(sim._bind_events) == 0
+
+    def test_does_not_fire_twice(self, sim):
+        """After expiration, waiting_time is 0 so a second call is a no-op."""
+        sim.waiting_time[0] = 3.0
+
+        sim.expire_waiting_period(current_time=5.0)
+        assert len(sim._bind_events) == 1
+
+        sim.expire_waiting_period(current_time=6.0)
+        assert len(sim._bind_events) == 1  # no new event
+
+    def test_multiple_molecules_expiring(self, sim):
+        """Multiple molecules can expire simultaneously."""
+        sim.waiting_time[0] = 2.0
+        sim.waiting_time[1] = 3.0
+        sim.waiting_time[3] = 4.0
+        sim.unbound_by_degradation[0] = True
+
+        sim.expire_waiting_period(current_time=5.0)
+
+        # All three should expire
+        assert sim.waiting_time[0] == 0
+        assert sim.waiting_time[1] == 0
+        assert sim.waiting_time[3] == 0
+        assert not sim.unbound_by_degradation[0]
+
+        assert len(sim._bind_events) == 1
+        events = sim._bind_events[0]
+        assert len(events) == 3
+        assert set(events["tPA Molecule Index"]) == {0, 1, 3}
+        assert np.all(events["Molecule New Status"] == MolStatus.UNBOUND.value)
+        assert np.all(events["Simulation Time Elapsed"] == 5.0)
+
+
+# ---------------------------------------------------------------------------
 #  save_data tests
 # ---------------------------------------------------------------------------
 

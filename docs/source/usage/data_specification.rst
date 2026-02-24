@@ -21,11 +21,11 @@ Files
 Group Structure
 --------------------
 
-``micro_group``
+``micro_data``
   Contains microscale output datasets.
 
-``macro_group``
-  Contains a group for each macroscale simulations datasets, numbered 00, 01, 02, ...
+``macro_data``
+  Contains a group for each macroscale simulation's datasets, named sim_00, sim_01, sim_02, ...
 
 ``log_files``
   Contains log files for all executions of code
@@ -258,10 +258,13 @@ Macroscale datasets
 
   Valid molecule statuses are:
 
-  0. Kinetically Unbound.
-  1. Bound to an undegraded fiber.
-  2. Bound to a degraded fiber (macro-unbound).
-  3. Bound to a fiber degradation product (micro-unbound).
+  0. Unbound. Not bound to any fibrin.
+  1. Bound. Bound to an intact fiber in the lattice.
+  2. Macro-unbound (unbinding by degradation). Still attached to a large fibrin
+     fragment that has separated from the lattice because the fiber was fully degraded.
+  3. Micro-unbound (forced unbinding). Still attached to a small fibrin fragment
+     that has separated from the lattice due to plasmin-mediated degradation of the
+     binding site.
 
   :Data Type: 
     (NumPy float64 (``f8``), NumPy uint64 (``u8``), NumPy uint8 (``u1``), NumPy uint32 (``u4``), NumPy uint32 (``u4``))
@@ -642,10 +645,13 @@ Subfolders
 
   Valid molecule statuses are:
 
-  0. Kinetically Unbound.
-  1. Bound to an undegraded fiber.
-  2. Bound to a degraded fiber (macro-unbound).
-  3. Bound to a fiber degradation product (micro-unbound).
+  0. Unbound. Not bound to any fibrin.
+  1. Bound. Bound to an intact fiber in the lattice.
+  2. Macro-unbound (unbinding by degradation). Still attached to a large fibrin
+     fragment that has separated from the lattice because the fiber was fully degraded.
+  3. Micro-unbound (forced unbinding). Still attached to a small fibrin fragment
+     that has separated from the lattice due to plasmin-mediated degradation of the
+     binding site.
 
   :File Type:
     Comma-delimited Text
@@ -719,16 +725,29 @@ Subfolders
   :Fortran Name:
     ``t``
 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+v1.95.0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Identical to v1.99.0 with the following exceptions:
+
+Parameters
+++++++++++++++++
+
+- Microscale parameters are parsed from the microscale log file
+  (``micro{file_code}.txt``) instead of ``params.json``.
+- All parameters are stored as plain ``numpy.float64`` values
+  instead of ``pint.Quantity`` objects with units.
 ``Nsave.dat``
-  The number of snapshots is recorded in the simulation.
+  The number of snapshots recorded in the simulation.
 
   :File Type:
     Binary
-  :Data Type: 
+  :Data Type:
     integer (``i4``)
   :Units:
     None
-  :Dimensions: 
-    (``simulations``,)
+  :Dimensions:
+    Scalar ``()``
   :Fortran Name:
     ``Nsavevect = [cNsave]``

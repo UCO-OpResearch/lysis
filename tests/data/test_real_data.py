@@ -111,7 +111,7 @@ class TestReadMicroscale:
         ("lysis", np.float64),
         ("tPA_time", np.float64),
         ("lasttPA", np.int32),
-        ("lyscomplete", np.int32),
+        ("lyscomplete", np.uint32),
         ("PLi", np.int32),
         ("tPAPLiunbd", np.int32),
         ("tPAunbind", np.int32),

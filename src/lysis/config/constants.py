@@ -346,16 +346,46 @@ class MolStatus(IntEnum):
     Molecules transition between these states based on binding/unbinding events
     and fiber degradation.
 
-    The distinction between MACRO_UNBOUND and MICRO_UNBOUND affects molecule
-    movement: macro-unbound molecules have restricted movement (only to degraded
-    edges) until their waiting period expires.
+    - **Bound** molecules are bound to an intact part of the fibrin lattice.
+    - **Unbound** molecules are not bound to any fibrin, either because they
+      have never bound, or because they kinetically unbound from the fibrin.
+      This kinetic unbinding takes place at the microscale level.
+    - **Micro-unbound** (forced unbinding) molecules are still bound to a
+      small piece of fibrin, but that piece has been separated from the lattice
+      due to plasmin-mediated degradation of the binding site they occupy. This
+      occurs at the microscale level. The molecule cannot rebind while in this
+      state, but the fibrin fragment it is attached to might move.
+    - **Macro-unbound** (unbinding by degradation) molecules are still bound
+      to a large piece of fibrin, but that piece has been separated from the
+      lattice because the fiber has passed the ``snap_percentage`` threshold
+      and is considered fully degraded. This occurs at the macroscale level.
+      The molecule cannot rebind while in this state, but the fibrin fragment
+      it is attached to might move.
 
-    :cvar UNBOUND: Molecule is unbound and free to move normally
-    :cvar BOUND: Molecule is bound to a fiber
-    :cvar MACRO_UNBOUND: Molecule was forcibly unbound by fiber degradation,
-        restricted movement until waiting period expires
-    :cvar MICRO_UNBOUND: Molecule was forcibly unbound during natural unbinding
-        event, restricted movement until waiting period expires
+    Most code follows the "into-and-along" schema, by which unbound molecules
+    are free to move anywhere on the edge grid and are free to bind to any
+    intact fiber. Micro-unbound molecules also have unrestricted movement,
+    since the fibrin fragment they are attached to is small enough to pass
+    through the pores in the lattice, but they cannot rebind until their
+    waiting period has elapsed. During their waiting period, macro-unbound
+    molecules have restricted movement and cannot rebind. Restricted movement
+    means the molecule can only move to edges where no intact fiber exists
+    (either in the fibrin-free region, or where the fiber has fully degraded).
+    This is because the fibrin fragment they are attached to is too large to
+    pass through intact parts of the lattice.
+
+    For details, see
+    Bannish, B. E., Paynter, B., Risman, R. A., Shroff, M., & Tutwiler, V. (2024).
+    The effect of plasmin-mediated degradation on fibrinolysis and
+    tissue plasminogen activator diffusion. Biophysical Journal, 123(5), 610-621.
+
+    :cvar UNBOUND: Molecule is unbound and free to move and bind normally.
+    :cvar BOUND: Molecule is bound to a fiber. It cannot move or bind to any
+        other fiber.
+    :cvar MACRO_UNBOUND: Unbound by fiber degradation. Restricted movement
+        and cannot rebind until waiting period expires.
+    :cvar MICRO_UNBOUND: Forced unbinding at the microscale. Unrestricted
+        movement but cannot rebind until waiting period expires.
     """
 
     UNBOUND = 0

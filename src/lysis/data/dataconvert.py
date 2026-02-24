@@ -290,8 +290,8 @@ def safe_np_bool_conversion(int_array, copy=True):
         return int_array.astype(np.bool, casting="safe", copy=copy)
     except TypeError:
         if np.all(int_array >= 0) and np.all(int_array <= 1):
-            if int_array.dtype.kind == "i":
-                # Allow casting from int to bool, since we have checked bounds
+            if int_array.dtype.kind in ("i", "u"):
+                # Allow casting from int/uint to bool, since we have checked bounds
                 casting = "unsafe"
             else:
                 # Raise a TypeError when we try to convert from, e.g., a float.

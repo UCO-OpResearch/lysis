@@ -587,7 +587,7 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                 "lyscomplete": DataSetSpec(
                     data_location="lyscomplete{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
-                    dtype=np.int32,
+                    dtype=np.uint32,
                 ),
                 # Time elapsed in each simulation (lysis time if completed)
                 "lysis": DataSetSpec(
@@ -607,13 +607,13 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
                     dtype=np.float64,
                 ),
-                # Whether tPA was forced to unbind by plasmin-mediated degradation
+                # Whether tPA was micro-unbound (forced unbinding by plasmin degradation)
                 "tPAPLiunbd": DataSetSpec(
                     data_location="tPAPLiunbd{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
                     dtype=np.int32,
                 ),
-                # Whether tPA unbound kinetically (by itself)
+                # Whether tPA kinetically unbound (not forced, free to rebind)
                 "tPAunbind": DataSetSpec(
                     data_location="tPAunbind{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
@@ -713,7 +713,7 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                     ),
                     delimiter=",",
                 ),
-                # Event log: time, molecule ID, new status, location for each tPA binding event
+                # Event log: time, molecule ID, new MolStatus, location for each binding/unbinding event
                 "m_bind_t": DataSetSpec(
                     data_location="{sim:02}/m_bind_t{file_code}_{sim:02}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
@@ -801,7 +801,7 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                 "pli_generated_num": DataSetSpec(
                     data_location="micro_data/pli_generated_num",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
-                    dtype=np.int16,
+                    dtype=np.uint16,
                 ),
                 # Time when tPA leaves system (or infinity if still bound)
                 "tpa_leaving_time": DataSetSpec(
@@ -809,13 +809,13 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
                     dtype=np.float64,
                 ),
-                # Whether tPA was forced to unbind by plasmin-mediated degradation
+                # Whether tPA was micro-unbound (forced unbinding by plasmin degradation)
                 "tpa_unbound_by_pli": DataSetSpec(
                     data_location="micro_data/tpa_unbound_by_pli",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
                     dtype=np.bool,
                 ),
-                # Whether tPA unbound kinetically (by itself)
+                # Whether tPA kinetically unbound (not forced, free to rebind)
                 "tpa_unbound_kinetic": DataSetSpec(
                     data_location="micro_data/tpa_unbound_kinetic",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
@@ -908,14 +908,14 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                         ]
                     ),
                 ),
-                # Event log: time, molecule ID, new status, location (row, rank) for each tPA binding
+                # Event log: time, molecule ID, new MolStatus, location (row, rank) for each binding/unbinding
                 "tpa_bind_events": DataSetSpec(
                     data_location="macro_data/sim_{sim:02}/tpa_bind_events",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
                     dtype=np.dtype(
                         [
                             ("Simulation Time Elapsed", np.float64),
-                            ("tPA Molecule Index", np.int64),
+                            ("tPA Molecule Index", np.uint64),
                             (
                                 "Molecule New Status",
                                 h5py.enum_dtype(
@@ -932,7 +932,7 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                 "tpa_location_snapshot": DataSetSpec(
                     data_location="macro_data/sim_{sim:02}/tpa_location_snapshot",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
-                    dtype=np.int32,
+                    dtype=np.uint32,
                     shape=(-1, 2, -1),
                 ),
                 # Time when each tPA molecule first reached the back row (first passage times)

@@ -405,7 +405,7 @@ class MacroscaleSim:
                 2,
                 self.run.macro_params.total_molecules,
             ),
-            dtype=np.int32,
+            dtype=np.uint32,
         )
         # Stores the simulation time corresponding to each save point
         self.snapshot_time = np.empty(
@@ -613,7 +613,7 @@ class MacroscaleSim:
         # bind to it.
         self.binding_time[m] = float("inf")
 
-        # Record MACRO_UNBOUND events
+        # Record MACRO_UNBOUND (unbinding by degradation) events
         mol_ids = np.where(m)[0]
         locations = self.location[m]
         rows, ranks = np.unravel_index(
@@ -629,18 +629,22 @@ class MacroscaleSim:
         self._bind_events.append(events)
 
     def unbind_by_time(self, m: np.ndarray, current_time: float):
-        """Unbind molecules whose binding duration has expired (micro unbind).
+        """Unbind molecules whose binding duration has expired.
 
         When a molecule's binding_time is reached, it unbinds stochastically.
-        With probability forced_unbind, it unbinds like a macro unbind (forced off,
-        must wait). Otherwise, it can immediately attempt to rebind with a newly
+        With probability ``forced_unbind``, it becomes MICRO_UNBOUND (forced
+        unbinding): the molecule has unrestricted movement but cannot rebind
+        until its waiting period expires. Otherwise, it becomes UNBOUND
+        (kinetic unbinding): the molecule can immediately rebind with a newly
         generated binding time.
 
         This method:
         - Updates bound status to False for affected molecules
         - Clears the unbound_by_degradation flag
-        - For forced unbinds: sets waiting time and binding_time to infinity
-        - For non-forced unbinds: generates new binding times for immediate rebinding
+        - For forced unbinds (MICRO_UNBOUND): sets waiting time and
+          binding_time to infinity
+        - For kinetic unbinds (UNBOUND): generates new binding times for
+          immediate rebinding
         - Updates the total_micro_unbinds counter
 
         :param m: Boolean array mask of molecules to unbind. Typically molecules
@@ -657,9 +661,11 @@ class MacroscaleSim:
             return
         # Update binding state: no longer bound
         self.bound = self.bound & ~m
-        # Clear the macro unbind flag (this is a micro unbind)
+        # Clear the unbound_by_degradation flag (micro-unbound molecules have
+        # unrestricted movement, unlike macro-unbound)
         self.unbound_by_degradation = self.unbound_by_degradation & ~m
-        # Determine which molecules experience forced unbinding vs immediate rebinding
+        # Determine which molecules experience forced unbinding (MICRO_UNBOUND)
+        # vs kinetic unbinding (UNBOUND)
         forced = np.full(self.run.macro_params.total_molecules, False, dtype=np.bool_)
         if self.run.macro_params.duplicate_fortran:
             # Use pre-generated random numbers in Fortran mode
@@ -670,7 +676,7 @@ class MacroscaleSim:
         else:
             # Generate fresh random numbers in native mode
             forced[m] = self.rng.random(count) <= self.run.macro_params.forced_unbind
-        # Forced unbinds: molecules must wait before moving (like macro unbind)
+        # Forced unbinds (MICRO_UNBOUND): cannot rebind until waiting period expires
         self.waiting_time[forced] = (
             current_time
             + self.run.macro_params.average_bound_time.magnitude
@@ -679,7 +685,7 @@ class MacroscaleSim:
         self.binding_time[forced] = float("inf")
         num_forced = np.count_nonzero(forced)
         self.total_micro_unbinds += num_forced
-        # Non-forced unbinds: molecules can immediately attempt to rebind
+        # Kinetic unbinds (UNBOUND): molecules can immediately attempt to rebind
         if num_forced < count:
             if self.run.macro_params.duplicate_fortran:
                 self.binding_time[m & ~forced] = (
@@ -695,7 +701,7 @@ class MacroscaleSim:
                     current_time + self.binding_time_factory.next(count - num_forced)
                 )
 
-        # Record unbind events for forced (MICRO_UNBOUND) molecules
+        # Record MICRO_UNBOUND (forced unbinding) events
         if num_forced > 0:
             mol_ids = np.where(forced)[0]
             locations = self.location[forced]
@@ -711,7 +717,7 @@ class MacroscaleSim:
             events["Grid Location Rank"] = ranks
             self._bind_events.append(events)
 
-        # Record unbind events for non-forced (UNBOUND) molecules
+        # Record UNBOUND (kinetic unbinding) events
         non_forced = m & ~forced
         num_non_forced = count - num_forced
         if num_non_forced > 0:
@@ -728,6 +734,51 @@ class MacroscaleSim:
             events["Grid Location Row"] = rows
             events["Grid Location Rank"] = ranks
             self._bind_events.append(events)
+
+    def expire_waiting_period(self, current_time: float):
+        """Record UNBOUND events for molecules whose waiting period has expired.
+
+        After a molecule is macro-unbound (fiber degraded) or micro-unbound
+        (forced unbinding), it enters a waiting period during which it cannot
+        rebind. When the waiting period expires, the Fortran code records an
+        UNBOUND event (macro_diffuse_into_and_along__external.f90, lines
+        1021-1039). This method replicates that behavior.
+
+        For each expired molecule, this method:
+        - Clears the ``unbound_by_degradation`` flag (no longer restricted)
+        - Resets ``waiting_time`` to 0 (so the event fires exactly once)
+        - Records an UNBOUND event in ``_bind_events``
+
+        :param current_time: The current simulation time
+        :type current_time: float
+        """
+        expired = (
+            ~self.bound
+            & (self.waiting_time > 0)
+            & (self.waiting_time <= current_time)
+        )
+        count = np.count_nonzero(expired)
+        if count == 0:
+            return
+
+        # Clear stale state
+        self.unbound_by_degradation = self.unbound_by_degradation & ~expired
+        self.waiting_time[expired] = 0
+
+        # Record UNBOUND events
+        mol_ids = np.where(expired)[0]
+        locations = self.location[expired]
+        rows, ranks = np.unravel_index(
+            locations,
+            (self.run.macro_params.rows, self.run.macro_params.full_row),
+        )
+        events = np.empty(count, dtype=_BIND_EVENT_DTYPE)
+        events["Simulation Time Elapsed"] = current_time
+        events["tPA Molecule Index"] = mol_ids
+        events["Molecule New Status"] = MolStatus.UNBOUND.value
+        events["Grid Location Row"] = rows
+        events["Grid Location Rank"] = ranks
+        self._bind_events.append(events)
 
     def find_unbinding_time(
         self, unbinding_time_bin: np.ndarray, current_time: float
@@ -1043,8 +1094,8 @@ class MacroscaleSim:
         :param current_time: The current simulation time
         :type current_time: float
         """
-        # Find those molecules still attached to a piece of fiber (macro-unbound)
-        # and have them move to an empty edge, if possible
+        # Find macro-unbound molecules still in their waiting period
+        # (restricted movement — can only move to degraded edges)
         still_stuck_to_fiber = self.find_still_stuck(m, current_time)
         self.move_to_empty_edge(still_stuck_to_fiber, current_time)
 
@@ -1188,11 +1239,15 @@ class MacroscaleSim:
                 self.bound & (self.binding_time < current_time), current_time
             )
 
+            # Record waiting period expirations
+            # (MACRO_UNBOUND -> UNBOUND and MICRO_UNBOUND -> UNBOUND)
+            self.expire_waiting_period(current_time)
+
             # Determine which molecules should bind:
             # - Not currently bound
             # - Binding time has arrived
             # - Fiber is still intact
-            # - Not waiting after a macro unbind
+            # - Waiting period has expired (applies to macro- and micro-unbound)
             should_bind = (
                 ~self.bound
                 & (self.binding_time < current_time)
