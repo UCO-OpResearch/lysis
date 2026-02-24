@@ -188,32 +188,17 @@ from tqdm.auto import tqdm
 
 from .config.constants import MolStatus, RandomDraw
 from .config.run import Run
+from .data.dataspec import dataspec
 from .geometry.edge_grid import EdgeGrid, from_fortran_edge_index, to_fortran_edge_index
 from .tools.kiss import KissRandomGenerator
 
-#: NumPy structured dtype for tPA bind/unbind event logging.
-#: Compatible with the HDF5 enum dtype in the v2.0.0 dataspec
-#: (the ``Molecule New Status`` field uses uint8 values matching
-#: :class:`~lysis.config.constants.MolStatus`).
-_BIND_EVENT_DTYPE = np.dtype(
-    [
-        ("Simulation Time Elapsed", np.float64),
-        ("tPA Molecule Index", np.int64),
-        ("Molecule New Status", np.uint8),
-        ("Grid Location Row", np.uint32),
-        ("Grid Location Rank", np.uint32),
-    ]
-)
+_macro_out_spec = dataspec["v2.0.0"]["macroscale_out"]
 
-#: NumPy structured dtype for fiber degrade-time event logging.
-_FIBER_DEGRADE_DTYPE = np.dtype(
-    [
-        ("Simulation Time Elapsed", np.float64),
-        ("Grid Location Row", np.uint32),
-        ("Grid Location Rank", np.uint32),
-        ("Fiber New Degrade Time", np.float64),
-    ]
-)
+#: NumPy structured dtype for tPA bind/unbind event logging (from dataspec).
+_BIND_EVENT_DTYPE = _macro_out_spec.data["tpa_bind_events"].dtype
+
+#: NumPy structured dtype for fiber degrade-time event logging (from dataspec).
+_FIBER_DEGRADE_DTYPE = _macro_out_spec.data["fiber_degrade_time"].dtype
 
 
 class MacroscaleSim:
