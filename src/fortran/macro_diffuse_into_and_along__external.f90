@@ -246,6 +246,8 @@ program macrolysis
     !!      Format: simulation time (t), fiber index (j), new degrade time (t_degrade)
     character(40) :: f_deg_list_format = '(f23.15, a, i0, a, f23.15)'
     character(40) :: deg_per_format = '(f23.15)'
+    character(40) :: t_save_format = '(f23.15)'
+    character(40) :: N_save_format = '(f23.15)'
 
     !! BRAD 2023-02-02
 
@@ -755,8 +757,8 @@ program macrolysis
     ! write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     ! write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     ! open(degunit,file=ADJUSTL('data/' //TRIM(runCode)// '/deg' //TRIM(outFileCode)//'.dat'),form=filetype)
-    open (Nunit, file=ADJUSTL('data/'//TRIM(runCode)//'/Nsave'//TRIM(outFileCode)//'.dat'), form=filetype)
-    open (tunit, file=ADJUSTL('data/'//TRIM(runCode)//'/tsave'//TRIM(outFileCode)//'.dat'), form=filetype)
+    open (Nunit, file=ADJUSTL('data/'//TRIM(runCode)//'/Nsave'//TRIM(outFileCode)//'.dat'), form='formatted')
+    open (tunit, file=ADJUSTL('data/'//TRIM(runCode)//'/tsave'//TRIM(outFileCode)//'.dat'), form='formatted')
     ! open(moveunit,file=ADJUSTL('data/' //TRIM(runCode)// '/move' //TRIM(outFileCode)//'.dat'),form=filetype)
     ! open(lastmoveunit,file=ADJUSTL('data/' //TRIM(runCode)// '/lastmove' //TRIM(outFileCode)//'.dat'),form=filetype)
     ! open(plotunit,file=ADJUSTL('data/' //TRIM(runCode)// '/plot' //TRIM(outFileCode)//'.dat'),form=filetype)
@@ -892,7 +894,7 @@ program macrolysis
 
         !! BRAD 2023-04-20
         ! write(degunit) degrade(:)
-        write (tunit) t
+        write (tunit,t_save_format) t
 
         !! BRAD 2023-01-21:
         ! write(t_degrade_unit) t_degrade(:)
@@ -1499,7 +1501,7 @@ program macrolysis
 
                 !! BRAD 2023-04-20:
                 ! write(degunit)    degrade(1:num)
-                write (tunit) t
+                write (tunit,t_save_format) t
                 !! BRAD 2023-01-21:
                 ! write(t_degrade_unit) t_degrade(:)
                 write (m_location_unit) V(1, :)
@@ -2079,7 +2081,7 @@ program macrolysis
     ! write(cbindunit) countbindV
     ! write(cindunit) countindepV
     ! write(bind1unit) bind1V
-    write (Nunit) Nsavevect(:)
+    write (Nunit,N_save_format) Nsavevect(:)
     ! write(lastmoveunit) lastmove(:,:)
     ! write(mfptunit) mfpt(:)
 
