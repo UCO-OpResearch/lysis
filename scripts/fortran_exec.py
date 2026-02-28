@@ -7,7 +7,7 @@ from lysis.config.run import Run
 from lysis.execution.codeutil import FortranMacro, FortranMicro
 
 __author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish"
+__copyright__ = "Copyright 2026, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = ""
 __version__ = "0.1"

@@ -22,7 +22,7 @@ from pint import UnitRegistry
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2025, Brittany Bannish"
+__copyright__ = "Copyright 2026, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = "GPLv3"
 __version__ = "0.2"

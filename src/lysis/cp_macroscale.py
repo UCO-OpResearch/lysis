@@ -11,7 +11,7 @@ from .config.run import Run
 from .geometry.edge_grid import EdgeGrid
 
 __author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish"
+__copyright__ = "Copyright 2026, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = ""
 __version__ = "0.1"

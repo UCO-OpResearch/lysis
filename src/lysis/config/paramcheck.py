@@ -62,7 +62,7 @@ from .parameters import MacroParameters, MicroParameters
 
 
 __author__ = "Bradley Paynter"
-__copyright__ = "Copyright 2025, Brittany Bannish"
+__copyright__ = "Copyright 2026, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = "GPLv3"
 __maintainer__ = "Bradley Paynter"
