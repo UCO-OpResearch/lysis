@@ -1,4 +1,4 @@
-"""Shared fixtures for lysis.data unit tests."""
+"""Shared fixtures for lysis.dataio unit tests."""
 
 import pathlib
 
@@ -6,7 +6,7 @@ import pytest
 import numpy as np
 
 from lysis.config.constants import CONST
-from lysis.data.dataspec import DataSetSpec, DataCollectionSpec
+from lysis.dataio.dataspec import DataSetSpec, DataCollectionSpec
 
 
 @pytest.fixture

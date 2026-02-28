@@ -1,4 +1,4 @@
-"""Comprehensive pytest unit tests for :mod:`lysis.data.dataconvert`.
+"""Comprehensive pytest unit tests for :mod:`lysis.dataio.dataconvert`.
 
 Tests cover:
 
@@ -26,8 +26,8 @@ import pytest
 
 from lysis.config.constants import CONST, Q_
 from lysis.config.parameters import Parameters
-from lysis.data.dataspec import DataSetSpec, DataCollectionSpec, dataspec, tags
-from lysis.data.dataconvert import (
+from lysis.dataio.dataspec import DataSetSpec, DataCollectionSpec, dataspec, tags
+from lysis.dataio.dataconvert import (
     safe_np_int_conversion,
     safe_np_bool_conversion,
     safe_np_string_conversion,
@@ -1088,7 +1088,7 @@ class TestBuildConversionGraph:
         fake_converters = dict(data_converters)
         fake_converters[("v99.0.0", "v2.0.0")] = {}
         monkeypatch.setattr(
-            "lysis.data.dataconvert.data_converters", fake_converters
+            "lysis.dataio.dataconvert.data_converters", fake_converters
         )
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
@@ -1309,7 +1309,7 @@ class TestBuildConversionPaths:
         fake_converters[("v99.0.0", "v98.0.0")] = {}
         fake_converters[("v98.0.0", "v99.0.0")] = {}
         monkeypatch.setattr(
-            "lysis.data.dataconvert.data_converters", fake_converters
+            "lysis.dataio.dataconvert.data_converters", fake_converters
         )
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
@@ -1320,7 +1320,7 @@ class TestBuildConversionPaths:
 
     def test_empty_converters(self, monkeypatch):
         """Empty data_converters produces empty paths."""
-        monkeypatch.setattr("lysis.data.dataconvert.data_converters", {})
+        monkeypatch.setattr("lysis.dataio.dataconvert.data_converters", {})
         paths = _build_conversion_paths()
         assert paths == {}
 

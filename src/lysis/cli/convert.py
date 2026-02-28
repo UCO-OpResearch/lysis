@@ -6,7 +6,7 @@ import sys
 import click
 
 from lysis.cli import cli
-from lysis.data.dataspec import dataspec, tags
+from lysis.dataio.dataspec import dataspec, tags
 
 
 def _resolve_spec(spec_str):
@@ -124,8 +124,8 @@ def convert(
         lysis convert ./data/ out.h5 -f fortran -t hdf5 --macro-log macro_TB-xiii__21_105.txt
         lysis convert ./data/ out.h5 -f fortran -t hdf5 --micro-log micro.txt --macro-log macro.txt
     """
-    from lysis.data.dataconvert import convert_data
-    from lysis.data.fileops import read_data_collection, write_data_collection
+    from lysis.dataio.dataconvert import convert_data
+    from lysis.dataio.fileops import read_data_collection, write_data_collection
 
     console = ctx.obj["console"]
     verbose = ctx.obj["verbose"]
@@ -171,7 +171,7 @@ def convert(
 
     # Validate that a conversion path exists before reading any data
     if in_version != out_version:
-        from lysis.data.dataconvert import conversion_paths
+        from lysis.dataio.dataconvert import conversion_paths
 
         if (in_version, out_version) not in conversion_paths:
             console.print(

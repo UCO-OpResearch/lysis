@@ -63,8 +63,8 @@ Example Usage
 
 Reading a complete data collection::
 
-    from lysis.data.fileops import read_data_collection
-    from lysis.data.dataspec import dataspec
+    from lysis.dataio.fileops import read_data_collection
+    from lysis.dataio.dataspec import dataspec
 
     # Read v1.99.0 Fortran microscale output
     collections = list(dataspec["v1.99.0"].values())
@@ -80,8 +80,8 @@ Reading a complete data collection::
 
 Writing a complete data collection::
 
-    from lysis.data.fileops import write_data_collection
-    from lysis.data.dataspec import dataspec
+    from lysis.dataio.fileops import write_data_collection
+    from lysis.dataio.dataspec import dataspec
 
     # Write v2.0.0 HDF5 format
     collections = list(dataspec["v2.0.0"].values())
@@ -94,7 +94,7 @@ Writing a complete data collection::
 
 Reading/writing individual datasets::
 
-    from lysis.data.fileops import read_dataset, write_dataset
+    from lysis.dataio.fileops import read_dataset, write_dataset
 
     # Read a single dataset
     spec = dataspec["v1.99.0"]["microscale_out"].data["lysis"]
@@ -138,8 +138,8 @@ Notes
 See Also
 --------
 
-:mod:`lysis.data.dataspec` : Data specification definitions
-:mod:`lysis.data.dataconvert` : Data format conversion utilities
+:mod:`lysis.dataio.dataspec` : Data specification definitions
+:mod:`lysis.dataio.dataconvert` : Data format conversion utilities
 :mod:`lysis.config.constants` : Storage type constants
 """
 
@@ -190,7 +190,7 @@ def _validate_fortran_params(
 
     Called automatically by :func:`read_data_collection` whenever any collection
     in the request belongs to a Fortran spec version (i.e. its version is in
-    :data:`~lysis.data.dataspec.fortran_versions`).
+    :data:`~lysis.dataio.dataspec.fortran_versions`).
 
     Delegates to :func:`~lysis.config.paramcheck.load_micro_params` and, when
     macro parameters are present, to
@@ -413,7 +413,7 @@ def _validate_hdf5_version(file: h5py.File, path: AnyStr, version: str):
     """Check that an open HDF5 file has the expected dataspec_version attribute.
 
     Skips validation if ``version`` is empty (e.g., for standalone specs not
-    registered in a :class:`~lysis.data.dataspec.DataSpec`).
+    registered in a :class:`~lysis.dataio.dataspec.DataSpec`).
 
     :param file: An already-open HDF5 file handle.
     :type file: h5py.File
@@ -595,7 +595,7 @@ def read_dataset(
     --------
     Reading a single Fortran binary file::
 
-        >>> from lysis.data.dataspec import dataspec
+        >>> from lysis.dataio.dataspec import dataspec
         >>> spec = dataspec["v1.99.0"]["microscale_out"].data["lysis"]
         >>> data = read_dataset(
         ...     path="/path/to/data",
@@ -677,7 +677,7 @@ def read_data_collection(
     --------
     Reading Fortran v1.99.0 microscale output::
 
-        >>> from lysis.data.dataspec import dataspec
+        >>> from lysis.dataio.dataspec import dataspec
         >>> collections = [dataspec["v1.99.0"]["microscale_out"]]
         >>> data = read_data_collection(
         ...     path="/path/to/fortran/data",
@@ -1115,7 +1115,7 @@ def write_data_collection(
     --------
     Writing HDF5 v2.0.0 format::
 
-        >>> from lysis.data.dataspec import dataspec
+        >>> from lysis.dataio.dataspec import dataspec
         >>> collections = list(dataspec["v2.0.0"].values())
         >>> write_data_collection(
         ...     data=simulation_results,

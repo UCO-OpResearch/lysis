@@ -17,8 +17,8 @@ import pytest
 from lysis.config.constants import MolStatus, Q_
 from lysis.config.parameters import MicroParameters, MacroParameters
 from lysis.config.run import Run
-from lysis.data.datastore import DataStore
-from lysis.data.dataspec import dataspec
+from lysis.dataio.datastore import DataStore
+from lysis.dataio.dataspec import dataspec
 from lysis.np_macroscale import MacroscaleSim, _BIND_EVENT_DTYPE, _FIBER_DEGRADE_DTYPE
 
 

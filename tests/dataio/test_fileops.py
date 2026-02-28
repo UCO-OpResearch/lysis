@@ -1,4 +1,4 @@
-"""Comprehensive pytest unit tests for :mod:`lysis.data.fileops`.
+"""Comprehensive pytest unit tests for :mod:`lysis.dataio.fileops`.
 
 Tests cover:
 
@@ -22,14 +22,14 @@ import pytest
 from pint import Quantity
 
 from lysis.config.constants import CONST
-from lysis.data.dataspec import (
+from lysis.dataio.dataspec import (
     DataCollectionSpec,
     DataSetSpec,
     check_dataset_spec,
     dataspec,
     parse_shape,
 )
-from lysis.data.fileops import (
+from lysis.dataio.fileops import (
     _read_file_binary,
     _read_file_json,
     _read_file_parsed,

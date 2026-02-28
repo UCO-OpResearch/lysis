@@ -766,7 +766,7 @@ class DataStore:
         The closure reads the six required microscale_out datasets from
         HDF5 (as numpy copies to avoid in-place mutation of HDF5 data),
         builds the params dict, and calls
-        :func:`~lysis.data.dataconvert.generate_macroscale_in`.
+        :func:`~lysis.dataio.dataconvert.generate_macroscale_in`.
 
         :return: A zero-argument callable returning a
             :class:`DataCollectionType` dict.

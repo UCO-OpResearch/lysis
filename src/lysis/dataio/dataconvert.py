@@ -76,7 +76,7 @@ Example Usage
 
 Converting from v1.99.0 to v2.0.0 format::
 
-    from lysis.data.dataconvert import convert_data
+    from lysis.dataio.dataconvert import convert_data
 
     # Load v1.99.0 data
     old_data = load_fortran_data()
@@ -89,7 +89,7 @@ Converting from v1.99.0 to v2.0.0 format::
 
 Generating macroscale input from microscale output::
 
-    from lysis.data.dataconvert import generate_macroscale_in
+    from lysis.dataio.dataconvert import generate_macroscale_in
 
     # microscale_output contains simulation results
     macroscale_input = generate_macroscale_in(microscale_output)
@@ -109,7 +109,7 @@ Notes
 See Also
 --------
 
-:mod:`lysis.data.dataspec` : Data specification definitions and validation
+:mod:`lysis.dataio.dataspec` : Data specification definitions and validation
 :mod:`lysis.geometry.edge_grid` : Grid neighborhood structure utilities
 """
 

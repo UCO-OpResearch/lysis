@@ -67,7 +67,7 @@ class TestResolveSpec:
 
     def test_unknown_collection_prints_error(self, runner):
         """Unknown collection name produces a helpful error."""
-        with patch("lysis.data.fileops.read_data_collection"):
+        with patch("lysis.dataio.fileops.read_data_collection"):
             result = runner.invoke(
                 cli,
                 ["convert", ".", ".", "-f", "fortran", "-t", "hdf5",
@@ -80,9 +80,9 @@ class TestResolveSpec:
 class TestConvertExecution:
     """Test the convert command execution paths."""
 
-    @patch("lysis.data.fileops.write_data_collection")
-    @patch("lysis.data.dataconvert.convert_data")
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.write_data_collection")
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_successful_conversion(self, mock_read, mock_convert, mock_write,
                                    runner, mock_data):
         """Successful conversion reads, converts, and writes."""
@@ -98,9 +98,9 @@ class TestConvertExecution:
         mock_convert.assert_called_once()
         mock_write.assert_called_once()
 
-    @patch("lysis.data.fileops.write_data_collection")
-    @patch("lysis.data.dataconvert.convert_data")
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.write_data_collection")
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_dry_run_skips_write(self, mock_read, mock_convert, mock_write,
                                  runner, mock_data):
         """--dry-run reads and converts but does not write."""
@@ -117,7 +117,7 @@ class TestConvertExecution:
         mock_write.assert_not_called()
         assert "Dry run" in result.output
 
-    @patch("lysis.data.fileops.read_data_collection",
+    @patch("lysis.dataio.fileops.read_data_collection",
            side_effect=FileNotFoundError("sim_00.dat"))
     def test_file_not_found_returns_1(self, mock_read, runner):
         """Missing input file returns exit code 1."""
@@ -128,8 +128,8 @@ class TestConvertExecution:
         assert result.exit_code == 1
         assert "not found" in result.output
 
-    @patch("lysis.data.fileops.read_data_collection")
-    @patch("lysis.data.dataconvert.convert_data",
+    @patch("lysis.dataio.fileops.read_data_collection")
+    @patch("lysis.dataio.dataconvert.convert_data",
            side_effect=NotImplementedError("converter stub"))
     def test_not_implemented_returns_1(self, mock_convert, mock_read,
                                        runner, mock_data):
@@ -143,8 +143,8 @@ class TestConvertExecution:
         assert result.exit_code == 1
         assert "not implemented" in result.output.lower()
 
-    @patch("lysis.data.fileops.read_data_collection")
-    @patch("lysis.data.dataconvert.convert_data",
+    @patch("lysis.dataio.fileops.read_data_collection")
+    @patch("lysis.dataio.dataconvert.convert_data",
            side_effect=OverflowError("int32 overflow"))
     def test_overflow_returns_1(self, mock_convert, mock_read,
                                 runner, mock_data):
@@ -158,9 +158,9 @@ class TestConvertExecution:
         assert result.exit_code == 1
         assert "conversion failed" in result.output.lower()
 
-    @patch("lysis.data.fileops.write_data_collection")
-    @patch("lysis.data.dataconvert.convert_data")
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.write_data_collection")
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_verbose_shows_details(self, mock_read, mock_convert, mock_write,
                                    runner, mock_data):
         """Verbose flag shows conversion details."""
@@ -175,9 +175,9 @@ class TestConvertExecution:
         assert "v1.99.0" in result.output
         assert "v2.0.0" in result.output
 
-    @patch("lysis.data.fileops.write_data_collection")
-    @patch("lysis.data.dataconvert.convert_data")
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.write_data_collection")
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_collections_filter(self, mock_read, mock_convert, mock_write,
                                 runner, mock_data):
         """--collections filters which collections are processed."""

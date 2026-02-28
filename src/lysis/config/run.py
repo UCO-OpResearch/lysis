@@ -26,13 +26,13 @@ import warnings
 from datetime import datetime
 from typing import Any, Mapping, Union
 
-from ..data.datastore import DataStore
+from ..dataio.datastore import DataStore
 from ..tools.util import dict_to_formatted_str
 from .parameters import MicroParameters, MacroParameters
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2024, Brittany Bannish"
+__copyright__ = "Copyright 2026, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = ""
 __version__ = "0.2"
@@ -163,7 +163,7 @@ class Run(object):
     def open_data(self, mode: str = "r") -> DataStore:
         """Open the HDF5 DataStore for this run.
 
-        Creates a :class:`~lysis.data.datastore.DataStore` backed by the HDF5
+        Creates a :class:`~lysis.dataio.datastore.DataStore` backed by the HDF5
         file ``{run_code}.h5`` in the run's data directory. The DataStore is
         stored as ``self.data`` and also returned for convenience.
 

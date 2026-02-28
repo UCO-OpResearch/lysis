@@ -8,7 +8,7 @@ import numpy as np
 
 from lysis.cli import cli
 from lysis.cli.convert import _resolve_spec
-from lysis.data.dataspec import dataspec, check_dataset_spec
+from lysis.dataio.dataspec import dataspec, check_dataset_spec
 
 
 @cli.command()
@@ -67,7 +67,7 @@ def validate(ctx, data_path, spec, collections, file_code, param_overrides, para
         lysis validate ./fortran_data/ -s fortran --file-code "_run01.dat"
         lysis validate output.h5 -s v2.0.0 -c microscale_out
     """
-    from lysis.data.fileops import read_data_collection
+    from lysis.dataio.fileops import read_data_collection
 
     console = ctx.obj["console"]
     verbose = ctx.obj["verbose"]

@@ -7,7 +7,7 @@ import pytest
 from click.testing import CliRunner
 
 from lysis.cli import cli
-from lysis.data.dataspec import dataspec
+from lysis.dataio.dataspec import dataspec
 
 
 @pytest.fixture
@@ -63,7 +63,7 @@ class TestValidateArgParsing:
         assert "Unknown spec" in result.output
 
     def test_unknown_collection_prints_error(self, runner):
-        with patch("lysis.data.fileops.read_data_collection"):
+        with patch("lysis.dataio.fileops.read_data_collection"):
             result = runner.invoke(
                 cli,
                 ["validate", ".", "-s", "hdf5", "-c", "bogus_collection"],
@@ -75,7 +75,7 @@ class TestValidateArgParsing:
 class TestValidateExecution:
     """Test the validate command execution paths."""
 
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_all_pass_returns_0(self, mock_read, runner):
         """All datasets passing returns exit code 0."""
         mock_read.return_value = _make_valid_hdf5_micro_data()
@@ -90,7 +90,7 @@ class TestValidateExecution:
         assert "FAIL" not in result.output
         assert "MISSING" not in result.output
 
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_missing_dataset_returns_1(self, mock_read, runner):
         """Dataset present in spec but missing from data counts as FAIL."""
         data = _make_valid_hdf5_micro_data()
@@ -108,7 +108,7 @@ class TestValidateExecution:
         assert result.exit_code == 1
         assert "MISSING" in result.output
 
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_wrong_dtype_returns_1(self, mock_read, runner):
         """Dataset with wrong dtype counts as FAIL."""
         data = _make_valid_hdf5_micro_data()
@@ -128,7 +128,7 @@ class TestValidateExecution:
         assert result.exit_code == 1
         assert "FAIL" in result.output
 
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_output_shows_ok_labels(self, mock_read, runner):
         """Output contains OK labels for passing datasets."""
         mock_read.return_value = _make_valid_hdf5_micro_data()
@@ -139,7 +139,7 @@ class TestValidateExecution:
         )
         assert "OK" in result.output
 
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_output_shows_collection_header(self, mock_read, runner):
         """Output includes collection name as a header."""
         mock_read.return_value = _make_valid_hdf5_micro_data()
@@ -150,7 +150,7 @@ class TestValidateExecution:
         )
         assert "microscale_out" in result.output
 
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_per_sim_list_validated(self, mock_read, runner):
         """Per-simulation data (list of arrays) is validated correctly."""
         data = _make_valid_hdf5_micro_data()
@@ -170,7 +170,7 @@ class TestValidateExecution:
         # Should show simulation count
         assert "3 sims" in result.output
 
-    @patch("lysis.data.fileops.read_data_collection",
+    @patch("lysis.dataio.fileops.read_data_collection",
            side_effect=FileNotFoundError("output.h5"))
     def test_file_not_found_returns_1(self, mock_read, runner):
         """Missing data file returns exit code 1."""
@@ -181,7 +181,7 @@ class TestValidateExecution:
         assert result.exit_code == 1
         assert "not found" in result.output
 
-    @patch("lysis.data.fileops.read_data_collection")
+    @patch("lysis.dataio.fileops.read_data_collection")
     def test_result_summary_counts(self, mock_read, runner):
         """Result summary shows correct pass/fail counts."""
         data = _make_valid_hdf5_micro_data()

@@ -24,9 +24,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 print(f"Path: {sys.path}")
 
-from lysis.data.fileops import read_data_collection, write_data_collection
-from lysis.data.dataconvert import convert_data
-from lysis.data.dataspec import dataspec
+from lysis.dataio.fileops import read_data_collection, write_data_collection
+from lysis.dataio.dataconvert import convert_data
+from lysis.dataio.dataspec import dataspec
 
 
 def test_microscale_conversion(data_path: str):

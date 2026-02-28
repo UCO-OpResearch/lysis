@@ -9,7 +9,7 @@ Subpackages
 
    lysis.cli
    lysis.config
-   lysis.data
+   lysis.dataio
    lysis.execution
    lysis.geometry
    lysis.tools

@@ -1,4 +1,4 @@
-"""Comprehensive tests for the lysis.data.dataspec module.
+"""Comprehensive tests for the lysis.dataio.dataspec module.
 
 Tests cover:
 - parse_shape() with integers, variable dims, string references, and errors
@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from lysis.config.constants import CONST
-from lysis.data.dataspec import (
+from lysis.dataio.dataspec import (
     DataCollectionSpec,
     DataSetSpec,
     DataSpec,

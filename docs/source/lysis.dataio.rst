@@ -1,37 +1,37 @@
-lysis.data package
+lysis.dataio package
 ==================
 
 Submodules
 ----------
 
-lysis.data.dataconvert module
+lysis.dataio.dataconvert module
 -----------------------------
 
-.. automodule:: lysis.data.dataconvert
+.. automodule:: lysis.dataio.dataconvert
    :members:
    :show-inheritance:
    :undoc-members:
 
-lysis.data.dataspec module
+lysis.dataio.dataspec module
 --------------------------
 
-.. automodule:: lysis.data.dataspec
+.. automodule:: lysis.dataio.dataspec
    :members:
    :show-inheritance:
    :undoc-members:
 
-lysis.data.datastore module
+lysis.dataio.datastore module
 ---------------------------
 
-.. automodule:: lysis.data.datastore
+.. automodule:: lysis.dataio.datastore
    :members:
    :show-inheritance:
    :undoc-members:
 
-lysis.data.fileops module
+lysis.dataio.fileops module
 -------------------------
 
-.. automodule:: lysis.data.fileops
+.. automodule:: lysis.dataio.fileops
    :members:
    :show-inheritance:
    :undoc-members:
@@ -39,7 +39,7 @@ lysis.data.fileops module
 Module contents
 ---------------
 
-.. automodule:: lysis.data
+.. automodule:: lysis.dataio
    :members:
    :show-inheritance:
    :undoc-members:

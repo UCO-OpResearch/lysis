@@ -10,7 +10,7 @@ import lysis
 from lysis.config.constants import Q_
 from lysis.config.parameters import MacroParameters
 from lysis.config.run import Run
-from lysis.data.datastore import DataStore
+from lysis.dataio.datastore import DataStore
 
 
 def exec(run: Run, timestamp: AnyStr):

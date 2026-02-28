@@ -20,9 +20,9 @@ import pytest
 from click.testing import CliRunner
 
 from lysis.cli import cli
-from lysis.data.dataconvert import convert_data, generate_macroscale_in
-from lysis.data.dataspec import dataspec
-from lysis.data.fileops import read_data_collection, write_data_collection
+from lysis.dataio.dataconvert import convert_data, generate_macroscale_in
+from lysis.dataio.dataspec import dataspec
+from lysis.dataio.fileops import read_data_collection, write_data_collection
 
 
 # ─── Constants matching the real data ────────────────────────────────────────

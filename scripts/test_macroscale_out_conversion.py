@@ -27,9 +27,9 @@ from pathlib import Path
 # Add src directory to path so we can import lysis
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from lysis.data.fileops import read_data_collection, write_data_collection
-from lysis.data.dataconvert import convert_data
-from lysis.data.dataspec import dataspec, DataSetSpec, parse_shape
+from lysis.dataio.fileops import read_data_collection, write_data_collection
+from lysis.dataio.dataconvert import convert_data
+from lysis.dataio.dataspec import dataspec, DataSetSpec, parse_shape
 from lysis.config.constants import CONST
 
 

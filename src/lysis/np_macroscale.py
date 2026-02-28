@@ -188,7 +188,7 @@ from tqdm.auto import tqdm
 
 from .config.constants import MolStatus, RandomDraw
 from .config.run import Run
-from .data.dataspec import dataspec
+from .dataio.dataspec import dataspec
 from .geometry.edge_grid import EdgeGrid, from_fortran_edge_index, to_fortran_edge_index
 from .tools.kiss import KissRandomGenerator
 

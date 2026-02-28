@@ -1,4 +1,4 @@
-"""Comprehensive pytest unit tests for the lysis.data.datastore module.
+"""Comprehensive pytest unit tests for the lysis.dataio.datastore module.
 
 Tests cover:
 - DataStatus enum values and flag operations
@@ -15,7 +15,7 @@ import numpy as np
 import h5py
 import pytest
 
-from lysis.data.datastore import (
+from lysis.dataio.datastore import (
     COMPATIBLE_DATASPEC_VERSION,
     DataStore,
     DataCollection,
@@ -26,7 +26,7 @@ from lysis.data.datastore import (
     _group_path_from_spec,
 )
 from lysis.config.constants import CONST
-from lysis.data.dataspec import DataCollectionSpec, DataSetSpec, dataspec
+from lysis.dataio.dataspec import DataCollectionSpec, DataSetSpec, dataspec
 from lysis.config.parameters import MicroParameters, MacroParameters
 
 

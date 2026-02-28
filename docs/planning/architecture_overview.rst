@@ -128,7 +128,7 @@ single, efficient format: **HDF5**.  A well-defined data specification
 (versioned, validated) ensures that any analysis tool can read any dataset
 regardless of which code version or Mechanism produced it.
 
-This goal is **largely achieved**.  The ``lysis.data`` package provides:
+This goal is **largely achieved**.  The ``lysis.dataio`` package provides:
 
 - A versioned data specification system (``dataspec``) with three supported
   versions (v1.95.0, v1.99.0, v2.0.0).
@@ -222,7 +222,7 @@ Repository Layout
    +-- src/
    |   +-- lysis/              Python package (installed via pip install -e .)
    |   |   +-- config/         Scenario parameters, Mechanism parameters, Run
-   |   |   +-- data/           Data specs, I/O, conversion, DataStore
+   |   |   +-- dataio/         Data specs, I/O, conversion, DataStore
    |   |   +-- geometry/       Edge grid, coordinate transforms
    |   |   +-- execution/      Fortran subprocess wrappers
    |   |   +-- tools/          Utilities (RNG, SLURM, misc)
