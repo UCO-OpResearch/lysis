@@ -1,23 +1,26 @@
-"""Code for holding, storing, and reading information about a Run
+"""Container for run identity, parameters, and HDF5 data access.
 
-This module gives a uniform way to handle the data and parameters of a given
-run. It contains classes to house these and make them accessible to the
-rest of the code. It also handles the storing and reading of parameters and
-data to/from disk.
+This module provides the :class:`Run` class, which acts as the single entry
+point for all information associated with a fibrinolysis simulation Run —
+its identity (``run_code``), its on-disk layout, its micro- and macroscale
+parameters, and a reference to its
+:class:`~lysis.dataio.datastore.DataStore`.
 
-Typical usage example:
-    >>> # Create a new run
-    >>> exp = Run('path/to/data')
-    >>> param = {'override_parameter': 2.54, 'another_new_parameter': 32}
-    >>> exp.initialize_macro_param(param)
-    >>> exp.to_file()
-    >>> # Load an existing run
-    >>> exp = Run('path/to/data', '2022_12_27_1100')
-    >>> exp.read_file()
-    >>> # Access a parameter
-    >>> exp.macro_params.pore_size
-    >>> # Access data
-    >>> exp.data.lysis_time[4][18]
+Typical usage
+-------------
+Create a new Run and initialize parameters::
+
+    from lysis.config.run import Run
+
+    run = Run("/data/experiments")
+    run.initialize_micro_param({"tpa_molecules": 500})
+    run.initialize_macro_param({"rows": 64, "cols": 64})
+
+Open the associated HDF5 DataStore for reading::
+
+    with run.open_data() as ds:
+        leaving_times = ds.microscale_out.tpa_leaving_time[:]
+        pore_size = run.micro_params.pore_size
 """
 
 import json
@@ -42,44 +45,57 @@ __status__ = "Development"
 
 
 class Run(object):
-    """Houses all information about a given experimental run.
+    """Houses all information about a given simulation Run.
 
-    This object contains:
+    Holds the run's identity, on-disk paths, micro- and macroscale parameters,
+    and a reference to the associated
+    :class:`~lysis.dataio.datastore.DataStore`.  Parameters are initialised
+    with :meth:`initialize_micro_param` and :meth:`initialize_macro_param`;
+    the HDF5 data file is opened with :meth:`open_data`.
 
-    * Data location
-    * Run parameters (microscale and macroscale)
-    * Run data
+    **Instance attributes**
 
-    It provides methods for:
+    .. attribute:: run_code
+       :type: str
 
-    * Initializing with default parameters
-    * Reading parameters from disk
-    * Saving parameters to disk
-    * Reading input data from disk
-    * Writing result data to disk
+       Unique run identifier, used as the name of the run subdirectory and
+       the stem of the HDF5 filename (``{run_code}.h5``).  Auto-generated as
+       ``YYYY-MM-DD-HHMM`` from the current date and time if not supplied.
 
-    :param data_root: The path of the folder containing datasets
+    .. attribute:: os_path
+       :type: str
+
+       Absolute path to the run's data subdirectory
+       (``{data_root}/{run_code}``).  Created automatically on construction.
+
+    .. attribute:: micro_params
+       :type: MicroParameters or None
+
+       Microscale parameters.  ``None`` until :meth:`initialize_micro_param`
+       is called.
+
+    .. attribute:: macro_params
+       :type: MacroParameters or None
+
+       Macroscale parameters.  ``None`` until :meth:`initialize_macro_param`
+       is called.  Requires ``micro_params`` to be set first.
+
+    .. attribute:: data
+       :type: DataStore or None
+
+       Open :class:`~lysis.dataio.datastore.DataStore` for this run.
+       ``None`` until :meth:`open_data` is called.
+
+    :param data_root: Path to the directory that contains run subdirectories.
     :type data_root: str, bytes, or os.PathLike
-    :param run_code: The code number of the run. This will be the name of the
-        folder containing the data specific to this run. This should be a date
-        and time in 'YYYY-MM-DD-hhmm' format. If no code is given, one will be
-        generated from the current date and time.
-    :type run_code: str
-    :raises RuntimeError: If an invalid data folder is given.
+    :param run_code: Identifier for this Run.  Must be a date-time string in
+        ``YYYY-MM-DD-HHMM`` format.  If omitted, one is generated from the
+        current date and time.
+    :type run_code: str, optional
+    :raises RuntimeError: If ``data_root`` is not an existing directory.
     """
 
     def __init__(self, data_root: Union[str, bytes, os.PathLike], run_code: str = None):
-        """Initialize a Run object with the given data root and run code.
-
-        :param data_root: The path of the folder containing datasets
-        :type data_root: str, bytes, or os.PathLike
-        :param run_code: The code number of the run. This will be the name of the
-            folder containing the data specific to this run. This should be a date
-            and time in 'YYYY-MM-DD-hhmm' format. If no code is given, one will be
-            generated from the current date and time.
-        :type run_code: str
-        :raises RuntimeError: If the data folder is not found.
-        """
         # Check if the data folder path is valid
         if not os.path.isdir(data_root):
             raise RuntimeError("Data folder not found.", data_root)
@@ -105,10 +121,10 @@ class Run(object):
         self.data = None
 
     def __str__(self) -> str:
-        """Gives a human-readable, formatted string of the current run's
-        parameters.
+        """Return a human-readable formatted string of the run's parameters.
 
-        :return: A formatted string representation of the run parameters
+        :return: Formatted representation of ``run_code``, ``micro_params``,
+            and ``macro_params``.
         :rtype: str
         """
         # Convert internal storage to a dictionary
@@ -117,18 +133,15 @@ class Run(object):
         return dict_to_formatted_str(values)
 
     def initialize_micro_param(self, params: Mapping[str, Any] = None) -> None:
-        """Creates the parameters for the Microscale model.
+        """Set the microscale parameters for this Run.
 
-        Parameters are set to the default values unless new values are passed
-        in the params dictionary.
+        Constructs a :class:`~lysis.config.parameters.MicroParameters` object
+        using default values, overriding any keys supplied in ``params``.
+        The result is stored as ``self.micro_params``.
 
-        This method is essentially a wrapper for the MicroParameters
-        constructor.
-
-        :param params: A dictionary of parameters that differ from the default
-            values. For example, {'binding_rate': 10, 'pore_size': 3,}
+        :param params: Parameter values that differ from the defaults,
+            e.g. ``{"binding_rate": 10, "pore_size": 3}``.
         :type params: dict, optional
-        :raises RuntimeError: If the microscale parameters are not valid.
         """
         if params is not None:
             self.micro_params = MicroParameters(**params)
@@ -136,19 +149,19 @@ class Run(object):
             self.micro_params = MicroParameters()
 
     def initialize_macro_param(self, params: dict[str, Any] = None) -> None:
-        """Creates the parameters for the Macroscale model.
+        """Set the macroscale parameters for this Run.
 
-        Parameters are set to the default values unless new values are passed
-        in the params dictionary.
+        Constructs a :class:`~lysis.config.parameters.MacroParameters` object
+        using default values, overriding any keys supplied in ``params``.
+        The result is stored as ``self.macro_params``.
 
-        This method is essentially a wrapper for the MacroParameters
-        constructor.
+        :meth:`initialize_micro_param` must be called before this method,
+        as macroscale parameters are derived from the microscale parameters.
 
-        :param params: A dictionary of parameters that differ from the default
-            values. For example, {'binding_rate': 10, 'pore_size': 3,}
+        :param params: Parameter values that differ from the defaults,
+            e.g. ``{"rows": 64, "cols": 64}``.
         :type params: dict, optional
-        :raises RuntimeError: If no microscale parameters are supplied or
-            if the macroscale parameters are not valid.
+        :raises RuntimeError: If ``micro_params`` has not been set.
         """
         # The macroscale model is dependent on the parameters and results of the
         # microscale model. If no microscale parameters are supplied, the macroscale
@@ -177,11 +190,18 @@ class Run(object):
         return self.data
 
     def to_dict(self) -> dict:
-        """Returns the internally stored data as a dictionary.
+        """Return the run's parameters as a plain dictionary.
 
-        Does not include system-specific information like paths.
+        Does not include system-specific information such as paths.  The
+        returned dictionary has the following keys:
 
-        :return: A dictionary representation of the run's parameters
+        - ``"run_code"`` — the run identifier string.
+        - ``"micro_params"`` — base-dict of microscale parameters, or
+          ``None`` if not yet initialised.
+        - ``"macro_params"`` — base-dict of macroscale parameters, or
+          ``None`` if not yet initialised.
+
+        :return: Dictionary representation of the run's parameters.
         :rtype: dict
         """
         # Initialize a dictionary of the appropriate parameters
@@ -202,62 +222,3 @@ class Run(object):
         if self.macro_params is not None:
             output["macro_params"] = self.macro_params.to_basedict()
         return output
-
-    def to_file(self) -> None:
-        """Stores the run parameters to disk.
-
-        Creates or overwrites the params.json file in the run's data
-        folder. This file will contain the current run parameters
-        (including any micro- and macroscale parameters) in JSON format.
-
-        :raises RuntimeError: If the parameter file cannot be written or
-            if there's an issue with the data serialization.
-        """
-        with open(self.os_param_file, "w") as file:
-            # Convert the internal parameters to a dictionary and then use the
-            # JSON module to save to disk.
-            json.dump(self.to_dict(), file)
-
-    def read_file(self) -> None:
-        """Load the run parameters from disk.
-
-        :raises RuntimeError: If no parameter file is available for this run
-            or if the file cannot be read properly.
-        """
-        # Determine whether the parameter file exists for this run
-        if not os.path.isfile(self.os_param_file):
-            raise RuntimeError("Run parameter file not found.")
-        # Open the file
-        with open(self.os_param_file, "r") as file:
-            # Use the JSON library to read in the parameters as a dictionary
-            params = json.load(file)
-        # Initialize a datastore
-        data_filenames = params.pop("data_filenames", None)
-        if data_filenames is not None:
-            self.data = DataStore(self.os_path, data_filenames)
-
-        # Remove the Microscale parameters from the dictionary (if it
-        # exists) and create a new MicroParameters object using its values
-        micro_params = params.pop("micro_params", None)
-        if micro_params is not None:
-            self.micro_params = MicroParameters.parse_from_basedict(micro_params)
-        else:
-            # If there were no microscale parameters in the file, then
-            # we raise a warning.
-            warnings.warn(
-                "Run parameter file does not contain Microscale parameters. "
-                "Using defaults.",
-                RuntimeWarning,
-            )
-            self.micro_params = MicroParameters()
-
-        # Remove the Macroscale parameters from the dictionary (if it
-        # exists) and create a new MacroParameters object using its values
-        macro_params = params.pop("macro_params", None)
-        if macro_params is not None:
-            macro_params["micro_params"] = self.micro_params
-            self.macro_params = MacroParameters.parse_from_basedict(macro_params)
-        else:
-            # If there were no parameters in the file, then we leave the
-            # object null.
-            self.macro_params = None

@@ -1,3 +1,84 @@
+"""Read-only HDF5 interface for fibrinolysis simulation data (v2.0.0 dataspec).
+
+This module provides the :class:`DataStore` class, the primary entry point for
+reading and writing simulation output files that conform to the lysis HDF5 v2.0.0
+data specification.  It also exposes supporting classes that give structured,
+dot-access navigation of the collections and datasets stored inside those files.
+
+Data model
+----------
+An HDF5 file managed by this module may contain up to three data collections,
+each corresponding to a stage of the simulation pipeline:
+
+- **microscale_out** — Output from the microscale (C) model.  All simulations
+  are stored in a single combined dataset group (``simulations_combined=True``).
+  Access datasets directly via dot-notation::
+
+      ds.microscale_out.tpa_leaving_time[:]
+
+- **macroscale_out** — Output from the macroscale (Fortran) model.  One dataset
+  group per simulation (``simulations_combined=False``).  Index by simulation
+  number to get a :class:`SimulationView`, then access datasets on it::
+
+      ds.macroscale_out[3].fiber_degrade_time[:]
+
+- **macroscale_in** — Derived input for the macroscale model, computed lazily
+  from ``microscale_out`` data via
+  :func:`~lysis.dataio.dataconvert.generate_macroscale_in`.
+  Stored in memory (not on disk) and generated on first access.
+
+Parameters (``MicroParameters``, ``MacroParameters``) are stored as HDF5
+attributes and loaded automatically when the corresponding collection is present.
+
+Classes
+-------
+DataStore
+    Primary interface.  Opens, validates, and navigates an HDF5 file.
+    Supports the context-manager protocol (``with DataStore(...) as ds:``).
+
+DataCollection
+    Lazy-access wrapper around one on-disk collection.  Returns
+    ``h5py.Dataset`` objects (combined) or :class:`SimulationView` objects
+    (per-simulation).
+
+SimulationView
+    Dot-access to the datasets belonging to a single simulation within a
+    per-simulation collection.
+
+DerivedDataCollection
+    In-memory wrapper for computed collections.  Identical dot-access
+    interface to :class:`DataCollection` but backed by numpy arrays.
+
+DataStatus
+    :class:`~enum.Flag` tracking the lifecycle state of a DataStore
+    (``INITIALIZED``, ``LOADED``, ``SAVED``, ``FILLED``).
+
+Typical usage
+-------------
+Open an existing file for reading::
+
+    from lysis.dataio.datastore import DataStore
+
+    with DataStore("run01", "/path/to/data") as ds:
+        leaving_times = ds.microscale_out.tpa_leaving_time[:]
+        degrade_time  = ds.macroscale_out[0].fiber_degrade_time[:]
+        rows          = ds.macro_params.rows
+
+Create a new file and populate it::
+
+    ds = DataStore.create("run01", "/path/to/data", micro_params)
+    # … write microscale results …
+    ds.initialize_macroscale(macro_params)
+    # … write macroscale results …
+    ds.close()
+
+Module-level constant
+---------------------
+COMPATIBLE_DATASPEC_VERSION
+    The dataspec version string this module is built against (``"v2.0.0"``).
+    A :class:`UserWarning` is raised at import time if the active dataspec
+    ``"hdf5"`` tag points to a different version.
+"""
 import os
 import warnings
 
