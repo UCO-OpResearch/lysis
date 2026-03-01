@@ -751,3 +751,36 @@ Parameters
     Scalar ``()``
   :Fortran Name:
     ``Nsavevect = [cNsave]``
+
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+v1.90.0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Identical to v1.95.0 with the following exception in macroscale output:
+
+Macroscale Output
+++++++++++++++++
+
+- ``f_deg_list.dat`` **does not exist** in v1.90.0.
+- ``f_deg_time.dat`` replaces it with a binary snapshot array recording the
+  scheduled degradation time of every fiber at each snapshot.
+
+``f_deg_time.dat``
+  A binary snapshot array of fiber scheduled-degradation times.  Each row
+  corresponds to one snapshot; each column corresponds to one fiber edge.
+  Edges that have not yet been scheduled for degradation hold the Fortran
+  sentinel value ``9.9e100``.
+
+  :File Type:
+    Binary
+  :Data Type:
+    double precision (``f8``)
+  :Units:
+    seconds
+  :Dimensions:
+    (``cNsave``, ``num``) — one row per snapshot, one column per fiber edge
+    (``num = total_edges``)
+  :Fortran Name:
+    ``t_degrade``
+  :Initial value:
+    ``9.9e100`` (edges not yet scheduled for degradation)

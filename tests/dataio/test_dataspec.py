@@ -793,34 +793,49 @@ class TestDataCollectionSpecReplace:
         assert combined_collection_spec.data["arr"].dtype == original_dtype
 
     # -----------------------------------------------------------------------
-    # Full data-dict replacement (data= keyword)
+    # data= keyword: UPDATE semantics (merge, not replace)
     # -----------------------------------------------------------------------
 
-    def test_replace_full_data_dict(self, combined_collection_spec, binary_spec):
-        """Passing data= as a complete dict replaces the entire data mapping.
+    def test_replace_data_dict_adds_new_key(self, combined_collection_spec, binary_spec):
+        """data= merges into the existing mapping — new key "x" is added alongside "arr".
 
-        The replacement dict is deep-copied, so the new spec is independent of
-        the caller's dict.
+        The replacement values are deep-copied, so the new spec is independent
+        of the caller's dict.
         """
         new_data = {"x": binary_spec}
         new = combined_collection_spec.replace(data=new_data)
-        assert set(new.data.keys()) == {"x"}
+        assert set(new.data.keys()) == {"arr", "x"}
         # Deep-copied: a new DataSetSpec object with the same field values.
         assert new.data["x"] is not binary_spec
         assert new.data["x"].dtype == binary_spec.dtype
         assert new.data["x"].dataset_storage_type == binary_spec.dataset_storage_type
         assert new.data["x"].data_location == binary_spec.data_location
 
-    def test_replace_full_data_dict_combined_with_other_change(
+    def test_replace_data_dict_combined_with_other_change(
         self, combined_collection_spec, binary_spec
     ):
-        """data= replacement can be combined with other field changes."""
+        """data= merge can be combined with other field changes."""
         new = combined_collection_spec.replace(
             simulations_combined=False,
             data={"x": binary_spec},
         )
         assert new.simulations_combined is False
+        assert set(new.data.keys()) == {"arr", "x"}
+
+    def test_replace_data_dict_none_value_removes_key(
+        self, combined_collection_spec, binary_spec
+    ):
+        """data= with a None value removes that key from the mapping."""
+        new = combined_collection_spec.replace(data={"arr": None, "x": binary_spec})
         assert set(new.data.keys()) == {"x"}
+
+    def test_replace_data_dict_overwrites_existing_key(
+        self, combined_collection_spec, binary_spec
+    ):
+        """data= with an existing key replaces that dataset spec."""
+        new = combined_collection_spec.replace(data={"arr": binary_spec})
+        assert set(new.data.keys()) == {"arr"}
+        assert new.data["arr"].dtype == binary_spec.dtype
 
     # -----------------------------------------------------------------------
     # Multiple simultaneous changes

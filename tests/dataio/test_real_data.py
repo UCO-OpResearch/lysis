@@ -4,15 +4,18 @@ Tests exercise the complete data pipeline with real output from the
 Fortran fibrinolysis simulator:
 
 1. **Fixture tests** (always run in CI):
-   Use the truncated fixture at ``tests/fixtures/fortran_sample/``.
+   Use the truncated fixture at ``tests/fixtures/fortran_sample/`` (v1.95.0)
+   and ``tests/fixtures/fortran_v190_sample/`` (v1.90.0).
    Validates reading, conversion, writing, and macroscale_in generation.
 
 2. **Full dataset tests** (marked ``@pytest.mark.real_data``, local only):
-   Use the complete ~665 MB dataset at ``data/2026-02-18-1723/``.
-   Skipped when the dataset is not present.
+   Use the complete ~665 MB dataset at ``data/2026-02-18-1723/`` (v1.95.0)
+   and ~190 MB dataset at ``data/2026-02-28-1907/`` (v1.90.0).
+   Skipped when the respective dataset is not present.
 """
 
 import os
+import warnings
 
 import h5py
 import numpy as np
@@ -20,12 +23,14 @@ import pytest
 from click.testing import CliRunner
 
 from lysis.cli import cli
+from lysis.config.constants import CONST
 from lysis.dataio.dataconvert import convert_data, generate_macroscale_in
 from lysis.dataio.dataspec import dataspec
+from lysis.dataio.datastore import DataStore
 from lysis.dataio.fileops import read_data_collection, write_data_collection
 
 
-# ─── Constants matching the real data ────────────────────────────────────────
+# ─── v1.95.0 constants matching the real data ────────────────────────────────
 
 MICRO_FILE_CODE = "_PLG2_tPA01_TB-xiii"
 MACRO_FILE_CODE = "_TB-xiii__21_105"
@@ -39,8 +44,42 @@ PARAM_OVERRIDES = {
     "snap_proportion": 0.66666667,
 }
 
+# ─── v1.90.0 constants matching the fortran_v190_sample fixture ───────────────
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
+V190_MICRO_FILE_CODE = "_PLG2_tPA01_Q4"
+V190_MACRO_FILE_CODE = "_TK-L_307"
+V190_TOTAL_EDGES = 7453
+V190_TOTAL_MOLECULES = 307
+
+# v1.90.0 micro logs write most rate constants *after* the ``stats=`` stop
+# pattern, so they are not captured by parse_micro_log.  Supply them via
+# param_overrides using values confirmed from the log header or defaults.
+V190_PARAM_OVERRIDES = {
+    # Physical / geometry params not in the v1.90.0 log:
+    "fibrinogen_length": "45nm",
+    "fibrinogen_radius": "1.2nm",
+    "fiber_radius": "36.35 nm",     # 72.7/2 nm (MicroParameters default)
+    "nodes_in_micro_row": 13,
+    "snap_proportion": 0.66666667,
+    # Code params not in the v1.90.0 log:
+    "micro_version": "micro_rates",
+    "micro_log_lvl": 30,
+    # Rate constants that appear after stats= in v1.90.0 logs (confirmed from
+    # the first stats block):
+    "bind_rate_tPA": "0.1 (micromolar*sec)^-1",     # ktPAon = 0.1
+    "bind_rate_PLG": "0.1 (micromolar*sec)^-1",     # kplgon = 0.1
+    "conc_free_PLG": "2 micromolar",                 # freeplg = 2.0
+    "deg_rate_fibrin": "5 sec^-1",                   # kdeg = 5.0
+    "unbind_rate_PLi": "57.6 sec^-1",               # kplioff = 57.6
+    "activation_rate_PLG": "0.1 sec^-1",            # kapcat = 0.1
+    "exposure_rate_binding_site": "5 sec^-1",        # kncat = 5.0
+}
+
+# v1.90.0 logs use ``runs=`` instead of ``simulations=`` for micro_simulations.
+V190_PARAM_ALIASES = {"micro_simulations": "runs"}
+
+
+# ─── v1.95.0 helpers ─────────────────────────────────────────────────────────
 
 def _read_micro(path):
     """Read microscale_out from *path* (v1.95.0)."""
@@ -77,6 +116,28 @@ def _read_all(path):
         file_codes=[MICRO_FILE_CODE, MICRO_FILE_CODE, MACRO_FILE_CODE],
         param_overrides=PARAM_OVERRIDES,
     )
+
+
+# ─── v1.90.0 helpers ─────────────────────────────────────────────────────────
+
+def _read_v190_all(path):
+    """Read microscale_out + macroscale_out from *path* (v1.90.0).
+
+    RuntimeWarnings about unit-less macro parameters are suppressed; they are
+    expected when reading raw v1.90.0 Fortran output.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return read_data_collection(
+            path,
+            collections=[
+                dataspec["v1.90.0"]["microscale_out"],
+                dataspec["v1.90.0"]["macroscale_out"],
+            ],
+            file_codes=[V190_MICRO_FILE_CODE, V190_MACRO_FILE_CODE],
+            param_overrides=V190_PARAM_OVERRIDES,
+            param_aliases=V190_PARAM_ALIASES,
+        )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -516,3 +577,172 @@ class TestConvertFullData:
         assert "pli_first_time" in converted
         assert "tpa_location_snapshot" in converted
         assert len(converted["tpa_location_snapshot"]) == 10
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# v1.90.0 fixture tests (always run in CI)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class TestReadV190MacroscaleOut:
+    """Read macroscale_out from the truncated v1.90.0 fixture and verify."""
+
+    @pytest.fixture
+    def data(self, fortran_v190_sample_path):
+        return _read_v190_all(fortran_v190_sample_path)
+
+    def test_f_deg_time_present(self, data):
+        """v1.90.0 has f_deg_time, not f_deg_list."""
+        assert "f_deg_time" in data
+        assert "f_deg_list" not in data
+
+    def test_f_deg_time_shape(self, data):
+        """f_deg_time has shape (n_snapshots, total_edges)."""
+        f = data["f_deg_time"][0]
+        assert f.shape == (3, V190_TOTAL_EDGES)
+
+    def test_f_deg_time_dtype(self, data):
+        assert data["f_deg_time"][0].dtype == np.float64
+
+    def test_first_snapshot_all_sentinel(self, data):
+        """At t=0 no fibers are scheduled; all values equal the sentinel 9.9e100."""
+        f = data["f_deg_time"][0]
+        sentinel = 9.9e100
+        assert np.all(f[0] >= sentinel)
+
+    def test_later_snapshots_have_some_non_sentinel(self, data):
+        """Later snapshots have fibres scheduled (non-sentinel values)."""
+        f = data["f_deg_time"][0]
+        sentinel = 9.9e100
+        assert np.any(f[1:] < sentinel), (
+            "Expected some fibers scheduled for degradation in later snapshots"
+        )
+
+    def test_nsave_is_2(self, data):
+        """Nsave == 2 means 3 snapshots total (t=0 plus 2 saves)."""
+        assert data["Nsave"][0] == 2
+
+    def test_tsave_shape(self, data):
+        assert data["tsave"][0].shape == (3,)
+
+    def test_m_loc_shape(self, data):
+        assert data["m_loc"][0].shape == (3, V190_TOTAL_MOLECULES)
+        assert data["m_loc"][0].dtype == np.int32
+
+    def test_macro_params_loaded(self, data):
+        macro = data["params"]["macro_params"]
+        assert macro["total_molecules"] == V190_TOTAL_MOLECULES
+        assert macro["total_edges"] == V190_TOTAL_EDGES
+
+    def test_micro_params_loaded(self, data):
+        micro = data["params"]["micro_params"]
+        assert micro["micro_simulations"] == pytest.approx(50000)
+
+
+class TestConvertV190Data:
+    """Convert v1.90.0 fixture data through the full pipeline."""
+
+    @pytest.fixture
+    def raw(self, fortran_v190_sample_path):
+        return _read_v190_all(fortran_v190_sample_path)
+
+    def test_intermediate_has_f_deg_list(self, raw):
+        """v1.90.0 → v1.95.0 conversion reconstructs f_deg_list from f_deg_time."""
+        intermediate = convert_data(raw, "v1.90.0", "v1.95.0")
+        assert "f_deg_list" in intermediate
+        assert "f_deg_time" not in intermediate
+
+    def test_intermediate_f_deg_list_is_structured(self, raw):
+        intermediate = convert_data(raw, "v1.90.0", "v1.95.0")
+        f = intermediate["f_deg_list"][0]
+        assert f.dtype.names is not None
+        assert "Simulation Time Elapsed" in f.dtype.names
+        assert "Grid Location Index" in f.dtype.names
+        assert "Fiber New Degrade Time" in f.dtype.names
+
+    def test_approx_flag_set_after_v200_conversion(self, raw):
+        """APPROX_F_DEG_LIST_ATTR is True in params after v1.90.0 → v2.0.0."""
+        converted = convert_data(raw, "v1.90.0", "v2.0.0")
+        assert converted["params"].get(CONST.APPROX_F_DEG_LIST_ATTR) is True
+
+    def test_approx_flag_set_in_hdf5(self, raw, tmp_path):
+        """APPROX_F_DEG_LIST_ATTR is written as an HDF5 root attribute."""
+        converted = convert_data(raw, "v1.90.0", "v2.0.0")
+        h5_path = str(tmp_path / "v190.h5")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            write_data_collection(
+                converted,
+                h5_path,
+                [dataspec["v2.0.0"]["microscale_out"], dataspec["v2.0.0"]["macroscale_out"]],
+                ["", ""],
+            )
+        with h5py.File(h5_path, "r") as f:
+            assert f.attrs.get(CONST.APPROX_F_DEG_LIST_ATTR)
+
+    def test_macroscale_datasets_present_after_v200(self, raw):
+        converted = convert_data(raw, "v1.90.0", "v2.0.0")
+        for name in dataspec["v2.0.0"]["macroscale_out"].data:
+            assert name in converted, f"Missing dataset: {name}"
+
+    def test_snapshot_time_shape(self, raw):
+        converted = convert_data(raw, "v1.90.0", "v2.0.0")
+        assert len(converted["snapshot_time"]) == 1
+        assert converted["snapshot_time"][0].shape == (3,)
+
+
+class TestDataStoreV190Warning:
+    """Opening a v2.0.0 HDF5 converted from v1.90.0 emits UserWarning."""
+
+    @pytest.fixture
+    def converted_h5_dir(self, fortran_v190_sample_path, tmp_path):
+        """Write a v2.0.0 HDF5 from v1.90.0 data; return (run_code, dir)."""
+        raw = _read_v190_all(fortran_v190_sample_path)
+        converted = convert_data(raw, "v1.90.0", "v2.0.0")
+        run_code = "v190_test"
+        h5_path = str(tmp_path / f"{run_code}.h5")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            write_data_collection(
+                converted,
+                h5_path,
+                [dataspec["v2.0.0"]["microscale_out"], dataspec["v2.0.0"]["macroscale_out"]],
+                ["", ""],
+            )
+        return run_code, str(tmp_path)
+
+    def test_datastore_warns_approx_f_deg_list(self, converted_h5_dir):
+        """DataStore emits UserWarning mentioning v1.90.0 on open."""
+        run_code, dir_path = converted_h5_dir
+        with pytest.warns(UserWarning, match="v1.90.0"):
+            ds = DataStore(run_code, dir_path)
+            ds.close()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# v1.90.0 full dataset tests (local only)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.real_data
+class TestReadFullV190Data:
+    """Read v1.90.0 macroscale data from the full dataset (local only)."""
+
+    @pytest.fixture
+    def data(self, full_data_v190_path):
+        return _read_v190_all(full_data_v190_path)
+
+    def test_ten_simulations_loaded(self, data):
+        assert len(data["tsave"]) == 10
+
+    def test_f_deg_time_shape(self, data):
+        f = data["f_deg_time"][0]
+        assert f.shape[1] == V190_TOTAL_EDGES
+        assert f.shape[0] > 100  # hundreds of snapshots
+        assert f.dtype == np.float64
+
+    def test_convert_to_v200(self, data):
+        converted = convert_data(data, "v1.90.0", "v2.0.0")
+        assert converted["params"].get(CONST.APPROX_F_DEG_LIST_ATTR) is True
+        assert "fiber_degrade_time" in converted
+        assert len(converted["snapshot_time"]) == 10

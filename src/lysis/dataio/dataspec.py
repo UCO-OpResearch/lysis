@@ -377,10 +377,11 @@ class DataCollectionSpec:
                 pli_first_time={"data_location": "micro_data/pli_first_time"},
             )
 
-        Replace the entire ``data`` dict (all entries at once)::
+        Update specific entries in the ``data`` dict.  Pass ``None`` to
+        remove a key; omit a key to leave it unchanged::
 
             new_coll = coll.replace(
-                data={"pli_first_time": DataSetSpec(...), "sim_final_time": DataSetSpec(...)}
+                data={"pli_first_time": DataSetSpec(...), "old_dataset": None}
             )
 
         """
@@ -391,7 +392,17 @@ class DataCollectionSpec:
             # key from changes so the loop below does not encounter "data"
             # (whose generic type dict[str, DataSetSpec] is not compatible with
             # isinstance()).
-            new_data = copy.deepcopy(changes.pop("data"))
+            # Start from existing data dict; apply caller's dict as updates.
+            # Keys with None are deleted; DataSetSpec values are added/replaced.
+            # This allows partial updates: replace(data={"f_deg_list": None,
+            # "f_deg_time": DataSetSpec(...)}) removes f_deg_list and adds f_deg_time
+            # without disturbing unmentioned datasets.
+            new_data = copy.deepcopy(self.data)
+            for k, v in copy.deepcopy(changes.pop("data")).items():
+                if v is None:
+                    new_data.pop(k, None)
+                else:
+                    new_data[k] = v
         else:
             # No full replacement supplied: start from a deep copy of the current
             # data dict so that individual entry changes below are isolated from
@@ -969,6 +980,26 @@ def _create_v1_95():
 _dataspec_raw["v1.95.0"] = _create_v1_95()
 
 
+# v1.90.0 <-- v1.95.0
+def _create_v1_90():
+    v1_90 = copy.deepcopy(_dataspec_raw["v1.95.0"])
+    v1_90["macroscale_out"] = v1_90["macroscale_out"].replace(
+        data={
+            "f_deg_list": None,  # removed (None → deleted by fixed replace())
+            "f_deg_time": DataSetSpec(
+                data_location="{sim:02}/f_deg_time{file_code}_{sim:02}.dat",
+                dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
+                dtype=np.float64,
+                shape=(-1, "macro_params.total_edges"),
+            ),
+        }
+    )
+    return v1_90
+
+
+_dataspec_raw["v1.90.0"] = _create_v1_90()
+
+
 # Wrap each version's raw dict in a DataSpec object
 dataspec: dict[str, DataSpec] = {}
 for _version, _collections in _dataspec_raw.items():
@@ -995,7 +1026,7 @@ del _k, _v
 # Spec versions that use Fortran file-based storage.
 # Derived from the tag system so this set stays in sync if tags are updated.
 # Used by fileops.read_data_collection to trigger paramcheck validation at read time.
-fortran_versions: frozenset[str] = frozenset({tags["fortran"], "v1.95.0"})
+fortran_versions: frozenset[str] = frozenset({tags["fortran"], "v1.95.0", "v1.90.0"})
 
 
 def parse_shape(

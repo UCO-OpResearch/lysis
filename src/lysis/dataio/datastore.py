@@ -90,7 +90,7 @@ import h5py
 from ..config.constants import CONST
 from ..config.parameters import MicroParameters, MacroParameters
 from .dataspec import DataCollectionSpec, DataSetSpec, dataspec, parse_shape
-from .fileops import read_dataset, write_dataset
+from .fileops import read_dataset, write_dataset, _validate_hdf5_version
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -460,21 +460,15 @@ class DataStore:
         self._hdf5_path = os.path.join(path, f"{run_code}.h5")
         self._file = h5py.File(self._hdf5_path, mode)
 
-        # Validate dataspec version
-        found = self._file.attrs.get(CONST.DATASPEC_VERSION_ATTR)
-        if found is None:
-            self.close()
-            raise ValueError(
-                f"HDF5 file has no '{CONST.DATASPEC_VERSION_ATTR}' attribute: "
-                f"{self._hdf5_path}"
+        # Validate dataspec version (also warns if APPROX_F_DEG_LIST_ATTR is set)
+        try:
+            _validate_hdf5_version(
+                self._file, self._hdf5_path, COMPATIBLE_DATASPEC_VERSION
             )
-        if found != COMPATIBLE_DATASPEC_VERSION:
+        except ValueError:
             self.close()
-            raise ValueError(
-                f"Dataspec version mismatch: file has '{found}', "
-                f"expected '{COMPATIBLE_DATASPEC_VERSION}'"
-            )
-        self._dataspec_version = found
+            raise
+        self._dataspec_version = COMPATIBLE_DATASPEC_VERSION
 
         self._collections = {}
         self._micro_params = None

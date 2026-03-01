@@ -140,3 +140,32 @@ def full_data_path():
     if not _FULL_DATA_DIR.exists():
         pytest.skip("Full dataset not found at data/2026-02-18-1723/")
     return str(_FULL_DATA_DIR)
+
+
+_FIXTURE_V190_DIR = _REPO_ROOT / "tests" / "fixtures" / "fortran_v190_sample"
+_FULL_DATA_V190_DIR = _REPO_ROOT / "data" / "2026-02-28-1907"
+
+
+@pytest.fixture
+def fortran_v190_sample_path():
+    """Path to the committed truncated v1.90.0 Fortran data fixture.
+
+    Returns the path to tests/fixtures/fortran_v190_sample/, which contains
+    a truncated subset of real Fortran v1.90.0 simulation output (3 snapshots,
+    simulation 00 only).
+    """
+    if not _FIXTURE_V190_DIR.exists():
+        pytest.skip("Truncated v1.90.0 fixture not found at tests/fixtures/fortran_v190_sample/")
+    return str(_FIXTURE_V190_DIR)
+
+
+@pytest.fixture
+def full_data_v190_path():
+    """Path to the full (~190MB) v1.90.0 Fortran data directory (local only).
+
+    Tests using this fixture should be marked with @pytest.mark.real_data
+    so they are skipped in CI.
+    """
+    if not _FULL_DATA_V190_DIR.exists():
+        pytest.skip("Full v1.90.0 dataset not found at data/2026-02-28-1907/")
+    return str(_FULL_DATA_V190_DIR)

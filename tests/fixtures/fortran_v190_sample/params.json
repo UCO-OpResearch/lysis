@@ -1,0 +1,21 @@
+{
+  "macro_params": {
+    "pore_size": 0.00010135000000000001,
+    "diffusion_coeff": 5e-07,
+    "forced_unbind": 0.0729129,
+    "cols": 87,
+    "rows": 29,
+    "empty_rows": 0,
+    "total_molecules": 307,
+    "total_edges": 7453,
+    "moving_probability": 0.2,
+    "macro_simulations": 10,
+    "total_time": 0,
+    "macro_seed": 1819293232,
+    "save_interval": 100,
+    "macro_version": "macro_diffuse_into_and_along__internal",
+    "macro_log_lvl": 30,
+    "duplicate_fortran": false,
+    "processing_library": "numpy"
+  }
+}

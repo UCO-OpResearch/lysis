@@ -145,6 +145,7 @@ See Also
 
 import json
 import os
+import warnings
 
 from typing import AnyStr, Callable
 
@@ -348,6 +349,7 @@ def _read_file_json(
 
 _COLLECTION_LOG_PARSER = {
     ("v1.95.0", "microscale_out"): (parse_micro_log, "micro_params"),
+    ("v1.90.0", "microscale_out"): (parse_micro_log, "micro_params"),
 }
 """(spec, Map collection name) → (parser_function, params_key) for FILE_PARSED storage."""
 
@@ -415,6 +417,11 @@ def _validate_hdf5_version(file: h5py.File, path: AnyStr, version: str):
     Skips validation if ``version`` is empty (e.g., for standalone specs not
     registered in a :class:`~lysis.dataio.dataspec.DataSpec`).
 
+    Also emits a :class:`UserWarning` when the file carries the
+    :attr:`~lysis.config.constants.Const.APPROX_F_DEG_LIST_ATTR` flag, which
+    indicates the file was converted from v1.90.0 format and the ``f_deg_list``
+    event log timestamps are approximations.
+
     :param file: An already-open HDF5 file handle.
     :type file: h5py.File
     :param path: Path to the HDF5 file (used in error messages).
@@ -437,9 +444,17 @@ def _validate_hdf5_version(file: h5py.File, path: AnyStr, version: str):
             f"Dataspec version mismatch in '{path}': "
             f"file has '{found}', expected '{version}'"
         )
+    if file.attrs.get(CONST.APPROX_F_DEG_LIST_ATTR):
+        warnings.warn(
+            "This HDF5 file was converted from v1.90.0 format. "
+            "The f_deg_list event log was reconstructed from snapshot differences; "
+            "exact fiber degradation scheduling times are not preserved.",
+            UserWarning,
+            stacklevel=2,
+        )
 
 
-def ensure_hdf5_version(path: AnyStr, version: str):
+def ensure_hdf5_version(path: AnyStr, version: str, data: dict = None):
     """Ensure an HDF5 file exists with the correct dataspec_version attribute.
 
     If the file does not exist, it is created with the version attribute written
@@ -453,6 +468,11 @@ def ensure_hdf5_version(path: AnyStr, version: str):
     :param version: Expected version string (e.g., ``"v2.0.0"``). Empty string
         skips all checks.
     :type version: str
+    :param data: Optional params dict (as passed to writer functions). When
+        provided and the dict contains the
+        :attr:`~lysis.config.constants.Const.APPROX_F_DEG_LIST_ATTR` flag,
+        that flag is also written to the new file's root attributes.
+    :type data: dict, optional
     :raises ValueError: If the existing file has no dataspec_version attribute,
         or if it does not match the expected version.
     """
@@ -464,6 +484,8 @@ def ensure_hdf5_version(path: AnyStr, version: str):
     else:
         with h5py.File(path, "w") as file:
             file.attrs[CONST.DATASPEC_VERSION_ATTR] = version
+            if data and data.get(CONST.APPROX_F_DEG_LIST_ATTR):
+                file.attrs[CONST.APPROX_F_DEG_LIST_ATTR] = True
 
 
 def _read_hdf5_attr(
@@ -997,7 +1019,7 @@ def _write_hdf5_attr(
     :param file_code: Additional code to insert into group path
     :type file_code: str, optional
     """
-    ensure_hdf5_version(path, spec.version)
+    ensure_hdf5_version(path, spec.version, data=data)
     with h5py.File(path, "a") as file:
         # Create or get the HDF5 group for parameters
         group = file.require_group(

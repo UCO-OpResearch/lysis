@@ -842,6 +842,87 @@ def convert_bind_events_to_bound(
     return output
 
 
+def convert_f_deg_list_to_f_deg_time(input_data: DataCollectionType) -> list[np.ndarray]:
+    """Convert v1.95.0 ``f_deg_list`` event log to v1.90.0 ``f_deg_time`` snapshot array.
+
+    Replays the fiber degradation event log against snapshot times using
+    :func:`replay_event_log_to_snapshot`. Because ``f_deg_list`` uses 1-based
+    Fortran grid indices, the ``Grid Location Index`` column is decremented
+    before passing to the replay function.
+
+    :param input_data: Data collection containing ``f_deg_list``, ``tsave``,
+        and ``params``.
+    :type input_data: DataCollectionType
+    :return: List of arrays (one per simulation), each of shape
+        ``(n_snapshots, total_edges)`` with dtype ``np.float64``.  Entries
+        for edges not yet scheduled for degradation are filled with
+        ``9.9e100`` (the Fortran sentinel value).
+    :rtype: list[np.ndarray]
+    """
+    n_edges = input_data["params"]["macro_params"]["total_edges"]
+    initial_degrade_time = 9.9e100  # Fortran sentinel: t_degrade = 9.9d+100
+
+    output = []
+    for events, tsave in zip(input_data["f_deg_list"], input_data["tsave"]):
+        # Adjust Grid Location Index: 1-based Fortran → 0-based Python
+        zero_based = events.copy()
+        zero_based["Grid Location Index"] -= 1
+        f_deg_time = replay_event_log_to_snapshot(
+            event_log=zero_based,
+            snapshot_times=tsave,
+            n_entities=n_edges,
+            entity_field="Grid Location Index",
+            time_field="Simulation Time Elapsed",
+            state_mapper=lambda e: e["Fiber New Degrade Time"],
+            initial_value=initial_degrade_time,
+            output_dtype=np.float64,
+        )
+        output.append(f_deg_time)
+    return output
+
+
+def convert_f_deg_time_to_f_deg_list(input_data: DataCollectionType) -> list[np.ndarray]:
+    """Convert v1.90.0 ``f_deg_time`` snapshot array to v1.95.0 ``f_deg_list`` event log.
+
+    Detects fiber degradation scheduling changes between consecutive snapshots
+    and emits one event per change.  This conversion is **lossy**: exact event
+    timestamps are replaced by the snapshot time at which the change was first
+    observed.
+
+    :param input_data: Data collection containing ``f_deg_time``, ``tsave``,
+        and ``params``.
+    :type input_data: DataCollectionType
+    :return: List of structured arrays (one per simulation), each with fields
+        ``("Simulation Time Elapsed", "Grid Location Index",
+        "Fiber New Degrade Time")`` matching the v1.95.0 dtype.
+    :rtype: list[np.ndarray]
+    """
+    initial_degrade_time = 9.9e100
+    output = []
+    for f_deg_time, tsave in zip(input_data["f_deg_time"], input_data["tsave"]):
+        events = []
+        n_snapshots, n_edges = f_deg_time.shape
+        # Initial snapshot: edges already scheduled (not at sentinel)
+        for idx in np.where(f_deg_time[0] < initial_degrade_time)[0]:
+            events.append((tsave[0], idx + 1, f_deg_time[0, idx]))  # 1-based index
+        # Subsequent snapshots: detect changes from previous snapshot
+        for t_idx in range(1, n_snapshots):
+            for idx in np.where(f_deg_time[t_idx] != f_deg_time[t_idx - 1])[0]:
+                events.append((tsave[t_idx], idx + 1, f_deg_time[t_idx, idx]))
+        f_deg_list_arr = np.array(
+            events,
+            dtype=np.dtype(
+                [
+                    ("Simulation Time Elapsed", np.float64),
+                    ("Grid Location Index", np.int32),
+                    ("Fiber New Degrade Time", np.float64),
+                ]
+            ),
+        )
+        output.append(f_deg_list_arr)
+    return output
+
+
 def _not_implemented(dataset_name: str, input_spec: str, output_spec: str):
     """Create a converter stub that raises NotImplementedError with a clear message.
 
@@ -926,6 +1007,9 @@ def _convert_params_strip_units(params: dict) -> dict:
 params_converters: dict[tuple[str, str], Callable] = {
     ("v1.95.0", "v1.99.0"): _convert_params_add_units,
     ("v1.99.0", "v1.95.0"): _convert_params_strip_units,
+    # v1.90.0 uses the same bare-magnitude parameter format as v1.95.0
+    ("v1.90.0", "v1.95.0"): lambda params: params,
+    ("v1.95.0", "v1.90.0"): lambda params: params,
 }
 
 
@@ -947,6 +1031,30 @@ params_converters: dict[tuple[str, str], Callable] = {
 data_converters: dict[
     tuple[str, str], dict[str, Callable[[DataCollectionType], DataSetType]]
 ] = {
+    # ============================================================================
+    # Convert from v1.90.0 to v1.95.0 (reconstruct event log from snapshots — lossy)
+    # ============================================================================
+    ("v1.90.0", "v1.95.0"): {
+        name: (lambda data, n=name: data[n])
+        for collection in dataspec["v1.90.0"].values()
+        for name in collection.data
+        if name != "f_deg_time"
+    }
+    | {
+        "f_deg_list": convert_f_deg_time_to_f_deg_list,
+    },
+    # ============================================================================
+    # Convert from v1.95.0 to v1.90.0 (replay event log into snapshots)
+    # ============================================================================
+    ("v1.95.0", "v1.90.0"): {
+        name: (lambda data, n=name: data[n])
+        for collection in dataspec["v1.95.0"].values()
+        for name in collection.data
+        if name != "f_deg_list"
+    }
+    | {
+        "f_deg_time": convert_f_deg_list_to_f_deg_time,
+    },
     # ============================================================================
     # Convert from v1.95.0 to v1.99.0 (identity — data datasets are identical)
     # ============================================================================
@@ -1381,6 +1489,14 @@ def _convert_single_step(
             # Unwrap list if simulations_combined=True (single array, not list of arrays)
             if collection.simulations_combined:
                 out_data[dataset_needed] = out_data[dataset_needed][0]
+
+    # Inject flag when converting from v1.90.0 (f_deg_list timestamps are approximated)
+    if input_set_spec == "v1.90.0" and output_set_spec == "v1.95.0":
+        out_data["params"][CONST.APPROX_F_DEG_LIST_ATTR] = True
+    # Propagate flag through subsequent conversion steps
+    # (params_converters may rebuild the params dict and drop unknown keys)
+    elif input_data.get("params", {}).get(CONST.APPROX_F_DEG_LIST_ATTR):
+        out_data["params"][CONST.APPROX_F_DEG_LIST_ATTR] = True
 
     return out_data
 
