@@ -74,6 +74,7 @@ __status__ = "Development"
 # Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _class_fortran_names(cls):
     """Return ``{python_name: fortran_spec}`` restricted to fields of *cls*.
 
@@ -116,12 +117,12 @@ def _build_inverse_map(cls, extra_cls=None):
 
     def _add(c, overwrite):
         for py_name, fortran_spec in _class_fortran_names(c).items():
-            if fortran_spec.endswith('-1'):
+            if fortran_spec.endswith("-1"):
                 base_name = fortran_spec[:-2]
-                transform = 'minus1'
-            elif fortran_spec.endswith('*100'):
+                transform = "minus1"
+            elif fortran_spec.endswith("*100"):
                 base_name = fortran_spec[:-4]
-                transform = 'times100'
+                transform = "times100"
             else:
                 base_name = fortran_spec
                 transform = None
@@ -156,15 +157,14 @@ def _parse_fortran_kv(lines):
     :return: ``{fortran_name_lower: raw_value_str}``.
     :rtype: dict[str, str]
     """
-    kv_pattern = re.compile(r'^\s*(\w+)\s*=\s*(.+?)\s*$')
-    setting_pattern = re.compile(r'^\s*Setting\s+(\w+)\s*=\s*(.+?)\s*$')
+    kv_pattern = re.compile(r"^\s*(\w+)\s*=\s*(.+?)\s*$")
+    setting_pattern = re.compile(r"^\s*Setting\s+(\w+)\s*=\s*(.+?)\s*$")
     result = {}
     for line in lines:
         m = setting_pattern.match(line) or kv_pattern.match(line)
         if m:
             result[m.group(1).lower()] = m.group(2).strip()
     return result
-
 
 
 def _apply_transform(raw_num, transform):
@@ -175,9 +175,9 @@ def _apply_transform(raw_num, transform):
     :return: Transformed numeric value.
     :rtype: float
     """
-    if transform == 'minus1':
+    if transform == "minus1":
         return raw_num - 1
-    if transform == 'times100':
+    if transform == "times100":
         return raw_num / 100
     return raw_num
 
@@ -301,14 +301,22 @@ def _check_dependent_params(base_params, instance, cls, tolerance):
 # Strict loading functions
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def load_micro_params(base_params, *, overrides=None, tolerance=1e-9):
     """Strictly load and validate :class:`~.parameters.MicroParameters`.
 
     Unlike :meth:`~.parameters.Parameters.parse_from_basedict`, this function:
 
-    * Raises :exc:`ValueError` if any independent parameter is missing.
+    * Raises :exc:`ValueError` if any independent parameter is missing
+      *and has no default value*.
     * Verifies that any stored dependent parameters match those recalculated
       from the independent parameters.
+
+    Parameters that have default values in :class:`~.parameters.MicroParameters`
+    but are not present in *base_params* or *overrides* are filled in
+    automatically.  This covers parameters with no Fortran equivalent
+    (e.g. ``fibrinogen_length``, ``micro_version``) that never appear in
+    Fortran log files.
 
     :param base_params: Dict of parameter values (base Python types only), as
         returned by :meth:`~.parameters.Parameters.to_basedict` or loaded from
@@ -336,23 +344,38 @@ def load_micro_params(base_params, *, overrides=None, tolerance=1e-9):
         if k in independent:
             merged[k] = v
 
+    # Fill in defaults for missing parameters that have default values.
+    # This covers parameters with no Fortran equivalent (e.g.
+    # fibrinogen_length, micro_version) that never appear in log files.
+    sig = inspect.signature(MicroParameters)
+    units_dict = MicroParameters.units()
+    for param_name, param in sig.parameters.items():
+        if param_name not in merged and param.default is not inspect.Parameter.empty:
+            default = param.default
+            if isinstance(default, Quantity):
+                unit = units_dict.get(param_name)
+                if unit:
+                    merged[param_name] = str(default.to(unit))
+                else:
+                    merged[param_name] = str(default)
+            else:
+                merged[param_name] = default
+
     missing = independent - set(merged.keys())
     if missing:
-        raise ValueError(
-            f"Missing independent MicroParameters: {sorted(missing)}"
-        )
+        raise ValueError(f"Missing independent MicroParameters: {sorted(missing)}")
 
     instance = MicroParameters.parse_from_basedict(merged)
 
-    mismatches = _check_dependent_params(base_params, instance, MicroParameters, tolerance)
+    mismatches = _check_dependent_params(
+        base_params, instance, MicroParameters, tolerance
+    )
     if mismatches:
         details = "; ".join(
             f"{name}: stored {stored!r} != calculated {calc!r}"
             for name, stored, calc in mismatches
         )
-        raise ValueError(
-            f"Dependent parameter mismatch in MicroParameters: {details}"
-        )
+        raise ValueError(f"Dependent parameter mismatch in MicroParameters: {details}")
 
     return instance
 
@@ -387,32 +410,47 @@ def load_macro_params(base_params, micro_params, *, overrides=None, tolerance=1e
     direct_overrides = overrides if overrides else {}
 
     independent = set(inspect.signature(MacroParameters).parameters.keys())
-    independent.discard('micro_params')  # Injected separately, not in base_params
+    independent.discard("micro_params")  # Injected separately, not in base_params
 
     merged = {k: v for k, v in base_params.items() if k in independent}
     for k, v in direct_overrides.items():
         if k in independent:
             merged[k] = v
 
+    # Fill in defaults for missing parameters (same rationale as load_micro_params)
+    sig = inspect.signature(MacroParameters)
+    units_dict = MacroParameters.units()
+    for param_name, param in sig.parameters.items():
+        if param_name == "micro_params":
+            continue
+        if param_name not in merged and param.default is not inspect.Parameter.empty:
+            default = param.default
+            if isinstance(default, Quantity):
+                unit = units_dict.get(param_name)
+                if unit:
+                    merged[param_name] = str(default.to(unit))
+                else:
+                    merged[param_name] = str(default)
+            else:
+                merged[param_name] = default
+
     missing = independent - set(merged.keys())
     if missing:
-        raise ValueError(
-            f"Missing independent MacroParameters: {sorted(missing)}"
-        )
+        raise ValueError(f"Missing independent MacroParameters: {sorted(missing)}")
 
     # Inject micro_params so parse_from_basedict can construct the instance
-    merged['micro_params'] = micro_params
+    merged["micro_params"] = micro_params
     instance = MacroParameters.parse_from_basedict(merged)
 
-    mismatches = _check_dependent_params(base_params, instance, MacroParameters, tolerance)
+    mismatches = _check_dependent_params(
+        base_params, instance, MacroParameters, tolerance
+    )
     if mismatches:
         details = "; ".join(
             f"{name}: stored {stored!r} != calculated {calc!r}"
             for name, stored, calc in mismatches
         )
-        raise ValueError(
-            f"Dependent parameter mismatch in MacroParameters: {details}"
-        )
+        raise ValueError(f"Dependent parameter mismatch in MacroParameters: {details}")
 
     return instance
 
@@ -421,7 +459,8 @@ def load_macro_params(base_params, micro_params, *, overrides=None, tolerance=1e
 # Internal log-parsing core
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map):
+
+def _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map, ignore=None):
     """Core Fortran log parser shared by micro and macro parsers.
 
     Reads *path* line by line, stopping before the first line matching
@@ -440,13 +479,16 @@ def _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map):
     :param inverse_map: ``{fortran_lower: (py_name, transform, source_cls)}``.
     :param units_dict: Combined ``{py_name: unit_str}`` for unit wrapping.
     :param alias_map: ``{fortran_alias_lower: py_name}`` from caller overrides.
+    :param ignore: Optional set of Fortran name keys (lowercase) to silently
+        skip even when they have numeric values.
+    :type ignore: set | None
     :return: ``{python_name: value}`` for all resolved parameters.
     :rtype: dict
     :raises ValueError: If any line contains a numeric-valued Fortran name
         that is not in *inverse_map* and not covered by *alias_map*.
     """
     path = Path(path)
-    with path.open('r', errors='replace') as fh:
+    with path.open("r", errors="replace") as fh:
         lines = []
         for line in fh:
             if stop_pattern.search(line):
@@ -459,6 +501,10 @@ def _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map):
     unknown = []
 
     for fortran_lower, raw_str in raw.items():
+        # Skip explicitly ignored keys
+        if ignore and fortran_lower in ignore:
+            continue
+
         # Alias overrides take priority
         if fortran_lower in alias_map:
             py_name = alias_map[fortran_lower]
@@ -495,8 +541,29 @@ def _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Legacy Fortran name aliases
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Legacy Fortran variable names that have been renamed in newer versions.
+#: Maps ``{old_fortran_lower: python_name}`` so old log files parse correctly.
+#: User-supplied aliases (via ``--param-alias``) take priority over these.
+MICRO_LEGACY_ALIASES = {
+    "runs": "micro_simulations",
+    "seed": "micro_seed",
+}
+
+#: Legacy Fortran variable names for macroscale log files.
+MACRO_LEGACY_ALIASES = {
+    "total_trials": "macro_simulations",
+    "log_lvl": "macro_log_lvl",
+    "seed": "macro_seed",
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Public log-parsing functions
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def parse_micro_log(path, *, aliases=None):
     """Parse a Fortran microscale log file into Python parameter values.
@@ -504,6 +571,10 @@ def parse_micro_log(path, *, aliases=None):
     Reads from the start of *path* until the first ``stats =`` line (exclusive).
     Maps Fortran variable names to Python parameter names using
     :meth:`~.parameters.MicroParameters.fortran_names` metadata.
+
+    :data:`MICRO_LEGACY_ALIASES` are applied automatically so that old
+    Fortran variable names (e.g. ``runs``) resolve without requiring an
+    explicit ``--param-alias``.  User-supplied *aliases* take priority.
 
     :param path: Path to the micro log file
         (e.g. ``micro_PLG2_tPA01_TB-xiii.txt``).
@@ -518,9 +589,12 @@ def parse_micro_log(path, *, aliases=None):
         a Python parameter.
     """
     alias_map = {v.lower(): k for k, v in aliases.items()} if aliases else {}
+    # Merge legacy aliases; user aliases take priority
+    for fortran_lower, py_name in MICRO_LEGACY_ALIASES.items():
+        alias_map.setdefault(fortran_lower, py_name)
     inverse_map = _build_inverse_map(MicroParameters)
     units_dict = MicroParameters.units()
-    stop_pattern = re.compile(r'^\s*stats\s*=')
+    stop_pattern = re.compile(r"^\s*stats\s*=")
     return _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map)
 
 
@@ -535,6 +609,10 @@ def parse_macro_log(path, *, aliases=None):
     belong to :class:`~.parameters.MicroParameters` are included in the result
     dict; callers can identify them by checking against
     ``dataclasses.fields(MicroParameters)``.
+
+    :data:`MACRO_LEGACY_ALIASES` are applied automatically so that old
+    Fortran variable names (e.g. ``total_trials``) resolve without requiring
+    an explicit ``--param-alias``.  User-supplied *aliases* take priority.
 
     .. note::
         The macro Fortran code writes ``kon=`` for the tPA binding rate, while
@@ -554,16 +632,76 @@ def parse_macro_log(path, *, aliases=None):
     :raises ValueError: If any numeric-valued Fortran name cannot be mapped.
     """
     alias_map = {v.lower(): k for k, v in aliases.items()} if aliases else {}
+    # Merge legacy aliases; user aliases take priority
+    for fortran_lower, py_name in MACRO_LEGACY_ALIASES.items():
+        alias_map.setdefault(fortran_lower, py_name)
     # MacroParameters takes precedence for shared names (e.g. seed, simulations)
     inverse_map = _build_inverse_map(MacroParameters, extra_cls=MicroParameters)
     units_dict = {**MicroParameters.units(), **MacroParameters.units()}
-    stop_pattern = re.compile(r'^After\s')
+    stop_pattern = re.compile(r"^After\s")
     return _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map)
+
+
+def parse_micro_log_v190(path, *, aliases=None):
+    """Parse a v1.90.0 Fortran microscale log file into Python parameter values.
+
+    v1.90.0 logs differ from v1.95.0+ in that most rate constants appear
+    *after* the first ``stats =`` line rather than before it.  This parser
+    reads until the first ``init_entry =`` line (exclusive) to capture the
+    rate constants, and silently ignores the intervening ``stats`` key.
+
+    :data:`MICRO_LEGACY_ALIASES` are applied automatically (e.g. ``runs`` →
+    ``micro_simulations``).
+
+    :param path: Path to the micro log file.
+    :type path: str | Path
+    :param aliases: Optional ``{python_name: fortran_name}`` aliases.
+    :type aliases: dict | None
+    :return: ``{python_name: value}`` for all recognized parameters.
+    :rtype: dict
+    :raises ValueError: If any numeric-valued Fortran name cannot be mapped.
+    """
+    alias_map = {v.lower(): k for k, v in aliases.items()} if aliases else {}
+    for fortran_lower, py_name in MICRO_LEGACY_ALIASES.items():
+        alias_map.setdefault(fortran_lower, py_name)
+    inverse_map = _build_inverse_map(MicroParameters)
+    units_dict = MicroParameters.units()
+    stop_pattern = re.compile(r"^\s*init_entry\s*=")
+    return _parse_log(
+        path, stop_pattern, inverse_map, units_dict, alias_map, ignore={"stats"}
+    )
+
+
+def parse_micro_file_code(file_code):
+    """Extract microscale parameters encoded in a file code string.
+
+    Parses a file code like ``_PLG2_tPA01_Q4`` and returns parameter values
+    for any recognized fiber type code segment.  The fiber type codes and
+    their associated parameter values are defined in
+    :data:`~lysis.config.constants.FIBER_TYPES`.
+
+    :param file_code: File code string (e.g. ``"_PLG2_tPA01_Q4"``).
+    :type file_code: str
+    :return: ``{python_name: value}`` for recognized fiber type parameters
+        (``fiber_radius`` and ``nodes_in_micro_row``).
+    :rtype: dict
+    """
+    from .constants import FIBER_TYPES
+
+    result = {}
+    parts = [p for p in file_code.split("_") if p]
+
+    for part in parts:
+        if part in FIBER_TYPES:
+            result.update(FIBER_TYPES[part])
+
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Internal verification core
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _verify_params(params_obj, log_params, units_dict, tolerance, direct_overrides):
     """Core verification logic comparing log values against a parameter object.
@@ -602,7 +740,10 @@ def _verify_params(params_obj, log_params, units_dict, tolerance, direct_overrid
 # Public verification functions
 # ─────────────────────────────────────────────────────────────────────────────
 
-def verify_micro_params(micro_params, log_path, *, aliases=None, overrides=None, tolerance=1e-9):
+
+def verify_micro_params(
+    micro_params, log_path, *, aliases=None, overrides=None, tolerance=1e-9
+):
     """Verify that a :class:`~.parameters.MicroParameters` matches a micro log.
 
     Parses *log_path* and compares every recognized parameter value against
@@ -642,7 +783,9 @@ def verify_micro_params(micro_params, log_path, *, aliases=None, overrides=None,
         raise ValueError(f"MicroParameters do not match log: {details}")
 
 
-def verify_macro_params(macro_params, log_path, *, aliases=None, overrides=None, tolerance=1e-9):
+def verify_macro_params(
+    macro_params, log_path, *, aliases=None, overrides=None, tolerance=1e-9
+):
     """Verify that a :class:`~.parameters.MacroParameters` matches a macro log.
 
     Like :func:`verify_micro_params` but for macroscale parameters.

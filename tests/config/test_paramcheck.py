@@ -19,7 +19,9 @@ from lysis.config.paramcheck import (
     load_macro_params,
     load_micro_params,
     parse_macro_log,
+    parse_micro_file_code,
     parse_micro_log,
+    parse_micro_log_v190,
     verify_macro_params,
     verify_micro_params,
 )
@@ -143,27 +145,36 @@ class TestLoadMicroParams:
         assert loaded.micro_seed == micro.micro_seed
         assert loaded.nodes_in_micro_row == micro.nodes_in_micro_row
 
-    def test_missing_independent_raises(self, capsys):
-        """Deleting one independent param raises ValueError naming it."""
+    def test_missing_param_uses_default(self, capsys):
+        """Deleting one independent param fills it from the class default."""
         micro = _make_micro()
         bd = micro.to_basedict()
         del bd["fiber_radius"]
 
-        with pytest.raises(ValueError, match="fiber_radius"):
-            load_micro_params(bd)
+        loaded = load_micro_params(bd)
         capsys.readouterr()
 
-    def test_multiple_missing_raises(self, capsys):
-        """Deleting two independent params raises ValueError naming both."""
+        # fiber_radius should be filled with the MicroParameters default
+        default_micro = _make_micro()
+        assert loaded.fiber_radius.to("nm").magnitude == pytest.approx(
+            default_micro.fiber_radius.to("nm").magnitude
+        )
+
+    def test_multiple_missing_use_defaults(self, capsys):
+        """Deleting multiple independent params fills them from class defaults."""
         micro = _make_micro()
         bd = micro.to_basedict()
         del bd["fiber_radius"]
         del bd["nodes_in_micro_row"]
 
-        with pytest.raises(ValueError, match="fiber_radius") as exc:
-            load_micro_params(bd)
-        assert "nodes_in_micro_row" in str(exc.value)
+        loaded = load_micro_params(bd)
         capsys.readouterr()
+
+        default_micro = _make_micro()
+        assert loaded.fiber_radius.to("nm").magnitude == pytest.approx(
+            default_micro.fiber_radius.to("nm").magnitude
+        )
+        assert loaded.nodes_in_micro_row == default_micro.nodes_in_micro_row
 
     def test_override_fills_missing(self, capsys):
         """A direct-value override supplies a missing independent param."""
@@ -198,6 +209,33 @@ class TestLoadMicroParams:
         load_micro_params(bd)  # must not raise
         capsys.readouterr()
 
+    def test_defaults_fill_missing_non_fortran_params(self, capsys):
+        """Parameters with no Fortran equivalent are filled from defaults."""
+        micro = _make_micro()
+        bd = micro.to_basedict()
+        # Remove params that have no Fortran equivalent and thus never
+        # appear in log files
+        del bd["fibrinogen_length"]
+        del bd["fibrinogen_radius"]
+        del bd["snap_proportion"]
+        del bd["micro_version"]
+        del bd["micro_log_lvl"]
+
+        loaded = load_micro_params(bd)
+        capsys.readouterr()
+
+        # Defaults should have been filled in (compare magnitudes in
+        # canonical units since the unit representation may differ)
+        assert loaded.fibrinogen_length.to("nm").magnitude == pytest.approx(
+            micro.fibrinogen_length.to("nm").magnitude
+        )
+        assert loaded.fibrinogen_radius.to("nm").magnitude == pytest.approx(
+            micro.fibrinogen_radius.to("nm").magnitude
+        )
+        assert loaded.snap_proportion == micro.snap_proportion
+        assert loaded.micro_version == micro.micro_version
+        assert loaded.micro_log_lvl == micro.micro_log_lvl
+
 
 # ---------------------------------------------------------------------------
 # TestLoadMacroParams
@@ -219,16 +257,18 @@ class TestLoadMacroParams:
         assert loaded.rows == macro.rows
         assert loaded.empty_rows == macro.empty_rows
 
-    def test_missing_independent_raises(self, capsys):
-        """Deleting one independent macro param raises ValueError naming it."""
+    def test_missing_param_uses_default(self, capsys):
+        """Deleting one independent macro param fills it from the class default."""
         micro = _make_micro()
         macro = _make_macro(micro)
         bd = macro.to_basedict()
         del bd["cols"]
 
-        with pytest.raises(ValueError, match="cols"):
-            load_macro_params(bd, micro)
+        loaded = load_macro_params(bd, micro)
         capsys.readouterr()
+
+        default_macro = _make_macro(micro)
+        assert loaded.cols == default_macro.cols
 
     def test_override_fills_missing(self, capsys):
         """A direct-value override supplies a missing macro independent param."""
@@ -305,11 +345,21 @@ class TestParseMicroLog:
 
     def test_unknown_name_raises(self, tmp_path):
         """A numeric-valued Fortran name absent from fortran_names() raises ValueError."""
+        content = " bogusparam=       50000\n stats=1\n"
+        path = _write_log(content, tmp_path)
+
+        with pytest.raises(ValueError, match="bogusparam"):
+            parse_micro_log(path)
+
+    def test_legacy_alias_runs_resolved(self, tmp_path):
+        """Legacy alias 'runs' is automatically mapped to micro_simulations."""
         content = " runs=       50000\n stats=1\n"
         path = _write_log(content, tmp_path)
 
-        with pytest.raises(ValueError, match="runs"):
-            parse_micro_log(path)
+        result = parse_micro_log(path)
+
+        assert "micro_simulations" in result
+        assert result["micro_simulations"] == pytest.approx(50000)
 
     def test_setting_lines_parsed(self, tmp_path):
         """'Setting key = value' lines from command-line parsing are extracted."""
@@ -354,6 +404,119 @@ class TestParseMicroLog:
 
         assert "micro_simulations" in result
         assert result["micro_simulations"] == pytest.approx(50000)
+
+
+# ---------------------------------------------------------------------------
+# TestParseMicroLogV190
+# ---------------------------------------------------------------------------
+
+
+class TestParseMicroLogV190:
+    """Tests for parse_micro_log_v190(): v1.90.0 Fortran micro log parsing."""
+
+    V190_LOG_CONTENT = textwrap.dedent("""\
+          filetype=binary
+          seed=   -34041038
+         KdtPAnoplg=  0.360000000000000
+         KdtPAyesplg=  2.000000000000000E-002
+         KdPLGnicked=   2.20000000000000
+         KdPLGintact=   38.0000000000000
+         runs=       50000
+          stats=           1
+          kncat=   5.00000000000000
+          kapcat=  0.100000000000000
+          ktPAon=  0.100000000000000
+          kaoff10=  3.600000000000000E-002
+          kaoff12=  2.000000000000000E-003
+          kplioff=   57.6000000000000
+          kplgoffnick=  0.220000000000000
+          kplgon=  0.100000000000000
+          kplgoff=   3.80000000000000
+          freeplg=   2.00000000000000
+          kdeg=   5.00000000000000
+         init_entry=          13
+    """)
+
+    def test_parses_rate_constants_after_stats(self, tmp_path):
+        """Rate constants after stats=1 are captured by the v1.90.0 parser."""
+        path = _write_log(self.V190_LOG_CONTENT, tmp_path)
+        result = parse_micro_log_v190(path)
+
+        assert "exposure_rate_binding_site" in result  # kncat
+        assert result["exposure_rate_binding_site"].magnitude == pytest.approx(5)
+        assert "bind_rate_tPA" in result  # ktPAon
+        assert result["bind_rate_tPA"].magnitude == pytest.approx(0.1)
+        assert "conc_free_PLG" in result  # freeplg
+        assert result["conc_free_PLG"].magnitude == pytest.approx(2)
+
+    def test_runs_resolved_via_legacy_alias(self, tmp_path):
+        """Legacy alias resolves 'runs' to micro_simulations."""
+        path = _write_log(self.V190_LOG_CONTENT, tmp_path)
+        result = parse_micro_log_v190(path)
+
+        assert "micro_simulations" in result
+        assert result["micro_simulations"] == pytest.approx(50000)
+
+    def test_stats_key_ignored(self, tmp_path):
+        """The 'stats' key between header and rate constants is ignored."""
+        path = _write_log(self.V190_LOG_CONTENT, tmp_path)
+        # Should not raise ValueError for 'stats'
+        result = parse_micro_log_v190(path)
+        assert "stats" not in result
+
+    def test_stops_at_init_entry(self, tmp_path):
+        """Lines at and after init_entry= are not parsed."""
+        content = textwrap.dedent("""\
+             KdtPAnoplg=  0.360000000000000
+              stats=           1
+              ktPAon=  0.100000000000000
+             init_entry=          13
+             p_rebind=  2.616532229748891E-005
+        """)
+        path = _write_log(content, tmp_path)
+        result = parse_micro_log_v190(path)
+
+        assert "bind_rate_tPA" in result
+        # init_entry and p_rebind are after the stop pattern
+        assert "init_entry" not in result
+
+
+# ---------------------------------------------------------------------------
+# TestParseMicroFileCode
+# ---------------------------------------------------------------------------
+
+
+class TestParseMicroFileCode:
+    """Tests for parse_micro_file_code(): extracting params from file codes."""
+
+    def test_q4_code(self):
+        """Q4 maps to fiber_radius=72.7 nm and nodes_in_micro_row=13."""
+        result = parse_micro_file_code("_PLG2_tPA01_Q4")
+        assert "fiber_radius" in result
+        assert result["fiber_radius"].to("nm").magnitude == pytest.approx(72.7)
+        assert result["nodes_in_micro_row"] == 13
+
+    def test_q2_code(self):
+        """Q2 maps to fiber_radius=36.35 nm and nodes_in_micro_row=7."""
+        result = parse_micro_file_code("_PLG2_tPA01_Q2")
+        assert result["fiber_radius"].to("nm").magnitude == pytest.approx(36.35)
+        assert result["nodes_in_micro_row"] == 7
+
+    def test_tb_xiii_code(self):
+        """TB-xiii maps to fiber_radius=61.5 nm and nodes_in_micro_row=13."""
+        result = parse_micro_file_code("_PLG2_tPA01_TB-xiii")
+        assert result["fiber_radius"].to("nm").magnitude == pytest.approx(61.5)
+        assert result["nodes_in_micro_row"] == 13
+
+    def test_no_fiber_code(self):
+        """A file code with no recognized fiber type returns empty dict."""
+        result = parse_micro_file_code("_TK-L_307")
+        assert result == {}
+
+    def test_empty_code(self):
+        """An empty file code returns empty dict."""
+        result = parse_micro_file_code("")
+        assert result == {}
 
 
 # ---------------------------------------------------------------------------
@@ -467,19 +630,18 @@ class TestVerifyMicroParams:
 
     def test_alias_and_override_together(self, tmp_path):
         """Both aliases and overrides can be used in a single verify call."""
-        # Log has 'runs=' (unknown) and a non-default KdtPAnoplg
+        # Log has 'runs=' (resolved by legacy alias) and a non-default KdtPAnoplg
         content = " runs=       50000\n KdtPAnoplg=  0.500000000000000\n stats=1\n"
         path = _write_log(content, tmp_path)
         micro = MicroParameters(micro_simulations=50000)
 
-        # Without alias: 'runs' is unknown → raises
-        with pytest.raises(ValueError, match="runs"):
+        # Without override: mismatch on KdtPAnoplg (0.5 vs 0.36) → raises
+        with pytest.raises(ValueError, match="diss_const_tPA_woPLG"):
             verify_micro_params(micro, path)
 
-        # With alias + override: alias resolves 'runs', override accepts 0.5 µM
+        # With override: 0.5 µM is used as the expected value → matches log
         verify_micro_params(
             micro, path,
-            aliases={"micro_simulations": "runs"},
             overrides={"diss_const_tPA_woPLG": "0.5 micromolar"},
         )
 

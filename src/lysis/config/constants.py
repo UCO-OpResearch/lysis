@@ -439,4 +439,32 @@ class DataSetStorageType(Enum):
 #:     >>> from lysis.config.constants import CONST
 #:     >>> if molecule_state == CONST.MOL_STATUS.BOUND:
 #:     >>>     process_bound_molecule()
+#: Mapping of fiber type codes to their physical parameters.
+#:
+#: These codes identify standard fiber configurations used in the fibrinolysis
+#: simulation.  Each entry maps a short code (from the header of
+#: ``micro_rates.f90``) to the fiber radius and the number of protofibril
+#: nodes per row in the microscale lattice.
+#:
+#: The fiber radius is half the fiber bundle diameter listed in the source
+#: code.  The nodes-per-row value determines the ``nodes_in_micro_row``
+#: parameter in :class:`~lysis.config.parameters.MicroParameters`.
+#:
+#: Example:
+#:     >>> from lysis.config.constants import FIBER_TYPES
+#:     >>> FIBER_TYPES["Q4"]["nodes_in_micro_row"]
+#:     13
+FIBER_TYPES = {
+    "Q0":     {"fiber_radius": Q_("23.0 nanometers"),  "nodes_in_micro_row": 4},
+    "Q1":     {"fiber_radius": Q_("28.7 nanometers"),  "nodes_in_micro_row": 5},
+    "Q2":     {"fiber_radius": Q_("36.35 nanometers"), "nodes_in_micro_row": 7},
+    "Q3":     {"fiber_radius": Q_("40.65 nanometers"), "nodes_in_micro_row": 8},
+    "TF-v":   {"fiber_radius": Q_("52.55 nanometers"), "nodes_in_micro_row": 5},
+    "TF-vii": {"fiber_radius": Q_("52.55 nanometers"), "nodes_in_micro_row": 7},
+    "TF-x":   {"fiber_radius": Q_("52.55 nanometers"), "nodes_in_micro_row": 10},
+    "TB-xi":  {"fiber_radius": Q_("61.5 nanometers"),  "nodes_in_micro_row": 11},
+    "TB-xiii": {"fiber_radius": Q_("61.5 nanometers"), "nodes_in_micro_row": 13},
+    "Q4":     {"fiber_radius": Q_("72.7 nanometers"),  "nodes_in_micro_row": 13},
+}
+
 CONST = Const()

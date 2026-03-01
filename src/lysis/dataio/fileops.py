@@ -155,7 +155,13 @@ import h5py
 from ..config.constants import CONST
 from pint import Quantity
 
-from ..config.paramcheck import load_macro_params, load_micro_params, parse_micro_log
+from ..config.paramcheck import (
+    load_macro_params,
+    load_micro_params,
+    parse_micro_file_code,
+    parse_micro_log,
+    parse_micro_log_v190,
+)
 from .dataspec import (
     DataCollectionSpec,
     DataSetSpec,
@@ -349,7 +355,7 @@ def _read_file_json(
 
 _COLLECTION_LOG_PARSER = {
     ("v1.95.0", "microscale_out"): (parse_micro_log, "micro_params"),
-    ("v1.90.0", "microscale_out"): (parse_micro_log, "micro_params"),
+    ("v1.90.0", "microscale_out"): (parse_micro_log_v190, "micro_params"),
 }
 """(spec, Map collection name) → (parser_function, params_key) for FILE_PARSED storage."""
 
@@ -400,6 +406,14 @@ def _read_file_parsed(
         path, spec.data_location.format(sim=sim, file_code=file_code)
     )
     parsed = parser(filepath, aliases=aliases)
+
+    # Fill in missing micro parameters from the file code (e.g. fiber type
+    # codes like Q4 → fiber_radius and nodes_in_micro_row).
+    if file_code and params_key == "micro_params":
+        file_code_params = parse_micro_file_code(file_code)
+        for k, v in file_code_params.items():
+            if k not in parsed:
+                parsed[k] = v
 
     base_dict = {}
     for k, v in parsed.items():
