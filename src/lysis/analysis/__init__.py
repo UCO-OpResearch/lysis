@@ -42,8 +42,10 @@ from .degradation import (
     plot_degradation_percent,
     plot_front_degradation,
 )
+from .fiber_replay import FiberReplayCursor
 
 __all__ = [
+    "FiberReplayCursor",
     "calculate_time_row_exposed",
     "degradation_rates",
     "fiber_degradation_linear_extrapolation",

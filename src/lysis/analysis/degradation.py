@@ -1,9 +1,9 @@
 """Analysis functions for fibrinolysis simulation Runs.
 
 Provides functions for quantifying and visualising clot-degradation dynamics
-from macroscale simulation output.  All analysis functions operate on
-pre-loaded numpy arrays (fiber degrade times, time-save arrays, etc.) together
-with a :class:`~lysis.config.run.Run` object that supplies the grid parameters.
+from macroscale simulation output.  Functions that need fiber state use
+:class:`~lysis.analysis.fiber_replay.FiberReplayCursor` internally and read
+save-point times from ``run.data.macroscale_out[sim].snapshot_time``.
 
 Typical workflow::
 
@@ -22,13 +22,13 @@ Typical workflow::
     percent_markers = [0.0, 0.25, 0.5, 0.75, 1.0]
     slope_pairs     = [(0.25, 0.75)]
 
-    deg_fraction  = find_degraded_fraction(run, deg, tsave)
+    deg_fraction  = find_degraded_fraction(run)
     marker_frames = find_degradation_marker_frames(deg_fraction, percent_markers)
-    marker_times  = find_degradation_marker_times(marker_frames, tsave)
-    rates         = degradation_rates(run, marker_frames, deg_fraction, tsave,
+    marker_times  = find_degradation_marker_times(run, marker_frames)
+    rates         = degradation_rates(run, marker_frames, deg_fraction,
                                       slope_pairs, percent_markers)
-    deg_rate, offset, lag = mean_degradation_rate(run, deg_fraction, tsave)
-    fig = plot_degradation_percent(run, deg_fraction, tsave, marker_frames,
+    deg_rate, offset, lag = mean_degradation_rate(run, deg_fraction)
+    fig = plot_degradation_percent(run, deg_fraction, marker_frames,
                                    rates, slope_pairs, percent_markers)
 """
 
@@ -52,7 +52,7 @@ from matplotlib.figure import Figure
 if TYPE_CHECKING:
     from lysis.config.run import Run
 
-from lysis.geometry.edge_grid import to_fortran_edge_index
+from lysis.analysis.fiber_replay import FiberReplayCursor
 
 __all__ = [
     "find_degraded_fraction",
@@ -81,27 +81,16 @@ __all__ = [
 
 def find_degraded_fraction(
     run: "Run",
-    deg: list[np.ndarray],
-    tsave: list[np.ndarray],
 ) -> list[np.ndarray]:
     """Calculate the fraction of fibrin fibers degraded at each save point.
 
-    For each simulation, counts the number of edges whose scheduled degradation
-    time has passed (``deg[sim][t, k] <= tsave[sim][t]``), subtracts the
-    fibrin-free (empty) edges, and normalises by the total number of fibrin
-    fibers.
+    For each simulation, uses a :class:`FiberReplayCursor` to replay the
+    event log and counts edges whose degrade time has passed at each save
+    point, subtracts the fibrin-free (empty) edges, and normalises by the
+    total number of fibrin fibers.
 
-    :param run: Run object supplying macro grid parameters.
+    :param run: Run object supplying macro grid parameters and data.
     :type run: Run
-    :param deg: Per-simulation fiber degrade-time arrays.
-        ``deg[sim]`` has shape ``(n_save, total_edges)``.
-        ``deg[sim][t, k]`` is the scheduled degradation time (seconds) of edge
-        ``k`` at save point ``t``.  Edges not yet degraded carry a large
-        sentinel value (~9.9 × 10\ :sup:`100`).
-    :type deg: list[numpy.ndarray]
-    :param tsave: Per-simulation save-point time arrays.
-        ``tsave[sim]`` has shape ``(n_save,)``, in seconds.
-    :type tsave: list[numpy.ndarray]
     :return: Per-simulation arrays of degraded fraction in ``[0, 1]``.
         ``degraded_fraction[sim]`` has shape ``(n_save,)``.
     :rtype: list[numpy.ndarray]
@@ -112,9 +101,12 @@ def find_degraded_fraction(
 
     degraded_fraction = []
     for sim in range(n_sims):
-        run_frac = np.empty(deg[sim].shape[0], dtype=np.float64)
-        for t in range(deg[sim].shape[0]):
-            run_frac[t] = np.count_nonzero(deg[sim][t] <= tsave[sim][t])
+        tsave = run.data.macroscale_out[sim].snapshot_time[:]
+        cursor = FiberReplayCursor(run, sim)
+        run_frac = np.empty(tsave.shape[0], dtype=np.float64)
+        for t_idx, t in enumerate(tsave):
+            cursor.advance_to(t)
+            run_frac[t_idx] = np.count_nonzero(cursor.state <= t)
         run_frac -= empty_edges
         degraded_fraction.append(run_frac / total_fibers)
     return degraded_fraction
@@ -156,16 +148,16 @@ def find_degradation_marker_frames(
 
 
 def find_degradation_marker_times(
+    run: "Run",
     marker_frames: np.ndarray,
-    tsave: list[np.ndarray],
 ) -> np.ndarray:
     """Convert degradation marker frame indices to elapsed time in minutes.
 
+    :param run: Run object supplying data access.
+    :type run: Run
     :param marker_frames: Save-point frame indices of shape ``(n_sims, n_markers)``,
         as returned by :func:`find_degradation_marker_frames`.
     :type marker_frames: numpy.ndarray
-    :param tsave: Per-simulation save-point time arrays (in seconds).
-    :type tsave: list[numpy.ndarray]
     :return: Float array of shape ``(n_sims, n_markers)`` giving the elapsed
         time (minutes) at which each simulation reached each degradation
         milestone.
@@ -174,7 +166,8 @@ def find_degradation_marker_times(
     n_sims, n_markers = marker_frames.shape
     marker_times = np.empty((n_sims, n_markers), dtype=np.float64)
     for sim in range(n_sims):
-        marker_times[sim] = tsave[sim][marker_frames[sim]]
+        tsave = run.data.macroscale_out[sim].snapshot_time[:]
+        marker_times[sim] = tsave[marker_frames[sim]]
     return marker_times / 60
 
 
@@ -187,7 +180,6 @@ def degradation_rates(
     run: "Run",
     marker_frames: np.ndarray,
     degraded_fraction: list[np.ndarray],
-    tsave: list[np.ndarray],
     slope_pairs: list[tuple[float, float]],
     percent_markers: list[float],
 ) -> np.ndarray:
@@ -197,15 +189,13 @@ def degradation_rates(
     difference slope between the two marker frames and returns the value in
     units of fraction per minute.
 
-    :param run: Run object supplying ``macro_simulations`` count.
+    :param run: Run object supplying ``macro_simulations`` count and data.
     :type run: Run
     :param marker_frames: Save-point frame indices of shape ``(n_sims, n_markers)``,
         as returned by :func:`find_degradation_marker_frames`.
     :type marker_frames: numpy.ndarray
     :param degraded_fraction: Per-simulation degraded-fraction arrays.
     :type degraded_fraction: list[numpy.ndarray]
-    :param tsave: Per-simulation save-point time arrays (in seconds).
-    :type tsave: list[numpy.ndarray]
     :param slope_pairs: List of ``(start_percent, end_percent)`` pairs defining
         the intervals over which to compute degradation rates.
         Example: ``[(0.25, 0.75)]`` computes one slope from 25 % to 75 %.
@@ -222,13 +212,14 @@ def degradation_rates(
     n_sims = run.macro_params.macro_simulations
     rates = np.empty((n_sims, len(slope_pairs)), dtype=np.float64)
     for sim in range(n_sims):
+        tsave = run.data.macroscale_out[sim].snapshot_time[:]
         for k, (start_pct, end_pct) in enumerate(slope_pairs):
             start_frame = marker_frames[sim, percent_markers.index(start_pct)]
             end_frame = marker_frames[sim, percent_markers.index(end_pct)]
             delta_frac = (
                 degraded_fraction[sim][end_frame] - degraded_fraction[sim][start_frame]
             )
-            delta_time = tsave[sim][end_frame] - tsave[sim][start_frame]
+            delta_time = tsave[end_frame] - tsave[start_frame]
             rates[sim, k] = delta_frac / delta_time * 60  # fraction/min
     return rates
 
@@ -236,7 +227,6 @@ def degradation_rates(
 def mean_degradation_rate(
     run: "Run",
     degraded_fraction: list[np.ndarray],
-    tsave: list[np.ndarray],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Estimate the degradation rate by fitting a line through the rapid-degradation phase.
 
@@ -245,12 +235,10 @@ def mean_degradation_rate(
     change observed in that simulation.  Fits a degree-1 polynomial to those
     points.
 
-    :param run: Run object supplying ``macro_simulations`` count.
+    :param run: Run object supplying ``macro_simulations`` count and data.
     :type run: Run
     :param degraded_fraction: Per-simulation degraded-fraction arrays.
     :type degraded_fraction: list[numpy.ndarray]
-    :param tsave: Per-simulation save-point time arrays (in seconds).
-    :type tsave: list[numpy.ndarray]
     :return: Tuple of three 1-D arrays of length ``n_sims``:
 
         - ``degradation_rate``: Slope of the linear fit (fraction/min).
@@ -266,6 +254,7 @@ def mean_degradation_rate(
     deg_start_time = np.empty(n_sims, dtype=np.float64)
 
     for r in range(n_sims):
+        tsave = run.data.macroscale_out[r].snapshot_time[:]
         incremental = np.empty(degraded_fraction[r].shape[0], dtype=np.float64)
         incremental[0] = degraded_fraction[r][0]
         for t in range(1, degraded_fraction[r].shape[0]):
@@ -273,11 +262,11 @@ def mean_degradation_rate(
         rapid_phase = incremental > incremental.max() / 2
         s = np.argmax(rapid_phase)
         b, m = np.polynomial.polynomial.polyfit(
-            tsave[r][rapid_phase] / 60, degraded_fraction[r][rapid_phase], 1
+            tsave[rapid_phase] / 60, degraded_fraction[r][rapid_phase], 1
         )
         degradation_rate[r] = m
         offset[r] = b
-        deg_start_time[r] = tsave[r][s] / 60
+        deg_start_time[r] = tsave[s] / 60
 
     return degradation_rate, offset, deg_start_time
 
@@ -289,7 +278,6 @@ def mean_degradation_rate(
 
 def calculate_time_row_exposed(
     run: "Run",
-    deg: list[np.ndarray],
 ) -> np.ndarray:
     """Compute the time (min) at which each fiber row in each column first becomes exposed.
 
@@ -299,11 +287,11 @@ def calculate_time_row_exposed(
     the preceding row and the final scheduled degradation time of the edge at
     position ``(i, j)``.
 
-    :param run: Run object supplying grid parameters.
+    Uses a :class:`FiberReplayCursor` advanced to the final save point to read
+    fiber degrade times via 2-D ``(row, rank)`` indexing.
+
+    :param run: Run object supplying grid parameters and data.
     :type run: Run
-    :param deg: Per-simulation fiber degrade-time arrays.
-        ``deg[sim]`` has shape ``(n_save, total_edges)``, in seconds.
-    :type deg: list[numpy.ndarray]
     :return: Array of shape ``(n_sims, rows - 1, cols)`` giving exposure time
         in minutes.  ``exposed_time[sim, i, j]`` is the time (min) at which
         row ``i`` in column ``j`` first became fully exposed in simulation
@@ -316,14 +304,17 @@ def calculate_time_row_exposed(
 
     exposed_time = np.empty((n_sims, rows - 1, cols), dtype=np.float64)
     for sim in range(n_sims):
+        tsave = run.data.macroscale_out[sim].snapshot_time[:]
+        cursor = FiberReplayCursor(run, sim)
+        cursor.advance_to(tsave[-1])
+        state = cursor.state
         for j in range(cols):
             for i in range(rows - 1):
                 if i == 0:
                     exposed_time[sim, i, j] = 0
                 else:
-                    k = to_fortran_edge_index(i, j, rows, cols)
                     exposed_time[sim, i, j] = max(
-                        exposed_time[sim, i - 1, j], deg[sim][-1, k]
+                        exposed_time[sim, i - 1, j], state[i, j]
                     )
     return exposed_time / 60
 
@@ -331,7 +322,6 @@ def calculate_time_row_exposed(
 def find_degradation_fronts(
     run: "Run",
     exposed_time: np.ndarray,
-    tsave: list[np.ndarray],
 ) -> list[list[np.ndarray]]:
     """Track the spatial position of the lysis front over time in each column.
 
@@ -340,15 +330,12 @@ def find_degradation_fronts(
     before the end of the simulation are excluded.  y-distances are computed
     directly from the run's pore size.
 
-    :param run: Run object supplying grid parameters and pore size.
+    :param run: Run object supplying grid parameters, pore size, and data.
     :type run: Run
     :param exposed_time: Per-simulation row-exposure time array of shape
         ``(n_sims, rows - 1, cols)``, in minutes, as returned by
         :func:`calculate_time_row_exposed`.
     :type exposed_time: numpy.ndarray
-    :param tsave: Per-simulation save-point time arrays (in seconds).
-        Used to determine the end-of-simulation cutoff.
-    :type tsave: list[numpy.ndarray]
     :return: Nested list ``deg_fronts[sim][col]`` where each element is an
         ``ndarray`` of shape ``(2, n_events)`` with row 0 giving event times
         (min) and row 1 giving y-distances (µm).
@@ -362,7 +349,8 @@ def find_degradation_fronts(
 
     deg_fronts = []
     for sim in range(n_sims):
-        t_end_min = tsave[sim][-1] / 60
+        tsave = run.data.macroscale_out[sim].snapshot_time[:]
+        t_end_min = tsave[-1] / 60
         sim_fronts = []
         for j in range(cols):
             col_front = []
@@ -426,39 +414,37 @@ def mean_front_velocity(
 
 def find_row_deg_fraction(
     run: "Run",
-    deg: list[np.ndarray],
-    tsave: list[np.ndarray],
 ) -> list[np.ndarray]:
     """Compute the fraction of fibers NOT yet degraded in each row at each save point.
 
-    Slices the fibrin-containing region of the edge array (excluding empty rows
-    and the last partial row), reshapes into ``(fiber_rows - 1, full_row)`` per
-    save point, and counts undegraded edges per row.
+    Uses a :class:`FiberReplayCursor` to replay events at each save point and
+    slices the fibrous region as ``cursor.state[empty_rows:rows-1, :]`` to
+    count undegraded edges per row.
 
-    :param run: Run object supplying grid parameters.
+    :param run: Run object supplying grid parameters and data.
     :type run: Run
-    :param deg: Per-simulation fiber degrade-time arrays.
-        ``deg[sim]`` has shape ``(n_save, total_edges)``, in seconds.
-    :type deg: list[numpy.ndarray]
-    :param tsave: Per-simulation save-point time arrays (in seconds).
-    :type tsave: list[numpy.ndarray]
     :return: Per-simulation arrays of shape
-        ``(n_save, fiber_rows - 1, full_row)`` containing the fraction of
+        ``(n_save, fiber_rows - 1)`` containing the fraction of
         edges in each row that have NOT yet degraded at each save point.
     :rtype: list[numpy.ndarray]
     """
     n_sims = run.macro_params.macro_simulations
-    empty_edges = run.macro_params.empty_edges
-    xz_row = run.macro_params.xz_row
+    empty_rows = run.macro_params.empty_rows
+    rows = run.macro_params.rows
     full_row = run.macro_params.full_row
-    fiber_rows = run.macro_params.fiber_rows
 
     row_deg = []
     for sim in range(n_sims):
-        not_degraded = (deg[sim] > tsave[sim].reshape(tsave[sim].size, 1))[
-            :, empty_edges:-xz_row
-        ].reshape((deg[sim].shape[0], fiber_rows - 1, full_row))
-        row_deg.append(np.count_nonzero(not_degraded, axis=2) / full_row)
+        tsave = run.data.macroscale_out[sim].snapshot_time[:]
+        cursor = FiberReplayCursor(run, sim)
+        n_saves = tsave.shape[0]
+        fiber_rows_minus_1 = rows - 1 - empty_rows
+        sim_row_deg = np.empty((n_saves, fiber_rows_minus_1), dtype=np.float64)
+        for t_idx, t in enumerate(tsave):
+            cursor.advance_to(t)
+            fibrous = cursor.state[empty_rows : rows - 1, :]
+            sim_row_deg[t_idx] = np.count_nonzero(fibrous > t, axis=1) / full_row
+        row_deg.append(sim_row_deg)
     return row_deg
 
 
@@ -496,8 +482,6 @@ def find_front(
 
 def fiber_degradation_linear_extrapolation(
     run: "Run",
-    tsave: list[np.ndarray],
-    deg: list[np.ndarray],
 ) -> np.ndarray:
     """Estimate fiber-level remaining-fibrin fractions by linear extrapolation.
 
@@ -506,13 +490,12 @@ def fiber_degradation_linear_extrapolation(
     The result is stacked across simulations and clipped to the fibrin-
     containing region.
 
-    :param run: Run object supplying grid parameters.
+    Uses a :class:`FiberReplayCursor` to replay the event log at each save
+    point, building 3-D ``(n_saves, rows, full_row)`` degrade-time snapshots
+    with NaN padding for the last row.
+
+    :param run: Run object supplying grid parameters and data.
     :type run: Run
-    :param tsave: Per-simulation save-point time arrays (in seconds).
-    :type tsave: list[numpy.ndarray]
-    :param deg: Per-simulation fiber degrade-time arrays.
-        ``deg[sim]`` has shape ``(n_save, total_edges)``, in seconds.
-    :type deg: list[numpy.ndarray]
     :return: Array of shape ``(n_sims, max_t, fiber_rows - 1, full_row)``
         containing the estimated remaining-fibrin fraction for each fiber at
         each save point.  ``max_t`` is the minimum number of save points across
@@ -520,44 +503,51 @@ def fiber_degradation_linear_extrapolation(
     :rtype: numpy.ndarray
     """
     n_sims = run.macro_params.macro_simulations
-    empty_edges = run.macro_params.empty_edges
-    total_fibers = run.macro_params.total_fibers
-    xz_row = run.macro_params.xz_row
+    empty_rows = run.macro_params.empty_rows
+    rows = run.macro_params.rows
     fiber_rows = run.macro_params.fiber_rows
     full_row = run.macro_params.full_row
-    total_edges = run.macro_params.total_edges
 
     f_deg_amt = []
+    all_tsave = []
     for sim in range(n_sims):
-        n_saves = tsave[sim].shape[0]
-        f_deg_amt_sim = np.concatenate(
-            [
-                np.full((n_saves, empty_edges), 0.0),
-                np.full((n_saves, total_fibers), 1.0),
-            ],
-            axis=1,
+        tsave = run.data.macroscale_out[sim].snapshot_time[:]
+        all_tsave.append(tsave)
+        n_saves = tsave.shape[0]
+        cursor = FiberReplayCursor(run, sim)
+
+        # Build snapshots of cursor state at each save point
+        snapshots = np.empty((n_saves, rows, full_row), dtype=np.float64)
+        for t_idx, t in enumerate(tsave):
+            cursor.advance_to(t)
+            snapshots[t_idx] = cursor.state
+
+        # Build remaining-fibrin fraction array for the fibrous region
+        # Shape: (n_saves, fiber_rows - 1, full_row)
+        fibrous_rows = rows - 1 - empty_rows  # = fiber_rows - 1
+        f_deg_amt_sim = np.ones(
+            (n_saves, fibrous_rows, full_row), dtype=np.float64
         )
-        f_deg_delta = np.full(total_edges, 0.0)
+        f_deg_delta = np.zeros((fibrous_rows, full_row), dtype=np.float64)
+
         for i in range(1, n_saves):
-            f_deg_change = np.argwhere(deg[sim][i] < deg[sim][i - 1])
-            f_deg_delta[f_deg_change] = f_deg_amt_sim[i - 1, f_deg_change] / (
-                deg[sim][i, f_deg_change] - tsave[sim][i - 1]
-            )
+            prev = snapshots[i - 1, empty_rows : rows - 1, :]
+            curr = snapshots[i, empty_rows : rows - 1, :]
+            changed = np.argwhere(curr < prev)
+            if changed.size > 0:
+                r_idx, c_idx = changed[:, 0], changed[:, 1]
+                f_deg_delta[r_idx, c_idx] = f_deg_amt_sim[i - 1, r_idx, c_idx] / (
+                    curr[r_idx, c_idx] - tsave[i - 1]
+                )
             f_deg_amt_sim[i] = np.maximum(
-                f_deg_amt_sim[i - 1] - f_deg_delta * (tsave[sim][i] - tsave[sim][i - 1]),
+                f_deg_amt_sim[i - 1]
+                - f_deg_delta * (tsave[i] - tsave[i - 1]),
                 0.0,
             )
         f_deg_amt.append(f_deg_amt_sim)
 
-    max_t = min(len(t) for t in tsave)
-    return np.stack(
-        [
-            f_deg_amt[sim][:max_t, empty_edges:-xz_row].reshape(
-                (max_t, fiber_rows - 1, full_row)
-            )
-            for sim in range(n_sims)
-        ]
-    )
+    max_t = min(len(t) for t in all_tsave)
+    return np.stack([f_deg_amt[sim][:max_t] for sim in range(n_sims)])
 
 
 ###############################################################################
@@ -568,7 +558,6 @@ def fiber_degradation_linear_extrapolation(
 def plot_degradation_percent(
     run: "Run",
     degraded_fraction: list[np.ndarray],
-    tsave: list[np.ndarray],
     marker_frames: np.ndarray,
     rates: np.ndarray,
     slope_pairs: list[tuple[float, float]],
@@ -579,12 +568,10 @@ def plot_degradation_percent(
     For each simulation, draws the degraded fraction over time and overlays a
     linear-fit segment (in blue) for each slope pair.
 
-    :param run: Run object supplying ``macro_simulations`` count.
+    :param run: Run object supplying ``macro_simulations`` count and data.
     :type run: Run
     :param degraded_fraction: Per-simulation degraded-fraction arrays.
     :type degraded_fraction: list[numpy.ndarray]
-    :param tsave: Per-simulation save-point time arrays (in seconds).
-    :type tsave: list[numpy.ndarray]
     :param marker_frames: Save-point frame indices of shape ``(n_sims, n_markers)``,
         as returned by :func:`find_degradation_marker_frames`.
     :type marker_frames: numpy.ndarray
@@ -604,7 +591,11 @@ def plot_degradation_percent(
     start_stop = [
         [percent_markers.index(mark) for mark in slope] for slope in slope_pairs
     ]
-    x_max = (max(tsave[sim][-1] for sim in range(n_sims)) // 60) + 1
+
+    all_tsave = [
+        run.data.macroscale_out[sim].snapshot_time[:] for sim in range(n_sims)
+    ]
+    x_max = (max(all_tsave[sim][-1] for sim in range(n_sims)) // 60) + 1
 
     fig = plt.figure(figsize=(7, 5))
     ax = fig.add_axes([0, 0, 1, 1])
@@ -612,13 +603,14 @@ def plot_degradation_percent(
     ax.set_ylim(-0.1, 1.1)
 
     for sim in range(n_sims):
-        ax.plot(tsave[sim] / 60, degraded_fraction[sim])
+        tsave = all_tsave[sim]
+        ax.plot(tsave / 60, degraded_fraction[sim])
         for k, (start_idx, end_idx) in enumerate(start_stop):
             start_frame = marker_frames[sim, start_idx]
             end_frame = marker_frames[sim, end_idx]
-            x_seg = tsave[sim][start_frame:end_frame] / 60
+            x_seg = tsave[start_frame:end_frame] / 60
             y_seg = (
-                rates[sim, k] * (x_seg - tsave[sim][start_frame] / 60)
+                rates[sim, k] * (x_seg - tsave[start_frame] / 60)
                 + degraded_fraction[sim][start_frame]
             )
             ax.plot(x_seg, y_seg, color="b", alpha=0.5, zorder=0.1)
@@ -629,7 +621,6 @@ def plot_degradation_percent(
 def plot_front_degradation(
     run: "Run",
     deg_fronts: list[list[np.ndarray]],
-    tsave: list[np.ndarray],
 ) -> Figure:
     """Plot the spatial lysis-front trajectories for all simulations.
 
@@ -637,14 +628,11 @@ def plot_front_degradation(
     minutes) at which the lysis front reached each successive y-position
     (y-axis, µm).
 
-    :param run: Run object supplying grid parameters and pore size.
+    :param run: Run object supplying grid parameters, pore size, and data.
     :type run: Run
     :param deg_fronts: Nested lysis-front data, as returned by
         :func:`find_degradation_fronts`.
     :type deg_fronts: list[list[numpy.ndarray]]
-    :param tsave: Per-simulation save-point time arrays (in seconds), used
-        to set the x-axis limit.
-    :type tsave: list[numpy.ndarray]
     :return: The matplotlib Figure containing the plot.
     :rtype: matplotlib.figure.Figure
     """
@@ -654,7 +642,13 @@ def plot_front_degradation(
     rows = run.macro_params.rows
     pore_size_um = run.macro_params.pore_size.to("microns").magnitude
 
-    x_max = (max(tsave[sim][-1] for sim in range(n_sims)) // 60) + 1
+    x_max = (
+        max(
+            run.data.macroscale_out[sim].snapshot_time[:][-1]
+            for sim in range(n_sims)
+        )
+        // 60
+    ) + 1
 
     fig = plt.figure(figsize=(7, 5))
     ax = fig.add_axes([0, 0, 1, 1])
