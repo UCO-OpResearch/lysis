@@ -462,3 +462,194 @@ class TestParametersKeySeparation:
         macro_keys = {f.name for f in dataclasses.fields(MacroParameters)}
         overlap = micro_keys & macro_keys
         assert overlap == set(), f"Overlapping field names: {overlap}"
+
+
+# ===========================================================================
+# Parameters.class_fortran_names()
+# ===========================================================================
+
+
+class TestClassFortranNames:
+    """class_fortran_names() filters fortran_names() to the calling class."""
+
+    def test_micro_only_contains_micro_fields(self):
+        """MicroParameters.class_fortran_names() only has MicroParameters fields."""
+        cfn = MicroParameters.class_fortran_names()
+        micro_fields = {f.name for f in dataclasses.fields(MicroParameters)}
+        assert set(cfn.keys()) <= micro_fields
+
+    def test_macro_only_contains_macro_fields(self):
+        """MacroParameters.class_fortran_names() only has MacroParameters fields."""
+        cfn = MacroParameters.class_fortran_names()
+        macro_fields = {f.name for f in dataclasses.fields(MacroParameters)}
+        assert set(cfn.keys()) <= macro_fields
+
+    def test_micro_contains_fiber_radius(self):
+        """fiber_radius is a micro field and should be present."""
+        cfn = MicroParameters.class_fortran_names()
+        assert "fiber_radius" in cfn
+        assert cfn["fiber_radius"] == "radius"
+
+    def test_macro_contains_cols(self):
+        """cols is a macro field and should be present."""
+        cfn = MacroParameters.class_fortran_names()
+        assert "cols" in cfn
+
+    def test_micro_excludes_macro_fields(self):
+        """MicroParameters.class_fortran_names() excludes MacroParameters fields."""
+        cfn = MicroParameters.class_fortran_names()
+        assert "cols" not in cfn
+        assert "rows" not in cfn
+
+    def test_macro_excludes_micro_fields(self):
+        """MacroParameters.class_fortran_names() excludes MicroParameters fields."""
+        cfn = MacroParameters.class_fortran_names()
+        assert "fiber_radius" not in cfn
+        assert "micro_simulations" not in cfn
+
+    def test_subset_of_fortran_names(self):
+        """class_fortran_names() is a subset of fortran_names()."""
+        all_fn = MicroParameters.fortran_names()
+        cfn = MicroParameters.class_fortran_names()
+        for key, val in cfn.items():
+            assert all_fn[key] == val
+
+
+# ===========================================================================
+# Parameters.inverse_fortran_map()
+# ===========================================================================
+
+
+class TestInverseFortranMap:
+    """inverse_fortran_map() builds {fortran_name_lower: (py, transform, cls)}."""
+
+    def test_returns_dict(self):
+        """Return type is dict."""
+        result = MicroParameters.inverse_fortran_map()
+        assert isinstance(result, dict)
+
+    def test_keys_are_lowercase(self):
+        """All keys in the inverse map are lowercase."""
+        result = MicroParameters.inverse_fortran_map()
+        for key in result:
+            assert key == key.lower(), f"Key {key!r} is not lowercase"
+
+    def test_simple_mapping(self):
+        """radius maps to (fiber_radius, None, MicroParameters)."""
+        result = MicroParameters.inverse_fortran_map()
+        assert result["radius"] == ("fiber_radius", None, MicroParameters)
+
+    def test_minus1_transform(self):
+        """Ffree-1 maps to (empty_rows, 'minus1', MacroParameters)."""
+        result = MacroParameters.inverse_fortran_map()
+        assert result["ffree"] == ("empty_rows", "minus1", MacroParameters)
+
+    def test_extra_cls_adds_entries(self):
+        """extra_cls entries are included when not conflicting."""
+        result = MacroParameters.inverse_fortran_map(extra_cls=MicroParameters)
+        # radius is a MicroParameters field
+        assert "radius" in result
+        assert result["radius"][2] is MicroParameters
+
+    def test_primary_cls_wins_conflict(self):
+        """Primary cls entries override extra_cls on conflict."""
+        # Both MicroParameters and MacroParameters have 'seed' Fortran name
+        macro_fn = MacroParameters.class_fortran_names()
+        micro_fn = MicroParameters.class_fortran_names()
+        # Verify both have a 'seed' mapping (micro_seed and macro_seed)
+        assert "micro_seed" in micro_fn
+        assert "macro_seed" in macro_fn
+        assert micro_fn["micro_seed"] == "seed"
+        assert macro_fn["macro_seed"] == "seed"
+        # When MacroParameters is primary, macro_seed wins
+        result = MacroParameters.inverse_fortran_map(extra_cls=MicroParameters)
+        assert result["seed"][0] == "macro_seed"
+        assert result["seed"][2] is MacroParameters
+
+    def test_no_extra_cls_excludes_other(self):
+        """Without extra_cls, only primary class fields are included."""
+        result = MicroParameters.inverse_fortran_map()
+        # cols is a MacroParameters field
+        macro_cfn = MacroParameters.class_fortran_names()
+        macro_fortran_lower = {
+            (spec[:-2] if spec.endswith("-1") else spec[:-4] if spec.endswith("*100") else spec).lower()
+            for spec in macro_cfn.values()
+        }
+        # No macro-only Fortran names should appear
+        for key in result:
+            assert key not in (macro_fortran_lower - {
+                k.lower() for k in MicroParameters.class_fortran_names().values()
+            }) or result[key][2] is MicroParameters
+
+    def test_tuple_has_three_elements(self):
+        """Each value is a 3-tuple of (str, transform, type)."""
+        result = MicroParameters.inverse_fortran_map()
+        for key, val in result.items():
+            assert len(val) == 3, f"Key {key!r} has {len(val)} elements"
+            assert isinstance(val[0], str)
+            assert val[1] in (None, "minus1", "times100")
+            assert val[2] is MicroParameters
+
+
+# ===========================================================================
+# Parameters.apply_fortran_transform()
+# ===========================================================================
+
+
+class TestApplyFortranTransform:
+    """apply_fortran_transform() applies the correct numeric transform."""
+
+    def test_none_identity(self):
+        """None transform returns the value unchanged."""
+        assert Parameters.apply_fortran_transform(42.0, None) == 42.0
+
+    def test_minus1(self):
+        """'minus1' subtracts 1."""
+        assert Parameters.apply_fortran_transform(10.0, "minus1") == 9.0
+
+    def test_times100(self):
+        """'times100' divides by 100."""
+        assert Parameters.apply_fortran_transform(50.0, "times100") == pytest.approx(0.5)
+
+    def test_minus1_with_zero(self):
+        """'minus1' on 0 returns -1."""
+        assert Parameters.apply_fortran_transform(0.0, "minus1") == -1.0
+
+    def test_times100_preserves_precision(self):
+        """'times100' preserves precision for fractional values."""
+        assert Parameters.apply_fortran_transform(1.0, "times100") == pytest.approx(0.01)
+
+
+# ===========================================================================
+# Parameters.to_quantity_or_number()
+# ===========================================================================
+
+
+class TestToQuantityOrNumber:
+    """to_quantity_or_number() wraps values in Quantity when units exist."""
+
+    def test_with_units_returns_quantity(self):
+        """Value with known units returns a Quantity."""
+        units_dict = {"fiber_radius": "microns"}
+        result = Parameters.to_quantity_or_number(36.35, "fiber_radius", units_dict)
+        assert isinstance(result, Quantity)
+        assert result.magnitude == pytest.approx(36.35)
+
+    def test_without_units_returns_bare_number(self):
+        """Value without known units returns a bare number."""
+        units_dict = {"fiber_radius": "microns"}
+        result = Parameters.to_quantity_or_number(7, "nodes_in_micro_row", units_dict)
+        assert result == 7
+        assert not isinstance(result, Quantity)
+
+    def test_empty_units_dict(self):
+        """Empty units dict always returns bare number."""
+        result = Parameters.to_quantity_or_number(100, "anything", {})
+        assert result == 100
+        assert not isinstance(result, Quantity)
+
+    def test_quantity_has_correct_unit(self):
+        """Returned Quantity has the expected unit."""
+        units_dict = {"total_time": "sec"}
+        result = Parameters.to_quantity_or_number(3600.0, "total_time", units_dict)
+        assert str(result.units) == "second"

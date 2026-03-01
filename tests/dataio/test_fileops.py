@@ -45,6 +45,9 @@ from lysis.dataio.fileops import (
     data_readers,
     data_writers,
     ensure_hdf5_version,
+    parse_macro_log,
+    parse_micro_file_code,
+    parse_micro_log,
     read_data_collection,
     read_dataset,
     write_data_collection,
@@ -735,30 +738,27 @@ class TestReadFileParsed:
     """Tests for :func:`_read_file_parsed`."""
 
     def test_parses_micro_log_to_params_dict(self, tmp_path):
-        """Parsed log returns dict with 'micro_params' key and expected values."""
+        """Parsed log returns dict with 'micro_params' key containing raw Fortran names."""
         (tmp_path / "micro.txt").write_text(_MICRO_LOG_FOR_FILEOPS)
         spec = _make_parsed_spec()
         result = _read_file_parsed(str(tmp_path), spec)
 
         assert "micro_params" in result
         micro = result["micro_params"]
-        # nodes=13 maps to nodes_in_micro_row
-        assert micro["nodes_in_micro_row"] == pytest.approx(13)
-        # simulations=50000 maps to micro_simulations
-        assert micro["micro_simulations"] == pytest.approx(50000)
+        # Raw Fortran names are preserved (no resolution)
+        assert micro["nodes"] == pytest.approx(13)
+        assert micro["simulations"] == pytest.approx(50000)
 
-    def test_quantities_converted_to_strings(self, tmp_path):
-        """Quantity values are converted to string representations (not Quantity objects)."""
+    def test_values_are_floats(self, tmp_path):
+        """Values are raw floats (no Quantity wrapping or string conversion)."""
         (tmp_path / "micro.txt").write_text(_MICRO_LOG_FOR_FILEOPS)
         spec = _make_parsed_spec()
         result = _read_file_parsed(str(tmp_path), spec)
 
         micro = result["micro_params"]
-        # KdtPAnoplg → diss_const_tPA_woPLG is a Quantity in the parser output
-        assert "diss_const_tPA_woPLG" in micro
-        val = micro["diss_const_tPA_woPLG"]
-        assert isinstance(val, str)
-        assert "0.36" in val
+        assert "kdtpanoplg" in micro
+        assert isinstance(micro["kdtpanoplg"], float)
+        assert micro["kdtpanoplg"] == pytest.approx(0.36)
 
     def test_unsupported_collection_raises(self, tmp_path):
         """NotImplementedError raised for unknown collection."""
@@ -766,23 +766,29 @@ class TestReadFileParsed:
         with pytest.raises(NotImplementedError, match="unknown_collection"):
             _read_file_parsed(str(tmp_path), spec)
 
-    def test_aliases_passed_through(self, tmp_path):
-        """Aliases resolve unknown Fortran names via the parser."""
-        # Log with 'runs=' instead of 'simulations=' — would fail without alias
+    def test_v190_stop_pattern(self, tmp_path):
+        """v1.90.0 uses init_entry stop pattern instead of stats."""
         content = textwrap.dedent(
             """\
-         runs=       50000
-          stats=        1000
+         KdtPAnoplg=  0.360000000000000
+          stats=           1
+          ktPAon=  0.100000000000000
+         init_entry=          13
+         p_rebind=  2.616532229748891E-005
         """
         )
         (tmp_path / "micro.txt").write_text(content)
-        spec = _make_parsed_spec()
-        result = _read_file_parsed(
-            str(tmp_path),
-            spec,
-            aliases={"micro_simulations": "runs"},
-        )
-        assert result["micro_params"]["micro_simulations"] == pytest.approx(50000)
+        spec = _make_parsed_spec(version="v1.90.0")
+        result = _read_file_parsed(str(tmp_path), spec)
+
+        micro = result["micro_params"]
+        # ktPAon appears after stats, before init_entry — should be captured
+        assert "ktpaon" in micro
+        assert micro["ktpaon"] == pytest.approx(0.1)
+        # stats should also be captured (raw parser doesn't filter it)
+        assert "stats" in micro
+        # init_entry and p_rebind are after the stop pattern
+        assert "init_entry" not in micro
 
 
 class TestReadDataCollectionFileParsed:
@@ -805,8 +811,6 @@ class TestReadDataCollectionFileParsed:
             params=real_spec.params,
             data={"lysis": real_spec.data["lysis"]},
         )
-        # Use empty version to skip _validate_fortran_params (tested separately
-        # in test_paramcheck.py). This test focuses on the FILE_PARSED read path.
         object.__setattr__(trimmed, "version", "")
         object.__setattr__(trimmed, "collection", "microscale_out")
 
@@ -816,11 +820,184 @@ class TestReadDataCollectionFileParsed:
             file_codes=[""],
         )
 
-        # Verify params were parsed
+        # Verify params were parsed — raw Fortran names
         assert "micro_params" in data["params"]
-        assert data["params"]["micro_params"]["micro_simulations"] == pytest.approx(
-            50000
-        )
+        assert data["params"]["micro_params"]["simulations"] == pytest.approx(50000)
 
         # Verify data was read
         np.testing.assert_array_equal(data["lysis"], lysis_data)
+
+
+# ---------------------------------------------------------------------------
+# Fortran log parsing tests (moved from test_paramcheck.py)
+# ---------------------------------------------------------------------------
+
+
+def _write_log(content, tmp_path, filename="test_log.txt"):
+    """Write inline content to a temp file and return its Path."""
+    path = tmp_path / filename
+    path.write_text(content)
+    return path
+
+
+class TestParseMicroLog:
+    """Tests for parse_micro_log(): Fortran micro log → raw KV dict."""
+
+    def test_parses_kv_pairs(self, tmp_path):
+        """Numeric KV pairs are extracted with lowercase Fortran names."""
+        content = textwrap.dedent("""\
+             KdtPAnoplg=  0.360000000000000
+              stats=        1000
+        """)
+        path = _write_log(content, tmp_path)
+        result = parse_micro_log(path)
+
+        assert "kdtpanoplg" in result
+        assert result["kdtpanoplg"] == pytest.approx(0.36)
+
+    def test_stops_at_stats_line(self, tmp_path):
+        """Lines at and after the first stats= line are not parsed."""
+        content = textwrap.dedent("""\
+             KdtPAnoplg=  0.360000000000000
+              stats=        1000
+              KdtPAyesplg=  0.999
+        """)
+        path = _write_log(content, tmp_path)
+        result = parse_micro_log(path)
+
+        assert "kdtpanoplg" in result
+        # KdtPAyesplg appears AFTER stats=; must not be parsed
+        assert "kdtpayesplg" not in result
+
+    def test_unknown_keys_pass_through(self, tmp_path):
+        """Unknown numeric keys pass through silently (no ValueError)."""
+        content = " bogusparam=       50000\n stats=1\n"
+        path = _write_log(content, tmp_path)
+        result = parse_micro_log(path)
+
+        assert "bogusparam" in result
+        assert result["bogusparam"] == pytest.approx(50000)
+
+    def test_setting_lines_parsed(self, tmp_path):
+        """'Setting key = value' lines from command-line parsing are extracted."""
+        content = textwrap.dedent("""\
+             Setting nodes =           13
+             Setting simulations =        50000
+             Setting seed =   2133256963
+             Setting outFileCode = _PLG2_tPA01_TB-xiii
+              stats=        1000
+        """)
+        path = _write_log(content, tmp_path)
+        result = parse_micro_log(path)
+
+        assert result["nodes"] == pytest.approx(13)
+        assert result["simulations"] == pytest.approx(50000)
+        assert result["seed"] == pytest.approx(2133256963)
+        # String-valued Setting lines (outFileCode) are silently skipped
+        assert "outfilecode" not in result
+
+    def test_setting_overwritten_by_later_kv(self, tmp_path):
+        """A later key=value line overwrites an earlier Setting line."""
+        content = textwrap.dedent("""\
+             Setting nodes =           99
+             nodes=          13
+              stats=        1000
+        """)
+        path = _write_log(content, tmp_path)
+        result = parse_micro_log(path)
+
+        assert result["nodes"] == pytest.approx(13)
+
+    def test_custom_stop_pattern(self, tmp_path):
+        """Custom stop_pattern overrides the default stats= pattern."""
+        content = textwrap.dedent("""\
+             KdtPAnoplg=  0.360000000000000
+              stats=           1
+              ktPAon=  0.100000000000000
+             init_entry=          13
+        """)
+        path = _write_log(content, tmp_path)
+        result = parse_micro_log(path, stop_pattern=r"^\s*init_entry\s*=")
+
+        # ktPAon appears after stats but before init_entry — should be captured
+        assert "ktpaon" in result
+        assert result["ktpaon"] == pytest.approx(0.1)
+        # stats is also captured (it's before init_entry)
+        assert "stats" in result
+        # init_entry is at/after stop — not captured
+        assert "init_entry" not in result
+
+    def test_non_numeric_values_skipped(self, tmp_path):
+        """Non-numeric values like filetype=binary are silently skipped."""
+        content = " filetype=binary\n nodes=13\n stats=1\n"
+        path = _write_log(content, tmp_path)
+        result = parse_micro_log(path)
+
+        assert "filetype" not in result
+        assert "nodes" in result
+
+
+class TestParseMacroLog:
+    """Tests for parse_macro_log(): Fortran macro log → raw KV dict."""
+
+    def test_parses_grid_params(self, tmp_path):
+        """N=, F=, M= are extracted with lowercase names and float values."""
+        content = textwrap.dedent("""\
+             N=          19
+              F=         184
+              M=                 21105
+            After     10. sec, 0 fibers are degraded
+        """)
+        path = _write_log(content, tmp_path)
+        result = parse_macro_log(path)
+
+        assert result["n"] == pytest.approx(19)
+        assert result["f"] == pytest.approx(184)
+        assert result["m"] == pytest.approx(21105)
+
+    def test_stops_at_after_line(self, tmp_path):
+        """Lines beginning with 'After ' are not parsed."""
+        content = textwrap.dedent("""\
+             N=          19
+             After     10. sec, 0 fibers are degraded
+             F=         999
+        """)
+        path = _write_log(content, tmp_path)
+        result = parse_macro_log(path)
+
+        assert result["n"] == pytest.approx(19)
+        # F= appears after the After line; must not be parsed
+        assert "f" not in result
+
+
+class TestParseMicroFileCode:
+    """Tests for parse_micro_file_code(): extracting params from file codes."""
+
+    def test_q4_code(self):
+        """Q4 maps to fiber_radius=72.7 nm and nodes_in_micro_row=13."""
+        result = parse_micro_file_code("_PLG2_tPA01_Q4")
+        assert "fiber_radius" in result
+        assert result["fiber_radius"].to("nm").magnitude == pytest.approx(72.7)
+        assert result["nodes_in_micro_row"] == 13
+
+    def test_q2_code(self):
+        """Q2 maps to fiber_radius=36.35 nm and nodes_in_micro_row=7."""
+        result = parse_micro_file_code("_PLG2_tPA01_Q2")
+        assert result["fiber_radius"].to("nm").magnitude == pytest.approx(36.35)
+        assert result["nodes_in_micro_row"] == 7
+
+    def test_tb_xiii_code(self):
+        """TB-xiii maps to fiber_radius=61.5 nm and nodes_in_micro_row=13."""
+        result = parse_micro_file_code("_PLG2_tPA01_TB-xiii")
+        assert result["fiber_radius"].to("nm").magnitude == pytest.approx(61.5)
+        assert result["nodes_in_micro_row"] == 13
+
+    def test_no_fiber_code(self):
+        """A file code with no recognized fiber type returns empty dict."""
+        result = parse_micro_file_code("_TK-L_307")
+        assert result == {}
+
+    def test_empty_code(self):
+        """An empty file code returns empty dict."""
+        result = parse_micro_file_code("")
+        assert result == {}

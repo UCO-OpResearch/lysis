@@ -17,6 +17,9 @@ Tests cover:
 * conversion_paths — module-level precomputed paths
 * _convert_single_step — single-hop conversion
 * convert_data multi-step — chaining, short-circuit, ValueError
+* _resolve_fortran_names — Fortran→Python name resolution with transforms
+* _convert_params_v190_to_v195 — v1.90.0 legacy renames and cleanup
+* _convert_params_v195_to_v190 — reverse v1.90.0 renames
 """
 
 import warnings
@@ -46,6 +49,9 @@ from lysis.dataio.dataconvert import (
     _convert_single_step,
     _convert_params_add_units,
     _convert_params_strip_units,
+    _resolve_fortran_names,
+    _convert_params_v190_to_v195,
+    _convert_params_v195_to_v190,
 )
 from lysis.geometry.edge_grid import (
     from_fortran_edge_index_array,
@@ -864,15 +870,25 @@ class TestConvertParamsStripUnits:
 class TestParamsConvertersRegistry:
     """Tests for the :data:`params_converters` registry."""
 
-    def test_both_directions_registered(self):
+    def test_both_directions_v195_v199(self):
         """Both v1.95.0↔v1.99.0 entries exist."""
         assert ("v1.95.0", "v1.99.0") in params_converters
         assert ("v1.99.0", "v1.95.0") in params_converters
 
-    def test_functions_match(self):
-        """Registry entries point to the correct functions."""
+    def test_both_directions_v190_v195(self):
+        """Both v1.90.0↔v1.95.0 entries exist."""
+        assert ("v1.90.0", "v1.95.0") in params_converters
+        assert ("v1.95.0", "v1.90.0") in params_converters
+
+    def test_functions_match_v195_v199(self):
+        """v1.95.0↔v1.99.0 registry entries point to the correct functions."""
         assert params_converters["v1.95.0", "v1.99.0"] is _convert_params_add_units
         assert params_converters["v1.99.0", "v1.95.0"] is _convert_params_strip_units
+
+    def test_functions_match_v190_v195(self):
+        """v1.90.0↔v1.95.0 registry entries point to the correct functions."""
+        assert params_converters["v1.90.0", "v1.95.0"] is _convert_params_v190_to_v195
+        assert params_converters["v1.95.0", "v1.90.0"] is _convert_params_v195_to_v190
 
 
 # ---------------------------------------------------------------------------
@@ -1592,3 +1608,233 @@ class TestConvertDataMultiStep:
         assert "pli_first_time" in result
         # Macroscale datasets should not be present
         assert "snapshot_time" not in result
+
+
+# ---------------------------------------------------------------------------
+# _resolve_fortran_names
+# ---------------------------------------------------------------------------
+
+
+class TestResolveFortranNames:
+    """Tests for :func:`_resolve_fortran_names`."""
+
+    def test_resolves_known_fortran_name(self):
+        """Known Fortran name 'radius' resolves to 'fiber_radius'."""
+        params = {"micro_params": {"radius": 0.03635}}
+        result = _resolve_fortran_names(params)
+        assert "fiber_radius" in result["micro_params"]
+        assert result["micro_params"]["fiber_radius"] == pytest.approx(0.03635)
+
+    def test_python_name_passes_through(self):
+        """Already-resolved Python names pass through unchanged."""
+        params = {"micro_params": {"fiber_radius": 0.03635}}
+        result = _resolve_fortran_names(params)
+        assert result["micro_params"]["fiber_radius"] == pytest.approx(0.03635)
+
+    def test_idempotent(self):
+        """Calling twice produces the same result."""
+        params = {"micro_params": {"radius": 0.03635, "simulations": 100}}
+        result1 = _resolve_fortran_names(params)
+        result2 = _resolve_fortran_names(result1)
+        assert result1 == result2
+
+    def test_minus1_transform_applied(self):
+        """Fortran 'Ffree' with -1 transform resolves to empty_rows = val - 1."""
+        params = {"macro_params": {"ffree": 10.0}}
+        result = _resolve_fortran_names(params)
+        assert result["macro_params"]["empty_rows"] == pytest.approx(9.0)
+
+    def test_unknown_key_passes_through(self):
+        """Keys not in inverse map and not Python names pass through."""
+        params = {"micro_params": {"unknown_key": 42}}
+        result = _resolve_fortran_names(params)
+        assert result["micro_params"]["unknown_key"] == 42
+
+    def test_non_dict_section_passes_through(self):
+        """Non-dict sections (e.g., version strings) pass through."""
+        params = {"version": "v1.95.0", "micro_params": {"radius": 0.03635}}
+        result = _resolve_fortran_names(params)
+        assert result["version"] == "v1.95.0"
+        assert "fiber_radius" in result["micro_params"]
+
+    def test_macro_section_uses_macro_inverse(self):
+        """Macro sections resolve macro Fortran names."""
+        params = {"macro_params": {"cols": 3}}
+        result = _resolve_fortran_names(params)
+        # 'cols' is already a Python name, should pass through
+        assert result["macro_params"]["cols"] == 3
+
+    def test_micro_section_uses_micro_inverse(self):
+        """Micro sections use the micro inverse map."""
+        params = {"micro_params": {"bs": 5.0}}
+        result = _resolve_fortran_names(params)
+        assert "binding_sites" in result["micro_params"]
+        assert result["micro_params"]["binding_sites"] == pytest.approx(5.0)
+
+    def test_mixed_fortran_and_python_names(self):
+        """Mix of Fortran and Python names in same section."""
+        params = {
+            "micro_params": {
+                "radius": 0.03635,
+                "micro_simulations": 100,
+                "bs": 5.0,
+            }
+        }
+        result = _resolve_fortran_names(params)
+        assert result["micro_params"]["fiber_radius"] == pytest.approx(0.03635)
+        assert result["micro_params"]["micro_simulations"] == 100
+        assert result["micro_params"]["binding_sites"] == pytest.approx(5.0)
+
+
+# ---------------------------------------------------------------------------
+# _convert_params_v190_to_v195
+# ---------------------------------------------------------------------------
+
+
+class TestConvertParamsV190ToV195:
+    """Tests for :func:`_convert_params_v190_to_v195`."""
+
+    def test_renames_micro_runs_to_micro_simulations(self):
+        """'runs' key in micro section is renamed to 'micro_simulations'."""
+        params = {"micro_params": {"runs": 500.0}}
+        result = _convert_params_v190_to_v195(params)
+        assert "micro_simulations" in result["micro_params"]
+        assert result["micro_params"]["micro_simulations"] == pytest.approx(500.0)
+        assert "runs" not in result["micro_params"]
+
+    def test_renames_micro_seed_to_micro_seed(self):
+        """'seed' key in micro section is renamed to 'micro_seed'."""
+        params = {"micro_params": {"seed": 42.0}}
+        result = _convert_params_v190_to_v195(params)
+        assert "micro_seed" in result["micro_params"]
+        assert "seed" not in result["micro_params"]
+
+    def test_removes_stats_from_micro(self):
+        """'stats' key in micro section is removed."""
+        params = {"micro_params": {"stats": 1.0, "simulations": 100.0}}
+        result = _convert_params_v190_to_v195(params)
+        assert "stats" not in result["micro_params"]
+
+    def test_renames_macro_total_trials(self):
+        """'total_trials' in macro section is renamed to 'macro_simulations'."""
+        params = {"macro_params": {"total_trials": 10.0}}
+        result = _convert_params_v190_to_v195(params)
+        assert "macro_simulations" in result["macro_params"]
+        assert "total_trials" not in result["macro_params"]
+
+    def test_renames_macro_log_lvl(self):
+        """'log_lvl' in macro section is renamed to 'macro_log_lvl'."""
+        params = {"macro_params": {"log_lvl": 2.0}}
+        result = _convert_params_v190_to_v195(params)
+        assert "macro_log_lvl" in result["macro_params"]
+        assert "log_lvl" not in result["macro_params"]
+
+    def test_renames_macro_seed(self):
+        """'seed' in macro section is renamed to 'macro_seed'."""
+        params = {"macro_params": {"seed": 99.0}}
+        result = _convert_params_v190_to_v195(params)
+        assert "macro_seed" in result["macro_params"]
+        assert "seed" not in result["macro_params"]
+
+    def test_resolves_fortran_names_first(self):
+        """Fortran names are resolved before v1.90.0 renames are applied."""
+        params = {"micro_params": {"radius": 0.03635, "runs": 500.0}}
+        result = _convert_params_v190_to_v195(params)
+        assert "fiber_radius" in result["micro_params"]
+        assert "micro_simulations" in result["micro_params"]
+
+    def test_non_dict_section_passes_through(self):
+        """Non-dict sections pass through unchanged."""
+        params = {"version": "v1.90.0", "micro_params": {"runs": 100.0}}
+        result = _convert_params_v190_to_v195(params)
+        assert result["version"] == "v1.90.0"
+
+
+# ---------------------------------------------------------------------------
+# _convert_params_v195_to_v190
+# ---------------------------------------------------------------------------
+
+
+class TestConvertParamsV195ToV190:
+    """Tests for :func:`_convert_params_v195_to_v190`."""
+
+    def test_renames_micro_simulations_to_runs(self):
+        """'micro_simulations' is renamed back to 'runs'."""
+        params = {"micro_params": {"micro_simulations": 500}}
+        result = _convert_params_v195_to_v190(params)
+        assert "runs" in result["micro_params"]
+        assert "micro_simulations" not in result["micro_params"]
+
+    def test_renames_micro_seed_to_seed(self):
+        """'micro_seed' is renamed back to 'seed'."""
+        params = {"micro_params": {"micro_seed": 42}}
+        result = _convert_params_v195_to_v190(params)
+        assert "seed" in result["micro_params"]
+        assert "micro_seed" not in result["micro_params"]
+
+    def test_renames_macro_simulations_to_total_trials(self):
+        """'macro_simulations' is renamed back to 'total_trials'."""
+        params = {"macro_params": {"macro_simulations": 10}}
+        result = _convert_params_v195_to_v190(params)
+        assert "total_trials" in result["macro_params"]
+        assert "macro_simulations" not in result["macro_params"]
+
+    def test_renames_macro_log_lvl(self):
+        """'macro_log_lvl' is renamed back to 'log_lvl'."""
+        params = {"macro_params": {"macro_log_lvl": 2}}
+        result = _convert_params_v195_to_v190(params)
+        assert "log_lvl" in result["macro_params"]
+        assert "macro_log_lvl" not in result["macro_params"]
+
+    def test_renames_macro_seed_to_seed(self):
+        """'macro_seed' is renamed back to 'seed'."""
+        params = {"macro_params": {"macro_seed": 99}}
+        result = _convert_params_v195_to_v190(params)
+        assert "seed" in result["macro_params"]
+        assert "macro_seed" not in result["macro_params"]
+
+    def test_non_dict_section_passes_through(self):
+        """Non-dict sections pass through unchanged."""
+        params = {"version": "v1.95.0", "micro_params": {"micro_simulations": 100}}
+        result = _convert_params_v195_to_v190(params)
+        assert result["version"] == "v1.95.0"
+
+    def test_unknown_keys_pass_through(self):
+        """Keys with no reverse rename pass through unchanged."""
+        params = {"micro_params": {"fiber_radius": 0.03635}}
+        result = _convert_params_v195_to_v190(params)
+        assert result["micro_params"]["fiber_radius"] == pytest.approx(0.03635)
+
+
+# ---------------------------------------------------------------------------
+# v1.90.0 ↔ v1.95.0 round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestParamsV190RoundTrip:
+    """Round-trip tests for v1.90.0 ↔ v1.95.0 conversion."""
+
+    def test_v190_to_v195_to_v190_preserves_keys(self):
+        """v1.90.0 → v1.95.0 → v1.90.0 preserves renamed keys."""
+        original = {
+            "micro_params": {
+                "micro_simulations": 500,
+                "micro_seed": 42,
+                "fiber_radius": 0.03635,
+            },
+            "macro_params": {
+                "macro_simulations": 10,
+                "macro_seed": 99,
+                "macro_log_lvl": 2,
+                "cols": 3,
+            },
+        }
+        v190 = _convert_params_v195_to_v190(original)
+        recovered = _convert_params_v190_to_v195(v190)
+        assert recovered["micro_params"]["micro_simulations"] == 500
+        assert recovered["micro_params"]["micro_seed"] == 42
+        assert recovered["micro_params"]["fiber_radius"] == pytest.approx(0.03635)
+        assert recovered["macro_params"]["macro_simulations"] == 10
+        assert recovered["macro_params"]["macro_seed"] == 99
+        assert recovered["macro_params"]["macro_log_lvl"] == 2
+        assert recovered["macro_params"]["cols"] == 3

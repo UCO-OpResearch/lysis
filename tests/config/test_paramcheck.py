@@ -1,8 +1,7 @@
 """Unit tests for lysis.config.paramcheck.
 
-Tests cover the six public functions:
+Tests cover the four public functions:
     load_micro_params, load_macro_params      -- strict parameter loading
-    parse_micro_log, parse_macro_log          -- Fortran log parsing
     verify_micro_params, verify_macro_params  -- log-vs-params verification
 
 All log-parsing tests use inline text constants (no real data files).
@@ -18,10 +17,6 @@ from lysis.config.parameters import MacroParameters, MicroParameters
 from lysis.config.paramcheck import (
     load_macro_params,
     load_micro_params,
-    parse_macro_log,
-    parse_micro_file_code,
-    parse_micro_log,
-    parse_micro_log_v190,
     verify_macro_params,
     verify_micro_params,
 )
@@ -80,8 +75,6 @@ MICRO_LOG_CONTENT = textwrap.dedent("""\
 # Values: N=19, F=184, Ffree=113 (→ empty_rows=112), M=21105, seed=-725030,
 # q=0.2, delx=5.34e-4 cm (pore_size), frac_forced=0.074101.
 # Integer dependent params included: num=10285 (total_edges), enoFB=6272 (empty_edges).
-# Excluded: avgwait (floating-point mismatch), tstep (floating-point mismatch),
-#           kon (requires overrides), bs (unit mismatch with stored value).
 MACRO_LOG_CONTENT = textwrap.dedent("""\
  command line processed
   N=          19
@@ -305,270 +298,6 @@ class TestLoadMacroParams:
 
 
 # ---------------------------------------------------------------------------
-# TestParseMicroLog
-# ---------------------------------------------------------------------------
-
-
-class TestParseMicroLog:
-    """Tests for parse_micro_log(): Fortran micro log → Python param dict."""
-
-    def test_parses_dissociation_constants(self, tmp_path):
-        """KdtPAnoplg= maps to diss_const_tPA_woPLG with correct value and units."""
-        path = _write_log(MICRO_LOG_CONTENT, tmp_path)
-        result = parse_micro_log(path)
-
-        assert "diss_const_tPA_woPLG" in result
-        parsed = result["diss_const_tPA_woPLG"]
-        assert parsed.to("micromolar").magnitude == pytest.approx(0.36)
-
-    def test_parses_kplgon(self, tmp_path):
-        """kplgon= maps to bind_rate_PLG (case-insensitive key matching)."""
-        path = _write_log(MICRO_LOG_CONTENT, tmp_path)
-        result = parse_micro_log(path)
-
-        assert "bind_rate_PLG" in result
-        assert result["bind_rate_PLG"].magnitude == pytest.approx(0.1)
-
-    def test_stops_at_stats_line(self, tmp_path):
-        """Lines at and after the first stats= line are not parsed."""
-        content = textwrap.dedent("""\
-             KdtPAnoplg=  0.360000000000000
-              stats=        1000
-              KdtPAyesplg=  0.999
-        """)
-        path = _write_log(content, tmp_path)
-        result = parse_micro_log(path)
-
-        assert "diss_const_tPA_woPLG" in result
-        # diss_const_tPA_wPLG appears AFTER stats=; must not be parsed
-        assert "diss_const_tPA_wPLG" not in result
-
-    def test_unknown_name_raises(self, tmp_path):
-        """A numeric-valued Fortran name absent from fortran_names() raises ValueError."""
-        content = " bogusparam=       50000\n stats=1\n"
-        path = _write_log(content, tmp_path)
-
-        with pytest.raises(ValueError, match="bogusparam"):
-            parse_micro_log(path)
-
-    def test_legacy_alias_runs_resolved(self, tmp_path):
-        """Legacy alias 'runs' is automatically mapped to micro_simulations."""
-        content = " runs=       50000\n stats=1\n"
-        path = _write_log(content, tmp_path)
-
-        result = parse_micro_log(path)
-
-        assert "micro_simulations" in result
-        assert result["micro_simulations"] == pytest.approx(50000)
-
-    def test_setting_lines_parsed(self, tmp_path):
-        """'Setting key = value' lines from command-line parsing are extracted."""
-        content = textwrap.dedent("""\
-             Setting nodes =           13
-             Setting simulations =        50000
-             Setting seed =   2133256963
-             Setting outFileCode = _PLG2_tPA01_TB-xiii
-              stats=        1000
-        """)
-        path = _write_log(content, tmp_path)
-        result = parse_micro_log(path)
-
-        assert "nodes_in_micro_row" in result
-        assert result["nodes_in_micro_row"] == pytest.approx(13)
-        assert "micro_simulations" in result
-        assert result["micro_simulations"] == pytest.approx(50000)
-        assert "micro_seed" in result
-        assert result["micro_seed"] == pytest.approx(2133256963)
-        # String-valued Setting lines (outFileCode) are silently skipped
-        assert "outFileCode" not in result
-
-    def test_setting_overwritten_by_later_kv(self, tmp_path):
-        """A later key=value line overwrites an earlier Setting line."""
-        content = textwrap.dedent("""\
-             Setting nodes =           99
-             nodes=          13
-              stats=        1000
-        """)
-        path = _write_log(content, tmp_path)
-        result = parse_micro_log(path)
-
-        # The later nodes=13 should overwrite Setting nodes=99
-        assert result["nodes_in_micro_row"] == pytest.approx(13)
-
-    def test_alias_resolves_unknown(self, tmp_path):
-        """aliases={"micro_simulations": "runs"} maps runs= to micro_simulations."""
-        content = " runs=       50000\n stats=1\n"
-        path = _write_log(content, tmp_path)
-
-        result = parse_micro_log(path, aliases={"micro_simulations": "runs"})
-
-        assert "micro_simulations" in result
-        assert result["micro_simulations"] == pytest.approx(50000)
-
-
-# ---------------------------------------------------------------------------
-# TestParseMicroLogV190
-# ---------------------------------------------------------------------------
-
-
-class TestParseMicroLogV190:
-    """Tests for parse_micro_log_v190(): v1.90.0 Fortran micro log parsing."""
-
-    V190_LOG_CONTENT = textwrap.dedent("""\
-          filetype=binary
-          seed=   -34041038
-         KdtPAnoplg=  0.360000000000000
-         KdtPAyesplg=  2.000000000000000E-002
-         KdPLGnicked=   2.20000000000000
-         KdPLGintact=   38.0000000000000
-         runs=       50000
-          stats=           1
-          kncat=   5.00000000000000
-          kapcat=  0.100000000000000
-          ktPAon=  0.100000000000000
-          kaoff10=  3.600000000000000E-002
-          kaoff12=  2.000000000000000E-003
-          kplioff=   57.6000000000000
-          kplgoffnick=  0.220000000000000
-          kplgon=  0.100000000000000
-          kplgoff=   3.80000000000000
-          freeplg=   2.00000000000000
-          kdeg=   5.00000000000000
-         init_entry=          13
-    """)
-
-    def test_parses_rate_constants_after_stats(self, tmp_path):
-        """Rate constants after stats=1 are captured by the v1.90.0 parser."""
-        path = _write_log(self.V190_LOG_CONTENT, tmp_path)
-        result = parse_micro_log_v190(path)
-
-        assert "exposure_rate_binding_site" in result  # kncat
-        assert result["exposure_rate_binding_site"].magnitude == pytest.approx(5)
-        assert "bind_rate_tPA" in result  # ktPAon
-        assert result["bind_rate_tPA"].magnitude == pytest.approx(0.1)
-        assert "conc_free_PLG" in result  # freeplg
-        assert result["conc_free_PLG"].magnitude == pytest.approx(2)
-
-    def test_runs_resolved_via_legacy_alias(self, tmp_path):
-        """Legacy alias resolves 'runs' to micro_simulations."""
-        path = _write_log(self.V190_LOG_CONTENT, tmp_path)
-        result = parse_micro_log_v190(path)
-
-        assert "micro_simulations" in result
-        assert result["micro_simulations"] == pytest.approx(50000)
-
-    def test_stats_key_ignored(self, tmp_path):
-        """The 'stats' key between header and rate constants is ignored."""
-        path = _write_log(self.V190_LOG_CONTENT, tmp_path)
-        # Should not raise ValueError for 'stats'
-        result = parse_micro_log_v190(path)
-        assert "stats" not in result
-
-    def test_stops_at_init_entry(self, tmp_path):
-        """Lines at and after init_entry= are not parsed."""
-        content = textwrap.dedent("""\
-             KdtPAnoplg=  0.360000000000000
-              stats=           1
-              ktPAon=  0.100000000000000
-             init_entry=          13
-             p_rebind=  2.616532229748891E-005
-        """)
-        path = _write_log(content, tmp_path)
-        result = parse_micro_log_v190(path)
-
-        assert "bind_rate_tPA" in result
-        # init_entry and p_rebind are after the stop pattern
-        assert "init_entry" not in result
-
-
-# ---------------------------------------------------------------------------
-# TestParseMicroFileCode
-# ---------------------------------------------------------------------------
-
-
-class TestParseMicroFileCode:
-    """Tests for parse_micro_file_code(): extracting params from file codes."""
-
-    def test_q4_code(self):
-        """Q4 maps to fiber_radius=72.7 nm and nodes_in_micro_row=13."""
-        result = parse_micro_file_code("_PLG2_tPA01_Q4")
-        assert "fiber_radius" in result
-        assert result["fiber_radius"].to("nm").magnitude == pytest.approx(72.7)
-        assert result["nodes_in_micro_row"] == 13
-
-    def test_q2_code(self):
-        """Q2 maps to fiber_radius=36.35 nm and nodes_in_micro_row=7."""
-        result = parse_micro_file_code("_PLG2_tPA01_Q2")
-        assert result["fiber_radius"].to("nm").magnitude == pytest.approx(36.35)
-        assert result["nodes_in_micro_row"] == 7
-
-    def test_tb_xiii_code(self):
-        """TB-xiii maps to fiber_radius=61.5 nm and nodes_in_micro_row=13."""
-        result = parse_micro_file_code("_PLG2_tPA01_TB-xiii")
-        assert result["fiber_radius"].to("nm").magnitude == pytest.approx(61.5)
-        assert result["nodes_in_micro_row"] == 13
-
-    def test_no_fiber_code(self):
-        """A file code with no recognized fiber type returns empty dict."""
-        result = parse_micro_file_code("_TK-L_307")
-        assert result == {}
-
-    def test_empty_code(self):
-        """An empty file code returns empty dict."""
-        result = parse_micro_file_code("")
-        assert result == {}
-
-
-# ---------------------------------------------------------------------------
-# TestParseMacroLog
-# ---------------------------------------------------------------------------
-
-
-class TestParseMacroLog:
-    """Tests for parse_macro_log(): Fortran macro log → Python param dict."""
-
-    def test_parses_grid_params(self, tmp_path):
-        """N=, F=, M= map to cols, rows, total_molecules with correct values."""
-        path = _write_log(MACRO_LOG_CONTENT, tmp_path)
-        result = parse_macro_log(path)
-
-        assert result["cols"] == pytest.approx(19)
-        assert result["rows"] == pytest.approx(184)
-        assert result["total_molecules"] == pytest.approx(21105)
-
-    def test_ffree_transform(self, tmp_path):
-        """Ffree=113 → empty_rows=112  (Python = Fortran − 1)."""
-        path = _write_log(MACRO_LOG_CONTENT, tmp_path)
-        result = parse_macro_log(path)
-
-        assert "empty_rows" in result
-        assert result["empty_rows"] == pytest.approx(112)
-
-    def test_stops_at_after_line(self, tmp_path):
-        """Lines beginning with 'After ' are not parsed."""
-        content = textwrap.dedent("""\
-             N=          19
-             After     10. sec, 0 fibers are degraded
-             F=         999
-        """)
-        path = _write_log(content, tmp_path)
-        result = parse_macro_log(path)
-
-        assert result["cols"] == pytest.approx(19)
-        # rows (F=) appears after the After line; must not be parsed
-        assert "rows" not in result
-
-    def test_cross_class_params_resolved(self, tmp_path):
-        """bs= in macro log resolves to MicroParameters.binding_sites."""
-        content = " bs=         42\nAfter done\n"
-        path = _write_log(content, tmp_path)
-        result = parse_macro_log(path)
-
-        assert "binding_sites" in result
-        assert result["binding_sites"].magnitude == pytest.approx(42)
-
-
-# ---------------------------------------------------------------------------
 # TestVerifyMicroParams
 # ---------------------------------------------------------------------------
 
@@ -628,22 +357,19 @@ class TestVerifyMicroParams:
             micro, path, overrides={"diss_const_tPA_woPLG": "0.5 micromolar"}
         )
 
-    def test_alias_and_override_together(self, tmp_path):
-        """Both aliases and overrides can be used in a single verify call."""
-        # Log has 'runs=' (resolved by legacy alias) and a non-default KdtPAnoplg
-        content = " runs=       50000\n KdtPAnoplg=  0.500000000000000\n stats=1\n"
+    def test_alias_resolves_unknown(self, tmp_path):
+        """aliases={"micro_simulations": "runs"} maps runs= to micro_simulations."""
+        # The raw log parser sees "runs" as a Fortran name.  Without alias,
+        # it would be an unknown key (silently skipped by verify).  With alias,
+        # it maps to micro_simulations and is compared.
+        content = " runs=       50000\n stats=1\n"
         path = _write_log(content, tmp_path)
         micro = MicroParameters(micro_simulations=50000)
 
-        # Without override: mismatch on KdtPAnoplg (0.5 vs 0.36) → raises
-        with pytest.raises(ValueError, match="diss_const_tPA_woPLG"):
-            verify_micro_params(micro, path)
-
-        # With override: 0.5 µM is used as the expected value → matches log
+        # With alias — "runs" maps to micro_simulations in the verify resolver
         verify_micro_params(
-            micro, path,
-            overrides={"diss_const_tPA_woPLG": "0.5 micromolar"},
-        )
+            micro, path, aliases={"micro_simulations": "runs"}
+        )  # must not raise
 
 
 # ---------------------------------------------------------------------------

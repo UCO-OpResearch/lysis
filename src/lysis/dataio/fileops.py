@@ -145,29 +145,23 @@ See Also
 
 import json
 import os
+import re
 import warnings
+from pathlib import Path
 
 from typing import AnyStr, Callable
 
 import numpy as np
 import h5py
 
-from ..config.constants import CONST
+from ..config.constants import CONST, Q_
 from pint import Quantity
 
-from ..config.paramcheck import (
-    load_macro_params,
-    load_micro_params,
-    parse_micro_file_code,
-    parse_micro_log,
-    parse_micro_log_v190,
-)
 from .dataspec import (
     DataCollectionSpec,
     DataSetSpec,
     DataCollectionType,
     BaseParamsType,
-    fortran_versions,
     parse_shape,
     check_dataset_spec,
 )
@@ -182,75 +176,150 @@ __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Fortran log parsing
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _parse_fortran_kv(lines):
+    """Extract ``key = value`` pairs from Fortran log lines.
+
+    Matches two formats:
+
+    * ``key = value`` -- standard Fortran output.
+    * ``Setting key = value`` -- command-line argument echoes written by the
+      Fortran code during startup.
+
+    Lines that match neither pattern are silently skipped.  When the same key
+    appears in both a ``Setting`` line and a later ``key = value`` line, the
+    later value overwrites the earlier one.
+
+    :param lines: Iterable of text lines from a Fortran log file.
+    :return: ``{fortran_name_lower: raw_value_str}``.
+    :rtype: dict[str, str]
+    """
+    kv_pattern = re.compile(r"^\s*(\w+)\s*=\s*(.+?)\s*$")
+    setting_pattern = re.compile(r"^\s*Setting\s+(\w+)\s*=\s*(.+?)\s*$")
+    result = {}
+    for line in lines:
+        m = setting_pattern.match(line) or kv_pattern.match(line)
+        if m:
+            result[m.group(1).lower()] = m.group(2).strip()
+    return result
+
+
+def _parse_log(path, stop_pattern):
+    """Core Fortran log parser: extract ``{fortran_name_lower: float}`` pairs.
+
+    Reads *path* line by line, stopping before the first line matching
+    *stop_pattern*.  Extracts ``key = value`` pairs and keeps only those
+    whose values are parseable as ``float``.  Non-numeric values (e.g.
+    ``filetype=binary``) are silently skipped.
+
+    No name resolution, transforms, units, or error-checking is performed.
+
+    :param path: Path to the Fortran log file.
+    :type path: str | Path
+    :param stop_pattern: Compiled :mod:`re` pattern; parsing stops at the
+        first line that matches.
+    :return: ``{fortran_name_lower: float}`` for all numeric KV pairs.
+    :rtype: dict[str, float]
+    """
+    path = Path(path)
+    with path.open("r", errors="replace") as fh:
+        lines = []
+        for line in fh:
+            if stop_pattern.search(line):
+                break
+            lines.append(line)
+
+    raw = _parse_fortran_kv(lines)
+
+    result = {}
+    for fortran_lower, raw_str in raw.items():
+        try:
+            result[fortran_lower] = float(raw_str)
+        except (ValueError, TypeError):
+            pass  # Non-numeric; skip silently
+    return result
+
+
+def parse_micro_log(path, *, stop_pattern=None):
+    """Parse a Fortran microscale log file into raw parameter values.
+
+    Reads from the start of *path* until the first line matching
+    *stop_pattern* (exclusive).  Returns ``{fortran_name_lower: float}``
+    with no name resolution or transforms applied.
+
+    :param path: Path to the micro log file.
+    :type path: str | Path
+    :param stop_pattern: Compiled regex or string pattern; parsing stops at
+        the first matching line.  Defaults to ``r"^\\s*stats\\s*="``.
+    :type stop_pattern: re.Pattern | str | None
+    :return: ``{fortran_name_lower: float}`` for all numeric KV pairs.
+    :rtype: dict[str, float]
+    """
+    if stop_pattern is None:
+        stop_pattern = re.compile(r"^\s*stats\s*=")
+    elif isinstance(stop_pattern, str):
+        stop_pattern = re.compile(stop_pattern)
+    return _parse_log(path, stop_pattern)
+
+
+def parse_macro_log(path, *, stop_pattern=None):
+    """Parse a Fortran macroscale log file into raw parameter values.
+
+    Reads from the start of *path* until the first line beginning with
+    ``After `` (exclusive).  Returns ``{fortran_name_lower: float}`` with no
+    name resolution or transforms applied.
+
+    :param path: Path to the macro log file.
+    :type path: str | Path
+    :param stop_pattern: Compiled regex or string pattern; parsing stops at
+        the first matching line.  Defaults to ``r"^After\\s"``.
+    :type stop_pattern: re.Pattern | str | None
+    :return: ``{fortran_name_lower: float}`` for all numeric KV pairs.
+    :rtype: dict[str, float]
+    """
+    if stop_pattern is None:
+        stop_pattern = re.compile(r"^After\s")
+    elif isinstance(stop_pattern, str):
+        stop_pattern = re.compile(stop_pattern)
+    return _parse_log(path, stop_pattern)
+
+
+def parse_micro_file_code(file_code):
+    """Extract microscale parameters encoded in a file code string.
+
+    Parses a file code like ``_PLG2_tPA01_Q4`` and returns parameter values
+    for any recognized fiber type code segment.  The fiber type codes and
+    their associated parameter values are defined in
+    :data:`~lysis.config.constants.FIBER_TYPES`.
+
+    :param file_code: File code string (e.g. ``"_PLG2_tPA01_Q4"``).
+    :type file_code: str
+    :return: ``{python_name: value}`` for recognized fiber type parameters
+        (``fiber_radius`` and ``nodes_in_micro_row``).
+    :rtype: dict
+    """
+    from ..config.constants import FIBER_TYPES
+
+    result = {}
+    parts = [p for p in file_code.split("_") if p]
+
+    for part in parts:
+        if part in FIBER_TYPES:
+            result.update(FIBER_TYPES[part])
+
+    return result
+
+
 def _not_implemented(*args, **kwargs):
     """Placeholder for storage types not yet implemented.
 
     :raises NotImplementedError: Always raised when called
     """
     raise NotImplementedError("This function is not yet implemented.")
-
-
-def _validate_fortran_params(
-    params: BaseParamsType, overrides: dict | None = None
-) -> None:
-    """Validate and normalize parameters loaded from a Fortran data collection.
-
-    Called automatically by :func:`read_data_collection` whenever any collection
-    in the request belongs to a Fortran spec version (i.e. its version is in
-    :data:`~lysis.dataio.dataspec.fortran_versions`).
-
-    Delegates to :func:`~lysis.config.paramcheck.load_micro_params` and, when
-    macro parameters are present, to
-    :func:`~lysis.config.paramcheck.load_macro_params`.  Both functions raise
-    :exc:`ValueError` on missing independent parameters or inconsistent dependent
-    parameters.
-
-    After successful validation, *params* is updated **in place** with the
-    complete set of parameters (independent + recalculated dependent) from
-    the validated :class:`~lysis.config.parameters.MicroParameters` and
-    :class:`~lysis.config.parameters.MacroParameters` instances.  This ensures
-    that any *overrides* and any dependent parameters not present in the
-    original data are carried forward into the converted output.
-
-    :param params: Merged parameter dict as built by :func:`read_data_collection`.
-        Expected structure: ``{"micro_params": {...}, "macro_params": {...}}``.
-        Either sub-dict may be absent if that collection was not read.
-        **Modified in place** on successful validation.
-    :type params: BaseParamsType
-    :param overrides: Optional ``{python_name: value}`` substitutions forwarded
-        to both :func:`~lysis.config.paramcheck.load_micro_params` and
-        :func:`~lysis.config.paramcheck.load_macro_params`.  Use this to supply
-        missing parameters or correct known discrepancies in legacy data without
-        modifying the data files.  Because micro and macro independent parameter
-        names do not overlap (except ``log_lvl``, which has the same meaning in
-        both), a single combined dict is safe to pass to both functions.
-    :type overrides: dict | None
-    :raises ValueError: If any independent parameter is missing from the stored
-        data, or if any stored dependent parameter is inconsistent with the value
-        recalculated from the independent parameters.
-    :raises ValueError: If ``macro_params`` are present but ``micro_params`` are
-        not — macro validation requires a
-        :class:`~lysis.config.parameters.MicroParameters` instance.
-    """
-    micro_base = params.get("micro_params")
-    macro_base = params.get("macro_params")
-
-    micro_instance = None
-    if micro_base:
-        micro_instance = load_micro_params(micro_base, overrides=overrides)
-        params["micro_params"] = micro_instance.to_basedict()
-
-    if macro_base:
-        if micro_instance is None:
-            raise ValueError(
-                "Cannot validate macro_params: micro_params were not loaded. "
-                "Include the microscale_out collection when reading Fortran data "
-                "that contains macro_params."
-            )
-        macro_instance = load_macro_params(
-            macro_base, micro_instance, overrides=overrides
-        )
-        params["macro_params"] = macro_instance.to_basedict()
 
 
 def _read_file_text(
@@ -354,10 +423,17 @@ def _read_file_json(
 
 
 _COLLECTION_LOG_PARSER = {
-    ("v1.95.0", "microscale_out"): (parse_micro_log, "micro_params"),
-    ("v1.90.0", "microscale_out"): (parse_micro_log_v190, "micro_params"),
+    ("v1.95.0", "microscale_out"): {
+        "parser": parse_micro_log,
+        "params_key": "micro_params",
+    },
+    ("v1.90.0", "microscale_out"): {
+        "parser": parse_micro_log,
+        "params_key": "micro_params",
+        "stop_pattern": r"^\s*init_entry\s*=",
+    },
 }
-"""(spec, Map collection name) → (parser_function, params_key) for FILE_PARSED storage."""
+"""Map ``(spec_version, collection_name)`` to parser config for FILE_PARSED storage."""
 
 
 def _read_file_parsed(
@@ -366,21 +442,18 @@ def _read_file_parsed(
     params: BaseParamsType = None,
     sim: int = None,
     file_code: str = "",
-    aliases: dict | None = None,
 ) -> BaseParamsType:
     """Read parameters by parsing a Fortran log file.
 
-    Delegates to the appropriate log parser based on the collection name
-    in *spec*.  The parser returns ``{python_name: value}`` (with
-    :class:`~pint.Quantity` objects for dimensioned parameters).  This
-    function converts those to base types (strings for Quantities, numbers
-    for unitless params) so the result matches the format produced by
-    :meth:`~lysis.config.parameters.Parameters.to_basedict`.
+    Delegates to the appropriate log parser based on the spec version and
+    collection name.  The parser returns ``{fortran_name_lower: float}``.
+    File-code parameters are merged in for micro logs.
 
     :param path: Directory containing the log file.
     :type path: AnyStr
-    :param spec: Dataset specification; ``spec.collection`` selects the parser
-        and ``spec.data_location`` provides the filename template.
+    :param spec: Dataset specification; ``spec.version`` and ``spec.collection``
+        select the parser and ``spec.data_location`` provides the filename
+        template.
     :type spec: DataSetSpec
     :param params: Not used; kept for interface consistency.
     :type params: BaseParamsType, optional
@@ -388,10 +461,7 @@ def _read_file_parsed(
     :type sim: int, optional
     :param file_code: Code inserted into the filename template.
     :type file_code: str, optional
-    :param aliases: Optional ``{python_name: fortran_name}`` aliases forwarded
-        to the underlying parser (e.g. to resolve unknown Fortran names).
-    :type aliases: dict | None
-    :return: ``{params_key: {python_name: base_value, ...}}`` ready for
+    :return: ``{params_key: {fortran_name_lower: float, ...}}`` ready for
         merging into the data-collection params dict.
     :rtype: BaseParamsType
     :raises NotImplementedError: If ``spec.collection`` is not supported.
@@ -401,11 +471,17 @@ def _read_file_parsed(
             f"FILE_PARSED not supported for collection '{spec.collection}'"
         )
 
-    parser, params_key = _COLLECTION_LOG_PARSER[spec.version, spec.collection]
+    config = _COLLECTION_LOG_PARSER[spec.version, spec.collection]
+    parser = config["parser"]
+    params_key = config["params_key"]
     filepath = os.path.join(
         path, spec.data_location.format(sim=sim, file_code=file_code)
     )
-    parsed = parser(filepath, aliases=aliases)
+
+    kwargs = {}
+    if "stop_pattern" in config:
+        kwargs["stop_pattern"] = config["stop_pattern"]
+    parsed = parser(filepath, **kwargs)
 
     # Fill in missing micro parameters from the file code (e.g. fiber type
     # codes like Q4 → fiber_radius and nodes_in_micro_row).
@@ -413,16 +489,13 @@ def _read_file_parsed(
         file_code_params = parse_micro_file_code(file_code)
         for k, v in file_code_params.items():
             if k not in parsed:
-                parsed[k] = v
+                # Convert Quantities to strings for consistency
+                if isinstance(v, Quantity):
+                    parsed[k] = str(v)
+                else:
+                    parsed[k] = v
 
-    base_dict = {}
-    for k, v in parsed.items():
-        if isinstance(v, Quantity):
-            base_dict[k] = str(v)
-        else:
-            base_dict[k] = v
-
-    return {params_key: base_dict}
+    return {params_key: parsed}
 
 
 def _validate_hdf5_version(file: h5py.File, path: AnyStr, version: str):
@@ -661,8 +734,6 @@ def read_data_collection(
     path: AnyStr,
     collections: list[DataCollectionSpec],
     file_codes: list[str],
-    param_overrides: dict | None = None,
-    param_aliases: dict | None = None,
 ) -> DataCollectionType:
     """Read complete data collections from disk.
 
@@ -673,89 +744,23 @@ def read_data_collection(
     - Loading per-simulation files until no more are found
     - Merging parameters from multiple collections
 
-    **Recommended** for most use cases as it handles all the complexity of
-    reading multi-collection, multi-simulation data.
+    For Fortran data, parameters are returned as raw
+    ``{fortran_name_lower: float}`` dicts.  Name resolution, transforms, and
+    unit addition are handled downstream by
+    :func:`~lysis.dataio.dataconvert.convert_data`.
 
-    :param path: Directory containing files (for v1.99.0 Fortran format) or path to
+    :param path: Directory containing files (for Fortran format) or path to
                  HDF5 file (for v2.0.0 format)
     :type path: AnyStr
-    :param collections: List of collection specifications to read. Order matters as
-                        parameters from earlier collections are available to later ones.
-                        Typically from dataspec[version].values()
+    :param collections: List of collection specifications to read.
     :type collections: list[DataCollectionSpec]
-    :param file_codes: List of file code strings, one per collection. Use [""] for
-                       no file codes. Example: ["_PLG2_tPA01_TB-xiii.dat"] for Fortran.
+    :param file_codes: List of file code strings, one per collection.
     :type file_codes: list[str]
-    :param param_overrides: Optional ``{python_name: value}`` substitutions passed to
-                            :func:`~lysis.config.paramcheck.load_micro_params` and
-                            :func:`~lysis.config.paramcheck.load_macro_params` when
-                            reading Fortran (≤v1.99.0) data.  Use this to supply
-                            missing parameters or correct known discrepancies in legacy
-                            data without modifying the data files.  Ignored for
-                            non-Fortran spec versions.
-    :type param_overrides: dict | None
-    :param param_aliases: Optional ``{python_name: fortran_name}`` aliases passed to
-                          the log parser when reading Fortran data.  Each entry causes
-                          *fortran_name* in the log to map to *python_name* instead of
-                          raising an unknown-name error.  Ignored for non-Fortran spec
-                          versions.
-    :type param_aliases: dict | None
-    :return: Dictionary containing all loaded datasets plus a "params" key with merged
-             parameters. For per-simulation storage, datasets are lists of arrays.
-             For combined storage, datasets are single arrays.
+    :return: Dictionary containing all loaded datasets plus a ``"params"`` key
+        with merged parameters.
     :rtype: DataCollectionType
     :raises FileNotFoundError: If sim=0 file is not found (no data exists)
     :raises KeyError: If required HDF5 dataset/group is not found
-    :raises ValueError: If Fortran parameters fail strict validation (missing independent
-                        parameters or inconsistent dependent parameters)
-
-    Examples
-    --------
-    Reading Fortran v1.99.0 microscale output::
-
-        >>> from lysis.dataio.dataspec import dataspec
-        >>> collections = [dataspec["v1.99.0"]["microscale_out"]]
-        >>> data = read_data_collection(
-        ...     path="/path/to/fortran/data",
-        ...     collections=collections,
-        ...     file_codes=["_PLG2_tPA01_TB-xiii.dat"]
-        ... )
-        >>> # Access datasets
-        >>> lysis_times = data["lysis"]  # Single array (simulations_combined=True)
-        >>> params = data["params"]      # Merged parameter dictionary
-
-    Reading HDF5 v2.0.0 macroscale output (per-simulation storage)::
-
-        >>> collections = [dataspec["v2.0.0"]["macroscale_out"]]
-        >>> data = read_data_collection(
-        ...     path="/path/to/output.h5",
-        ...     collections=collections,
-        ...     file_codes=[""]
-        ... )
-        >>> # Access per-simulation datasets
-        >>> degrade_times = data["fiber_degrade_time"]  # List of arrays
-        >>> first_sim = degrade_times[0]                # Array for simulation 0
-
-    Reading multiple collections::
-
-        >>> # Read both microscale output and macroscale input
-        >>> collections = [
-        ...     dataspec["v2.0.0"]["microscale_out"],
-        ...     dataspec["v2.0.0"]["macroscale_in"]
-        ... ]
-        >>> data = read_data_collection(path, collections, ["", ""])
-
-    Notes
-    -----
-    - Per-simulation files are read sequentially (sim=0, 1, 2, ...) until FileNotFoundError
-    - Parameters are read first and made available to subsequent dataset reads
-    - Parameters from multiple collections are merged using dictionary union (|)
-    - If len(file_codes) < len(collections), empty strings are used for remaining collections
-
-    See Also
-    --------
-    :func:`read_dataset` : Read individual datasets
-    :func:`write_data_collection` : Write complete data collections
     """
     # Initialize output dictionary with empty params
     data = {}
@@ -779,7 +784,6 @@ def read_data_collection(
                     path,
                     collection.params,
                     file_code=file_code,
-                    aliases=param_aliases,
                 )
             else:
                 params = read_dataset(
@@ -827,13 +831,6 @@ def read_data_collection(
                         # Successfully read this simulation, add to list
                         data[name].append(dataset)
                         sim += 1
-
-    # Validate parameters for any Fortran-versioned collection that carries params.
-    # This mirrors the HDF5 version check (_validate_hdf5_version) and ensures
-    # paramcheck validation runs automatically — it is not possible to read Fortran
-    # data through this function without validation.
-    if any(c.version in fortran_versions and c.params is not None for c in collections):
-        _validate_fortran_params(data["params"], overrides=param_overrides)
 
     return data
 

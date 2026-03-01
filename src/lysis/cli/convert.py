@@ -227,10 +227,7 @@ def convert(
 
     # Read
     try:
-        data = read_data_collection(
-            input_path, in_collections, file_codes,
-            param_overrides=overrides, param_aliases=aliases,
-        )
+        data = read_data_collection(input_path, in_collections, file_codes)
     except FileNotFoundError as e:
         console.print(f"[red]Error:[/red] Input file not found: {e}")
         ctx.exit(1)
@@ -239,10 +236,21 @@ def convert(
         console.print(f"[red]Error:[/red] Missing data in input: {e}")
         ctx.exit(1)
         return
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] Parameter validation failed: {e}")
-        ctx.exit(1)
-        return
+
+    # Apply param_overrides: merge into all params sub-dicts
+    if overrides:
+        for key, value in overrides.items():
+            for section in data["params"].values():
+                if isinstance(section, dict):
+                    section[key] = value
+
+    # Apply param_aliases: rename keys in all params sub-dicts
+    if aliases:
+        for py_name, fort_name in aliases.items():
+            fort_lower = fort_name.lower()
+            for section in data["params"].values():
+                if isinstance(section, dict) and fort_lower in section:
+                    section[py_name] = section.pop(fort_lower)
 
     if verbose:
         n_datasets = sum(1 for k in data if k != "params")

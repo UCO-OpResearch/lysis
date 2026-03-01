@@ -126,8 +126,10 @@ import h5py
 
 from pint import Quantity
 
+import dataclasses
+
 from ..config.constants import CONST, Q_
-from ..config.parameters import Parameters
+from ..config.parameters import MacroParameters, MicroParameters, Parameters
 from .dataspec import (
     DataCollectionSpec,
     DataCollectionType,
@@ -945,11 +947,116 @@ def _not_implemented(dataset_name: str, input_spec: str, output_spec: str):
     return _raise_error
 
 
+def _resolve_fortran_names(params):
+    """Convert Fortran parameter names to Python names and apply transforms.
+
+    Uses :meth:`~.parameters.Parameters.inverse_fortran_map` for the mapping.
+    Keys that are already Python parameter names pass through unchanged
+    (idempotent).  Unknown keys (not in inverse_map and not a Python name)
+    also pass through.
+
+    :param params: Parameters dict with ``{section_key: {name: value, ...}}``
+        structure.  Non-dict sections pass through unchanged.
+    :type params: dict
+    :return: Parameters dict with Fortran names resolved to Python names.
+    :rtype: dict
+    """
+    micro_inverse = MicroParameters.inverse_fortran_map()
+    macro_inverse = MacroParameters.inverse_fortran_map(extra_cls=MicroParameters)
+    micro_fields = {f.name for f in dataclasses.fields(MicroParameters)}
+    macro_fields = {f.name for f in dataclasses.fields(MacroParameters)}
+    all_fields = micro_fields | macro_fields
+
+    out = {}
+    for section_key, section in params.items():
+        if not isinstance(section, dict):
+            out[section_key] = section
+            continue
+        inverse = micro_inverse if "micro" in section_key else macro_inverse
+        out[section_key] = {}
+        for key, value in section.items():
+            if key in all_fields:
+                # Already a Python name — pass through unchanged
+                out[section_key][key] = value
+            elif key in inverse:
+                py_name, transform, _ = inverse[key]
+                out[section_key][py_name] = Parameters.apply_fortran_transform(
+                    value, transform
+                )
+            else:
+                # Unknown key — pass through for version-specific handling
+                out[section_key][key] = value
+    return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Legacy v1.90.0 parameter renames
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: v1.90.0 micro log keys that differ from the v1.95.0 Python names.
+_V190_MICRO_RENAMES = {"runs": "micro_simulations", "seed": "micro_seed"}
+#: v1.90.0 micro log keys to silently discard.
+_V190_MICRO_REMOVE = {"stats"}
+#: v1.90.0 macro log keys that differ from the v1.95.0 Python names.
+_V190_MACRO_RENAMES = {
+    "total_trials": "macro_simulations",
+    "log_lvl": "macro_log_lvl",
+    "seed": "macro_seed",
+}
+
+
+def _convert_params_v190_to_v195(params):
+    """Resolve Fortran names, rename v1.90.0 legacy keys, remove noise.
+
+    :param params: Parameters dict with raw Fortran names.
+    :type params: dict
+    :return: Parameters dict with Python names (v1.95.0 convention).
+    :rtype: dict
+    """
+    params = _resolve_fortran_names(params)
+    out = {}
+    for section_key, section in params.items():
+        if not isinstance(section, dict):
+            out[section_key] = section
+            continue
+        renames = _V190_MICRO_RENAMES if "micro" in section_key else _V190_MACRO_RENAMES
+        removes = _V190_MICRO_REMOVE if "micro" in section_key else set()
+        out[section_key] = {}
+        for key, value in section.items():
+            if key in removes:
+                continue
+            out[section_key][renames.get(key, key)] = value
+    return out
+
+
+def _convert_params_v195_to_v190(params):
+    """Reverse rename Python names back to v1.90.0 legacy keys.
+
+    :param params: Parameters dict with Python names (v1.95.0 convention).
+    :type params: dict
+    :return: Parameters dict with v1.90.0 keys where applicable.
+    :rtype: dict
+    """
+    # Build reverse renames
+    micro_reverse = {v: k for k, v in _V190_MICRO_RENAMES.items()}
+    macro_reverse = {v: k for k, v in _V190_MACRO_RENAMES.items()}
+    out = {}
+    for section_key, section in params.items():
+        if not isinstance(section, dict):
+            out[section_key] = section
+            continue
+        reverse = micro_reverse if "micro" in section_key else macro_reverse
+        out[section_key] = {}
+        for key, value in section.items():
+            out[section_key][reverse.get(key, key)] = value
+    return out
+
+
 def _convert_params_add_units(params: dict) -> dict:
     """Convert parameters from v1.95.0 (bare magnitudes) to v1.99.0 (with units).
 
-    For each parameter section that is a dict, wraps numeric values that have
-    known units (from :meth:`Parameters.units`) as Pint Quantity strings
+    Resolves Fortran names first (for data read directly as v1.95.0), then
+    wraps numeric values that have known units as Pint Quantity strings
     (e.g., ``0.000534`` → ``"0.000534 centimeter"``). Non-numeric values and
     parameters without known units pass through unchanged.
 
@@ -958,6 +1065,7 @@ def _convert_params_add_units(params: dict) -> dict:
     :return: Parameters dict with dimensioned values as unit strings
     :rtype: dict
     """
+    params = _resolve_fortran_names(params)
     units = Parameters.units()
     out = {}
     for section_key, section in params.items():
@@ -1007,9 +1115,8 @@ def _convert_params_strip_units(params: dict) -> dict:
 params_converters: dict[tuple[str, str], Callable] = {
     ("v1.95.0", "v1.99.0"): _convert_params_add_units,
     ("v1.99.0", "v1.95.0"): _convert_params_strip_units,
-    # v1.90.0 uses the same bare-magnitude parameter format as v1.95.0
-    ("v1.90.0", "v1.95.0"): lambda params: params,
-    ("v1.95.0", "v1.90.0"): lambda params: params,
+    ("v1.90.0", "v1.95.0"): _convert_params_v190_to_v195,
+    ("v1.95.0", "v1.90.0"): _convert_params_v195_to_v190,
 }
 
 

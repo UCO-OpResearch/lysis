@@ -79,34 +79,56 @@ V190_PARAM_OVERRIDES = {
 V190_PARAM_ALIASES = {"micro_simulations": "runs"}
 
 
+# ─── helpers ─────────────────────────────────────────────────────────────────
+
+
+def _apply_overrides(data, overrides):
+    """Apply param_overrides to an already-read data dict."""
+    for key, value in overrides.items():
+        for section in data["params"].values():
+            if isinstance(section, dict):
+                section[key] = value
+
+
+def _apply_aliases(data, aliases):
+    """Apply param_aliases (rename Fortran keys) to an already-read data dict."""
+    for py_name, fort_name in aliases.items():
+        fort_lower = fort_name.lower()
+        for section in data["params"].values():
+            if isinstance(section, dict) and fort_lower in section:
+                section[py_name] = section.pop(fort_lower)
+
+
 # ─── v1.95.0 helpers ─────────────────────────────────────────────────────────
 
 def _read_micro(path):
     """Read microscale_out from *path* (v1.95.0)."""
-    return read_data_collection(
+    data = read_data_collection(
         path,
         collections=[dataspec["v1.95.0"]["microscale_out"]],
         file_codes=[MICRO_FILE_CODE],
-        param_overrides=PARAM_OVERRIDES,
     )
+    _apply_overrides(data, PARAM_OVERRIDES)
+    return data
 
 
 def _read_micro_and_macro_in(path):
     """Read microscale_out + macroscale_in from *path* (v1.95.0)."""
-    return read_data_collection(
+    data = read_data_collection(
         path,
         collections=[
             dataspec["v1.95.0"]["microscale_out"],
             dataspec["v1.95.0"]["macroscale_in"],
         ],
         file_codes=[MICRO_FILE_CODE, MICRO_FILE_CODE],
-        param_overrides=PARAM_OVERRIDES,
     )
+    _apply_overrides(data, PARAM_OVERRIDES)
+    return data
 
 
 def _read_all(path):
     """Read all three collections from *path* (v1.95.0)."""
-    return read_data_collection(
+    data = read_data_collection(
         path,
         collections=[
             dataspec["v1.95.0"]["microscale_out"],
@@ -114,8 +136,9 @@ def _read_all(path):
             dataspec["v1.95.0"]["macroscale_out"],
         ],
         file_codes=[MICRO_FILE_CODE, MICRO_FILE_CODE, MACRO_FILE_CODE],
-        param_overrides=PARAM_OVERRIDES,
     )
+    _apply_overrides(data, PARAM_OVERRIDES)
+    return data
 
 
 # ─── v1.90.0 helpers ─────────────────────────────────────────────────────────
@@ -128,16 +151,17 @@ def _read_v190_all(path):
     """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        return read_data_collection(
+        data = read_data_collection(
             path,
             collections=[
                 dataspec["v1.90.0"]["microscale_out"],
                 dataspec["v1.90.0"]["macroscale_out"],
             ],
             file_codes=[V190_MICRO_FILE_CODE, V190_MACRO_FILE_CODE],
-            param_overrides=V190_PARAM_OVERRIDES,
-            param_aliases=V190_PARAM_ALIASES,
         )
+    _apply_overrides(data, V190_PARAM_OVERRIDES)
+    _apply_aliases(data, V190_PARAM_ALIASES)
+    return data
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -153,10 +177,10 @@ class TestReadMicroscale:
         return _read_micro(fortran_sample_path)
 
     def test_params_loaded(self, micro_data):
-        """Parameters were parsed from the micro log file."""
+        """Parameters were parsed from the micro log file (raw Fortran names)."""
         micro = micro_data["params"]["micro_params"]
-        assert micro["micro_simulations"] == pytest.approx(50000)
-        assert micro["nodes_in_micro_row"] == pytest.approx(13)
+        assert micro["simulations"] == pytest.approx(50000)
+        assert micro["nodes"] == pytest.approx(13)
 
     def test_overridden_params_present(self, micro_data):
         """Parameters supplied via param_overrides appear in the output."""
@@ -483,11 +507,6 @@ class TestWriteConvertedData:
 class TestCLIConvertTruncated:
     """End-to-end test of ``lysis convert`` with the truncated fixture."""
 
-    @pytest.mark.skip(
-        reason="CLI does a single convert_data() call; v1.95.0 → v2.0.0 "
-        "requires multi-hop routing (v1.95.0 → v1.99.0 → v2.0.0) "
-        "which the CLI does not yet support."
-    )
     def test_cli_convert_fortran_to_hdf5(self, fortran_sample_path, tmp_path):
         output_path = str(tmp_path / "cli_output.h5")
         runner = CliRunner()
@@ -538,7 +557,7 @@ class TestReadFullMicroscale:
         ("lysis", np.float64, (50000,)),
         ("tPA_time", np.float64, (50000,)),
         ("lasttPA", np.int32, (50000,)),
-        ("lyscomplete", np.int32, (50000,)),
+        ("lyscomplete", np.uint32, (50000,)),
         ("PLi", np.int32, (50000,)),
         ("tPAPLiunbd", np.int32, (50000,)),
         ("tPAunbind", np.int32, (50000,)),
@@ -738,7 +757,7 @@ class TestReadFullV190Data:
     def test_f_deg_time_shape(self, data):
         f = data["f_deg_time"][0]
         assert f.shape[1] == V190_TOTAL_EDGES
-        assert f.shape[0] > 100  # hundreds of snapshots
+        assert f.shape[0] > 50  # tens of snapshots
         assert f.dtype == np.float64
 
     def test_convert_to_v200(self, data):

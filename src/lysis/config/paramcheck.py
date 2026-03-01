@@ -1,6 +1,6 @@
 """Parameter validation and Fortran log verification.
 
-Provides strict parameter loading and Fortran log parsing/verification on top
+Provides strict parameter loading and Fortran log verification on top
 of :meth:`~.parameters.Parameters.parse_from_basedict`.  All functions here
 are **optional** — existing code that calls ``parse_from_basedict()`` directly
 is unchanged.
@@ -13,52 +13,34 @@ Strict loading
 data, and also verify that any stored *dependent* parameters match the values
 recalculated from the independent parameters.
 
-Log parsing
------------
-
-:func:`parse_micro_log` and :func:`parse_macro_log` parse Fortran simulator
-output files (``micro_*.txt``, ``macro_*.txt``) and return a dict of
-``{python_name: value}``.  Any numeric-valued Fortran name that cannot be
-mapped to a Python parameter raises :exc:`ValueError`.
-
 Log verification
 ----------------
 
-:func:`verify_micro_params` and :func:`verify_macro_params` combine parsing
-with comparison against a parameter object, raising :exc:`ValueError` on any
-mismatch.
+:func:`verify_micro_params` and :func:`verify_macro_params` parse Fortran
+log files (via :mod:`lysis.dataio.fileops`), resolve Fortran names to Python
+names using :meth:`~.parameters.Parameters.inverse_fortran_map`, and compare
+the values against a parameter object.  All mismatches are collected and
+reported together in a single :exc:`ValueError`.
 
 Aliases and overrides
 ---------------------
 
-The public functions accept two optional keyword arguments:
-
-* ``aliases`` — a ``{python_name: fortran_name}`` dict that tells the parser
-  to look up an alternative Fortran name in the log file.  This also suppresses
-  the "unknown Fortran name" error for the aliased entry.  Used by the parse
-  and verify functions.
-* ``overrides`` — a ``{python_name: value}`` dict of direct values (int, float,
-  Quantity-string, etc.) used as-is.  Used by the load and verify functions.
-
-Note on ``kon`` in macro logs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The Fortran macroscale code writes ``kon=`` for the tPA binding rate, while the
-microscale code writes ``ktPAon=``.  Only ``ktPAon`` appears in
-:meth:`~.parameters.MicroParameters.fortran_names`.  When parsing macro logs
-that contain ``kon=``, pass
-``aliases={"bind_rate_tPA": "kon"}`` to resolve it.
+* ``aliases`` — a ``{python_name: fortran_name}`` dict that tells the
+  verify functions to look up an alternative Fortran name in the parsed
+  log output.  Used by :func:`verify_micro_params` and
+  :func:`verify_macro_params`.
+* ``overrides`` — a ``{python_name: value}`` dict of direct values (int,
+  float, Quantity-string, etc.) used as-is.  Used by the load and verify
+  functions.
 """
 
 import dataclasses
 import inspect
-import re
-from pathlib import Path
 
 from pint import Quantity
 
 from .constants import Q_
-from .parameters import MacroParameters, MicroParameters
+from .parameters import MacroParameters, MicroParameters, Parameters
 
 
 __author__ = "Bradley Paynter"
@@ -73,127 +55,6 @@ __status__ = "Development"
 # ─────────────────────────────────────────────────────────────────────────────
 # Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
-
-
-def _class_fortran_names(cls):
-    """Return ``{python_name: fortran_spec}`` restricted to fields of *cls*.
-
-    :meth:`~.parameters.Parameters.fortran_names` parses the entire source
-    file and therefore returns entries for both ``MicroParameters`` and
-    ``MacroParameters``.  This helper filters to only the fields declared in
-    *cls*.
-
-    :param cls: A :class:`~.parameters.Parameters` subclass.
-    :return: Filtered ``{python_name: fortran_spec}`` dict.
-    :rtype: dict[str, str]
-    """
-    all_names = cls.fortran_names()
-    cls_field_names = {f.name for f in dataclasses.fields(cls)}
-    return {k: v for k, v in all_names.items() if k in cls_field_names}
-
-
-def _build_inverse_map(cls, extra_cls=None):
-    """Build ``{fortran_name_lower: (python_name, transform, source_cls)}``.
-
-    Iterates :func:`_class_fortran_names` for *cls* (and optionally
-    *extra_cls*) and inverts the mapping.  The primary class (*cls*) takes
-    precedence: if both classes share the same Fortran name (e.g. ``seed``
-    for both ``micro_seed`` and ``macro_seed``), the *cls* entry wins and the
-    *extra_cls* entry is silently dropped.
-
-    Transform labels encode the Fortran → Python conversion direction:
-
-    * ``None``      — identity: ``python = fortran``
-    * ``'minus1'``  — subtract: ``python = fortran − 1``
-    * ``'times100'``— divide:   ``python = fortran / 100``
-
-    :param cls: Primary parameter class.
-    :param extra_cls: Optional additional class whose non-conflicting names
-        are also included (for cross-class params in macro logs).
-    :return: Inverse Fortran-name map.
-    :rtype: dict[str, tuple]
-    """
-    inverse = {}
-
-    def _add(c, overwrite):
-        for py_name, fortran_spec in _class_fortran_names(c).items():
-            if fortran_spec.endswith("-1"):
-                base_name = fortran_spec[:-2]
-                transform = "minus1"
-            elif fortran_spec.endswith("*100"):
-                base_name = fortran_spec[:-4]
-                transform = "times100"
-            else:
-                base_name = fortran_spec
-                transform = None
-            key = base_name.lower()
-            if overwrite or key not in inverse:
-                inverse[key] = (py_name, transform, c)
-
-    _add(cls, overwrite=True)
-    if extra_cls is not None:
-        _add(extra_cls, overwrite=False)
-
-    return inverse
-
-
-def _parse_fortran_kv(lines):
-    """Extract ``key = value`` pairs from Fortran log lines.
-
-    Matches two formats:
-
-    * ``key = value`` — standard Fortran output (pattern
-      ``r'^\\s*(\\w+)\\s*=\\s*(.+?)\\s*$'``).
-    * ``Setting key = value`` — command-line argument echoes written by the
-      Fortran code during startup (pattern
-      ``r'^\\s*Setting\\s+(\\w+)\\s*=\\s*(.+?)\\s*$'``).
-
-    Lines that match neither pattern (e.g. file-path lines, multi-line values)
-    are silently skipped.  When the same key appears in both a ``Setting`` line
-    and a later ``key = value`` line, the later value overwrites the earlier
-    one.
-
-    :param lines: Iterable of text lines from a Fortran log file.
-    :return: ``{fortran_name_lower: raw_value_str}``.
-    :rtype: dict[str, str]
-    """
-    kv_pattern = re.compile(r"^\s*(\w+)\s*=\s*(.+?)\s*$")
-    setting_pattern = re.compile(r"^\s*Setting\s+(\w+)\s*=\s*(.+?)\s*$")
-    result = {}
-    for line in lines:
-        m = setting_pattern.match(line) or kv_pattern.match(line)
-        if m:
-            result[m.group(1).lower()] = m.group(2).strip()
-    return result
-
-
-def _apply_transform(raw_num, transform):
-    """Apply the Fortran → Python transform to a numeric value.
-
-    :param raw_num: Float value read directly from the Fortran log.
-    :param transform: ``None``, ``'minus1'``, or ``'times100'``.
-    :return: Transformed numeric value.
-    :rtype: float
-    """
-    if transform == "minus1":
-        return raw_num - 1
-    if transform == "times100":
-        return raw_num / 100
-    return raw_num
-
-
-def _to_quantity_or_number(val, py_name, units_dict):
-    """Wrap *val* in a :class:`~pint.Quantity` if *py_name* has units.
-
-    :param val: Numeric value (post-transform).
-    :param py_name: Python parameter name.
-    :param units_dict: ``{py_name: unit_str}`` from ``cls.units()``.
-    :return: ``Quantity`` or bare ``float``.
-    """
-    unit = units_dict.get(py_name)
-    if unit is not None:
-        return Q_(val, unit)
-    return val
 
 
 def _extract_numeric(value, units_dict, py_name):
@@ -456,251 +317,44 @@ def load_macro_params(base_params, micro_params, *, overrides=None, tolerance=1e
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Internal log-parsing core
+# Internal verification helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map, ignore=None):
-    """Core Fortran log parser shared by micro and macro parsers.
+def _resolve_log_params(raw_log, inverse_map, units_dict, alias_map):
+    """Resolve raw Fortran log params to ``{python_name: value}`` dict.
 
-    Reads *path* line by line, stopping before the first line matching
-    *stop_pattern*.  Extracts ``key = value`` pairs, maps them via
-    *inverse_map* (augmented with *alias_map*), and applies the appropriate
-    Fortran → Python transform.  Raises :exc:`ValueError` for any
-    numeric-valued Fortran name that cannot be resolved.
-
-    Non-numeric values (e.g. ``filetype=binary``) are silently skipped
-    regardless of whether the key is in the inverse map.
-
-    :param path: Path to the Fortran log file.
-    :type path: str | Path
-    :param stop_pattern: Compiled :mod:`re` pattern; parsing stops at the
-        first line that matches.
-    :param inverse_map: ``{fortran_lower: (py_name, transform, source_cls)}``.
-    :param units_dict: Combined ``{py_name: unit_str}`` for unit wrapping.
-    :param alias_map: ``{fortran_alias_lower: py_name}`` from caller overrides.
-    :param ignore: Optional set of Fortran name keys (lowercase) to silently
-        skip even when they have numeric values.
-    :type ignore: set | None
+    :param raw_log: ``{fortran_name_lower: float}`` from
+        :func:`~lysis.dataio.fileops.parse_micro_log` or
+        :func:`~lysis.dataio.fileops.parse_macro_log`.
+    :param inverse_map: From :meth:`Parameters.inverse_fortran_map`.
+    :param units_dict: ``{py_name: unit_str}`` for unit wrapping.
+    :param alias_map: ``{fortran_alias_lower: py_name}`` from caller.
     :return: ``{python_name: value}`` for all resolved parameters.
     :rtype: dict
-    :raises ValueError: If any line contains a numeric-valued Fortran name
-        that is not in *inverse_map* and not covered by *alias_map*.
     """
-    path = Path(path)
-    with path.open("r", errors="replace") as fh:
-        lines = []
-        for line in fh:
-            if stop_pattern.search(line):
-                break
-            lines.append(line)
-
-    raw = _parse_fortran_kv(lines)
-
     result = {}
-    unknown = []
 
-    for fortran_lower, raw_str in raw.items():
-        # Skip explicitly ignored keys
-        if ignore and fortran_lower in ignore:
-            continue
-
+    for fortran_lower, raw_num in raw_log.items():
         # Alias overrides take priority
         if fortran_lower in alias_map:
             py_name = alias_map[fortran_lower]
-            try:
-                num = float(raw_str)
-            except (ValueError, TypeError):
-                continue  # Non-numeric; skip silently
-            result[py_name] = _to_quantity_or_number(num, py_name, units_dict)
+            result[py_name] = Parameters.to_quantity_or_number(
+                raw_num, py_name, units_dict
+            )
             continue
 
         if fortran_lower in inverse_map:
             py_name, transform, _ = inverse_map[fortran_lower]
-            try:
-                num = float(raw_str)
-            except (ValueError, TypeError):
-                continue  # Non-numeric; skip silently (e.g. filetype=binary)
-            transformed = _apply_transform(num, transform)
-            result[py_name] = _to_quantity_or_number(transformed, py_name, units_dict)
+            transformed = Parameters.apply_fortran_transform(raw_num, transform)
+            result[py_name] = Parameters.to_quantity_or_number(
+                transformed, py_name, units_dict
+            )
             continue
 
-        # Unknown key — flag only if the value is numeric (a real parameter)
-        try:
-            float(raw_str)
-            unknown.append(fortran_lower)
-        except (ValueError, TypeError):
-            pass  # Non-numeric unknown keys are silently ignored
-
-    if unknown:
-        raise ValueError(
-            f"Unrecognized Fortran parameter names in log: {sorted(unknown)}"
-        )
+        # Unknown key — silently skip (raw log already filtered to numeric)
 
     return result
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Legacy Fortran name aliases
-# ─────────────────────────────────────────────────────────────────────────────
-
-#: Legacy Fortran variable names that have been renamed in newer versions.
-#: Maps ``{old_fortran_lower: python_name}`` so old log files parse correctly.
-#: User-supplied aliases (via ``--param-alias``) take priority over these.
-MICRO_LEGACY_ALIASES = {
-    "runs": "micro_simulations",
-    "seed": "micro_seed",
-}
-
-#: Legacy Fortran variable names for macroscale log files.
-MACRO_LEGACY_ALIASES = {
-    "total_trials": "macro_simulations",
-    "log_lvl": "macro_log_lvl",
-    "seed": "macro_seed",
-}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Public log-parsing functions
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def parse_micro_log(path, *, aliases=None):
-    """Parse a Fortran microscale log file into Python parameter values.
-
-    Reads from the start of *path* until the first ``stats =`` line (exclusive).
-    Maps Fortran variable names to Python parameter names using
-    :meth:`~.parameters.MicroParameters.fortran_names` metadata.
-
-    :data:`MICRO_LEGACY_ALIASES` are applied automatically so that old
-    Fortran variable names (e.g. ``runs``) resolve without requiring an
-    explicit ``--param-alias``.  User-supplied *aliases* take priority.
-
-    :param path: Path to the micro log file
-        (e.g. ``micro_PLG2_tPA01_TB-xiii.txt``).
-    :type path: str | Path
-    :param aliases: Optional ``{python_name: fortran_name}`` aliases.
-        Each entry causes *fortran_name* in the log to map to *python_name*
-        instead of raising an unknown-name error.
-    :type aliases: dict | None
-    :return: ``{python_name: value}`` for all recognized parameters.
-    :rtype: dict
-    :raises ValueError: If any numeric-valued Fortran name cannot be mapped to
-        a Python parameter.
-    """
-    alias_map = {v.lower(): k for k, v in aliases.items()} if aliases else {}
-    # Merge legacy aliases; user aliases take priority
-    for fortran_lower, py_name in MICRO_LEGACY_ALIASES.items():
-        alias_map.setdefault(fortran_lower, py_name)
-    inverse_map = _build_inverse_map(MicroParameters)
-    units_dict = MicroParameters.units()
-    stop_pattern = re.compile(r"^\s*stats\s*=")
-    return _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map)
-
-
-def parse_macro_log(path, *, aliases=None):
-    """Parse a Fortran macroscale log file into Python parameter values.
-
-    Reads from the start of *path* until the first line beginning with
-    ``After `` (exclusive).  Maps Fortran variable names using both
-    :meth:`~.parameters.MacroParameters.fortran_names` and
-    :meth:`~.parameters.MicroParameters.fortran_names`.
-    Cross-class parameters that appear in the macro log (e.g. ``bs``) but
-    belong to :class:`~.parameters.MicroParameters` are included in the result
-    dict; callers can identify them by checking against
-    ``dataclasses.fields(MicroParameters)``.
-
-    :data:`MACRO_LEGACY_ALIASES` are applied automatically so that old
-    Fortran variable names (e.g. ``total_trials``) resolve without requiring
-    an explicit ``--param-alias``.  User-supplied *aliases* take priority.
-
-    .. note::
-        The macro Fortran code writes ``kon=`` for the tPA binding rate, while
-        the microscale code uses ``ktPAon=``.  The parameter
-        ``bind_rate_tPA`` maps to ``ktPAon`` in
-        :meth:`~.parameters.MicroParameters.fortran_names`, so ``kon=`` lines
-        in macro logs will raise :exc:`ValueError` unless you pass
-        ``aliases={"bind_rate_tPA": "kon"}``.
-
-    :param path: Path to the macro log file
-        (e.g. ``macro_TB-xiii__21_105_00.txt``).
-    :type path: str | Path
-    :param aliases: Optional ``{python_name: fortran_name}`` aliases.
-    :type aliases: dict | None
-    :return: ``{python_name: value}`` for all recognized parameters.
-    :rtype: dict
-    :raises ValueError: If any numeric-valued Fortran name cannot be mapped.
-    """
-    alias_map = {v.lower(): k for k, v in aliases.items()} if aliases else {}
-    # Merge legacy aliases; user aliases take priority
-    for fortran_lower, py_name in MACRO_LEGACY_ALIASES.items():
-        alias_map.setdefault(fortran_lower, py_name)
-    # MacroParameters takes precedence for shared names (e.g. seed, simulations)
-    inverse_map = _build_inverse_map(MacroParameters, extra_cls=MicroParameters)
-    units_dict = {**MicroParameters.units(), **MacroParameters.units()}
-    stop_pattern = re.compile(r"^After\s")
-    return _parse_log(path, stop_pattern, inverse_map, units_dict, alias_map)
-
-
-def parse_micro_log_v190(path, *, aliases=None):
-    """Parse a v1.90.0 Fortran microscale log file into Python parameter values.
-
-    v1.90.0 logs differ from v1.95.0+ in that most rate constants appear
-    *after* the first ``stats =`` line rather than before it.  This parser
-    reads until the first ``init_entry =`` line (exclusive) to capture the
-    rate constants, and silently ignores the intervening ``stats`` key.
-
-    :data:`MICRO_LEGACY_ALIASES` are applied automatically (e.g. ``runs`` →
-    ``micro_simulations``).
-
-    :param path: Path to the micro log file.
-    :type path: str | Path
-    :param aliases: Optional ``{python_name: fortran_name}`` aliases.
-    :type aliases: dict | None
-    :return: ``{python_name: value}`` for all recognized parameters.
-    :rtype: dict
-    :raises ValueError: If any numeric-valued Fortran name cannot be mapped.
-    """
-    alias_map = {v.lower(): k for k, v in aliases.items()} if aliases else {}
-    for fortran_lower, py_name in MICRO_LEGACY_ALIASES.items():
-        alias_map.setdefault(fortran_lower, py_name)
-    inverse_map = _build_inverse_map(MicroParameters)
-    units_dict = MicroParameters.units()
-    stop_pattern = re.compile(r"^\s*init_entry\s*=")
-    return _parse_log(
-        path, stop_pattern, inverse_map, units_dict, alias_map, ignore={"stats"}
-    )
-
-
-def parse_micro_file_code(file_code):
-    """Extract microscale parameters encoded in a file code string.
-
-    Parses a file code like ``_PLG2_tPA01_Q4`` and returns parameter values
-    for any recognized fiber type code segment.  The fiber type codes and
-    their associated parameter values are defined in
-    :data:`~lysis.config.constants.FIBER_TYPES`.
-
-    :param file_code: File code string (e.g. ``"_PLG2_tPA01_Q4"``).
-    :type file_code: str
-    :return: ``{python_name: value}`` for recognized fiber type parameters
-        (``fiber_radius`` and ``nodes_in_micro_row``).
-    :rtype: dict
-    """
-    from .constants import FIBER_TYPES
-
-    result = {}
-    parts = [p for p in file_code.split("_") if p]
-
-    for part in parts:
-        if part in FIBER_TYPES:
-            result.update(FIBER_TYPES[part])
-
-    return result
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Internal verification core
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _verify_params(params_obj, log_params, units_dict, tolerance, direct_overrides):
@@ -746,21 +400,22 @@ def verify_micro_params(
 ):
     """Verify that a :class:`~.parameters.MicroParameters` matches a micro log.
 
-    Parses *log_path* and compares every recognized parameter value against
-    *micro_params*.  All mismatches are collected and reported together in a
-    single :exc:`ValueError`.
+    Parses *log_path* via :func:`~lysis.dataio.fileops.parse_micro_log`,
+    resolves Fortran names using :meth:`MicroParameters.inverse_fortran_map`,
+    and compares every recognized parameter value against *micro_params*.
+    All mismatches are collected and reported together in a single
+    :exc:`ValueError`.
 
     :param micro_params: The parameter instance to validate.
     :type micro_params: MicroParameters
     :param log_path: Path to the Fortran micro log file.
     :type log_path: str | Path
-    :param aliases: Optional ``{python_name: fortran_name}`` aliases for the
-        log parser.  Each entry causes *fortran_name* in the log to map to
-        *python_name* instead of raising an unknown-name error.
+    :param aliases: Optional ``{python_name: fortran_name}`` aliases.
+        Each entry causes *fortran_name* in the log to map to *python_name*
+        instead of being ignored.
     :type aliases: dict | None
     :param overrides: Optional ``{python_name: value}`` direct overrides.
-        Each entry replaces the stored attribute in the comparison (e.g. to
-        accept a known corrected value).
+        Each entry replaces the stored attribute in the comparison.
     :type overrides: dict | None
     :param tolerance: Relative (or absolute when zero) numeric tolerance.
     :type tolerance: float
@@ -768,9 +423,16 @@ def verify_micro_params(
     :raises ValueError: If any log parameter value does not match
         *micro_params* within *tolerance*.
     """
+    from ..dataio.fileops import parse_micro_log
+
     direct_overrides = overrides if overrides else {}
-    log_params = parse_micro_log(log_path, aliases=aliases)
+    alias_map = {v.lower(): k for k, v in aliases.items()} if aliases else {}
+
+    raw_log = parse_micro_log(log_path)
+    inverse_map = MicroParameters.inverse_fortran_map()
     units_dict = MicroParameters.units()
+
+    log_params = _resolve_log_params(raw_log, inverse_map, units_dict, alias_map)
 
     mismatches = _verify_params(
         micro_params, log_params, units_dict, tolerance, direct_overrides
@@ -797,8 +459,7 @@ def verify_macro_params(
     :type macro_params: MacroParameters
     :param log_path: Path to the Fortran macro log file.
     :type log_path: str | Path
-    :param aliases: Optional ``{python_name: fortran_name}`` aliases for the
-        log parser.
+    :param aliases: Optional ``{python_name: fortran_name}`` aliases.
     :type aliases: dict | None
     :param overrides: Optional ``{python_name: value}`` direct overrides.
     :type overrides: dict | None
@@ -808,10 +469,17 @@ def verify_macro_params(
     :raises ValueError: If any log parameter value does not match
         *macro_params* (or its associated *micro_params*) within *tolerance*.
     """
-    direct_overrides = overrides if overrides else {}
-    log_params = parse_macro_log(log_path, aliases=aliases)
+    from ..dataio.fileops import parse_macro_log
 
+    direct_overrides = overrides if overrides else {}
+    alias_map = {v.lower(): k for k, v in aliases.items()} if aliases else {}
+
+    raw_log = parse_macro_log(log_path)
+    inverse_map = MacroParameters.inverse_fortran_map(extra_cls=MicroParameters)
     units_dict = {**MicroParameters.units(), **MacroParameters.units()}
+
+    log_params = _resolve_log_params(raw_log, inverse_map, units_dict, alias_map)
+
     micro_field_names = {f.name for f in dataclasses.fields(MicroParameters)}
 
     # Partition log_params: cross-class (MicroParameters) vs MacroParameters

@@ -68,6 +68,7 @@ import logging
 import pkgutil
 import re
 import warnings
+import dataclasses
 from dataclasses import asdict, dataclass, field
 from typing import List, Tuple, Type, TypeVar
 
@@ -270,6 +271,95 @@ class Parameters:
                 names[match[0]] = match[1]
 
         return names
+
+    @classmethod
+    def class_fortran_names(cls):
+        """Return ``{python_name: fortran_spec}`` restricted to fields of *cls*.
+
+        :meth:`fortran_names` parses the entire source file and therefore
+        returns entries for both ``MicroParameters`` and ``MacroParameters``.
+        This helper filters to only the fields declared in *cls*.
+
+        :return: Filtered ``{python_name: fortran_spec}`` dict.
+        :rtype: dict[str, str]
+        """
+        all_names = cls.fortran_names()
+        cls_field_names = {f.name for f in dataclasses.fields(cls)}
+        return {k: v for k, v in all_names.items() if k in cls_field_names}
+
+    @classmethod
+    def inverse_fortran_map(cls, extra_cls=None):
+        """Build ``{fortran_name_lower: (python_name, transform, source_cls)}``.
+
+        Iterates :meth:`class_fortran_names` for *cls* (and optionally
+        *extra_cls*) and inverts the mapping.  The primary class (*cls*) takes
+        precedence: if both classes share the same Fortran name (e.g. ``seed``
+        for both ``micro_seed`` and ``macro_seed``), the *cls* entry wins and
+        the *extra_cls* entry is silently dropped.
+
+        Transform labels encode the Fortran-to-Python conversion direction:
+
+        * ``None``      -- identity: ``python = fortran``
+        * ``'minus1'``  -- subtract: ``python = fortran - 1``
+        * ``'times100'``-- divide:   ``python = fortran / 100``
+
+        :param extra_cls: Optional additional class whose non-conflicting names
+            are also included (for cross-class params in macro logs).
+        :type extra_cls: type | None
+        :return: Inverse Fortran-name map.
+        :rtype: dict[str, tuple]
+        """
+        inverse = {}
+
+        def _add(c, overwrite):
+            for py_name, fortran_spec in c.class_fortran_names().items():
+                if fortran_spec.endswith("-1"):
+                    base_name = fortran_spec[:-2]
+                    transform = "minus1"
+                elif fortran_spec.endswith("*100"):
+                    base_name = fortran_spec[:-4]
+                    transform = "times100"
+                else:
+                    base_name = fortran_spec
+                    transform = None
+                key = base_name.lower()
+                if overwrite or key not in inverse:
+                    inverse[key] = (py_name, transform, c)
+
+        _add(cls, overwrite=True)
+        if extra_cls is not None:
+            _add(extra_cls, overwrite=False)
+
+        return inverse
+
+    @staticmethod
+    def apply_fortran_transform(raw_num, transform):
+        """Apply the Fortran-to-Python transform to a numeric value.
+
+        :param raw_num: Float value read directly from the Fortran log.
+        :param transform: ``None``, ``'minus1'``, or ``'times100'``.
+        :return: Transformed numeric value.
+        :rtype: float
+        """
+        if transform == "minus1":
+            return raw_num - 1
+        if transform == "times100":
+            return raw_num / 100
+        return raw_num
+
+    @staticmethod
+    def to_quantity_or_number(val, py_name, units_dict):
+        """Wrap *val* in a :class:`~pint.Quantity` if *py_name* has units.
+
+        :param val: Numeric value (post-transform).
+        :param py_name: Python parameter name.
+        :param units_dict: ``{py_name: unit_str}`` from ``cls.units()``.
+        :return: ``Quantity`` or bare ``float``.
+        """
+        unit = units_dict.get(py_name)
+        if unit is not None:
+            return Q_(val, unit)
+        return val
 
     @classmethod
     def print_default_values(cls) -> str:

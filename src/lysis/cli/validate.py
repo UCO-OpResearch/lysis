@@ -133,10 +133,7 @@ def validate(ctx, data_path, spec, collections, file_code, param_overrides, para
 
     # Read data
     try:
-        data = read_data_collection(
-            data_path, spec_collections, file_codes,
-            param_overrides=overrides, param_aliases=aliases,
-        )
+        data = read_data_collection(data_path, spec_collections, file_codes)
     except FileNotFoundError as e:
         console.print(f"[red]Error:[/red] Data file not found: {e}")
         ctx.exit(1)
@@ -145,6 +142,21 @@ def validate(ctx, data_path, spec, collections, file_code, param_overrides, para
         console.print(f"[red]Error:[/red] Missing data: {e}")
         ctx.exit(1)
         return
+
+    # Apply param_overrides: merge into all params sub-dicts
+    if overrides:
+        for key, value in overrides.items():
+            for section in data["params"].values():
+                if isinstance(section, dict):
+                    section[key] = value
+
+    # Apply param_aliases: rename keys in all params sub-dicts
+    if aliases:
+        for py_name, fort_name in aliases.items():
+            fort_lower = fort_name.lower()
+            for section in data["params"].values():
+                if isinstance(section, dict) and fort_lower in section:
+                    section[py_name] = section.pop(fort_lower)
 
     params = data.get("params")
 
