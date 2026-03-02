@@ -460,7 +460,7 @@ class DataStore:
         self._hdf5_path = os.path.join(path, f"{run_code}.h5")
         self._file = h5py.File(self._hdf5_path, mode)
 
-        # Validate dataspec version (also warns if APPROX_F_DEG_LIST_ATTR is set)
+        # Validate dataspec version (also warns if CONVERTED_FROM_ATTR is set)
         try:
             _validate_hdf5_version(
                 self._file, self._hdf5_path, COMPATIBLE_DATASPEC_VERSION

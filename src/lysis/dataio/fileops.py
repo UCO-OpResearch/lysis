@@ -162,6 +162,7 @@ from .dataspec import (
     DataSetSpec,
     DataCollectionType,
     BaseParamsType,
+    CONVERSION_WARNINGS,
     parse_shape,
     check_dataset_spec,
 )
@@ -505,9 +506,9 @@ def _validate_hdf5_version(file: h5py.File, path: AnyStr, version: str):
     registered in a :class:`~lysis.dataio.dataspec.DataSpec`).
 
     Also emits a :class:`UserWarning` when the file carries the
-    :attr:`~lysis.config.constants.Const.APPROX_F_DEG_LIST_ATTR` flag, which
-    indicates the file was converted from v1.90.0 format and the ``f_deg_list``
-    event log timestamps are approximations.
+    :attr:`~lysis.config.constants.Const.CONVERTED_FROM_ATTR` attribute and the
+    source version has an entry in
+    :data:`~lysis.dataio.dataspec.CONVERSION_WARNINGS`.
 
     :param file: An already-open HDF5 file handle.
     :type file: h5py.File
@@ -531,14 +532,9 @@ def _validate_hdf5_version(file: h5py.File, path: AnyStr, version: str):
             f"Dataspec version mismatch in '{path}': "
             f"file has '{found}', expected '{version}'"
         )
-    if file.attrs.get(CONST.APPROX_F_DEG_LIST_ATTR):
-        warnings.warn(
-            "This HDF5 file was converted from v1.90.0 format. "
-            "The f_deg_list event log was reconstructed from snapshot differences; "
-            "exact fiber degradation scheduling times are not preserved.",
-            UserWarning,
-            stacklevel=2,
-        )
+    converted_from = file.attrs.get(CONST.CONVERTED_FROM_ATTR)
+    if converted_from and converted_from in CONVERSION_WARNINGS:
+        warnings.warn(CONVERSION_WARNINGS[converted_from], UserWarning, stacklevel=2)
 
 
 def ensure_hdf5_version(path: AnyStr, version: str, data: dict = None):
@@ -557,8 +553,8 @@ def ensure_hdf5_version(path: AnyStr, version: str, data: dict = None):
     :type version: str
     :param data: Optional params dict (as passed to writer functions). When
         provided and the dict contains the
-        :attr:`~lysis.config.constants.Const.APPROX_F_DEG_LIST_ATTR` flag,
-        that flag is also written to the new file's root attributes.
+        :attr:`~lysis.config.constants.Const.CONVERTED_FROM_ATTR` key,
+        that value is also written to the new file's root attributes.
     :type data: dict, optional
     :raises ValueError: If the existing file has no dataspec_version attribute,
         or if it does not match the expected version.
@@ -571,8 +567,9 @@ def ensure_hdf5_version(path: AnyStr, version: str, data: dict = None):
     else:
         with h5py.File(path, "w") as file:
             file.attrs[CONST.DATASPEC_VERSION_ATTR] = version
-            if data and data.get(CONST.APPROX_F_DEG_LIST_ATTR):
-                file.attrs[CONST.APPROX_F_DEG_LIST_ATTR] = True
+            converted_from = data.get(CONST.CONVERTED_FROM_ATTR) if data else None
+            if converted_from:
+                file.attrs[CONST.CONVERTED_FROM_ATTR] = converted_from
 
 
 def _read_hdf5_attr(

@@ -75,7 +75,7 @@ class Const:
         self.MOL_STATUS = MolStatus
         self.DATASET_STORAGE_TYPE = DataSetStorageType
         self.DATASPEC_VERSION_ATTR = "dataspec_version"
-        self.APPROX_F_DEG_LIST_ATTR = "approx_f_deg_list"
+        self.CONVERTED_FROM_ATTR = "converted_from"
         self.NUMPY_SAVETXT_FORMATS = {
             # Boolean types - save as 0 or 1
             np.dtype("bool"): "%d",

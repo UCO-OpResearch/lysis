@@ -1028,6 +1028,18 @@ del _k, _v
 # Used by fileops.read_data_collection to trigger paramcheck validation at read time.
 fortran_versions: frozenset[str] = frozenset({tags["fortran"], "v1.95.0", "v1.90.0"})
 
+# Warnings emitted when opening HDF5 files that were converted from a given source version.
+# Add an entry here for any conversion that results in data loss or approximation.
+# Keys are the original source version string (as stored in the ``converted_from`` HDF5
+# attribute); values are the warning message text.
+CONVERSION_WARNINGS: dict[str, str] = {
+    "v1.90.0": (
+        "This HDF5 file was converted from v1.90.0 format. "
+        "The f_deg_list event log was reconstructed from snapshot differences; "
+        "exact fiber degradation scheduling times are not preserved."
+    ),
+}
+
 
 def parse_shape(
     shape: tuple[int | str, ...], params: BaseParamsType = None

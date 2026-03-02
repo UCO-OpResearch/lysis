@@ -679,13 +679,13 @@ class TestConvertV190Data:
         assert "Grid Location Index" in f.dtype.names
         assert "Fiber New Degrade Time" in f.dtype.names
 
-    def test_approx_flag_set_after_v200_conversion(self, raw):
-        """APPROX_F_DEG_LIST_ATTR is True in params after v1.90.0 → v2.0.0."""
+    def test_converted_from_set_after_v200_conversion(self, raw):
+        """CONVERTED_FROM_ATTR is "v1.90.0" in params after v1.90.0 → v2.0.0."""
         converted = convert_data(raw, "v1.90.0", "v2.0.0")
-        assert converted["params"].get(CONST.APPROX_F_DEG_LIST_ATTR) is True
+        assert converted["params"].get(CONST.CONVERTED_FROM_ATTR) == "v1.90.0"
 
-    def test_approx_flag_set_in_hdf5(self, raw, tmp_path):
-        """APPROX_F_DEG_LIST_ATTR is written as an HDF5 root attribute."""
+    def test_converted_from_set_in_hdf5(self, raw, tmp_path):
+        """CONVERTED_FROM_ATTR is written as an HDF5 root attribute."""
         converted = convert_data(raw, "v1.90.0", "v2.0.0")
         h5_path = str(tmp_path / "v190.h5")
         with warnings.catch_warnings():
@@ -697,7 +697,7 @@ class TestConvertV190Data:
                 ["", ""],
             )
         with h5py.File(h5_path, "r") as f:
-            assert f.attrs.get(CONST.APPROX_F_DEG_LIST_ATTR)
+            assert f.attrs.get(CONST.CONVERTED_FROM_ATTR) == "v1.90.0"
 
     def test_macroscale_datasets_present_after_v200(self, raw):
         converted = convert_data(raw, "v1.90.0", "v2.0.0")
@@ -730,7 +730,7 @@ class TestDataStoreV190Warning:
             )
         return run_code, str(tmp_path)
 
-    def test_datastore_warns_approx_f_deg_list(self, converted_h5_dir):
+    def test_datastore_warns_on_converted_from_v190(self, converted_h5_dir):
         """DataStore emits UserWarning mentioning v1.90.0 on open."""
         run_code, dir_path = converted_h5_dir
         with pytest.warns(UserWarning, match="v1.90.0"):
@@ -762,6 +762,6 @@ class TestReadFullV190Data:
 
     def test_convert_to_v200(self, data):
         converted = convert_data(data, "v1.90.0", "v2.0.0")
-        assert converted["params"].get(CONST.APPROX_F_DEG_LIST_ATTR) is True
+        assert converted["params"].get(CONST.CONVERTED_FROM_ATTR) == "v1.90.0"
         assert "fiber_degrade_time" in converted
         assert len(converted["snapshot_time"]) == 10

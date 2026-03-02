@@ -1597,13 +1597,12 @@ def _convert_single_step(
             if collection.simulations_combined:
                 out_data[dataset_needed] = out_data[dataset_needed][0]
 
-    # Inject flag when converting from v1.90.0 (f_deg_list timestamps are approximated)
-    if input_set_spec == "v1.90.0" and output_set_spec == "v1.95.0":
-        out_data["params"][CONST.APPROX_F_DEG_LIST_ATTR] = True
-    # Propagate flag through subsequent conversion steps
-    # (params_converters may rebuild the params dict and drop unknown keys)
-    elif input_data.get("params", {}).get(CONST.APPROX_F_DEG_LIST_ATTR):
-        out_data["params"][CONST.APPROX_F_DEG_LIST_ATTR] = True
+    # Track the original source version through conversion chains.
+    # Preserve the existing value (first source in the chain) if already set.
+    existing_converted_from = input_data.get("params", {}).get(CONST.CONVERTED_FROM_ATTR)
+    out_data["params"][CONST.CONVERTED_FROM_ATTR] = (
+        existing_converted_from if existing_converted_from else input_set_spec
+    )
 
     return out_data
 
