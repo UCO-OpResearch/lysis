@@ -26,6 +26,7 @@ __status__ = "Development"
 
 from .degradation import (
     calculate_time_row_exposed,
+    compute_run_statistics,
     degradation_rates,
     fiber_degradation_linear_extrapolation,
     find_degradation_fronts,
@@ -47,6 +48,7 @@ from .fiber_replay import FiberReplayCursor
 __all__ = [
     "FiberReplayCursor",
     "calculate_time_row_exposed",
+    "compute_run_statistics",
     "degradation_rates",
     "fiber_degradation_linear_extrapolation",
     "find_degradation_fronts",

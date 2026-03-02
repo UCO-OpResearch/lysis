@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.figure import Figure
 
 if TYPE_CHECKING:
@@ -69,6 +70,7 @@ __all__ = [
     "get_unbind_amounts",
     "get_processing_time",
     "get_total_binds",
+    "compute_run_statistics",
 ]
 
 
@@ -83,6 +85,7 @@ _KEY_DEG_FRONTS = "deg_fronts"
 _KEY_MEAN_DEG_RATE = "mean_deg_rate"
 _KEY_MEAN_FRONT_VEL = "mean_front_vel"
 _KEY_FIBER_EXTRAP = "fiber_extrap"
+_KEY_RUN_STATS = "run_stats"
 
 
 ###############################################################################
@@ -774,3 +777,115 @@ def get_total_binds(
                 log_text += fh.read()
         run._cache[key] = np.array(re.findall(pattern, log_text), dtype=int)
     return run._cache[key]
+
+
+###############################################################################
+# Summary statistics
+###############################################################################
+
+
+_DEFAULT_PERCENT_MARKERS = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+
+def compute_run_statistics(
+    run: "Run",
+    percent_markers: list[float] = None,
+) -> pd.Series:
+    """Compute key summary statistics for a Run as a labelled pandas Series.
+
+    Collects six scalar statistics (each as a mean and standard deviation)
+    across all macroscale simulations and returns them as a
+    :class:`pandas.Series` with a two-level
+    :class:`~pandas.MultiIndex` ``(metric_name, stat)`` where *stat* is either
+    ``"Mean"`` or ``"Standard Deviation"``.  Multiple Series can be stacked
+    into a :class:`~pandas.DataFrame` with one row per Run via
+    ``pd.DataFrame([s1, s2, ...])``.
+
+    The six metrics mirror the results block in the ``MASTER LOOP`` notebook
+    cell (lines 73-96):
+
+    - **Degradation rate (%/min)** — slope of the rapid-degradation linear
+      fit, converted to percent per minute.  Calls
+      :func:`mean_degradation_rate` internally.
+    - **Lysis lag time (min)** — time of the first save point in the
+      rapid-degradation phase.  Also from :func:`mean_degradation_rate`.
+    - **Time to full clot degradation (min)** — time at which the last
+      milestone in *percent_markers* (i.e. 100 %) is first reached.  Calls
+      :func:`find_degradation_marker_times` internally.
+    - **Percent of molecules that reached the back row** — fraction of tPA
+      molecules whose first-passage time is positive, expressed as a
+      percentage.  Averaged and std'd across simulations.
+    - **First passage time (min)** — mean and std of all positive first-
+      passage times (in minutes) pooled across all simulations.
+    - **Front Velocity (microns/min)** — mean and std from
+      :func:`mean_front_velocity`.
+
+    :param run: Run object supplying grid parameters and data.
+    :type run: Run
+    :param percent_markers: Degradation milestones used to locate the
+        full-degradation time.  Must include ``1.0`` as the last element.
+        Defaults to ``[0.0, 0.25, 0.5, 0.75, 1.0]``.
+    :type percent_markers: list[float], optional
+    :return: Series indexed by
+        ``(metric_name, "Mean" | "Standard Deviation")``.
+    :rtype: pandas.Series
+    """
+    if percent_markers is None:
+        percent_markers = _DEFAULT_PERCENT_MARKERS
+
+    key = (_KEY_RUN_STATS, tuple(percent_markers))
+    if key in run._cache:
+        return run._cache[key]
+
+    deg_rate, _offset, deg_start = mean_degradation_rate(run)
+    marker_times = find_degradation_marker_times(run, percent_markers)
+    front_mean, front_sd = mean_front_velocity(run)
+
+    n_sims = run.macro_params.macro_simulations
+    total_molecules = run.macro_params.total_molecules
+    reach_pct = np.array(
+        [
+            np.count_nonzero(run.data.macroscale_out[sim].tpa_transit_time[:] > 0)
+            / total_molecules
+            * 100
+            for sim in range(n_sims)
+        ]
+    )
+    all_transit = np.concatenate(
+        [run.data.macroscale_out[sim].tpa_transit_time[:] for sim in range(n_sims)]
+    )
+    fpt = all_transit[all_transit > 0] / 60
+
+    index = pd.MultiIndex.from_tuples(
+        [
+            ("Degradation rate (%/min)", "Mean"),
+            ("Degradation rate (%/min)", "Standard Deviation"),
+            ("Lysis lag time (min)", "Mean"),
+            ("Lysis lag time (min)", "Standard Deviation"),
+            ("Time to full clot degradation (min)", "Mean"),
+            ("Time to full clot degradation (min)", "Standard Deviation"),
+            ("Percent of molecules that reached the back row", "Mean"),
+            ("Percent of molecules that reached the back row", "Standard Deviation"),
+            ("First passage time (min)", "Mean"),
+            ("First passage time (min)", "Standard Deviation"),
+            ("Front Velocity (microns/min)", "Mean"),
+            ("Front Velocity (microns/min)", "Standard Deviation"),
+        ]
+    )
+    values = [
+        float(np.mean(deg_rate) * 100),
+        float(np.std(deg_rate) * 100),
+        float(np.mean(deg_start)),
+        float(np.std(deg_start)),
+        float(np.mean(marker_times[:, -1])),
+        float(np.std(marker_times[:, -1])),
+        float(np.mean(reach_pct)),
+        float(np.std(reach_pct)),
+        float(np.mean(fpt)),
+        float(np.std(fpt)),
+        front_mean,
+        front_sd,
+    ]
+    result = pd.Series(values, index=index)
+    run._cache[key] = result
+    return result
