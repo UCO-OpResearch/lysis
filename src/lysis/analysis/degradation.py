@@ -23,13 +23,11 @@ Typical workflow::
     slope_pairs     = [(0.25, 0.75)]
 
     deg_fraction  = find_degraded_fraction(run)
-    marker_frames = find_degradation_marker_frames(deg_fraction, percent_markers)
-    marker_times  = find_degradation_marker_times(run, marker_frames)
-    rates         = degradation_rates(run, marker_frames, deg_fraction,
-                                      slope_pairs, percent_markers)
-    deg_rate, offset, lag = mean_degradation_rate(run, deg_fraction)
-    fig = plot_degradation_percent(run, deg_fraction, marker_frames,
-                                   rates, slope_pairs, percent_markers)
+    marker_frames = find_degradation_marker_frames(run, percent_markers)
+    marker_times  = find_degradation_marker_times(run, percent_markers)
+    rates         = degradation_rates(run, slope_pairs, percent_markers)
+    deg_rate, offset, lag = mean_degradation_rate(run)
+    fig = plot_degradation_percent(run, slope_pairs, percent_markers)
 """
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -118,18 +116,17 @@ def find_degraded_fraction(
 
 
 def find_degradation_marker_frames(
-    degraded_fraction: list[np.ndarray],
+    run: "Run",
     percent_markers: list[float],
 ) -> np.ndarray:
     """Find the save-point frame index at which each degradation milestone is first reached.
 
     For each simulation and each milestone fraction, returns the index of the
     first save point at which the degraded fraction is greater than or equal to
-    that milestone.
+    that milestone.  Calls :func:`find_degraded_fraction` internally.
 
-    :param degraded_fraction: Per-simulation degraded-fraction arrays, as
-        returned by :func:`find_degraded_fraction`.
-    :type degraded_fraction: list[numpy.ndarray]
+    :param run: Run object supplying macro grid parameters and data.
+    :type run: Run
     :param percent_markers: Degradation milestones to locate, e.g.
         ``[0.0, 0.25, 0.50, 0.75, 1.0]``.
     :type percent_markers: list[float]
@@ -138,6 +135,7 @@ def find_degradation_marker_frames(
         ``sim`` first reaches milestone ``percent_markers[m]``.
     :rtype: numpy.ndarray
     """
+    degraded_fraction = find_degraded_fraction(run)
     n_sims = len(degraded_fraction)
     n_markers = len(percent_markers)
     marker_frames = np.empty((n_sims, n_markers), dtype=np.intp)
@@ -149,20 +147,25 @@ def find_degradation_marker_frames(
 
 def find_degradation_marker_times(
     run: "Run",
-    marker_frames: np.ndarray,
+    percent_markers: list[float],
 ) -> np.ndarray:
-    """Convert degradation marker frame indices to elapsed time in minutes.
+    """Convert degradation milestones to elapsed time in minutes.
+
+    Calls :func:`find_degradation_marker_frames` (which in turn calls
+    :func:`find_degraded_fraction`) to locate the save-point frame for each
+    milestone, then maps those frame indices to wall-clock times.
 
     :param run: Run object supplying data access.
     :type run: Run
-    :param marker_frames: Save-point frame indices of shape ``(n_sims, n_markers)``,
-        as returned by :func:`find_degradation_marker_frames`.
-    :type marker_frames: numpy.ndarray
+    :param percent_markers: Degradation milestones to locate, e.g.
+        ``[0.0, 0.25, 0.50, 0.75, 1.0]``.
+    :type percent_markers: list[float]
     :return: Float array of shape ``(n_sims, n_markers)`` giving the elapsed
         time (minutes) at which each simulation reached each degradation
         milestone.
     :rtype: numpy.ndarray
     """
+    marker_frames = find_degradation_marker_frames(run, percent_markers)
     n_sims, n_markers = marker_frames.shape
     marker_times = np.empty((n_sims, n_markers), dtype=np.float64)
     for sim in range(n_sims):
@@ -178,8 +181,6 @@ def find_degradation_marker_times(
 
 def degradation_rates(
     run: "Run",
-    marker_frames: np.ndarray,
-    degraded_fraction: list[np.ndarray],
     slope_pairs: list[tuple[float, float]],
     percent_markers: list[float],
 ) -> np.ndarray:
@@ -187,21 +188,17 @@ def degradation_rates(
 
     For each simulation and each pair of milestones, computes the finite-
     difference slope between the two marker frames and returns the value in
-    units of fraction per minute.
+    units of fraction per minute.  Calls :func:`find_degraded_fraction` and
+    :func:`find_degradation_marker_frames` internally.
 
     :param run: Run object supplying ``macro_simulations`` count and data.
     :type run: Run
-    :param marker_frames: Save-point frame indices of shape ``(n_sims, n_markers)``,
-        as returned by :func:`find_degradation_marker_frames`.
-    :type marker_frames: numpy.ndarray
-    :param degraded_fraction: Per-simulation degraded-fraction arrays.
-    :type degraded_fraction: list[numpy.ndarray]
     :param slope_pairs: List of ``(start_percent, end_percent)`` pairs defining
         the intervals over which to compute degradation rates.
         Example: ``[(0.25, 0.75)]`` computes one slope from 25 % to 75 %.
     :type slope_pairs: list[tuple[float, float]]
     :param percent_markers: The full list of milestone fractions used when
-        computing ``marker_frames``.  Used to look up the frame indices
+        computing marker frames.  Used to look up the frame indices
         corresponding to the endpoints of each slope pair.
     :type percent_markers: list[float]
     :return: Array of shape ``(n_sims, n_slopes)`` containing degradation rates
@@ -209,6 +206,8 @@ def degradation_rates(
         ``sim`` between the milestones defined by ``slope_pairs[k]``.
     :rtype: numpy.ndarray
     """
+    degraded_fraction = find_degraded_fraction(run)
+    marker_frames = find_degradation_marker_frames(run, percent_markers)
     n_sims = run.macro_params.macro_simulations
     rates = np.empty((n_sims, len(slope_pairs)), dtype=np.float64)
     for sim in range(n_sims):
@@ -226,19 +225,16 @@ def degradation_rates(
 
 def mean_degradation_rate(
     run: "Run",
-    degraded_fraction: list[np.ndarray],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Estimate the degradation rate by fitting a line through the rapid-degradation phase.
 
     Identifies the rapid-degradation phase as the set of save points where the
     incremental change in degraded fraction exceeds half the maximum incremental
     change observed in that simulation.  Fits a degree-1 polynomial to those
-    points.
+    points.  Calls :func:`find_degraded_fraction` internally.
 
     :param run: Run object supplying ``macro_simulations`` count and data.
     :type run: Run
-    :param degraded_fraction: Per-simulation degraded-fraction arrays.
-    :type degraded_fraction: list[numpy.ndarray]
     :return: Tuple of three 1-D arrays of length ``n_sims``:
 
         - ``degradation_rate``: Slope of the linear fit (fraction/min).
@@ -248,6 +244,7 @@ def mean_degradation_rate(
 
     :rtype: tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]
     """
+    degraded_fraction = find_degraded_fraction(run)
     n_sims = run.macro_params.macro_simulations
     degradation_rate = np.empty(n_sims, dtype=np.float64)
     offset = np.empty(n_sims, dtype=np.float64)
@@ -321,26 +318,23 @@ def calculate_time_row_exposed(
 
 def find_degradation_fronts(
     run: "Run",
-    exposed_time: np.ndarray,
 ) -> list[list[np.ndarray]]:
     """Track the spatial position of the lysis front over time in each column.
 
     For each column, collects ``(time, y-distance)`` pairs at which each
     successive fiber row first becomes exposed.  Rows that are never exposed
     before the end of the simulation are excluded.  y-distances are computed
-    directly from the run's pore size.
+    directly from the run's pore size.  Calls
+    :func:`calculate_time_row_exposed` internally.
 
     :param run: Run object supplying grid parameters, pore size, and data.
     :type run: Run
-    :param exposed_time: Per-simulation row-exposure time array of shape
-        ``(n_sims, rows - 1, cols)``, in minutes, as returned by
-        :func:`calculate_time_row_exposed`.
-    :type exposed_time: numpy.ndarray
     :return: Nested list ``deg_fronts[sim][col]`` where each element is an
         ``ndarray`` of shape ``(2, n_events)`` with row 0 giving event times
         (min) and row 1 giving y-distances (µm).
     :rtype: list[list[numpy.ndarray]]
     """
+    exposed_time = calculate_time_row_exposed(run)
     n_sims = run.macro_params.macro_simulations
     rows = run.macro_params.rows
     cols = run.macro_params.cols
@@ -368,14 +362,13 @@ def find_degradation_fronts(
 
 def mean_front_velocity(
     run: "Run",
-    deg_fronts: list[list[np.ndarray]],
 ) -> tuple[float, float]:
     """Compute the mean and standard deviation of lysis-front velocity (µm/min).
 
     For each column in each simulation, fits a line to the ``(time, y-distance)``
-    data from :func:`find_degradation_fronts` and takes the slope as the
-    column's front velocity.  Returns the grand mean and the mean standard
-    deviation across all simulations.
+    data and takes the slope as the column's front velocity.  Returns the grand
+    mean and the mean standard deviation across all simulations.  Calls
+    :func:`find_degradation_fronts` internally.
 
     .. todo::
 
@@ -384,12 +377,10 @@ def mean_front_velocity(
 
     :param run: Run object supplying ``macro_simulations`` and ``cols`` counts.
     :type run: Run
-    :param deg_fronts: Nested lysis-front data, as returned by
-        :func:`find_degradation_fronts`.
-    :type deg_fronts: list[list[numpy.ndarray]]
     :return: Tuple ``(mean_velocity, std_velocity)`` in µm/min.
     :rtype: tuple[float, float]
     """
+    deg_fronts = find_degradation_fronts(run)
     n_sims = run.macro_params.macro_simulations
     cols = run.macro_params.cols
 
@@ -450,20 +441,17 @@ def find_row_deg_fraction(
 
 def find_front(
     run: "Run",
-    row_deg: list[np.ndarray],
     front_threshold: float,
 ) -> list[np.ndarray]:
     """Locate the lysis-front row index from per-row undegraded fractions.
 
     For each simulation and save point, finds the first row whose undegraded
     fraction meets or exceeds ``front_threshold``.  If no row meets the
-    threshold, the front is set to ``fiber_rows - 1`` (the last row).
+    threshold, the front is set to ``fiber_rows - 1`` (the last row).  Calls
+    :func:`find_row_deg_fraction` internally.
 
     :param run: Run object supplying ``fiber_rows`` count.
     :type run: Run
-    :param row_deg: Per-simulation row-degradation arrays, as returned by
-        :func:`find_row_deg_fraction`.
-    :type row_deg: list[numpy.ndarray]
     :param front_threshold: Minimum undegraded fraction for a row to be
         counted as part of the lysis front.
     :type front_threshold: float
@@ -471,6 +459,7 @@ def find_front(
         row index of the lysis front at each save point.
     :rtype: list[numpy.ndarray]
     """
+    row_deg = find_row_deg_fraction(run)
     fiber_rows = run.macro_params.fiber_rows
     fronts = []
     for sim_row_deg in row_deg:
@@ -557,36 +546,30 @@ def fiber_degradation_linear_extrapolation(
 
 def plot_degradation_percent(
     run: "Run",
-    degraded_fraction: list[np.ndarray],
-    marker_frames: np.ndarray,
-    rates: np.ndarray,
     slope_pairs: list[tuple[float, float]],
     percent_markers: list[float],
 ) -> Figure:
     """Plot degradation curves with overlaid linear-fit segments for each simulation.
 
     For each simulation, draws the degraded fraction over time and overlays a
-    linear-fit segment (in blue) for each slope pair.
+    linear-fit segment (in blue) for each slope pair.  Calls
+    :func:`find_degraded_fraction`, :func:`find_degradation_marker_frames`, and
+    :func:`degradation_rates` internally.
 
     :param run: Run object supplying ``macro_simulations`` count and data.
     :type run: Run
-    :param degraded_fraction: Per-simulation degraded-fraction arrays.
-    :type degraded_fraction: list[numpy.ndarray]
-    :param marker_frames: Save-point frame indices of shape ``(n_sims, n_markers)``,
-        as returned by :func:`find_degradation_marker_frames`.
-    :type marker_frames: numpy.ndarray
-    :param rates: Degradation rates of shape ``(n_sims, n_slopes)`` in
-        fraction/min, as returned by :func:`degradation_rates`.
-    :type rates: numpy.ndarray
     :param slope_pairs: List of ``(start_percent, end_percent)`` pairs defining
         the intervals over which rates were computed.
     :type slope_pairs: list[tuple[float, float]]
     :param percent_markers: The full list of milestone fractions used when
-        computing ``marker_frames``.
+        computing marker frames.
     :type percent_markers: list[float]
     :return: The matplotlib Figure containing the plot.
     :rtype: matplotlib.figure.Figure
     """
+    degraded_fraction = find_degraded_fraction(run)
+    marker_frames = find_degradation_marker_frames(run, percent_markers)
+    rates = degradation_rates(run, slope_pairs, percent_markers)
     n_sims = run.macro_params.macro_simulations
     start_stop = [
         [percent_markers.index(mark) for mark in slope] for slope in slope_pairs
@@ -620,22 +603,19 @@ def plot_degradation_percent(
 
 def plot_front_degradation(
     run: "Run",
-    deg_fronts: list[list[np.ndarray]],
 ) -> Figure:
     """Plot the spatial lysis-front trajectories for all simulations.
 
     For each simulation and column, draws a line tracing the time (x-axis,
     minutes) at which the lysis front reached each successive y-position
-    (y-axis, µm).
+    (y-axis, µm).  Calls :func:`find_degradation_fronts` internally.
 
     :param run: Run object supplying grid parameters, pore size, and data.
     :type run: Run
-    :param deg_fronts: Nested lysis-front data, as returned by
-        :func:`find_degradation_fronts`.
-    :type deg_fronts: list[list[numpy.ndarray]]
     :return: The matplotlib Figure containing the plot.
     :rtype: matplotlib.figure.Figure
     """
+    deg_fronts = find_degradation_fronts(run)
     n_sims = run.macro_params.macro_simulations
     cols = run.macro_params.cols
     empty_rows = run.macro_params.empty_rows

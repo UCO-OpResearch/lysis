@@ -190,30 +190,27 @@ def degraded_fraction(stub_run):
 
 
 @pytest.fixture
-def marker_frames(degraded_fraction):
+def marker_frames(stub_run):
     """Result of find_degradation_marker_frames for PERCENT_MARKERS."""
     from lysis.analysis.degradation import find_degradation_marker_frames
 
-    return find_degradation_marker_frames(degraded_fraction, PERCENT_MARKERS)
+    return find_degradation_marker_frames(stub_run, PERCENT_MARKERS)
 
 
 @pytest.fixture
-def marker_times(stub_run, marker_frames):
+def marker_times(stub_run):
     """Result of find_degradation_marker_times."""
     from lysis.analysis.degradation import find_degradation_marker_times
 
-    return find_degradation_marker_times(stub_run, marker_frames)
+    return find_degradation_marker_times(stub_run, PERCENT_MARKERS)
 
 
 @pytest.fixture
-def rates(stub_run, marker_frames, degraded_fraction):
+def rates(stub_run):
     """Result of degradation_rates for SLOPE_PAIRS."""
     from lysis.analysis.degradation import degradation_rates
 
-    return degradation_rates(
-        stub_run, marker_frames, degraded_fraction,
-        SLOPE_PAIRS, PERCENT_MARKERS,
-    )
+    return degradation_rates(stub_run, SLOPE_PAIRS, PERCENT_MARKERS)
 
 
 @pytest.fixture
@@ -225,11 +222,11 @@ def exposed_time(stub_run):
 
 
 @pytest.fixture
-def deg_fronts(stub_run, exposed_time):
+def deg_fronts(stub_run):
     """Result of find_degradation_fronts for the synthetic data."""
     from lysis.analysis.degradation import find_degradation_fronts
 
-    return find_degradation_fronts(stub_run, exposed_time)
+    return find_degradation_fronts(stub_run)
 
 
 @pytest.fixture

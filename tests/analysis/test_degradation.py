@@ -120,35 +120,35 @@ class TestFindDegradedFraction:
 class TestFindDegradationMarkerFrames:
     """Tests for :func:`find_degradation_marker_frames`."""
 
-    def test_returns_array_of_correct_shape(self, degraded_fraction):
+    def test_returns_array_of_correct_shape(self, stub_run):
         """Returns an integer array of shape (n_sims, n_markers)."""
-        result = find_degradation_marker_frames(degraded_fraction, PERCENT_MARKERS)
-        n_sims = len(degraded_fraction)
+        result = find_degradation_marker_frames(stub_run, PERCENT_MARKERS)
+        n_sims = stub_run.macro_params.macro_simulations
         assert result.shape == (n_sims, len(PERCENT_MARKERS))
 
-    def test_frame_indices_are_valid(self, stub_run, degraded_fraction):
+    def test_frame_indices_are_valid(self, stub_run):
         """All frame indices are non-negative and within the save range."""
         n_saves = len(stub_run.data.macroscale_out[0].snapshot_time[:])
-        result = find_degradation_marker_frames(degraded_fraction, PERCENT_MARKERS)
+        result = find_degradation_marker_frames(stub_run, PERCENT_MARKERS)
         assert np.all(result >= 0)
         assert np.all(result < n_saves)
 
-    def test_marker_frames_are_non_decreasing_per_sim(self, degraded_fraction):
+    def test_marker_frames_are_non_decreasing_per_sim(self, stub_run):
         """Frame indices must be non-decreasing for each simulation."""
-        result = find_degradation_marker_frames(degraded_fraction, PERCENT_MARKERS)
+        result = find_degradation_marker_frames(stub_run, PERCENT_MARKERS)
         for sim_frames in result:
             assert np.all(np.diff(sim_frames) >= 0)
 
-    def test_known_marker_frames(self, degraded_fraction):
+    def test_known_marker_frames(self, stub_run):
         """With the synthetic data, every milestone is first hit at frames [0,1,2,3,4]."""
-        result = find_degradation_marker_frames(degraded_fraction, PERCENT_MARKERS)
+        result = find_degradation_marker_frames(stub_run, PERCENT_MARKERS)
         expected = np.array([0, 1, 2, 3, 4])
         for sim_frames in result:
             np.testing.assert_array_equal(sim_frames, expected)
 
-    def test_zero_threshold_returns_frame_zero(self, degraded_fraction):
+    def test_zero_threshold_returns_frame_zero(self, stub_run):
         """A threshold of 0.0 is always satisfied at frame 0."""
-        result = find_degradation_marker_frames(degraded_fraction, [0.0])
+        result = find_degradation_marker_frames(stub_run, [0.0])
         assert np.all(result[:, 0] == 0)
 
 
@@ -160,10 +160,11 @@ class TestFindDegradationMarkerFrames:
 class TestFindDegradationMarkerTimes:
     """Tests for :func:`find_degradation_marker_times`."""
 
-    def test_returns_array_of_correct_shape(self, stub_run, marker_frames):
+    def test_returns_array_of_correct_shape(self, stub_run):
         """Returns a float array of shape (n_sims, n_markers)."""
-        result = find_degradation_marker_times(stub_run, marker_frames)
-        assert result.shape == marker_frames.shape
+        result = find_degradation_marker_times(stub_run, PERCENT_MARKERS)
+        n_sims = stub_run.macro_params.macro_simulations
+        assert result.shape == (n_sims, len(PERCENT_MARKERS))
 
     def test_values_are_in_minutes(self, stub_run, marker_times):
         """All times must be strictly less than max tsave in seconds."""
@@ -196,14 +197,9 @@ class TestFindDegradationMarkerTimes:
 class TestDegradationRates:
     """Tests for :func:`degradation_rates`."""
 
-    def test_returns_array_of_correct_shape(
-        self, stub_run, marker_frames, degraded_fraction
-    ):
+    def test_returns_array_of_correct_shape(self, stub_run):
         """Returns a float array of shape (n_sims, n_slope_pairs)."""
-        result = degradation_rates(
-            stub_run, marker_frames, degraded_fraction,
-            SLOPE_PAIRS, PERCENT_MARKERS,
-        )
+        result = degradation_rates(stub_run, SLOPE_PAIRS, PERCENT_MARKERS)
         n_sims = stub_run.macro_params.macro_simulations
         assert result.shape == (n_sims, len(SLOPE_PAIRS))
 
@@ -217,15 +213,10 @@ class TestDegradationRates:
         for sim_rates in rates:
             assert sim_rates[0] == pytest.approx(expected)
 
-    def test_multiple_slope_pairs(
-        self, stub_run, marker_frames, degraded_fraction
-    ):
+    def test_multiple_slope_pairs(self, stub_run):
         """Accepts multiple slope pairs and returns one column per pair."""
         pairs = [(0.0, 0.5), (0.25, 1.0)]
-        result = degradation_rates(
-            stub_run, marker_frames, degraded_fraction,
-            pairs, PERCENT_MARKERS,
-        )
+        result = degradation_rates(stub_run, pairs, PERCENT_MARKERS)
         assert result.shape == (stub_run.macro_params.macro_simulations, 2)
 
 
@@ -237,36 +228,28 @@ class TestDegradationRates:
 class TestMeanDegradationRate:
     """Tests for :func:`mean_degradation_rate`."""
 
-    def test_returns_three_arrays_of_length_n_sims(
-        self, stub_run, degraded_fraction
-    ):
+    def test_returns_three_arrays_of_length_n_sims(self, stub_run):
         """Returns a 3-tuple; each element is a 1-D array of length n_sims."""
         n_sims = stub_run.macro_params.macro_simulations
-        dr, off, lag = mean_degradation_rate(stub_run, degraded_fraction)
+        dr, off, lag = mean_degradation_rate(stub_run)
         assert dr.shape == (n_sims,)
         assert off.shape == (n_sims,)
         assert lag.shape == (n_sims,)
 
-    def test_degradation_rate_is_positive(
-        self, stub_run, degraded_fraction
-    ):
+    def test_degradation_rate_is_positive(self, stub_run):
         """Fitted slope must be positive (clot degrades over time)."""
-        dr, _, _ = mean_degradation_rate(stub_run, degraded_fraction)
+        dr, _, _ = mean_degradation_rate(stub_run)
         assert np.all(dr > 0)
 
-    def test_deg_start_time_is_non_negative(
-        self, stub_run, degraded_fraction
-    ):
+    def test_deg_start_time_is_non_negative(self, stub_run):
         """Lysis lag time must be non-negative."""
-        _, _, lag = mean_degradation_rate(stub_run, degraded_fraction)
+        _, _, lag = mean_degradation_rate(stub_run)
         assert np.all(lag >= 0)
 
-    def test_deg_start_time_in_minutes(
-        self, stub_run, degraded_fraction
-    ):
+    def test_deg_start_time_in_minutes(self, stub_run):
         """Lysis lag time must be less than the total simulation time in minutes."""
         total_min = stub_run.data.macroscale_out[0].snapshot_time[:][-1] / 60
-        _, _, lag = mean_degradation_rate(stub_run, degraded_fraction)
+        _, _, lag = mean_degradation_rate(stub_run)
         assert np.all(lag <= total_min)
 
 
@@ -381,22 +364,22 @@ class TestFindDegradationFronts:
 class TestMeanFrontVelocity:
     """Tests for :func:`mean_front_velocity`."""
 
-    def test_returns_tuple_of_two_floats(self, stub_run, deg_fronts):
+    def test_returns_tuple_of_two_floats(self, stub_run):
         """Return value is a 2-tuple of Python floats."""
-        result = mean_front_velocity(stub_run, deg_fronts)
+        result = mean_front_velocity(stub_run)
         assert isinstance(result, tuple)
         assert len(result) == 2
         assert isinstance(result[0], float)
         assert isinstance(result[1], float)
 
-    def test_mean_velocity_is_positive(self, stub_run, deg_fronts):
+    def test_mean_velocity_is_positive(self, stub_run):
         """Mean front velocity must be positive (front moves away from source)."""
-        mean_v, _ = mean_front_velocity(stub_run, deg_fronts)
+        mean_v, _ = mean_front_velocity(stub_run)
         assert mean_v > 0.0
 
-    def test_std_velocity_is_non_negative(self, stub_run, deg_fronts):
+    def test_std_velocity_is_non_negative(self, stub_run):
         """Std of front velocity must be non-negative."""
-        _, std_v = mean_front_velocity(stub_run, deg_fronts)
+        _, std_v = mean_front_velocity(stub_run)
         assert std_v >= 0.0
 
 
@@ -447,39 +430,37 @@ class TestFindRowDegFraction:
 class TestFindFront:
     """Tests for :func:`find_front`."""
 
-    def test_returns_list_of_length_n_sims(self, stub_run, row_deg):
+    def test_returns_list_of_length_n_sims(self, stub_run):
         """Return value is a list with one array per simulation."""
-        result = find_front(stub_run, row_deg, FRONT_THRESHOLD)
+        result = find_front(stub_run, FRONT_THRESHOLD)
         assert len(result) == stub_run.macro_params.macro_simulations
 
-    def test_each_element_has_shape_n_saves(self, stub_run, row_deg):
+    def test_each_element_has_shape_n_saves(self, stub_run):
         """Each array has shape (n_saves,)."""
-        result = find_front(stub_run, row_deg, FRONT_THRESHOLD)
+        result = find_front(stub_run, FRONT_THRESHOLD)
         n_saves = len(stub_run.data.macroscale_out[0].snapshot_time[:])
         for arr in result:
             assert arr.shape == (n_saves,)
 
-    def test_values_within_valid_range(self, stub_run, row_deg):
+    def test_values_within_valid_range(self, stub_run):
         """Front indices lie in [0, fiber_rows - 1]."""
         fiber_rows = stub_run.macro_params.fiber_rows
-        result = find_front(stub_run, row_deg, FRONT_THRESHOLD)
+        result = find_front(stub_run, FRONT_THRESHOLD)
         for arr in result:
             assert np.all(arr >= 0)
             assert np.all(arr <= fiber_rows - 1)
 
-    def test_front_at_row_zero_when_all_intact(self, stub_run, row_deg):
+    def test_front_at_row_zero_when_all_intact(self, stub_run):
         """At save-point 0 all rows are intact, so the front is at row 0."""
-        result = find_front(stub_run, row_deg, FRONT_THRESHOLD)
+        result = find_front(stub_run, FRONT_THRESHOLD)
         for arr in result:
             assert arr[0] == 0
 
-    def test_front_at_last_row_when_no_row_meets_threshold(
-        self, stub_run, row_deg
-    ):
+    def test_front_at_last_row_when_no_row_meets_threshold(self, stub_run):
         """When no row meets the threshold the front defaults to fiber_rows - 1."""
         fiber_rows = stub_run.macro_params.fiber_rows
         # At save-point 4 all fibers are degraded; no row meets threshold=0.5
-        result = find_front(stub_run, row_deg, FRONT_THRESHOLD)
+        result = find_front(stub_run, FRONT_THRESHOLD)
         for arr in result:
             assert arr[-1] == fiber_rows - 1
 
@@ -533,37 +514,22 @@ class TestFiberDegradationLinearExtrapolation:
 class TestPlotDegradationPercent:
     """Tests for :func:`plot_degradation_percent`."""
 
-    def test_returns_figure(
-        self, stub_run, degraded_fraction, marker_frames, rates
-    ):
+    def test_returns_figure(self, stub_run):
         """Return value is a matplotlib Figure."""
-        fig = plot_degradation_percent(
-            stub_run, degraded_fraction,
-            marker_frames, rates, SLOPE_PAIRS, PERCENT_MARKERS,
-        )
+        fig = plot_degradation_percent(stub_run, SLOPE_PAIRS, PERCENT_MARKERS)
         assert isinstance(fig, Figure)
         plt.close(fig)
 
-    def test_figure_has_axes(
-        self, stub_run, degraded_fraction, marker_frames, rates
-    ):
+    def test_figure_has_axes(self, stub_run):
         """The returned Figure contains at least one Axes."""
-        fig = plot_degradation_percent(
-            stub_run, degraded_fraction,
-            marker_frames, rates, SLOPE_PAIRS, PERCENT_MARKERS,
-        )
+        fig = plot_degradation_percent(stub_run, SLOPE_PAIRS, PERCENT_MARKERS)
         assert len(fig.get_axes()) > 0
         plt.close(fig)
 
-    def test_axes_has_lines(
-        self, stub_run, degraded_fraction, marker_frames, rates
-    ):
+    def test_axes_has_lines(self, stub_run):
         """The axes contains one degradation curve per simulation."""
         n_sims = stub_run.macro_params.macro_simulations
-        fig = plot_degradation_percent(
-            stub_run, degraded_fraction,
-            marker_frames, rates, SLOPE_PAIRS, PERCENT_MARKERS,
-        )
+        fig = plot_degradation_percent(stub_run, SLOPE_PAIRS, PERCENT_MARKERS)
         ax = fig.get_axes()[0]
         # One curve per sim plus one linear-fit segment per sim per slope pair
         n_expected_lines = n_sims + n_sims * len(SLOPE_PAIRS)
@@ -579,23 +545,23 @@ class TestPlotDegradationPercent:
 class TestPlotFrontDegradation:
     """Tests for :func:`plot_front_degradation`."""
 
-    def test_returns_figure(self, stub_run, deg_fronts):
+    def test_returns_figure(self, stub_run):
         """Return value is a matplotlib Figure."""
-        fig = plot_front_degradation(stub_run, deg_fronts)
+        fig = plot_front_degradation(stub_run)
         assert isinstance(fig, Figure)
         plt.close(fig)
 
-    def test_figure_has_axes(self, stub_run, deg_fronts):
+    def test_figure_has_axes(self, stub_run):
         """The returned Figure contains at least one Axes."""
-        fig = plot_front_degradation(stub_run, deg_fronts)
+        fig = plot_front_degradation(stub_run)
         assert len(fig.get_axes()) > 0
         plt.close(fig)
 
-    def test_axes_has_lines(self, stub_run, deg_fronts):
+    def test_axes_has_lines(self, stub_run):
         """The axes contains one line per simulation per column."""
         n_sims = stub_run.macro_params.macro_simulations
         cols = stub_run.macro_params.cols
-        fig = plot_front_degradation(stub_run, deg_fronts)
+        fig = plot_front_degradation(stub_run)
         ax = fig.get_axes()[0]
         assert len(ax.get_lines()) == n_sims * cols
         plt.close(fig)
