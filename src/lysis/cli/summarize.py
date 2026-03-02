@@ -18,7 +18,7 @@ def summarize(ctx, hdf5_file):
 
     \b
     Example:
-        lysis summarize data/2024-04-16-1900/2024-04-16-1900.h5
+        lysis summarize data/2024-04-16-1900.h5
     """
     from lysis.analysis.degradation import compute_run_statistics
     from lysis.config.run import Run
@@ -26,9 +26,8 @@ def summarize(ctx, hdf5_file):
     console = ctx.obj["console"]
 
     hdf5_file = os.path.abspath(hdf5_file)
-    os_path = os.path.dirname(hdf5_file)
     run_code = os.path.splitext(os.path.basename(hdf5_file))[0]
-    data_root = os.path.dirname(os_path)
+    data_root = os.path.dirname(hdf5_file)
 
     try:
         run = Run(data_root, run_code)

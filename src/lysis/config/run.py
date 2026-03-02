@@ -23,9 +23,7 @@ Open the associated HDF5 DataStore for reading::
         pore_size = run.micro_params.pore_size
 """
 
-import json
 import os
-import warnings
 from datetime import datetime
 from typing import Any, Mapping, Union
 
@@ -58,15 +56,16 @@ class Run(object):
     .. attribute:: run_code
        :type: str
 
-       Unique run identifier, used as the name of the run subdirectory and
-       the stem of the HDF5 filename (``{run_code}.h5``).  Auto-generated as
-       ``YYYY-MM-DD-HHMM`` from the current date and time if not supplied.
+       Unique run identifier, used as the stem of the HDF5 filename
+       (``{run_code}.h5``).  Auto-generated as ``YYYY-MM-DD-HHMM`` from
+       the current date and time if not supplied.
 
     .. attribute:: os_path
        :type: str
 
-       Absolute path to the run's data subdirectory
-       (``{data_root}/{run_code}``).  Created automatically on construction.
+       Absolute path to the directory containing the run's HDF5 file
+       (i.e. ``data_root``).  The HDF5 file itself is at
+       ``{os_path}/{run_code}.h5``.
 
     .. attribute:: micro_params
        :type: MicroParameters or None
@@ -86,7 +85,7 @@ class Run(object):
        Open :class:`~lysis.dataio.datastore.DataStore` for this run.
        ``None`` until :meth:`open_data` is called.
 
-    :param data_root: Path to the directory that contains run subdirectories.
+    :param data_root: Path to the directory that contains run HDF5 files.
     :type data_root: str, bytes, or os.PathLike
     :param run_code: Identifier for this Run.  Must be a date-time string in
         ``YYYY-MM-DD-HHMM`` format.  If omitted, one is generated from the
@@ -99,18 +98,13 @@ class Run(object):
         # Check if the data folder path is valid
         if not os.path.isdir(data_root):
             raise RuntimeError("Data folder not found.", data_root)
-        self.os_data_root = data_root
+        self.os_path = str(data_root)
         # If no run code was given, create a new one from the current
         # date and time.
         if run_code is None:
             self.run_code = datetime.now().strftime("%Y-%m-%d-%H%M")
         else:
             self.run_code = run_code
-
-        # Generate the path to the run folder and the parameters file
-        self.os_path = os.path.join(data_root, str(self.run_code))
-        os.makedirs(self.os_path, exist_ok=True)
-        self.os_param_file = os.path.join(self.os_path, "params.json")
 
         # TODO(bpaynter): Check if the parameters are already stored.
         #                 Don't allow parameters to be changed once stored.
