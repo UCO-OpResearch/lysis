@@ -73,6 +73,19 @@ __all__ = [
 
 
 ###############################################################################
+# Cache keys
+###############################################################################
+
+_KEY_DEGRADED_FRACTION = "degraded_fraction"
+_KEY_EXPOSED_TIME = "exposed_time"
+_KEY_ROW_DEG = "row_deg"
+_KEY_DEG_FRONTS = "deg_fronts"
+_KEY_MEAN_DEG_RATE = "mean_deg_rate"
+_KEY_MEAN_FRONT_VEL = "mean_front_vel"
+_KEY_FIBER_EXTRAP = "fiber_extrap"
+
+
+###############################################################################
 # Degradation fraction
 ###############################################################################
 
@@ -93,21 +106,23 @@ def find_degraded_fraction(
         ``degraded_fraction[sim]`` has shape ``(n_save,)``.
     :rtype: list[numpy.ndarray]
     """
-    n_sims = run.macro_params.macro_simulations
-    empty_edges = run.macro_params.empty_edges
-    total_fibers = run.macro_params.total_fibers
+    if _KEY_DEGRADED_FRACTION not in run._cache:
+        n_sims = run.macro_params.macro_simulations
+        empty_edges = run.macro_params.empty_edges
+        total_fibers = run.macro_params.total_fibers
 
-    degraded_fraction = []
-    for sim in range(n_sims):
-        tsave = run.data.macroscale_out[sim].snapshot_time[:]
-        cursor = FiberReplayCursor(run, sim)
-        run_frac = np.empty(tsave.shape[0], dtype=np.float64)
-        for t_idx, t in enumerate(tsave):
-            cursor.advance_to(t)
-            run_frac[t_idx] = np.count_nonzero(cursor.state <= t)
-        run_frac -= empty_edges
-        degraded_fraction.append(run_frac / total_fibers)
-    return degraded_fraction
+        degraded_fraction = []
+        for sim in range(n_sims):
+            tsave = run.data.macroscale_out[sim].snapshot_time[:]
+            cursor = FiberReplayCursor(run, sim)
+            run_frac = np.empty(tsave.shape[0], dtype=np.float64)
+            for t_idx, t in enumerate(tsave):
+                cursor.advance_to(t)
+                run_frac[t_idx] = np.count_nonzero(cursor.state <= t)
+            run_frac -= empty_edges
+            degraded_fraction.append(run_frac / total_fibers)
+        run._cache[_KEY_DEGRADED_FRACTION] = degraded_fraction
+    return run._cache[_KEY_DEGRADED_FRACTION]
 
 
 ###############################################################################
@@ -135,14 +150,17 @@ def find_degradation_marker_frames(
         ``sim`` first reaches milestone ``percent_markers[m]``.
     :rtype: numpy.ndarray
     """
-    degraded_fraction = find_degraded_fraction(run)
-    n_sims = len(degraded_fraction)
-    n_markers = len(percent_markers)
-    marker_frames = np.empty((n_sims, n_markers), dtype=np.intp)
-    for sim in range(n_sims):
-        for m, threshold in enumerate(percent_markers):
-            marker_frames[sim, m] = np.argmax(degraded_fraction[sim] >= threshold)
-    return marker_frames
+    key = ("marker_frames", tuple(percent_markers))
+    if key not in run._cache:
+        degraded_fraction = find_degraded_fraction(run)
+        n_sims = len(degraded_fraction)
+        n_markers = len(percent_markers)
+        marker_frames = np.empty((n_sims, n_markers), dtype=np.intp)
+        for sim in range(n_sims):
+            for m, threshold in enumerate(percent_markers):
+                marker_frames[sim, m] = np.argmax(degraded_fraction[sim] >= threshold)
+        run._cache[key] = marker_frames
+    return run._cache[key]
 
 
 def find_degradation_marker_times(
@@ -165,13 +183,16 @@ def find_degradation_marker_times(
         milestone.
     :rtype: numpy.ndarray
     """
-    marker_frames = find_degradation_marker_frames(run, percent_markers)
-    n_sims, n_markers = marker_frames.shape
-    marker_times = np.empty((n_sims, n_markers), dtype=np.float64)
-    for sim in range(n_sims):
-        tsave = run.data.macroscale_out[sim].snapshot_time[:]
-        marker_times[sim] = tsave[marker_frames[sim]]
-    return marker_times / 60
+    key = ("marker_times", tuple(percent_markers))
+    if key not in run._cache:
+        marker_frames = find_degradation_marker_frames(run, percent_markers)
+        n_sims, n_markers = marker_frames.shape
+        marker_times = np.empty((n_sims, n_markers), dtype=np.float64)
+        for sim in range(n_sims):
+            tsave = run.data.macroscale_out[sim].snapshot_time[:]
+            marker_times[sim] = tsave[marker_frames[sim]]
+        run._cache[key] = marker_times / 60
+    return run._cache[key]
 
 
 ###############################################################################
@@ -206,21 +227,24 @@ def degradation_rates(
         ``sim`` between the milestones defined by ``slope_pairs[k]``.
     :rtype: numpy.ndarray
     """
-    degraded_fraction = find_degraded_fraction(run)
-    marker_frames = find_degradation_marker_frames(run, percent_markers)
-    n_sims = run.macro_params.macro_simulations
-    rates = np.empty((n_sims, len(slope_pairs)), dtype=np.float64)
-    for sim in range(n_sims):
-        tsave = run.data.macroscale_out[sim].snapshot_time[:]
-        for k, (start_pct, end_pct) in enumerate(slope_pairs):
-            start_frame = marker_frames[sim, percent_markers.index(start_pct)]
-            end_frame = marker_frames[sim, percent_markers.index(end_pct)]
-            delta_frac = (
-                degraded_fraction[sim][end_frame] - degraded_fraction[sim][start_frame]
-            )
-            delta_time = tsave[end_frame] - tsave[start_frame]
-            rates[sim, k] = delta_frac / delta_time * 60  # fraction/min
-    return rates
+    key = ("rates", tuple(tuple(s) for s in slope_pairs), tuple(percent_markers))
+    if key not in run._cache:
+        degraded_fraction = find_degraded_fraction(run)
+        marker_frames = find_degradation_marker_frames(run, percent_markers)
+        n_sims = run.macro_params.macro_simulations
+        rates = np.empty((n_sims, len(slope_pairs)), dtype=np.float64)
+        for sim in range(n_sims):
+            tsave = run.data.macroscale_out[sim].snapshot_time[:]
+            for k, (start_pct, end_pct) in enumerate(slope_pairs):
+                start_frame = marker_frames[sim, percent_markers.index(start_pct)]
+                end_frame = marker_frames[sim, percent_markers.index(end_pct)]
+                delta_frac = (
+                    degraded_fraction[sim][end_frame] - degraded_fraction[sim][start_frame]
+                )
+                delta_time = tsave[end_frame] - tsave[start_frame]
+                rates[sim, k] = delta_frac / delta_time * 60  # fraction/min
+        run._cache[key] = rates
+    return run._cache[key]
 
 
 def mean_degradation_rate(
@@ -244,28 +268,30 @@ def mean_degradation_rate(
 
     :rtype: tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]
     """
-    degraded_fraction = find_degraded_fraction(run)
-    n_sims = run.macro_params.macro_simulations
-    degradation_rate = np.empty(n_sims, dtype=np.float64)
-    offset = np.empty(n_sims, dtype=np.float64)
-    deg_start_time = np.empty(n_sims, dtype=np.float64)
+    if _KEY_MEAN_DEG_RATE not in run._cache:
+        degraded_fraction = find_degraded_fraction(run)
+        n_sims = run.macro_params.macro_simulations
+        degradation_rate = np.empty(n_sims, dtype=np.float64)
+        offset = np.empty(n_sims, dtype=np.float64)
+        deg_start_time = np.empty(n_sims, dtype=np.float64)
 
-    for r in range(n_sims):
-        tsave = run.data.macroscale_out[r].snapshot_time[:]
-        incremental = np.empty(degraded_fraction[r].shape[0], dtype=np.float64)
-        incremental[0] = degraded_fraction[r][0]
-        for t in range(1, degraded_fraction[r].shape[0]):
-            incremental[t] = degraded_fraction[r][t] - degraded_fraction[r][t - 1]
-        rapid_phase = incremental > incremental.max() / 2
-        s = np.argmax(rapid_phase)
-        b, m = np.polynomial.polynomial.polyfit(
-            tsave[rapid_phase] / 60, degraded_fraction[r][rapid_phase], 1
-        )
-        degradation_rate[r] = m
-        offset[r] = b
-        deg_start_time[r] = tsave[s] / 60
+        for r in range(n_sims):
+            tsave = run.data.macroscale_out[r].snapshot_time[:]
+            incremental = np.empty(degraded_fraction[r].shape[0], dtype=np.float64)
+            incremental[0] = degraded_fraction[r][0]
+            for t in range(1, degraded_fraction[r].shape[0]):
+                incremental[t] = degraded_fraction[r][t] - degraded_fraction[r][t - 1]
+            rapid_phase = incremental > incremental.max() / 2
+            s = np.argmax(rapid_phase)
+            b, m = np.polynomial.polynomial.polyfit(
+                tsave[rapid_phase] / 60, degraded_fraction[r][rapid_phase], 1
+            )
+            degradation_rate[r] = m
+            offset[r] = b
+            deg_start_time[r] = tsave[s] / 60
 
-    return degradation_rate, offset, deg_start_time
+        run._cache[_KEY_MEAN_DEG_RATE] = (degradation_rate, offset, deg_start_time)
+    return run._cache[_KEY_MEAN_DEG_RATE]
 
 
 ###############################################################################
@@ -295,25 +321,27 @@ def calculate_time_row_exposed(
         ``sim``.
     :rtype: numpy.ndarray
     """
-    n_sims = run.macro_params.macro_simulations
-    rows = run.macro_params.rows
-    cols = run.macro_params.cols
+    if _KEY_EXPOSED_TIME not in run._cache:
+        n_sims = run.macro_params.macro_simulations
+        rows = run.macro_params.rows
+        cols = run.macro_params.cols
 
-    exposed_time = np.empty((n_sims, rows - 1, cols), dtype=np.float64)
-    for sim in range(n_sims):
-        tsave = run.data.macroscale_out[sim].snapshot_time[:]
-        cursor = FiberReplayCursor(run, sim)
-        cursor.advance_to(tsave[-1])
-        state = cursor.state
-        for j in range(cols):
-            for i in range(rows - 1):
-                if i == 0:
-                    exposed_time[sim, i, j] = 0
-                else:
-                    exposed_time[sim, i, j] = max(
-                        exposed_time[sim, i - 1, j], state[i, j]
-                    )
-    return exposed_time / 60
+        exposed_time = np.empty((n_sims, rows - 1, cols), dtype=np.float64)
+        for sim in range(n_sims):
+            tsave = run.data.macroscale_out[sim].snapshot_time[:]
+            cursor = FiberReplayCursor(run, sim)
+            cursor.advance_to(tsave[-1])
+            state = cursor.state
+            for j in range(cols):
+                for i in range(rows - 1):
+                    if i == 0:
+                        exposed_time[sim, i, j] = 0
+                    else:
+                        exposed_time[sim, i, j] = max(
+                            exposed_time[sim, i - 1, j], state[i, j]
+                        )
+        run._cache[_KEY_EXPOSED_TIME] = exposed_time / 60
+    return run._cache[_KEY_EXPOSED_TIME]
 
 
 def find_degradation_fronts(
@@ -334,30 +362,32 @@ def find_degradation_fronts(
         (min) and row 1 giving y-distances (µm).
     :rtype: list[list[numpy.ndarray]]
     """
-    exposed_time = calculate_time_row_exposed(run)
-    n_sims = run.macro_params.macro_simulations
-    rows = run.macro_params.rows
-    cols = run.macro_params.cols
-    pore_size_um = run.macro_params.pore_size.to("microns").magnitude
-    y_distance = np.arange(rows - 1) * pore_size_um
+    if _KEY_DEG_FRONTS not in run._cache:
+        exposed_time = calculate_time_row_exposed(run)
+        n_sims = run.macro_params.macro_simulations
+        rows = run.macro_params.rows
+        cols = run.macro_params.cols
+        pore_size_um = run.macro_params.pore_size.to("microns").magnitude
+        y_distance = np.arange(rows - 1) * pore_size_um
 
-    deg_fronts = []
-    for sim in range(n_sims):
-        tsave = run.data.macroscale_out[sim].snapshot_time[:]
-        t_end_min = tsave[-1] / 60
-        sim_fronts = []
-        for j in range(cols):
-            col_front = []
-            for i in range(1, rows - 1):
-                if (
-                    exposed_time[sim, i - 1, j]
-                    < exposed_time[sim, i, j]
-                    < t_end_min + 1
-                ):
-                    col_front.append([exposed_time[sim, i, j], y_distance[i]])
-            sim_fronts.append(np.array(col_front).T)
-        deg_fronts.append(sim_fronts)
-    return deg_fronts
+        deg_fronts = []
+        for sim in range(n_sims):
+            tsave = run.data.macroscale_out[sim].snapshot_time[:]
+            t_end_min = tsave[-1] / 60
+            sim_fronts = []
+            for j in range(cols):
+                col_front = []
+                for i in range(1, rows - 1):
+                    if (
+                        exposed_time[sim, i - 1, j]
+                        < exposed_time[sim, i, j]
+                        < t_end_min + 1
+                    ):
+                        col_front.append([exposed_time[sim, i, j], y_distance[i]])
+                sim_fronts.append(np.array(col_front).T)
+            deg_fronts.append(sim_fronts)
+        run._cache[_KEY_DEG_FRONTS] = deg_fronts
+    return run._cache[_KEY_DEG_FRONTS]
 
 
 def mean_front_velocity(
@@ -380,22 +410,26 @@ def mean_front_velocity(
     :return: Tuple ``(mean_velocity, std_velocity)`` in µm/min.
     :rtype: tuple[float, float]
     """
-    deg_fronts = find_degradation_fronts(run)
-    n_sims = run.macro_params.macro_simulations
-    cols = run.macro_params.cols
+    if _KEY_MEAN_FRONT_VEL not in run._cache:
+        deg_fronts = find_degradation_fronts(run)
+        n_sims = run.macro_params.macro_simulations
+        cols = run.macro_params.cols
 
-    run_mean = np.empty(n_sims, dtype=np.float64)
-    run_std = np.empty(n_sims, dtype=np.float64)
-    for sim in range(n_sims):
-        front_velocity = np.empty(cols, dtype=np.float64)
-        for j in range(cols):
-            _b, m = np.polynomial.polynomial.polyfit(
-                deg_fronts[sim][j][0], deg_fronts[sim][j][1], 1
-            )
-            front_velocity[j] = m
-        run_mean[sim] = np.mean(front_velocity)
-        run_std[sim] = np.std(front_velocity)
-    return float(np.mean(run_mean)), float(np.mean(run_std))
+        run_mean = np.empty(n_sims, dtype=np.float64)
+        run_std = np.empty(n_sims, dtype=np.float64)
+        for sim in range(n_sims):
+            front_velocity = np.empty(cols, dtype=np.float64)
+            for j in range(cols):
+                _b, m = np.polynomial.polynomial.polyfit(
+                    deg_fronts[sim][j][0], deg_fronts[sim][j][1], 1
+                )
+                front_velocity[j] = m
+            run_mean[sim] = np.mean(front_velocity)
+            run_std[sim] = np.std(front_velocity)
+        run._cache[_KEY_MEAN_FRONT_VEL] = (
+            float(np.mean(run_mean)), float(np.mean(run_std))
+        )
+    return run._cache[_KEY_MEAN_FRONT_VEL]
 
 
 ###############################################################################
@@ -419,24 +453,26 @@ def find_row_deg_fraction(
         edges in each row that have NOT yet degraded at each save point.
     :rtype: list[numpy.ndarray]
     """
-    n_sims = run.macro_params.macro_simulations
-    empty_rows = run.macro_params.empty_rows
-    rows = run.macro_params.rows
-    full_row = run.macro_params.full_row
+    if _KEY_ROW_DEG not in run._cache:
+        n_sims = run.macro_params.macro_simulations
+        empty_rows = run.macro_params.empty_rows
+        rows = run.macro_params.rows
+        full_row = run.macro_params.full_row
 
-    row_deg = []
-    for sim in range(n_sims):
-        tsave = run.data.macroscale_out[sim].snapshot_time[:]
-        cursor = FiberReplayCursor(run, sim)
-        n_saves = tsave.shape[0]
-        fiber_rows_minus_1 = rows - 1 - empty_rows
-        sim_row_deg = np.empty((n_saves, fiber_rows_minus_1), dtype=np.float64)
-        for t_idx, t in enumerate(tsave):
-            cursor.advance_to(t)
-            fibrous = cursor.state[empty_rows : rows - 1, :]
-            sim_row_deg[t_idx] = np.count_nonzero(fibrous > t, axis=1) / full_row
-        row_deg.append(sim_row_deg)
-    return row_deg
+        row_deg = []
+        for sim in range(n_sims):
+            tsave = run.data.macroscale_out[sim].snapshot_time[:]
+            cursor = FiberReplayCursor(run, sim)
+            n_saves = tsave.shape[0]
+            fiber_rows_minus_1 = rows - 1 - empty_rows
+            sim_row_deg = np.empty((n_saves, fiber_rows_minus_1), dtype=np.float64)
+            for t_idx, t in enumerate(tsave):
+                cursor.advance_to(t)
+                fibrous = cursor.state[empty_rows : rows - 1, :]
+                sim_row_deg[t_idx] = np.count_nonzero(fibrous > t, axis=1) / full_row
+            row_deg.append(sim_row_deg)
+        run._cache[_KEY_ROW_DEG] = row_deg
+    return run._cache[_KEY_ROW_DEG]
 
 
 def find_front(
@@ -459,14 +495,17 @@ def find_front(
         row index of the lysis front at each save point.
     :rtype: list[numpy.ndarray]
     """
-    row_deg = find_row_deg_fraction(run)
-    fiber_rows = run.macro_params.fiber_rows
-    fronts = []
-    for sim_row_deg in row_deg:
-        sim_fronts = np.argmax(sim_row_deg >= front_threshold, axis=1)
-        sim_fronts[np.max(sim_row_deg >= front_threshold, axis=1) == 0] = fiber_rows - 1
-        fronts.append(sim_fronts)
-    return fronts
+    key = ("front", front_threshold)
+    if key not in run._cache:
+        row_deg = find_row_deg_fraction(run)
+        fiber_rows = run.macro_params.fiber_rows
+        fronts = []
+        for sim_row_deg in row_deg:
+            sim_fronts = np.argmax(sim_row_deg >= front_threshold, axis=1)
+            sim_fronts[np.max(sim_row_deg >= front_threshold, axis=1) == 0] = fiber_rows - 1
+            fronts.append(sim_fronts)
+        run._cache[key] = fronts
+    return run._cache[key]
 
 
 def fiber_degradation_linear_extrapolation(
@@ -491,52 +530,56 @@ def fiber_degradation_linear_extrapolation(
         all simulations.
     :rtype: numpy.ndarray
     """
-    n_sims = run.macro_params.macro_simulations
-    empty_rows = run.macro_params.empty_rows
-    rows = run.macro_params.rows
-    fiber_rows = run.macro_params.fiber_rows
-    full_row = run.macro_params.full_row
+    if _KEY_FIBER_EXTRAP not in run._cache:
+        n_sims = run.macro_params.macro_simulations
+        empty_rows = run.macro_params.empty_rows
+        rows = run.macro_params.rows
+        fiber_rows = run.macro_params.fiber_rows
+        full_row = run.macro_params.full_row
 
-    f_deg_amt = []
-    all_tsave = []
-    for sim in range(n_sims):
-        tsave = run.data.macroscale_out[sim].snapshot_time[:]
-        all_tsave.append(tsave)
-        n_saves = tsave.shape[0]
-        cursor = FiberReplayCursor(run, sim)
+        f_deg_amt = []
+        all_tsave = []
+        for sim in range(n_sims):
+            tsave = run.data.macroscale_out[sim].snapshot_time[:]
+            all_tsave.append(tsave)
+            n_saves = tsave.shape[0]
+            cursor = FiberReplayCursor(run, sim)
 
-        # Build snapshots of cursor state at each save point
-        snapshots = np.empty((n_saves, rows, full_row), dtype=np.float64)
-        for t_idx, t in enumerate(tsave):
-            cursor.advance_to(t)
-            snapshots[t_idx] = cursor.state
+            # Build snapshots of cursor state at each save point
+            snapshots = np.empty((n_saves, rows, full_row), dtype=np.float64)
+            for t_idx, t in enumerate(tsave):
+                cursor.advance_to(t)
+                snapshots[t_idx] = cursor.state
 
-        # Build remaining-fibrin fraction array for the fibrous region
-        # Shape: (n_saves, fiber_rows - 1, full_row)
-        fibrous_rows = rows - 1 - empty_rows  # = fiber_rows - 1
-        f_deg_amt_sim = np.ones(
-            (n_saves, fibrous_rows, full_row), dtype=np.float64
-        )
-        f_deg_delta = np.zeros((fibrous_rows, full_row), dtype=np.float64)
-
-        for i in range(1, n_saves):
-            prev = snapshots[i - 1, empty_rows : rows - 1, :]
-            curr = snapshots[i, empty_rows : rows - 1, :]
-            changed = np.argwhere(curr < prev)
-            if changed.size > 0:
-                r_idx, c_idx = changed[:, 0], changed[:, 1]
-                f_deg_delta[r_idx, c_idx] = f_deg_amt_sim[i - 1, r_idx, c_idx] / (
-                    curr[r_idx, c_idx] - tsave[i - 1]
-                )
-            f_deg_amt_sim[i] = np.maximum(
-                f_deg_amt_sim[i - 1]
-                - f_deg_delta * (tsave[i] - tsave[i - 1]),
-                0.0,
+            # Build remaining-fibrin fraction array for the fibrous region
+            # Shape: (n_saves, fiber_rows - 1, full_row)
+            fibrous_rows = rows - 1 - empty_rows  # = fiber_rows - 1
+            f_deg_amt_sim = np.ones(
+                (n_saves, fibrous_rows, full_row), dtype=np.float64
             )
-        f_deg_amt.append(f_deg_amt_sim)
+            f_deg_delta = np.zeros((fibrous_rows, full_row), dtype=np.float64)
 
-    max_t = min(len(t) for t in all_tsave)
-    return np.stack([f_deg_amt[sim][:max_t] for sim in range(n_sims)])
+            for i in range(1, n_saves):
+                prev = snapshots[i - 1, empty_rows : rows - 1, :]
+                curr = snapshots[i, empty_rows : rows - 1, :]
+                changed = np.argwhere(curr < prev)
+                if changed.size > 0:
+                    r_idx, c_idx = changed[:, 0], changed[:, 1]
+                    f_deg_delta[r_idx, c_idx] = f_deg_amt_sim[i - 1, r_idx, c_idx] / (
+                        curr[r_idx, c_idx] - tsave[i - 1]
+                    )
+                f_deg_amt_sim[i] = np.maximum(
+                    f_deg_amt_sim[i - 1]
+                    - f_deg_delta * (tsave[i] - tsave[i - 1]),
+                    0.0,
+                )
+            f_deg_amt.append(f_deg_amt_sim)
+
+        max_t = min(len(t) for t in all_tsave)
+        run._cache[_KEY_FIBER_EXTRAP] = np.stack(
+            [f_deg_amt[sim][:max_t] for sim in range(n_sims)]
+        )
+    return run._cache[_KEY_FIBER_EXTRAP]
 
 
 ###############################################################################
@@ -668,16 +711,19 @@ def get_unbind_amounts(
         1-D integer array of length ``n_sims``.
     :rtype: tuple[numpy.ndarray, numpy.ndarray]
     """
-    macro_pattern = re.compile(r"countmacrounbd=\s*(\d+)")
-    micro_pattern = re.compile(r"countmicrounbd=\s*(\d+)")
-    log_text = ""
-    for sim in range(run.macro_params.macro_simulations):
-        log_file = os.path.join(run.os_path, f"{sim:02}", f"macro{file_code}_{sim:02}.txt")
-        with open(log_file) as fh:
-            log_text += fh.read()
-    macro_unbinds = np.array(re.findall(macro_pattern, log_text), dtype=int)
-    micro_unbinds = np.array(re.findall(micro_pattern, log_text), dtype=int)
-    return macro_unbinds, micro_unbinds
+    key = ("unbind_amounts", file_code)
+    if key not in run._cache:
+        macro_pattern = re.compile(r"countmacrounbd=\s*(\d+)")
+        micro_pattern = re.compile(r"countmicrounbd=\s*(\d+)")
+        log_text = ""
+        for sim in range(run.macro_params.macro_simulations):
+            log_file = os.path.join(run.os_path, f"{sim:02}", f"macro{file_code}_{sim:02}.txt")
+            with open(log_file) as fh:
+                log_text += fh.read()
+        macro_unbinds = np.array(re.findall(macro_pattern, log_text), dtype=int)
+        micro_unbinds = np.array(re.findall(micro_pattern, log_text), dtype=int)
+        run._cache[key] = (macro_unbinds, micro_unbinds)
+    return run._cache[key]
 
 
 def get_processing_time(
@@ -693,13 +739,16 @@ def get_processing_time(
     :return: 1-D float array of processing times in seconds, one per simulation.
     :rtype: numpy.ndarray
     """
-    pattern = re.compile(r"Processing time:\s*(\d+\.\d+)\s*sec")
-    log_text = ""
-    for sim in range(run.macro_params.macro_simulations):
-        log_file = os.path.join(run.os_path, f"{sim:02}", f"macro{file_code}_{sim:02}.txt")
-        with open(log_file) as fh:
-            log_text += fh.read()
-    return np.array(re.findall(pattern, log_text), dtype=float)
+    key = ("processing_time", file_code)
+    if key not in run._cache:
+        pattern = re.compile(r"Processing time:\s*(\d+\.\d+)\s*sec")
+        log_text = ""
+        for sim in range(run.macro_params.macro_simulations):
+            log_file = os.path.join(run.os_path, f"{sim:02}", f"macro{file_code}_{sim:02}.txt")
+            with open(log_file) as fh:
+                log_text += fh.read()
+        run._cache[key] = np.array(re.findall(pattern, log_text), dtype=float)
+    return run._cache[key]
 
 
 def get_total_binds(
@@ -715,10 +764,13 @@ def get_total_binds(
     :return: 1-D integer array of total bind counts, one per simulation.
     :rtype: numpy.ndarray
     """
-    pattern = re.compile(r"Total Binds:\s*(\d+\.?\d*)\s*")
-    log_text = ""
-    for sim in range(run.macro_params.macro_simulations):
-        log_file = os.path.join(run.os_path, f"{sim:02}", f"macro{file_code}_{sim:02}.txt")
-        with open(log_file) as fh:
-            log_text += fh.read()
-    return np.array(re.findall(pattern, log_text), dtype=int)
+    key = ("total_binds", file_code)
+    if key not in run._cache:
+        pattern = re.compile(r"Total Binds:\s*(\d+\.?\d*)\s*")
+        log_text = ""
+        for sim in range(run.macro_params.macro_simulations):
+            log_file = os.path.join(run.os_path, f"{sim:02}", f"macro{file_code}_{sim:02}.txt")
+            with open(log_file) as fh:
+                log_text += fh.read()
+        run._cache[key] = np.array(re.findall(pattern, log_text), dtype=int)
+    return run._cache[key]

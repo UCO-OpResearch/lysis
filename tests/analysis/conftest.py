@@ -124,6 +124,7 @@ class _StubRun:
         self.macro_params = macro_params
         self.os_path = os_path
         self.data = data
+        self._cache = {}
 
 
 # ---------------------------------------------------------------------------

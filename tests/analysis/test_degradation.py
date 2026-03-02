@@ -578,6 +578,7 @@ class _LogRunStub:
     def __init__(self, macro_params, os_path):
         self.macro_params = macro_params
         self.os_path = os_path
+        self._cache = {}
 
 
 def _write_log_file(directory, filename, content):

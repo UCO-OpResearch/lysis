@@ -119,6 +119,7 @@ class Run(object):
         self.micro_params = None
         self.macro_params = None
         self.data = None
+        self._cache = {}
 
     def __str__(self) -> str:
         """Return a human-readable formatted string of the run's parameters.
