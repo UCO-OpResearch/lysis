@@ -1560,6 +1560,17 @@ def _convert_single_step(
 
         # Process each dataset within the collection
         for dataset_needed in collection.data.keys():
+            # If the output dataset name matches an optional input dataset that is
+            # absent, skip it rather than letting the converter raise a KeyError.
+            # (Applies to identity-style conversions where the name is unchanged.)
+            in_collection_data = dataspec[input_set_spec][name].data
+            if (
+                dataset_needed in in_collection_data
+                and in_collection_data[dataset_needed].optional
+                and dataset_needed not in input_data
+            ):
+                continue
+
             # Apply the appropriate converter function for this dataset
             out = data_converters[input_set_spec, output_set_spec][dataset_needed](
                 input_data
