@@ -166,6 +166,11 @@ class DataSetSpec:
     :ivar delimiter: Delimiter for text files (e.g., "," for CSV, "\\u0000" for null-terminated).
         None for binary/HDF5 formats.
     :vartype delimiter: str | None
+    :ivar optional: If ``True``, reading silently skips this dataset when the
+        underlying file or HDF5 key is absent.  The dataset will be missing from
+        the returned data dict, and downstream converters must handle that case
+        (e.g., by regenerating the data from other fields).  Default ``False``.
+    :vartype optional: bool
 
     Examples
     --------
@@ -206,6 +211,7 @@ class DataSetSpec:
     data_location: str | None = None
     shape: tuple[int, ...] = (-1,)
     delimiter: str | None = None
+    optional: bool = False
     # Hidden fields — not in constructor, auto-populated by DataSpec
     version: str = field(init=False, default="")
     collection: str = field(init=False, default="")
@@ -675,6 +681,7 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
                     dtype=np.int32,
                     shape=(-1,),
+                    optional=True,
                 ),
             },
         ),

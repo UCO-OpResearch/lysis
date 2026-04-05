@@ -799,9 +799,13 @@ def read_data_collection(
         for name, spec in collection.data.items():
             if collection.simulations_combined is True:
                 # All simulations stored together in a single file/dataset
-                data[name] = read_dataset(
-                    path, spec, params=data["params"], file_code=file_code
-                )
+                try:
+                    data[name] = read_dataset(
+                        path, spec, params=data["params"], file_code=file_code
+                    )
+                except (FileNotFoundError, KeyError):
+                    if not spec.optional:
+                        raise
             else:
                 # Each simulation stored in a separate file/dataset
                 data[name] = []

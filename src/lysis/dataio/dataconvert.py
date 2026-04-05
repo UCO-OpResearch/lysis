@@ -1290,13 +1290,20 @@ data_converters: dict[
         ),
         "binned_fiber_degraded": lambda data: data["lenlysisvect"]
         - 1,  # Count of degraded fibers per bin (convert Fortran 1-based to 0-based)
-        "edge_grid_neighbors": lambda data: np.reshape(
-            data["neighbors"]
-            - 1,  # Grid neighbor indices (convert Fortran 1-based to 0-based)
-            (
-                -1,
-                8,
-            ),  # Unflatten from column vector: one row per edge, 8 neighbors per row
+        "edge_grid_neighbors": lambda data: (
+            np.reshape(
+                data["neighbors"]
+                - 1,  # Grid neighbor indices (convert Fortran 1-based to 0-based)
+                (
+                    -1,
+                    8,
+                ),  # Unflatten from column vector: one row per edge, 8 neighbors per row
+            )
+            if "neighbors" in data
+            else generate_fortran_neighborhood_structure(  # Regenerate when file was absent
+                data["params"]["macro_params"]["rows"],
+                data["params"]["macro_params"]["cols"],
+            )
         ),
         # ------------------------------------------------------------------------
         # Macroscale output datasets
@@ -1540,10 +1547,10 @@ def _convert_single_step(
         # This allows conversion to work with partial data (e.g., only microscale_out
         # without macroscale_in/out), preventing NotImplementedError for missing collections
         collection_exists = True
-        for dataset in dataspec[input_set_spec][name].data.keys():
-            if not dataset in input_data:
+        for dataset, spec in dataspec[input_set_spec][name].data.items():
+            if dataset not in input_data and not spec.optional:
                 collection_exists = False
-                break  # No need to check further if any dataset is missing
+                break  # No need to check further if any required dataset is missing
 
         # Skip this collection if it doesn't exist in the input data
         # This is expected when converting data that only contains some collections
