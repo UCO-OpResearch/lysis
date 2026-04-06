@@ -52,8 +52,14 @@ def _load_run_stats(data_root, run_code, console):
         "numerically; 'alpha' uses plain lexicographic order."
     ),
 )
+@click.option(
+    "--no-progress",
+    is_flag=True,
+    default=False,
+    help="Suppress progress indicators.",
+)
 @click.pass_context
-def summarize(ctx, path, sort_mode):
+def summarize(ctx, path, sort_mode, no_progress):
     """Print summary statistics for one or more simulation Runs.
 
     PATH may be a single HDF5 file or a directory. When a directory is given,
@@ -73,7 +79,11 @@ def summarize(ctx, path, sort_mode):
         # --- single-file mode ---
         run_code = os.path.splitext(os.path.basename(path))[0]
         data_root = os.path.dirname(path)
-        stats = _load_run_stats(data_root, run_code, console)
+        if not no_progress:
+            with console.status(f"Computing statistics for {run_code}..."):
+                stats = _load_run_stats(data_root, run_code, console)
+        else:
+            stats = _load_run_stats(data_root, run_code, console)
         if stats is None:
             ctx.exit(1)
             return
@@ -86,6 +96,13 @@ def summarize(ctx, path, sort_mode):
     else:
         # --- directory mode: table of all .h5 files ---
         from lysis.tools.runcode_sort import smart_sort
+        from rich.progress import (
+            BarColumn,
+            MofNCompleteColumn,
+            Progress,
+            TextColumn,
+            TimeRemainingColumn,
+        )
         from rich.table import Table
 
         h5_files = [f for f in os.listdir(path) if f.lower().endswith(".h5")]
@@ -102,12 +119,34 @@ def summarize(ctx, path, sort_mode):
 
         rows = {}
         first_stats = None
-        for run_code in run_codes:
-            stats = _load_run_stats(path, run_code, console)
-            if stats is not None:
-                rows[run_code] = stats
-                if first_stats is None:
-                    first_stats = stats
+
+        if not no_progress:
+            _progress = Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TimeRemainingColumn(),
+                console=console,
+            )
+        else:
+            from contextlib import nullcontext
+
+            _progress = nullcontext()
+
+        with _progress as prog:
+            _task = (
+                prog.add_task("Summarizing runs...", total=len(run_codes))
+                if prog is not None
+                else None
+            )
+            for run_code in run_codes:
+                stats = _load_run_stats(path, run_code, console)
+                if prog is not None:
+                    prog.advance(_task)
+                if stats is not None:
+                    rows[run_code] = stats
+                    if first_stats is None:
+                        first_stats = stats
 
         if not rows:
             ctx.exit(1)

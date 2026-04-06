@@ -72,6 +72,12 @@ def _resolve_spec(spec_str):
     help="Show what would be converted without writing output.",
 )
 @click.option(
+    "--no-progress",
+    is_flag=True,
+    default=False,
+    help="Suppress progress indicators.",
+)
+@click.option(
     "--param-override",
     "param_overrides",
     multiple=True,
@@ -104,6 +110,7 @@ def convert(
     collections,
     file_code,
     dry_run,
+    no_progress,
     param_overrides,
     param_aliases,
 ):
@@ -225,64 +232,93 @@ def convert(
             key, fortran_name = item.split("=", 1)
             aliases[key] = fortran_name
 
-    # Read
-    try:
-        data = read_data_collection(input_path, in_collections, file_codes)
-    except FileNotFoundError as e:
-        console.print(f"[red]Error:[/red] Input file not found: {e}")
-        ctx.exit(1)
-        return
-    except KeyError as e:
-        console.print(f"[red]Error:[/red] Missing data in input: {e}")
-        ctx.exit(1)
-        return
+    from contextlib import nullcontext
 
-    # Apply param_overrides: merge into all params sub-dicts
-    if overrides:
-        for key, value in overrides.items():
-            for section in data["params"].values():
-                if isinstance(section, dict):
-                    section[key] = value
+    from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
-    # Apply param_aliases: rename keys in all params sub-dicts
-    if aliases:
-        for py_name, fort_name in aliases.items():
-            fort_lower = fort_name.lower()
-            for section in data["params"].values():
-                if isinstance(section, dict) and fort_lower in section:
-                    section[py_name] = section.pop(fort_lower)
+    _pctx = (
+        Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        )
+        if not no_progress
+        else nullcontext()
+    )
 
-    if verbose:
-        n_datasets = sum(1 for k in data if k != "params")
-        console.print(f"Read {n_datasets} dataset(s) from input.")
+    with _pctx as prog:
+        _task = (
+            prog.add_task("Reading data...", total=None) if prog is not None else None
+        )
 
-    # Convert
-    try:
-        converted = convert_data(data, in_version, out_version)
-    except ValueError as e:
-        console.print(f"[red]Error:[/red] Conversion error: {e}")
-        ctx.exit(1)
-        return
-    except NotImplementedError as e:
-        console.print(f"[red]Error:[/red] Conversion not implemented: {e}")
-        ctx.exit(1)
-        return
-    except (OverflowError, TypeError) as e:
-        console.print(f"[red]Error:[/red] Type conversion failed: {e}")
-        ctx.exit(1)
-        return
+        # Read
+        try:
+            data = read_data_collection(input_path, in_collections, file_codes)
+        except FileNotFoundError as e:
+            console.print(f"[red]Error:[/red] Input file not found: {e}")
+            ctx.exit(1)
+            return
+        except KeyError as e:
+            console.print(f"[red]Error:[/red] Missing data in input: {e}")
+            ctx.exit(1)
+            return
 
-    # Write
-    if dry_run:
-        console.print("[green]Dry run complete. No files written.[/green]")
-        return
+        # Apply param_overrides: merge into all params sub-dicts
+        if overrides:
+            for key, value in overrides.items():
+                for section in data["params"].values():
+                    if isinstance(section, dict):
+                        section[key] = value
 
-    try:
-        write_data_collection(converted, output_path, out_collections, file_codes)
-    except (OSError, TypeError) as e:
-        console.print(f"[red]Error:[/red] Failed to write output: {e}")
-        ctx.exit(1)
-        return
+        # Apply param_aliases: rename keys in all params sub-dicts
+        if aliases:
+            for py_name, fort_name in aliases.items():
+                fort_lower = fort_name.lower()
+                for section in data["params"].values():
+                    if isinstance(section, dict) and fort_lower in section:
+                        section[py_name] = section.pop(fort_lower)
+
+        if verbose:
+            n_datasets = sum(1 for k in data if k != "params")
+            console.print(f"Read {n_datasets} dataset(s) from input.")
+
+        if prog is not None:
+            prog.update(_task, description="Converting data...")
+
+        # Convert
+        try:
+            converted = convert_data(data, in_version, out_version)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] Conversion error: {e}")
+            ctx.exit(1)
+            return
+        except NotImplementedError as e:
+            console.print(f"[red]Error:[/red] Conversion not implemented: {e}")
+            ctx.exit(1)
+            return
+        except (OverflowError, TypeError) as e:
+            console.print(f"[red]Error:[/red] Type conversion failed: {e}")
+            ctx.exit(1)
+            return
+
+        # Write
+        if dry_run:
+            console.print("[green]Dry run complete. No files written.[/green]")
+            return
+
+        if prog is not None:
+            prog.update(_task, description="Writing output...")
+
+        try:
+            write_data_collection(converted, output_path, out_collections, file_codes)
+        except (OSError, TypeError) as e:
+            console.print(f"[red]Error:[/red] Failed to write output: {e}")
+            ctx.exit(1)
+            return
+
+        if prog is not None:
+            prog.update(_task, description="[green]Done.[/green]")
 
     console.print(
         f"[green]Converted {in_version} -> {out_version} "
