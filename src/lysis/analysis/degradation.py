@@ -370,8 +370,10 @@ def find_degradation_fronts(
         n_sims = run.macro_params.macro_simulations
         rows = run.macro_params.rows
         cols = run.macro_params.cols
-        pore_size_um = run.macro_params.pore_size.to("microns").magnitude
-        y_distance = np.arange(rows - 1) * pore_size_um
+        grid_node_distance = (
+            run.macro_params.pore_size + 2 * run.macro_params.micro_params.fiber_radius
+        )
+        y_distance = (np.arange(rows - 1) * grid_node_distance).to("microns").magnitude
 
         deg_fronts = []
         for sim in range(n_sims):
@@ -666,7 +668,9 @@ def plot_front_degradation(
     cols = run.macro_params.cols
     empty_rows = run.macro_params.empty_rows
     rows = run.macro_params.rows
-    pore_size_um = run.macro_params.pore_size.to("microns").magnitude
+    grid_node_distance = (
+        run.macro_params.pore_size + 2 * run.macro_params.micro_params.fiber_radius
+    )
 
     x_max = (
         max(
@@ -681,8 +685,8 @@ def plot_front_degradation(
     ax.set_axis_on()
     ax.set_xlim(0, x_max)
     ax.set_ylim(
-        (empty_rows - 1) * pore_size_um,
-        (rows - 1) * pore_size_um,
+        ((empty_rows - 1) * grid_node_distance).to("microns").magnitude,
+        ((rows - 1) * grid_node_distance).to("microns").magnitude,
     )
 
     for sim in range(n_sims):
