@@ -341,12 +341,15 @@ class TestFindDegradationFronts:
             for col_front in sim_fronts:
                 assert np.all(col_front[1] > 0.0)
 
-    def test_y_distances_are_multiples_of_pore_size(self, deg_fronts, stub_run):
-        """y-distances must be integer multiples of pore_size (µm)."""
-        pore_um = stub_run.macro_params.pore_size.to("microns").magnitude
+    def test_y_distances_are_multiples_of_grid_node_distance(self, deg_fronts, stub_run):
+        """y-distances must be integer multiples of grid_node_distance (µm)."""
+        grid_node_distance = (
+            stub_run.macro_params.pore_size
+            + 2 * stub_run.macro_params.micro_params.fiber_radius
+        ).to("microns").magnitude
         for sim_fronts in deg_fronts:
             for col_front in sim_fronts:
-                ratios = col_front[1] / pore_um
+                ratios = col_front[1] / grid_node_distance
                 np.testing.assert_allclose(ratios, np.round(ratios), atol=1e-9)
 
     def test_three_front_events_per_column(self, deg_fronts, stub_run):
