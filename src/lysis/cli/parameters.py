@@ -209,7 +209,7 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
     from contextlib import nullcontext
 
     from lysis.analysis.summary import parameters_table
-    from lysis.cli.display import emit_markdown, params_df_to_markdown, params_df_to_rich
+    from lysis.tools.display import emit_markdown, params_df_to_markdown, params_df_to_rich
     from lysis.config.parameters import MacroParameters
 
     console = ctx.obj["console"]

@@ -39,7 +39,7 @@ def mock_params():
 def _params_to_markdown(param_specs, add_names, natural_units, rows, ordered_codes,
                         single_file_code=None):
     from lysis.analysis.summary import parameters_table
-    from lysis.cli.display import params_df_to_markdown
+    from lysis.tools.display import params_df_to_markdown
     df = parameters_table(rows, param_specs, add_names, natural_units, ordered_codes)
     return params_df_to_markdown(df, single_code=single_file_code)
 
@@ -71,19 +71,19 @@ class TestParametersHelp:
 
 class TestMdTableParameters:
     def test_header_pipe_format(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["Parameter", "Run1"], [["pore_size", "1.0135"]])
         assert out.splitlines()[0] == "| Parameter | Run1 |"
 
     def test_separator_row(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["A", "B", "C"], [])
         assert out.splitlines()[1] == "| --- | --- | --- |"
 
     def test_data_row_present(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["P", "V"], [["pore_size (microns)", "1.0135"]])
         assert "| pore_size (microns) | 1.0135 |" in out

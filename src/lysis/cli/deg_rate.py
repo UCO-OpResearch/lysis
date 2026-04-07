@@ -192,7 +192,7 @@ def deg_rate(ctx, path, sort_mode, no_progress, markdown_out, add_intervals, dro
     from contextlib import nullcontext
 
     from lysis.analysis.summary import deg_rate_table
-    from lysis.cli.display import emit_markdown, stats_df_to_markdown, stats_df_to_rich
+    from lysis.tools.display import emit_markdown, stats_df_to_markdown, stats_df_to_rich
     from lysis.tools.runcode_sort import smart_sort
     from rich.progress import (
         BarColumn,

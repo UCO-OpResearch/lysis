@@ -48,7 +48,7 @@ def mock_stats():
 
 def _summarize_to_markdown(rows_dict, metrics, single_file_code=None):
     from lysis.analysis.summary import macro_stats_table
-    from lysis.cli.display import stats_df_to_markdown
+    from lysis.tools.display import stats_df_to_markdown
     df = macro_stats_table(rows_dict)
     return stats_df_to_markdown(df, "Run", single_code=single_file_code)
 
@@ -79,27 +79,27 @@ class TestSummarizeHelp:
 
 class TestMdTable:
     def test_header_row(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         lines = out.splitlines()
         assert lines[0] == "| A | B |"
 
     def test_separator_row(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         lines = out.splitlines()
         assert lines[1] == "| --- | --- |"
 
     def test_data_row(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["hello", "world"]])
         assert "| hello | world |" in out
 
     def test_multiple_rows(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["X"], [["r1"], ["r2"], ["r3"]])
         assert out.count("| r") == 3

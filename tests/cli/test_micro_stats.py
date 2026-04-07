@@ -50,7 +50,7 @@ def mock_stats():
 
 def _micro_stats_to_markdown(rows_dict, single_file_code=None):
     from lysis.analysis.summary import micro_stats_table
-    from lysis.cli.display import stats_df_to_markdown
+    from lysis.tools.display import stats_df_to_markdown
     df = micro_stats_table(rows_dict)
     return stats_df_to_markdown(df, "Run", single_code=single_file_code)
 
@@ -138,19 +138,19 @@ class TestFmtMetric:
 
 class TestMdTableMicroStats:
     def test_header_row(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         assert out.splitlines()[0] == "| A | B |"
 
     def test_separator_row(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         assert out.splitlines()[1] == "| --- | --- |"
 
     def test_data_row(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["hello", "world"]])
         assert "| hello | world |" in out

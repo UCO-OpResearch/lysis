@@ -36,7 +36,7 @@ def mock_stats():
 
 def _deg_time_to_markdown(rows_dict, markers, single_file_code=None):
     from lysis.analysis.summary import deg_time_table
-    from lysis.cli.display import stats_df_to_markdown
+    from lysis.tools.display import stats_df_to_markdown
     md_col_headers = {f"{m}%": f"{m}% (min)" for m in markers}
     df = deg_time_table(rows_dict, markers).rename(columns=md_col_headers)
     return stats_df_to_markdown(df, "Run", single_code=single_file_code)
@@ -121,19 +121,19 @@ class TestParseMarker:
 
 class TestMdTableDegTime:
     def test_header_row(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         assert out.splitlines()[0] == "| A | B |"
 
     def test_separator_row(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         assert out.splitlines()[1] == "| --- | --- |"
 
     def test_data_row(self):
-        from lysis.cli.display import md_table as _md_table
+        from lysis.tools.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["hello", "world"]])
         assert "| hello | world |" in out
