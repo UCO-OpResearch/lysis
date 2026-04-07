@@ -6,6 +6,103 @@ import click
 
 from lysis.cli import cli
 
+# ---------------------------------------------------------------------------
+# Markdown helpers
+# ---------------------------------------------------------------------------
+
+
+def _md_table(headers, rows):
+    """Build a GitHub-flavored Markdown table string.
+
+    :param headers: Column header strings.
+    :type headers: list[str]
+    :param rows: Data rows, each a list of cell strings.
+    :type rows: list[list[str]]
+    :return: GFM table as a string.
+    :rtype: str
+    """
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    lines += ["| " + " | ".join(row) + " |" for row in rows]
+    return "\n".join(lines)
+
+
+def _params_to_markdown(
+    param_specs, add_names, natural_units, rows, ordered_codes, single_file_code=None
+):
+    """Build a Markdown string from parameters data.
+
+    Splits parameters into Macroscale and Microscale sections.  An optional
+    Additional Parameters section is appended when *add_names* is non-empty.
+
+    :param param_specs: Effective parameter spec list (after --drop filtering).
+    :param add_names: Extra parameter names added via --add.
+    :param natural_units: Dict of attr_name → unit string for column headers.
+    :param rows: Dict of run_code → formatted-value dict.
+    :param ordered_codes: Run codes in display order.
+    :param single_file_code: Run code when operating on a single file, or
+        ``None`` for directory mode.
+    :return: Markdown text.
+    :rtype: str
+    """
+    lines = []
+    if single_file_code is not None:
+        lines += [f"## {single_file_code}", ""]
+
+    macro_specs = [(a, s, d, f) for a, s, d, f in param_specs if s != "micro"]
+    micro_specs = [(a, s, d, f) for a, s, d, f in param_specs if s == "micro"]
+
+    for section_label, specs in [
+        ("Macroscale Parameters", macro_specs),
+        ("Microscale Parameters", micro_specs),
+    ]:
+        if not specs:
+            continue
+        lines += [f"### {section_label}", ""]
+        headers = ["Parameter"] + ordered_codes
+        table_rows = [
+            [_param_header(a, d, natural_units)] + [rows[rc][a] for rc in ordered_codes]
+            for a, _s, d, _f in specs
+        ]
+        lines.append(_md_table(headers, table_rows))
+        lines.append("")
+
+    if add_names:
+        lines += ["### Additional Parameters", ""]
+        headers = ["Parameter"] + ordered_codes
+        table_rows = [
+            [_param_header(a, None, natural_units)] + [rows[rc][a] for rc in ordered_codes]
+            for a in add_names
+        ]
+        lines.append(_md_table(headers, table_rows))
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _emit_markdown(md_text, markdown_out, console):
+    """Write *md_text* to stdout or a file.
+
+    :param md_text: Markdown content to write.
+    :type md_text: str
+    :param markdown_out: ``"-"`` for stdout, or a file path.
+    :type markdown_out: str
+    :param console: Rich Console for status messages.
+    """
+    if markdown_out == "-":
+        print(md_text)
+    else:
+        try:
+            with open(markdown_out, "w", encoding="utf-8") as fh:
+                fh.write(md_text)
+                if not md_text.endswith("\n"):
+                    fh.write("\n")
+            console.print(f"[green]Markdown written to {markdown_out}[/green]")
+        except OSError as e:
+            console.print(f"[red]Error:[/red] Could not write to {markdown_out}: {e}")
+
 # Each entry: (attr_name, source, display_units, fmt)
 # source:        "macro" | "micro" | "computed" — informational only
 # display_units: pint unit string to convert to before showing the magnitude,
@@ -203,8 +300,21 @@ def _build_table(param_specs, add_names, natural_units, rows, ordered_codes):
         "Example: --drop empty_rows --drop macro_seed"
     ),
 )
+@click.option(
+    "--markdown",
+    "markdown_out",
+    type=str,
+    default=None,
+    metavar="FILE",
+    help=(
+        "Output results as Markdown.  Use '-' to print to the console, "
+        "or provide a filename to write to a file.  "
+        "Progress indicators are suppressed automatically.  "
+        "Example: --markdown -, --markdown params.md"
+    ),
+)
 @click.pass_context
-def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params):
+def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markdown_out):
     """Print parameter tables for one or more simulation Runs.
 
     PATH may be a single HDF5 file or a directory. When a directory is given,
@@ -218,13 +328,19 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params):
         lysis parameters data/lysis-front/
         lysis parameters data/lysis-front/ --sort alpha
         lysis parameters data/ --drop empty_rows --add protofibril_radius
+        lysis parameters data/ --markdown -
+        lysis parameters data/ --markdown params.md
     """
     from contextlib import nullcontext
 
-    from lysis.config.parameters import MacroParameters, MicroParameters
+    from lysis.config.parameters import MacroParameters
 
     console = ctx.obj["console"]
     path = os.path.abspath(path)
+
+    # Suppress progress when producing structured markdown output
+    if markdown_out is not None:
+        no_progress = True
 
     # Build effective parameter spec list
     drop_set = set(drop_params)
@@ -253,10 +369,20 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params):
             ctx.exit(1)
             return
 
-        table = _build_table(
-            param_specs, add_names, natural_units, {run_code: values}, [run_code]
-        )
-        console.print(table)
+        if markdown_out is not None:
+            _emit_markdown(
+                _params_to_markdown(
+                    param_specs, add_names, natural_units,
+                    {run_code: values}, [run_code], single_file_code=run_code,
+                ),
+                markdown_out,
+                console,
+            )
+        else:
+            table = _build_table(
+                param_specs, add_names, natural_units, {run_code: values}, [run_code]
+            )
+            console.print(table)
 
     else:
         # --- directory mode: parameters × runs table ---
@@ -315,5 +441,13 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params):
             return
 
         ordered = [rc for rc in run_codes if rc in rows]
-        table = _build_table(param_specs, add_names, natural_units, rows, ordered)
-        console.print(table)
+
+        if markdown_out is not None:
+            _emit_markdown(
+                _params_to_markdown(param_specs, add_names, natural_units, rows, ordered),
+                markdown_out,
+                console,
+            )
+        else:
+            table = _build_table(param_specs, add_names, natural_units, rows, ordered)
+            console.print(table)
