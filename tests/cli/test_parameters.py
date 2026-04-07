@@ -32,19 +32,6 @@ def mock_params():
 
 
 # ---------------------------------------------------------------------------
-# Wrappers around the new public API (replaces removed private helpers)
-# ---------------------------------------------------------------------------
-
-
-def _params_to_markdown(param_specs, add_names, natural_units, rows, ordered_codes,
-                        single_file_code=None):
-    from lysis.analysis.summary import parameters_table
-    from lysis.tools.display import params_df_to_markdown
-    df = parameters_table(rows, param_specs, add_names, natural_units, ordered_codes)
-    return params_df_to_markdown(df, single_code=single_file_code)
-
-
-# ---------------------------------------------------------------------------
 # Help
 # ---------------------------------------------------------------------------
 
@@ -62,118 +49,6 @@ class TestParametersHelp:
         result = runner.invoke(cli, ["parameters", "--help"])
         assert "--add" in result.output
         assert "--drop" in result.output
-
-
-# ---------------------------------------------------------------------------
-# Markdown helpers (unit tests)
-# ---------------------------------------------------------------------------
-
-
-class TestMdTableParameters:
-    def test_header_pipe_format(self):
-        from lysis.tools.display import md_table as _md_table
-
-        out = _md_table(["Parameter", "Run1"], [["pore_size", "1.0135"]])
-        assert out.splitlines()[0] == "| Parameter | Run1 |"
-
-    def test_separator_row(self):
-        from lysis.tools.display import md_table as _md_table
-
-        out = _md_table(["A", "B", "C"], [])
-        assert out.splitlines()[1] == "| --- | --- | --- |"
-
-    def test_data_row_present(self):
-        from lysis.tools.display import md_table as _md_table
-
-        out = _md_table(["P", "V"], [["pore_size (microns)", "1.0135"]])
-        assert "| pore_size (microns) | 1.0135 |" in out
-
-
-class TestParamsToMarkdown:
-    """Unit tests for the parameters markdown output (via parameters_table + params_df_to_markdown)."""
-
-    def _natural_units(self):
-        from lysis.config.parameters import MacroParameters
-        return MacroParameters.units()
-
-    def test_single_file_heading(self, mock_params):
-        md = _params_to_markdown(
-            _DEFAULT_PARAMS, [], self._natural_units(),
-            {"run_A": mock_params}, ["run_A"], single_file_code="run_A",
-        )
-        assert md.startswith("## run_A")
-
-    def test_macroscale_section_header(self, mock_params):
-        md = _params_to_markdown(
-            _DEFAULT_PARAMS, [], self._natural_units(),
-            {"run_A": mock_params}, ["run_A"],
-        )
-        assert "### Macroscale Parameters" in md
-
-    def test_microscale_section_header(self, mock_params):
-        md = _params_to_markdown(
-            _DEFAULT_PARAMS, [], self._natural_units(),
-            {"run_A": mock_params}, ["run_A"],
-        )
-        assert "### Microscale Parameters" in md
-
-    def test_macro_param_appears_in_macro_section(self, mock_params):
-        md = _params_to_markdown(
-            _DEFAULT_PARAMS, [], self._natural_units(),
-            {"run_A": mock_params}, ["run_A"],
-        )
-        macro_section = md.split("### Macroscale Parameters")[1].split("### Microscale")[0]
-        assert "pore_size" in macro_section
-
-    def test_micro_param_appears_in_micro_section(self, mock_params):
-        md = _params_to_markdown(
-            _DEFAULT_PARAMS, [], self._natural_units(),
-            {"run_A": mock_params}, ["run_A"],
-        )
-        micro_section = md.split("### Microscale Parameters")[1]
-        assert "bind_rate_tPA" in micro_section
-
-    def test_run_code_as_column(self, mock_params):
-        md = _params_to_markdown(
-            _DEFAULT_PARAMS, [], self._natural_units(),
-            {"run_X": mock_params}, ["run_X"],
-        )
-        assert "run_X" in md
-
-    def test_multiple_run_codes_as_columns(self):
-        rows = {"run_X": _make_params("1.0"), "run_Y": _make_params("2.0")}
-        md = _params_to_markdown(
-            _DEFAULT_PARAMS, [], self._natural_units(),
-            rows, ["run_X", "run_Y"],
-        )
-        header_lines = [l for l in md.splitlines() if "run_X" in l]
-        assert any("run_Y" in l for l in header_lines)
-
-    def test_add_names_create_additional_section(self, mock_params):
-        extra_params = {**mock_params, "protofibril_radius": "0.0024"}
-        md = _params_to_markdown(
-            _DEFAULT_PARAMS, ["protofibril_radius"], self._natural_units(),
-            {"run_A": extra_params}, ["run_A"],
-        )
-        assert "### Additional Parameters" in md
-        assert "protofibril_radius" in md
-
-    def test_no_add_names_no_additional_section(self, mock_params):
-        md = _params_to_markdown(
-            _DEFAULT_PARAMS, [], self._natural_units(),
-            {"run_A": mock_params}, ["run_A"],
-        )
-        assert "### Additional Parameters" not in md
-
-    def test_drop_removes_param(self):
-        filtered = [p for p in _DEFAULT_PARAMS if p[0] != "pore_size"]
-        rows = {"run_A": _make_params()}
-        del rows["run_A"]["pore_size"]
-
-        md = _params_to_markdown(
-            filtered, [], self._natural_units(), rows, ["run_A"],
-        )
-        assert "pore_size" not in md
 
 
 # ---------------------------------------------------------------------------

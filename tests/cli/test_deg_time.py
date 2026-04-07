@@ -30,19 +30,6 @@ def mock_stats():
 
 
 # ---------------------------------------------------------------------------
-# Wrappers around the new public API (replaces removed private helpers)
-# ---------------------------------------------------------------------------
-
-
-def _deg_time_to_markdown(rows_dict, markers, single_file_code=None):
-    from lysis.analysis.summary import deg_time_table
-    from lysis.tools.display import stats_df_to_markdown
-    md_col_headers = {f"{m}%": f"{m}% (min)" for m in markers}
-    df = deg_time_table(rows_dict, markers).rename(columns=md_col_headers)
-    return stats_df_to_markdown(df, "Run", single_code=single_file_code)
-
-
-# ---------------------------------------------------------------------------
 # Help
 # ---------------------------------------------------------------------------
 
@@ -112,83 +99,6 @@ class TestParseMarker:
 
         with pytest.raises(click.BadParameter):
             _parse_marker("101")
-
-
-# ---------------------------------------------------------------------------
-# Markdown helpers (unit tests)
-# ---------------------------------------------------------------------------
-
-
-class TestMdTableDegTime:
-    def test_header_row(self):
-        from lysis.tools.display import md_table as _md_table
-
-        out = _md_table(["A", "B"], [["1", "2"]])
-        assert out.splitlines()[0] == "| A | B |"
-
-    def test_separator_row(self):
-        from lysis.tools.display import md_table as _md_table
-
-        out = _md_table(["A", "B"], [["1", "2"]])
-        assert out.splitlines()[1] == "| --- | --- |"
-
-    def test_data_row(self):
-        from lysis.tools.display import md_table as _md_table
-
-        out = _md_table(["A", "B"], [["hello", "world"]])
-        assert "| hello | world |" in out
-
-
-class TestDegTimeToMarkdown:
-    def test_single_file_heading(self, mock_stats):
-        md = _deg_time_to_markdown(
-            {"run_A": mock_stats}, _DEFAULT_MARKERS, single_file_code="run_A"
-        )
-        assert md.startswith("## run_A")
-
-    def test_single_file_two_columns(self, mock_stats):
-        # Single-file markdown now shows combined "mean ± std" in one Value column
-        md = _deg_time_to_markdown(
-            {"run_A": mock_stats}, _DEFAULT_MARKERS, single_file_code="run_A"
-        )
-        header_line = [l for l in md.splitlines() if "Metric" in l][0]
-        assert header_line.count("|") == 3  # | Metric | Value |
-
-    def test_single_file_milestone_label(self, mock_stats):
-        md = _deg_time_to_markdown(
-            {"run_A": mock_stats}, _DEFAULT_MARKERS, single_file_code="run_A"
-        )
-        assert "50%" in md
-
-    def test_single_file_values_formatted(self, mock_stats):
-        md = _deg_time_to_markdown(
-            {"run_A": mock_stats}, _DEFAULT_MARKERS, single_file_code="run_A"
-        )
-        assert "42.00" in md
-        assert "3.50" in md
-
-    def test_directory_run_codes_as_rows(self):
-        rows = {"run_X": _make_stats(40.0, 2.0), "run_Y": _make_stats(50.0, 4.0)}
-        md = _deg_time_to_markdown(rows, _DEFAULT_MARKERS)
-        assert "run_X" in md
-        assert "run_Y" in md
-
-    def test_directory_header_starts_with_run(self):
-        rows = {"run_X": _make_stats()}
-        md = _deg_time_to_markdown(rows, _DEFAULT_MARKERS)
-        assert md.splitlines()[0].startswith("| Run |")
-
-    def test_directory_mean_pm_std_format(self):
-        rows = {"run_X": _make_stats(42.0, 3.5)}
-        md = _deg_time_to_markdown(rows, _DEFAULT_MARKERS)
-        assert "42.00" in md
-        assert "\u00b1" in md  # ±
-
-    def test_directory_all_markers_present(self):
-        rows = {"run_X": _make_stats()}
-        md = _deg_time_to_markdown(rows, _DEFAULT_MARKERS)
-        for m in _DEFAULT_MARKERS:
-            assert f"{m}%" in md
 
 
 # ---------------------------------------------------------------------------
