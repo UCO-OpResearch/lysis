@@ -1,4 +1,4 @@
-"""``lysis summarize`` — print summary statistics for a simulation Run."""
+"""``lysis macro-stats`` — print macroscale summary statistics for a simulation Run."""
 
 import os
 
@@ -128,7 +128,7 @@ def _load_run_stats(data_root, run_code, console):
         run.data.close()
 
 
-@cli.command()
+@cli.command(name="macro-stats")
 @click.argument("path", type=click.Path(exists=True, file_okay=True, dir_okay=True))
 @click.option(
     "--sort",
@@ -162,8 +162,8 @@ def _load_run_stats(data_root, run_code, console):
     ),
 )
 @click.pass_context
-def summarize(ctx, path, sort_mode, no_progress, markdown_out):
-    """Print summary statistics for one or more simulation Runs.
+def macro_stats(ctx, path, sort_mode, no_progress, markdown_out):
+    """Print macroscale summary statistics for one or more simulation Runs.
 
     PATH may be a single HDF5 file or a directory. When a directory is given,
     statistics for every .h5 file found in that directory are computed and
@@ -171,11 +171,11 @@ def summarize(ctx, path, sort_mode, no_progress, markdown_out):
 
     \b
     Examples:
-        lysis summarize data/TB-xi__1_582_867.h5
-        lysis summarize data/lysis-front/
-        lysis summarize data/lysis-front/ --sort alpha
-        lysis summarize data/ --markdown -
-        lysis summarize data/ --markdown report.md
+        lysis macro-stats data/TB-xi__1_582_867.h5
+        lysis macro-stats data/lysis-front/
+        lysis macro-stats data/lysis-front/ --sort alpha
+        lysis macro-stats data/ --markdown -
+        lysis macro-stats data/ --markdown report.md
     """
     console = ctx.obj["console"]
     path = os.path.abspath(path)
@@ -256,7 +256,7 @@ def summarize(ctx, path, sort_mode, no_progress, markdown_out):
 
         with _pctx as prog:
             _task = (
-                prog.add_task("Summarizing runs...", total=len(run_codes))
+                prog.add_task("Computing macro statistics...", total=len(run_codes))
                 if prog is not None
                 else None
             )
