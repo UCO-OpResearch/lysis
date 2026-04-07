@@ -689,3 +689,38 @@ class TestGetTotalBinds:
         """Array length equals macro_simulations."""
         result = get_total_binds(log_run, "_test")
         assert len(result) == small_macro.macro_simulations
+
+
+# ===========================================================================
+# _build_percent_markers
+# ===========================================================================
+
+
+class TestBuildPercentMarkers:
+    """Tests for :func:`~lysis.analysis.degradation._build_percent_markers`."""
+
+    def test_includes_bookends(self):
+        from lysis.analysis.degradation import _build_percent_markers
+
+        markers = _build_percent_markers([(20, 80)])
+        assert 0.0 in markers
+        assert 1.0 in markers
+
+    def test_includes_endpoints(self):
+        from lysis.analysis.degradation import _build_percent_markers
+
+        markers = _build_percent_markers([(20, 80)])
+        assert 0.20 in markers
+        assert 0.80 in markers
+
+    def test_sorted(self):
+        from lysis.analysis.degradation import _build_percent_markers
+
+        markers = _build_percent_markers([(20, 80), (50, 90)])
+        assert markers == sorted(markers)
+
+    def test_no_duplicates(self):
+        from lysis.analysis.degradation import _build_percent_markers
+
+        markers = _build_percent_markers([(20, 80), (20, 50), (50, 80)])
+        assert len(markers) == len(set(markers))

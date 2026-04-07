@@ -168,6 +168,9 @@ def _marker_label(pct, with_units=True):
 def _load_run_deg_times(data_root, run_code, markers, console):
     """Load a Run and compute degradation times for each milestone.
 
+    Delegates to
+    :func:`~lysis.analysis.degradation.compute_degradation_marker_stats`.
+
     :param data_root: Directory containing the HDF5 file.
     :type data_root: str
     :param run_code: Run code (HDF5 filename without extension).
@@ -179,7 +182,7 @@ def _load_run_deg_times(data_root, run_code, markers, console):
         on error.
     :rtype: dict[int, tuple] or None
     """
-    from lysis.analysis.degradation import find_degradation_marker_times
+    from lysis.analysis.degradation import compute_degradation_marker_stats
     from lysis.config.run import Run
 
     try:
@@ -191,13 +194,7 @@ def _load_run_deg_times(data_root, run_code, markers, console):
         return None
 
     try:
-        pct_markers = [m / 100 for m in markers]
-        times = find_degradation_marker_times(run, pct_markers)
-        # times: shape (n_sims, n_markers), already in minutes
-        return {
-            m: (float(times[:, k].mean()), float(times[:, k].std()))
-            for k, m in enumerate(markers)
-        }
+        return compute_degradation_marker_stats(run, markers)
     except Exception as e:
         console.print(f"[red]Error computing times for {run_code}:[/red] {e}")
         return None

@@ -149,22 +149,6 @@ def _parse_interval(s, param_name="interval"):
     return (start, end)
 
 
-def _build_percent_markers(intervals):
-    """Return a sorted list of fractional markers covering all interval endpoints.
-
-    Always includes 0.0 and 1.0 as bookends.
-
-    :param intervals: List of (start, end) integer percent pairs.
-    :type intervals: list[tuple[int, int]]
-    :return: Sorted list of fractions.
-    :rtype: list[float]
-    """
-    endpoints = {0, 100}
-    for start, end in intervals:
-        endpoints.add(start)
-        endpoints.add(end)
-    return [p / 100 for p in sorted(endpoints)]
-
 
 def _interval_label(start, end, with_units=True):
     """Human-readable label for an interval.
@@ -187,6 +171,9 @@ def _interval_label(start, end, with_units=True):
 def _load_run_deg_rates(data_root, run_code, intervals, console):
     """Load a Run and compute degradation rates for each interval.
 
+    Delegates to
+    :func:`~lysis.analysis.degradation.compute_degradation_rate_stats`.
+
     :param data_root: Directory containing the HDF5 file.
     :type data_root: str
     :param run_code: Run code (HDF5 filename without extension).
@@ -198,7 +185,7 @@ def _load_run_deg_rates(data_root, run_code, intervals, console):
         or ``None`` on error.
     :rtype: dict[tuple, tuple] or None
     """
-    from lysis.analysis.degradation import degradation_rates
+    from lysis.analysis.degradation import compute_degradation_rate_stats
     from lysis.config.run import Run
 
     try:
@@ -210,15 +197,7 @@ def _load_run_deg_rates(data_root, run_code, intervals, console):
         return None
 
     try:
-        slope_pairs = [(s / 100, e / 100) for s, e in intervals]
-        pct_markers = _build_percent_markers(intervals)
-        rates = degradation_rates(run, slope_pairs, pct_markers)
-        # rates: shape (n_sims, n_intervals), fraction/min → multiply by 100 for %/min
-        rates_pct = rates * 100
-        return {
-            ivl: (float(rates_pct[:, k].mean()), float(rates_pct[:, k].std()))
-            for k, ivl in enumerate(intervals)
-        }
+        return compute_degradation_rate_stats(run, intervals)
     except Exception as e:
         console.print(f"[red]Error computing rates for {run_code}:[/red] {e}")
         return None

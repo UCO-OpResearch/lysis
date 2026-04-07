@@ -105,34 +105,6 @@ class TestParseInterval:
             _parse_interval("0-101")
 
 
-class TestBuildPercentMarkers:
-    def test_includes_bookends(self):
-        from lysis.cli.deg_rate import _build_percent_markers
-
-        markers = _build_percent_markers([(20, 80)])
-        assert 0.0 in markers
-        assert 1.0 in markers
-
-    def test_includes_endpoints(self):
-        from lysis.cli.deg_rate import _build_percent_markers
-
-        markers = _build_percent_markers([(20, 80)])
-        assert 0.20 in markers
-        assert 0.80 in markers
-
-    def test_sorted(self):
-        from lysis.cli.deg_rate import _build_percent_markers
-
-        markers = _build_percent_markers([(20, 80), (50, 90)])
-        assert markers == sorted(markers)
-
-    def test_no_duplicates(self):
-        from lysis.cli.deg_rate import _build_percent_markers
-
-        markers = _build_percent_markers([(20, 80), (20, 50), (50, 80)])
-        assert len(markers) == len(set(markers))
-
-
 # ---------------------------------------------------------------------------
 # Markdown helpers (unit tests)
 # ---------------------------------------------------------------------------

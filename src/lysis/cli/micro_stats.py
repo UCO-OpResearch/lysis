@@ -8,7 +8,6 @@ all microscale simulations.
 import os
 
 import click
-import numpy as np
 
 from lysis.cli import cli
 
@@ -147,9 +146,7 @@ def _emit_markdown(md_text, markdown_out, console):
 def _load_run_micro_stats(data_root, run_code, console):
     """Load a Run and compute microscale statistics.
 
-    Reads ``fiber_degraded``, ``sim_final_time``, and ``tpa_leaving_time``
-    from ``microscale_out`` and returns summary statistics matching the
-    notebook's ``microscale_df`` table.
+    Delegates to :func:`~lysis.analysis.microscale.compute_micro_statistics`.
 
     :param data_root: Directory containing the HDF5 file.
     :type data_root: str
@@ -161,33 +158,18 @@ def _load_run_micro_stats(data_root, run_code, console):
         ``tpa_leaving_std``, ``tpa_leaving_median``; or ``None`` on error.
     :rtype: dict or None
     """
+    from lysis.analysis.microscale import compute_micro_statistics
     from lysis.config.run import Run
 
     try:
         run = Run(data_root, run_code)
         run.open_data()
-        run.macro_params = run.data.macro_params
     except Exception as e:
         console.print(f"[red]Error loading {run_code}:[/red] {e}")
         return None
 
     try:
-        micro = run.data.microscale_out
-        fiber_degraded = micro.fiber_degraded[:]
-        sim_final_time = micro.sim_final_time[:]
-        tpa_leaving_time = micro.tpa_leaving_time[:]
-
-        lysis_times = sim_final_time[fiber_degraded]
-
-        return {
-            "fibers_degraded": int(np.sum(fiber_degraded)),
-            "lysis_time_mean": float(np.mean(lysis_times) / 60),
-            "lysis_time_std": float(np.std(lysis_times) / 60),
-            "lysis_time_median": float(np.median(lysis_times) / 60),
-            "tpa_leaving_mean": float(np.mean(tpa_leaving_time)),
-            "tpa_leaving_std": float(np.std(tpa_leaving_time)),
-            "tpa_leaving_median": float(np.median(tpa_leaving_time)),
-        }
+        return compute_micro_statistics(run)
     except Exception as e:
         console.print(f"[red]Error computing statistics for {run_code}:[/red] {e}")
         return None

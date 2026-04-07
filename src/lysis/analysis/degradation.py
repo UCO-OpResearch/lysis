@@ -71,6 +71,8 @@ __all__ = [
     "get_processing_time",
     "get_total_binds",
     "compute_run_statistics",
+    "compute_degradation_marker_stats",
+    "compute_degradation_rate_stats",
 ]
 
 
@@ -893,3 +895,79 @@ def compute_run_statistics(
     result = pd.Series(values, index=index)
     run._cache[key] = result
     return result
+
+
+###############################################################################
+# Aggregated stat helpers (mean ± std across simulations)
+###############################################################################
+
+
+def compute_degradation_marker_stats(
+    run: "Run",
+    percent_markers: list[int],
+) -> dict[int, tuple[float, float]]:
+    """Compute mean and standard deviation of degradation-milestone times.
+
+    Calls :func:`find_degradation_marker_times` and aggregates across
+    simulations, returning results in minutes.
+
+    :param run: Run object supplying macro grid parameters and data.
+    :type run: Run
+    :param percent_markers: Integer percentage milestones, e.g.
+        ``[5, 20, 50, 80, 100]``.
+    :type percent_markers: list[int]
+    :return: Mapping from each integer milestone to
+        ``(mean_min, std_min)``.
+    :rtype: dict[int, tuple[float, float]]
+    """
+    pct_fractions = [m / 100 for m in percent_markers]
+    times = find_degradation_marker_times(run, pct_fractions)
+    return {
+        m: (float(times[:, k].mean()), float(times[:, k].std()))
+        for k, m in enumerate(percent_markers)
+    }
+
+
+def _build_percent_markers(intervals: list[tuple[int, int]]) -> list[float]:
+    """Return a sorted list of fractional markers covering all interval endpoints.
+
+    Always includes 0.0 and 1.0 as bookends.
+
+    :param intervals: List of (start, end) integer percent pairs.
+    :type intervals: list[tuple[int, int]]
+    :return: Sorted list of fractions with no duplicates.
+    :rtype: list[float]
+    """
+    endpoints = {0, 100}
+    for start, end in intervals:
+        endpoints.add(start)
+        endpoints.add(end)
+    return [p / 100 for p in sorted(endpoints)]
+
+
+def compute_degradation_rate_stats(
+    run: "Run",
+    intervals: list[tuple[int, int]],
+) -> dict[tuple[int, int], tuple[float, float]]:
+    """Compute mean and standard deviation of degradation rates for each interval.
+
+    Calls :func:`degradation_rates` and aggregates across simulations,
+    converting results from fraction/min to %/min.
+
+    :param run: Run object supplying macro grid parameters and data.
+    :type run: Run
+    :param intervals: List of ``(start, end)`` integer percentage pairs, e.g.
+        ``[(20, 80), (20, 50), (50, 80)]``.
+    :type intervals: list[tuple[int, int]]
+    :return: Mapping from each ``(start, end)`` pair to
+        ``(mean_pct_per_min, std_pct_per_min)``.
+    :rtype: dict[tuple[int, int], tuple[float, float]]
+    """
+    slope_pairs = [(s / 100, e / 100) for s, e in intervals]
+    pct_markers = _build_percent_markers(intervals)
+    rates = degradation_rates(run, slope_pairs, pct_markers)
+    rates_pct = rates * 100
+    return {
+        ivl: (float(rates_pct[:, k].mean()), float(rates_pct[:, k].std()))
+        for k, ivl in enumerate(intervals)
+    }
