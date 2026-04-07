@@ -30,6 +30,19 @@ def mock_stats():
 
 
 # ---------------------------------------------------------------------------
+# Wrappers around the new public API (replaces removed private helpers)
+# ---------------------------------------------------------------------------
+
+
+def _deg_time_to_markdown(rows_dict, markers, single_file_code=None):
+    from lysis.analysis.summary import deg_time_table
+    from lysis.cli.display import stats_df_to_markdown
+    md_col_headers = {f"{m}%": f"{m}% (min)" for m in markers}
+    df = deg_time_table(rows_dict, markers).rename(columns=md_col_headers)
+    return stats_df_to_markdown(df, "Run", single_code=single_file_code)
+
+
+# ---------------------------------------------------------------------------
 # Help
 # ---------------------------------------------------------------------------
 
@@ -108,19 +121,19 @@ class TestParseMarker:
 
 class TestMdTableDegTime:
     def test_header_row(self):
-        from lysis.cli.deg_time import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         assert out.splitlines()[0] == "| A | B |"
 
     def test_separator_row(self):
-        from lysis.cli.deg_time import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         assert out.splitlines()[1] == "| --- | --- |"
 
     def test_data_row(self):
-        from lysis.cli.deg_time import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["hello", "world"]])
         assert "| hello | world |" in out
@@ -128,34 +141,26 @@ class TestMdTableDegTime:
 
 class TestDegTimeToMarkdown:
     def test_single_file_heading(self, mock_stats):
-        from lysis.cli.deg_time import _deg_time_to_markdown
-
         md = _deg_time_to_markdown(
             {"run_A": mock_stats}, _DEFAULT_MARKERS, single_file_code="run_A"
         )
         assert md.startswith("## run_A")
 
-    def test_single_file_three_columns(self, mock_stats):
-        from lysis.cli.deg_time import _deg_time_to_markdown
-
+    def test_single_file_two_columns(self, mock_stats):
+        # Single-file markdown now shows combined "mean ± std" in one Value column
         md = _deg_time_to_markdown(
             {"run_A": mock_stats}, _DEFAULT_MARKERS, single_file_code="run_A"
         )
-        header_line = [l for l in md.splitlines() if "Milestone" in l][0]
-        # | Milestone | Mean (min) | Std Dev (min) |
-        assert header_line.count("|") == 4
+        header_line = [l for l in md.splitlines() if "Metric" in l][0]
+        assert header_line.count("|") == 3  # | Metric | Value |
 
     def test_single_file_milestone_label(self, mock_stats):
-        from lysis.cli.deg_time import _deg_time_to_markdown
-
         md = _deg_time_to_markdown(
             {"run_A": mock_stats}, _DEFAULT_MARKERS, single_file_code="run_A"
         )
         assert "50%" in md
 
     def test_single_file_values_formatted(self, mock_stats):
-        from lysis.cli.deg_time import _deg_time_to_markdown
-
         md = _deg_time_to_markdown(
             {"run_A": mock_stats}, _DEFAULT_MARKERS, single_file_code="run_A"
         )
@@ -163,31 +168,23 @@ class TestDegTimeToMarkdown:
         assert "3.50" in md
 
     def test_directory_run_codes_as_rows(self):
-        from lysis.cli.deg_time import _deg_time_to_markdown
-
         rows = {"run_X": _make_stats(40.0, 2.0), "run_Y": _make_stats(50.0, 4.0)}
         md = _deg_time_to_markdown(rows, _DEFAULT_MARKERS)
         assert "run_X" in md
         assert "run_Y" in md
 
     def test_directory_header_starts_with_run(self):
-        from lysis.cli.deg_time import _deg_time_to_markdown
-
         rows = {"run_X": _make_stats()}
         md = _deg_time_to_markdown(rows, _DEFAULT_MARKERS)
         assert md.splitlines()[0].startswith("| Run |")
 
     def test_directory_mean_pm_std_format(self):
-        from lysis.cli.deg_time import _deg_time_to_markdown
-
         rows = {"run_X": _make_stats(42.0, 3.5)}
         md = _deg_time_to_markdown(rows, _DEFAULT_MARKERS)
         assert "42.00" in md
         assert "\u00b1" in md  # ±
 
     def test_directory_all_markers_present(self):
-        from lysis.cli.deg_time import _deg_time_to_markdown
-
         rows = {"run_X": _make_stats()}
         md = _deg_time_to_markdown(rows, _DEFAULT_MARKERS)
         for m in _DEFAULT_MARKERS:
@@ -220,7 +217,7 @@ class TestDegTimeMarkdownSingleFile:
         result = runner.invoke(cli, ["deg-time", str(h5), "--markdown", "-"])
 
         assert result.exit_code == 0
-        assert "| Milestone | Mean (min) | Std Dev (min) |" in result.output
+        assert "| Metric | Value |" in result.output
 
     @patch("lysis.cli.deg_time._load_run_deg_times")
     def test_markdown_to_stdout_contains_milestone(self, mock_load, runner, mock_stats, tmp_path):
@@ -256,7 +253,7 @@ class TestDegTimeMarkdownSingleFile:
 
         content = out_file.read_text()
         assert "## run_E" in content
-        assert "| Milestone | Mean (min) | Std Dev (min) |" in content
+        assert "| Metric | Value |" in content
 
     @patch("lysis.cli.deg_time._load_run_deg_times")
     def test_markdown_file_confirmation_message(self, mock_load, runner, mock_stats, tmp_path):
@@ -447,7 +444,7 @@ class TestDegTimeAddDrop:
 
         assert result.exit_code == 0
         lines = result.output.splitlines()
-        row_10 = next((i for i, l in enumerate(lines) if "| 10% |" in l), None)
-        row_20 = next((i for i, l in enumerate(lines) if "| 20% |" in l), None)
+        row_10 = next((i for i, l in enumerate(lines) if "| 10%" in l), None)
+        row_20 = next((i for i, l in enumerate(lines) if "| 20%" in l), None)
         assert row_10 is not None and row_20 is not None
         assert row_10 < row_20

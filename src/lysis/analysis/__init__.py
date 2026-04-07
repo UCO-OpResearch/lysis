@@ -5,6 +5,8 @@ Currently available submodules:
 
 - :mod:`~lysis.analysis.degradation`: Clot-degradation analysis and plots.
 - :mod:`~lysis.analysis.microscale`: Microscale simulation summary statistics.
+- :mod:`~lysis.analysis.summary`: Summary table functions returning
+  :class:`pandas.DataFrame` objects for CLI display and notebook use.
 
 Example::
 
@@ -15,6 +17,7 @@ Example::
         mean_degradation_rate,
     )
     from lysis.analysis.microscale import compute_micro_statistics
+    from lysis.analysis.summary import micro_stats_table, macro_stats_table
 """
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -49,10 +52,22 @@ from .degradation import (
 )
 from .fiber_replay import FiberReplayCursor
 from .microscale import compute_micro_statistics
+from .summary import (
+    deg_rate_table,
+    deg_time_table,
+    macro_stats_table,
+    micro_stats_table,
+    parameters_table,
+)
 
 __all__ = [
     "FiberReplayCursor",
     "calculate_time_row_exposed",
+    "deg_rate_table",
+    "deg_time_table",
+    "macro_stats_table",
+    "micro_stats_table",
+    "parameters_table",
     "compute_degradation_marker_stats",
     "compute_degradation_rate_stats",
     "compute_micro_statistics",

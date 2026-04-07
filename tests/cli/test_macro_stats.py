@@ -42,6 +42,18 @@ def mock_stats():
 
 
 # ---------------------------------------------------------------------------
+# Wrappers around the new public API (replaces removed private helpers)
+# ---------------------------------------------------------------------------
+
+
+def _summarize_to_markdown(rows_dict, metrics, single_file_code=None):
+    from lysis.analysis.summary import macro_stats_table
+    from lysis.cli.display import stats_df_to_markdown
+    df = macro_stats_table(rows_dict)
+    return stats_df_to_markdown(df, "Run", single_code=single_file_code)
+
+
+# ---------------------------------------------------------------------------
 # Help
 # ---------------------------------------------------------------------------
 
@@ -67,27 +79,27 @@ class TestSummarizeHelp:
 
 class TestMdTable:
     def test_header_row(self):
-        from lysis.cli.macro_stats import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         lines = out.splitlines()
         assert lines[0] == "| A | B |"
 
     def test_separator_row(self):
-        from lysis.cli.macro_stats import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         lines = out.splitlines()
         assert lines[1] == "| --- | --- |"
 
     def test_data_row(self):
-        from lysis.cli.macro_stats import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["hello", "world"]])
         assert "| hello | world |" in out
 
     def test_multiple_rows(self):
-        from lysis.cli.macro_stats import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["X"], [["r1"], ["r2"], ["r3"]])
         assert out.count("| r") == 3
@@ -95,35 +107,26 @@ class TestMdTable:
 
 class TestSummarizeToMarkdown:
     def test_single_file_heading(self, mock_stats):
-        from lysis.cli.macro_stats import _summarize_to_markdown
-
         md = _summarize_to_markdown({"run_A": mock_stats}, _METRICS, "run_A")
         assert md.startswith("## run_A")
 
     def test_single_file_metric_in_table(self, mock_stats):
-        from lysis.cli.macro_stats import _summarize_to_markdown
-
         md = _summarize_to_markdown({"run_A": mock_stats}, _METRICS, "run_A")
         assert "Degradation rate (%/min)" in md
 
     def test_single_file_values_formatted(self, mock_stats):
-        from lysis.cli.macro_stats import _summarize_to_markdown
-
         md = _summarize_to_markdown({"run_A": mock_stats}, _METRICS, "run_A")
         assert "1.234" in md
         assert "0.056" in md
 
-    def test_single_file_three_columns(self, mock_stats):
-        from lysis.cli.macro_stats import _summarize_to_markdown
-
+    def test_single_file_two_columns(self, mock_stats):
+        # Single-file markdown now shows combined "mean ± std" in one Value column
         md = _summarize_to_markdown({"run_A": mock_stats}, _METRICS, "run_A")
         header_line = [l for l in md.splitlines() if "Metric" in l][0]
-        assert header_line.count("|") == 4  # | Metric | Mean | Std Dev |
+        assert header_line.count("|") == 3  # | Metric | Value |
 
     def test_directory_run_codes_in_rows(self):
         """In directory mode, run codes appear as row values (first column)."""
-        from lysis.cli.macro_stats import _summarize_to_markdown
-
         rows = {"run_X": _make_stats(1.0, 0.1), "run_Y": _make_stats(2.0, 0.2)}
         md = _summarize_to_markdown(rows, _METRICS)
         assert "run_X" in md
@@ -132,8 +135,6 @@ class TestSummarizeToMarkdown:
         assert md.splitlines()[0].startswith("| Run |")
 
     def test_directory_mean_pm_std_format(self):
-        from lysis.cli.macro_stats import _summarize_to_markdown
-
         rows = {"run_X": _make_stats(1.234, 0.056)}
         md = _summarize_to_markdown(rows, _METRICS)
         # Should contain "1.234 ± 0.056" in a cell
@@ -141,8 +142,6 @@ class TestSummarizeToMarkdown:
         assert "\u00b1" in md  # ±
 
     def test_directory_all_metrics_present(self):
-        from lysis.cli.macro_stats import _summarize_to_markdown
-
         rows = {"run_X": _make_stats()}
         md = _summarize_to_markdown(rows, _METRICS)
         for metric in _METRICS:
@@ -175,7 +174,7 @@ class TestSummarizeMarkdownSingleFile:
         result = runner.invoke(cli, ["macro-stats", str(h5), "--markdown", "-"])
 
         assert result.exit_code == 0
-        assert "| Metric | Mean | Std Dev |" in result.output
+        assert "| Metric | Value |" in result.output
 
     @patch("lysis.cli.macro_stats._load_run_stats")
     def test_markdown_to_stdout_contains_metrics(self, mock_load, runner, mock_stats, tmp_path):
@@ -213,7 +212,7 @@ class TestSummarizeMarkdownSingleFile:
 
         content = out_file.read_text()
         assert "## run_E" in content
-        assert "| Metric | Mean | Std Dev |" in content
+        assert "| Metric | Value |" in content
 
     @patch("lysis.cli.macro_stats._load_run_stats")
     def test_markdown_file_confirmation_message(self, mock_load, runner, mock_stats, tmp_path):

@@ -12,18 +12,10 @@ import click
 from lysis.cli import cli
 
 # ---------------------------------------------------------------------------
-# Metric definitions
+# Rich display metadata
 # ---------------------------------------------------------------------------
 
-# Ordered display names and their short Rich-table headers
-_METRICS = [
-    "Fibers Degraded",
-    "Mean Lysis Time (min)",
-    "Median Lysis Time (min)",
-    "Mean tPA Leaving Time (sec)",
-    "Median tPA Leaving Time (sec)",
-]
-
+# Abbreviated column headers for the Rich table (may contain \n for multi-line)
 _METRIC_SHORT = {
     "Fibers Degraded": "Fibers\nDegraded",
     "Mean Lysis Time (min)": "Mean Lysis\nTime (min)",
@@ -31,112 +23,6 @@ _METRIC_SHORT = {
     "Mean tPA Leaving Time (sec)": "Mean tPA\nLeaving (sec)",
     "Median tPA Leaving Time (sec)": "Median tPA\nLeaving (sec)",
 }
-
-# ---------------------------------------------------------------------------
-# Formatting helpers
-# ---------------------------------------------------------------------------
-
-
-def _fmt_metric(key, stats):
-    """Format a single metric value from *stats* as a display string.
-
-    :param key: Metric name from :data:`_METRICS`.
-    :type key: str
-    :param stats: Stats dict as returned by :func:`_load_run_micro_stats`.
-    :type stats: dict
-    :return: Formatted string.
-    :rtype: str
-    """
-    if key == "Fibers Degraded":
-        return f"{stats['fibers_degraded']:,}"
-    if key == "Mean Lysis Time (min)":
-        return f"{stats['lysis_time_mean']:.3f} \u00b1 {stats['lysis_time_std']:.3f}"
-    if key == "Median Lysis Time (min)":
-        return f"{stats['lysis_time_median']:.3f}"
-    if key == "Mean tPA Leaving Time (sec)":
-        return f"{stats['tpa_leaving_mean']:.3f} \u00b1 {stats['tpa_leaving_std']:.3f}"
-    if key == "Median tPA Leaving Time (sec)":
-        return f"{stats['tpa_leaving_median']:.3f}"
-    raise KeyError(key)
-
-
-# ---------------------------------------------------------------------------
-# Markdown helpers
-# ---------------------------------------------------------------------------
-
-
-def _md_table(headers, rows):
-    """Build a GitHub-flavored Markdown table string.
-
-    :param headers: Column header strings.
-    :type headers: list[str]
-    :param rows: Data rows, each a list of cell strings.
-    :type rows: list[list[str]]
-    :return: GFM table as a string.
-    :rtype: str
-    """
-    lines = [
-        "| " + " | ".join(headers) + " |",
-        "| " + " | ".join("---" for _ in headers) + " |",
-    ]
-    lines += ["| " + " | ".join(row) + " |" for row in rows]
-    return "\n".join(lines)
-
-
-def _micro_stats_to_markdown(rows_dict, single_file_code=None):
-    """Build a Markdown string from microscale-stats data.
-
-    In single-file mode (*single_file_code* given) produces a heading and a
-    two-column table (Metric / Value).  In directory mode produces a flat
-    table with one row per Run and one column per metric.
-
-    :param rows_dict: Maps run code → stats dict.
-    :type rows_dict: dict[str, dict]
-    :param single_file_code: Run code for single-file mode, or ``None``.
-    :type single_file_code: str or None
-    :return: Markdown text.
-    :rtype: str
-    """
-    if single_file_code is not None:
-        stats = rows_dict[single_file_code]
-        table_rows = [[m, _fmt_metric(m, stats)] for m in _METRICS]
-        return "\n".join(
-            [
-                f"## {single_file_code}",
-                "",
-                _md_table(["Metric", "Value"], table_rows),
-            ]
-        )
-    else:
-        headers = ["Run"] + _METRICS
-        table_rows = [
-            [rc] + [_fmt_metric(m, rows_dict[rc]) for m in _METRICS]
-            for rc in rows_dict
-        ]
-        return _md_table(headers, table_rows)
-
-
-def _emit_markdown(md_text, markdown_out, console):
-    """Write *md_text* to stdout or a file.
-
-    :param md_text: Markdown content to write.
-    :type md_text: str
-    :param markdown_out: ``"-"`` for stdout, or a file path.
-    :type markdown_out: str
-    :param console: Rich Console for status messages.
-    """
-    if markdown_out == "-":
-        print(md_text)
-    else:
-        try:
-            with open(markdown_out, "w", encoding="utf-8") as fh:
-                fh.write(md_text)
-                if not md_text.endswith("\n"):
-                    fh.write("\n")
-            console.print(f"[green]Markdown written to {markdown_out}[/green]")
-        except OSError as e:
-            console.print(f"[red]Error:[/red] Could not write to {markdown_out}: {e}")
-
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -237,6 +123,8 @@ def micro_stats(ctx, path, sort_mode, no_progress, markdown_out):
     """
     from contextlib import nullcontext
 
+    from lysis.analysis.summary import micro_stats_table
+    from lysis.cli.display import emit_markdown, stats_df_to_markdown, stats_df_to_rich
     from lysis.tools.runcode_sort import smart_sort
     from rich.progress import (
         BarColumn,
@@ -245,7 +133,6 @@ def micro_stats(ctx, path, sort_mode, no_progress, markdown_out):
         TextColumn,
         TimeRemainingColumn,
     )
-    from rich.table import Table
 
     console = ctx.obj["console"]
     path = os.path.abspath(path)
@@ -270,16 +157,19 @@ def micro_stats(ctx, path, sort_mode, no_progress, markdown_out):
             ctx.exit(1)
             return
 
+        rows = {run_code: stats}
+        df = micro_stats_table(rows)
+
         if markdown_out is not None:
-            _emit_markdown(
-                _micro_stats_to_markdown({run_code: stats}, run_code),
+            emit_markdown(
+                stats_df_to_markdown(df, "Run", single_code=run_code),
                 markdown_out,
                 console,
             )
         else:
             console.print(f"[bold]{run_code}[/bold]\n")
-            for m in _METRICS:
-                console.print(f"  {m}: {_fmt_metric(m, stats)}")
+            for col, val in df.loc[run_code].items():
+                console.print(f"  {col}: {val}")
 
     # -----------------------------------------------------------------------
     else:
@@ -327,22 +217,15 @@ def micro_stats(ctx, path, sort_mode, no_progress, markdown_out):
             ctx.exit(1)
             return
 
-        ordered = [rc for rc in run_codes if rc in rows]
+        # Preserve sort order, skipping any failed runs
+        ordered = {rc: rows[rc] for rc in run_codes if rc in rows}
+        df = micro_stats_table(ordered)
 
         if markdown_out is not None:
-            _emit_markdown(
-                _micro_stats_to_markdown(rows),
+            emit_markdown(
+                stats_df_to_markdown(df, "Run"),
                 markdown_out,
                 console,
             )
         else:
-            table = Table(show_header=True, header_style="bold", show_lines=True)
-            table.add_column("Run", style="bold", no_wrap=True)
-            for m in _METRICS:
-                table.add_column(_METRIC_SHORT.get(m, m), justify="right")
-
-            for run_code in ordered:
-                cells = [run_code] + [_fmt_metric(m, rows[run_code]) for m in _METRICS]
-                table.add_row(*cells)
-
-            console.print(table)
+            console.print(stats_df_to_rich(df, "Run", _METRIC_SHORT))

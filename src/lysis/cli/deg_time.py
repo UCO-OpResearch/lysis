@@ -18,102 +18,6 @@ from lysis.cli import cli
 # Default percentage milestones matching the notebook's degrade_percent_markers
 _DEFAULT_MARKERS = [5, 20, 50, 80, 100]
 
-# Display format for times (minutes)
-_TIME_FMT = "{:.2f}"
-
-# ---------------------------------------------------------------------------
-# Markdown helpers
-# ---------------------------------------------------------------------------
-
-
-def _md_table(headers, rows):
-    """Build a GitHub-flavored Markdown table string.
-
-    :param headers: Column header strings.
-    :type headers: list[str]
-    :param rows: Data rows, each a list of cell strings.
-    :type rows: list[list[str]]
-    :return: GFM table as a string.
-    :rtype: str
-    """
-    lines = [
-        "| " + " | ".join(headers) + " |",
-        "| " + " | ".join("---" for _ in headers) + " |",
-    ]
-    lines += ["| " + " | ".join(row) + " |" for row in rows]
-    return "\n".join(lines)
-
-
-def _deg_time_to_markdown(rows_dict, markers, single_file_code=None):
-    """Build a Markdown string from degradation-time data.
-
-    In single-file mode (*single_file_code* given) produces a heading and a
-    three-column table (Milestone / Mean (min) / Std Dev (min)).  In
-    directory mode produces a flat table with one row per Run.
-
-    :param rows_dict: Maps run code → {marker_pct: (mean_min, std_min)}.
-    :type rows_dict: dict[str, dict[int, tuple]]
-    :param markers: Ordered list of integer percentage milestones.
-    :type markers: list[int]
-    :param single_file_code: Run code for single-file mode, or ``None``.
-    :type single_file_code: str or None
-    :return: Markdown text.
-    :rtype: str
-    """
-    marker_labels = [f"{m}% (min)" for m in markers]
-
-    if single_file_code is not None:
-        stats = rows_dict[single_file_code]
-        table_rows = [
-            [
-                f"{m}%",
-                _TIME_FMT.format(stats[m][0]),
-                _TIME_FMT.format(stats[m][1]),
-            ]
-            for m in markers
-        ]
-        return "\n".join(
-            [
-                f"## {single_file_code}",
-                "",
-                _md_table(["Milestone", "Mean (min)", "Std Dev (min)"], table_rows),
-            ]
-        )
-    else:
-        headers = ["Run"] + marker_labels
-        table_rows = [
-            [rc]
-            + [
-                f"{rows_dict[rc][m][0]:.2f} \u00b1 {rows_dict[rc][m][1]:.2f}"
-                for m in markers
-            ]
-            for rc in rows_dict
-        ]
-        return _md_table(headers, table_rows)
-
-
-def _emit_markdown(md_text, markdown_out, console):
-    """Write *md_text* to stdout or a file.
-
-    :param md_text: Markdown content to write.
-    :type md_text: str
-    :param markdown_out: ``"-"`` for stdout, or a file path.
-    :type markdown_out: str
-    :param console: Rich Console for status messages.
-    """
-    if markdown_out == "-":
-        print(md_text)
-    else:
-        try:
-            with open(markdown_out, "w", encoding="utf-8") as fh:
-                fh.write(md_text)
-                if not md_text.endswith("\n"):
-                    fh.write("\n")
-            console.print(f"[green]Markdown written to {markdown_out}[/green]")
-        except OSError as e:
-            console.print(f"[red]Error:[/red] Could not write to {markdown_out}: {e}")
-
-
 # ---------------------------------------------------------------------------
 # Marker helpers
 # ---------------------------------------------------------------------------
@@ -285,6 +189,8 @@ def deg_time(ctx, path, sort_mode, no_progress, markdown_out, add_markers, drop_
     """
     from contextlib import nullcontext
 
+    from lysis.analysis.summary import deg_time_table
+    from lysis.cli.display import emit_markdown, stats_df_to_markdown, stats_df_to_rich
     from lysis.tools.runcode_sort import smart_sort
     from rich.progress import (
         BarColumn,
@@ -293,7 +199,6 @@ def deg_time(ctx, path, sort_mode, no_progress, markdown_out, add_markers, drop_
         TextColumn,
         TimeRemainingColumn,
     )
-    from rich.table import Table
 
     console = ctx.obj["console"]
     path = os.path.abspath(path)
@@ -331,6 +236,11 @@ def deg_time(ctx, path, sort_mode, no_progress, markdown_out, add_markers, drop_
         ctx.exit(1)
         return
 
+    # Short headers for Rich: add units suffix to each column name
+    short_headers = {f"{m}%": _marker_label(m) for m in markers}
+    # Markdown column headers include units inline
+    md_col_headers = {f"{m}%": f"{m}% (min)" for m in markers}
+
     # -----------------------------------------------------------------------
     if os.path.isfile(path):
         # --- single-file mode ---
@@ -347,20 +257,20 @@ def deg_time(ctx, path, sort_mode, no_progress, markdown_out, add_markers, drop_
             ctx.exit(1)
             return
 
+        rows = {run_code: stats}
+        df = deg_time_table(rows, markers)
+
         if markdown_out is not None:
-            _emit_markdown(
-                _deg_time_to_markdown({run_code: stats}, markers, run_code),
+            md_df = df.rename(columns=md_col_headers)
+            emit_markdown(
+                stats_df_to_markdown(md_df, "Run", single_code=run_code),
                 markdown_out,
                 console,
             )
         else:
             console.print(f"[bold]{run_code}[/bold]\n")
-            for m in markers:
-                mean, std = stats[m]
-                console.print(
-                    f"  {m}%: "
-                    f"{_TIME_FMT.format(mean)} \u00b1 {_TIME_FMT.format(std)} min"
-                )
+            for col, val in df.loc[run_code].items():
+                console.print(f"  {col}: {val} min")
 
     # -----------------------------------------------------------------------
     else:
@@ -408,28 +318,16 @@ def deg_time(ctx, path, sort_mode, no_progress, markdown_out, add_markers, drop_
             ctx.exit(1)
             return
 
-        ordered = [rc for rc in run_codes if rc in rows]
+        # Preserve sort order, skipping any failed runs
+        ordered = {rc: rows[rc] for rc in run_codes if rc in rows}
+        df = deg_time_table(ordered, markers)
 
         if markdown_out is not None:
-            _emit_markdown(
-                _deg_time_to_markdown(rows, markers),
+            md_df = df.rename(columns=md_col_headers)
+            emit_markdown(
+                stats_df_to_markdown(md_df, "Run"),
                 markdown_out,
                 console,
             )
         else:
-            table = Table(show_header=True, header_style="bold", show_lines=True)
-            table.add_column("Run", style="bold", no_wrap=True)
-            for m in markers:
-                table.add_column(_marker_label(m), justify="right")
-
-            for run_code in ordered:
-                stats = rows[run_code]
-                cells = [run_code]
-                for m in markers:
-                    mean, std = stats[m]
-                    cells.append(
-                        f"{_TIME_FMT.format(mean)}\n\u00b1 {_TIME_FMT.format(std)}"
-                    )
-                table.add_row(*cells)
-
-            console.print(table)
+            console.print(stats_df_to_rich(df, "Run", short_headers))

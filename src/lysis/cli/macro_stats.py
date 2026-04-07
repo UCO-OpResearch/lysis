@@ -7,95 +7,10 @@ import click
 from lysis.cli import cli
 
 # ---------------------------------------------------------------------------
-# Markdown helpers
+# Rich display metadata
 # ---------------------------------------------------------------------------
 
-
-def _md_table(headers, rows):
-    """Build a GitHub-flavored Markdown table string.
-
-    :param headers: Column header strings.
-    :type headers: list[str]
-    :param rows: Data rows, each a list of cell strings.
-    :type rows: list[list[str]]
-    :return: GFM table as a string.
-    :rtype: str
-    """
-    lines = [
-        "| " + " | ".join(headers) + " |",
-        "| " + " | ".join("---" for _ in headers) + " |",
-    ]
-    lines += ["| " + " | ".join(row) + " |" for row in rows]
-    return "\n".join(lines)
-
-
-def _summarize_to_markdown(rows_dict, metrics, single_file_code=None):
-    """Build a Markdown string from summarize data.
-
-    In single-file mode (*single_file_code* given) produces a heading and a
-    three-column table (Metric / Mean / Std Dev).  In directory mode produces
-    a flat table with one row per Run and one column per metric (mean ± std).
-
-    :param rows_dict: Maps run code → stats Series.
-    :type rows_dict: dict[str, pandas.Series]
-    :param metrics: Ordered list of metric names.
-    :type metrics: list[str]
-    :param single_file_code: Run code when operating on a single file, or
-        ``None`` for directory mode.
-    :type single_file_code: str or None
-    :return: Markdown text.
-    :rtype: str
-    """
-    if single_file_code is not None:
-        stats = rows_dict[single_file_code]
-        table_rows = [
-            [
-                m,
-                f"{stats[m]['Mean']:,.3f}",
-                f"{stats[m]['Standard Deviation']:,.3f}",
-            ]
-            for m in metrics
-        ]
-        return "\n".join(
-            [f"## {single_file_code}", "", _md_table(["Metric", "Mean", "Std Dev"], table_rows)]
-        )
-    else:
-        headers = ["Run"] + metrics
-        table_rows = [
-            [rc]
-            + [
-                f"{rows_dict[rc][m]['Mean']:,.3f} \u00b1 {rows_dict[rc][m]['Standard Deviation']:,.3f}"
-                for m in metrics
-            ]
-            for rc in rows_dict
-        ]
-        return _md_table(headers, table_rows)
-
-
-def _emit_markdown(md_text, markdown_out, console):
-    """Write *md_text* to stdout or a file.
-
-    :param md_text: Markdown content to write.
-    :type md_text: str
-    :param markdown_out: ``"-"`` for stdout, or a file path.
-    :type markdown_out: str
-    :param console: Rich Console for status messages.
-    """
-    if markdown_out == "-":
-        print(md_text)
-    else:
-        try:
-            with open(markdown_out, "w", encoding="utf-8") as fh:
-                fh.write(md_text)
-                if not md_text.endswith("\n"):
-                    fh.write("\n")
-            console.print(f"[green]Markdown written to {markdown_out}[/green]")
-        except OSError as e:
-            console.print(f"[red]Error:[/red] Could not write to {markdown_out}: {e}")
-
-
-# ---------------------------------------------------------------------------
-
+# Abbreviated column headers for the Rich table (may contain \n for multi-line)
 _METRIC_SHORT = {
     "Degradation rate (%/min)": "Deg. Rate\n(%/min)",
     "Lysis lag time (min)": "Lag Time\n(min)",
@@ -104,6 +19,10 @@ _METRIC_SHORT = {
     "First passage time (min)": "FPT\n(min)",
     "Front Velocity (microns/min)": "Front Vel.\n(\u03bcm/min)",
 }
+
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
 
 
 def _load_run_stats(data_root, run_code, console):
@@ -126,6 +45,11 @@ def _load_run_stats(data_root, run_code, console):
         return None
     finally:
         run.data.close()
+
+
+# ---------------------------------------------------------------------------
+# Click command
+# ---------------------------------------------------------------------------
 
 
 @cli.command(name="macro-stats")
@@ -169,6 +93,9 @@ def macro_stats(ctx, path, sort_mode, no_progress, markdown_out):
     statistics for every .h5 file found in that directory are computed and
     displayed as a table, with rows ordered by --sort.
 
+    Single-file Markdown output combines Mean and Std Dev into a single
+    ``mean ± std`` value column (unlike the previous three-column format).
+
     \b
     Examples:
         lysis macro-stats data/TB-xi__1_582_867.h5
@@ -177,6 +104,19 @@ def macro_stats(ctx, path, sort_mode, no_progress, markdown_out):
         lysis macro-stats data/ --markdown -
         lysis macro-stats data/ --markdown report.md
     """
+    from contextlib import nullcontext
+
+    from lysis.analysis.summary import macro_stats_table
+    from lysis.cli.display import emit_markdown, stats_df_to_markdown, stats_df_to_rich
+    from lysis.tools.runcode_sort import smart_sort
+    from rich.progress import (
+        BarColumn,
+        MofNCompleteColumn,
+        Progress,
+        TextColumn,
+        TimeRemainingColumn,
+    )
+
     console = ctx.obj["console"]
     path = os.path.abspath(path)
 
@@ -184,49 +124,39 @@ def macro_stats(ctx, path, sort_mode, no_progress, markdown_out):
     if markdown_out is not None:
         no_progress = True
 
+    # -----------------------------------------------------------------------
     if os.path.isfile(path):
         # --- single-file mode ---
         run_code = os.path.splitext(os.path.basename(path))[0]
         data_root = os.path.dirname(path)
+
         if not no_progress:
             with console.status(f"Computing statistics for {run_code}..."):
                 stats = _load_run_stats(data_root, run_code, console)
         else:
             stats = _load_run_stats(data_root, run_code, console)
+
         if stats is None:
             ctx.exit(1)
             return
 
-        metrics = stats.index.get_level_values(0).unique().tolist()
+        rows = {run_code: stats}
+        df = macro_stats_table(rows)
 
         if markdown_out is not None:
-            _emit_markdown(
-                _summarize_to_markdown({run_code: stats}, metrics, run_code),
+            emit_markdown(
+                stats_df_to_markdown(df, "Run", single_code=run_code),
                 markdown_out,
                 console,
             )
         else:
             console.print(f"[bold]{run_code}[/bold]\n")
-            for metric in metrics:
-                x = stats[metric]
-                console.print(
-                    f"  {metric}: {x['Mean']:,.3f} \u00b1 {x['Standard Deviation']:,.3f}"
-                )
+            for col, val in df.loc[run_code].items():
+                console.print(f"  {col}: {val}")
 
+    # -----------------------------------------------------------------------
     else:
-        # --- directory mode: table of all .h5 files ---
-        from contextlib import nullcontext
-
-        from lysis.tools.runcode_sort import smart_sort
-        from rich.progress import (
-            BarColumn,
-            MofNCompleteColumn,
-            Progress,
-            TextColumn,
-            TimeRemainingColumn,
-        )
-        from rich.table import Table
-
+        # --- directory mode ---
         h5_files = [f for f in os.listdir(path) if f.lower().endswith(".h5")]
         if not h5_files:
             console.print(f"[yellow]No .h5 files found in {path}[/yellow]")
@@ -240,7 +170,6 @@ def macro_stats(ctx, path, sort_mode, no_progress, markdown_out):
             run_codes = sorted(run_codes)
 
         rows = {}
-        first_stats = None
 
         _pctx = (
             Progress(
@@ -266,34 +195,20 @@ def macro_stats(ctx, path, sort_mode, no_progress, markdown_out):
                     prog.advance(_task)
                 if stats is not None:
                     rows[run_code] = stats
-                    if first_stats is None:
-                        first_stats = stats
 
         if not rows:
             ctx.exit(1)
             return
 
-        metrics = first_stats.index.get_level_values(0).unique().tolist()
+        # Preserve sort order, skipping any failed runs
+        ordered = {rc: rows[rc] for rc in run_codes if rc in rows}
+        df = macro_stats_table(ordered)
 
         if markdown_out is not None:
-            _emit_markdown(
-                _summarize_to_markdown(rows, metrics),
+            emit_markdown(
+                stats_df_to_markdown(df, "Run"),
                 markdown_out,
                 console,
             )
         else:
-            table = Table(show_header=True, header_style="bold", show_lines=True)
-            table.add_column("Run", style="bold", no_wrap=True)
-            for metric in metrics:
-                table.add_column(_METRIC_SHORT.get(metric, metric), justify="right")
-
-            for run_code, stats in rows.items():
-                cells = [run_code]
-                for metric in metrics:
-                    x = stats[metric]
-                    cells.append(
-                        f"{x['Mean']:,.3f}\n\u00b1 {x['Standard Deviation']:,.3f}"
-                    )
-                table.add_row(*cells)
-
-            console.print(table)
+            console.print(stats_df_to_rich(df, "Run", _METRIC_SHORT))

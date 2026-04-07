@@ -18,102 +18,6 @@ from lysis.cli import cli
 # Default intervals (start%, end%) matching the notebook cell
 _DEFAULT_INTERVALS = [(20, 80), (20, 50), (50, 80)]
 
-# Display format for rates (shown in %/min)
-_RATE_FMT = "{:.4f}"
-
-# ---------------------------------------------------------------------------
-# Markdown helpers
-# ---------------------------------------------------------------------------
-
-
-def _md_table(headers, rows):
-    """Build a GitHub-flavored Markdown table string.
-
-    :param headers: Column header strings.
-    :type headers: list[str]
-    :param rows: Data rows, each a list of cell strings.
-    :type rows: list[list[str]]
-    :return: GFM table as a string.
-    :rtype: str
-    """
-    lines = [
-        "| " + " | ".join(headers) + " |",
-        "| " + " | ".join("---" for _ in headers) + " |",
-    ]
-    lines += ["| " + " | ".join(row) + " |" for row in rows]
-    return "\n".join(lines)
-
-
-def _deg_rate_to_markdown(rows_dict, intervals, single_file_code=None):
-    """Build a Markdown string from degradation-rate data.
-
-    In single-file mode (*single_file_code* given) produces a heading and a
-    three-column table (Interval / Mean (%/min) / Std Dev (%/min)).  In
-    directory mode produces a flat table with one row per Run.
-
-    :param rows_dict: Maps run code → {interval_key: (mean, std)}.
-    :type rows_dict: dict[str, dict[tuple, tuple]]
-    :param intervals: Ordered list of (start, end) integer percent pairs.
-    :type intervals: list[tuple[int, int]]
-    :param single_file_code: Run code for single-file mode, or ``None``.
-    :type single_file_code: str or None
-    :return: Markdown text.
-    :rtype: str
-    """
-    interval_labels = [f"{s}% to {e}% (%/min)" for s, e in intervals]
-
-    if single_file_code is not None:
-        stats = rows_dict[single_file_code]
-        table_rows = [
-            [
-                f"{s}% to {e}%",
-                _RATE_FMT.format(stats[(s, e)][0]),
-                _RATE_FMT.format(stats[(s, e)][1]),
-            ]
-            for s, e in intervals
-        ]
-        return "\n".join(
-            [
-                f"## {single_file_code}",
-                "",
-                _md_table(["Interval", "Mean (%/min)", "Std Dev (%/min)"], table_rows),
-            ]
-        )
-    else:
-        headers = ["Run"] + interval_labels
-        table_rows = [
-            [rc]
-            + [
-                f"{rows_dict[rc][(s, e)][0]:.4f} \u00b1 {rows_dict[rc][(s, e)][1]:.4f}"
-                for s, e in intervals
-            ]
-            for rc in rows_dict
-        ]
-        return _md_table(headers, table_rows)
-
-
-def _emit_markdown(md_text, markdown_out, console):
-    """Write *md_text* to stdout or a file.
-
-    :param md_text: Markdown content to write.
-    :type md_text: str
-    :param markdown_out: ``"-"`` for stdout, or a file path.
-    :type markdown_out: str
-    :param console: Rich Console for status messages.
-    """
-    if markdown_out == "-":
-        print(md_text)
-    else:
-        try:
-            with open(markdown_out, "w", encoding="utf-8") as fh:
-                fh.write(md_text)
-                if not md_text.endswith("\n"):
-                    fh.write("\n")
-            console.print(f"[green]Markdown written to {markdown_out}[/green]")
-        except OSError as e:
-            console.print(f"[red]Error:[/red] Could not write to {markdown_out}: {e}")
-
-
 # ---------------------------------------------------------------------------
 # Interval helpers
 # ---------------------------------------------------------------------------
@@ -143,11 +47,10 @@ def _parse_interval(s, param_name="interval"):
         )
     if not (0 <= start < end <= 100):
         raise click.BadParameter(
-            f"Interval must satisfy 0 ≤ start < end ≤ 100, got: {s!r}",
+            f"Interval must satisfy 0 \u2264 start < end \u2264 100, got: {s!r}",
             param_hint=param_name,
         )
     return (start, end)
-
 
 
 def _interval_label(start, end, with_units=True):
@@ -288,6 +191,8 @@ def deg_rate(ctx, path, sort_mode, no_progress, markdown_out, add_intervals, dro
     """
     from contextlib import nullcontext
 
+    from lysis.analysis.summary import deg_rate_table
+    from lysis.cli.display import emit_markdown, stats_df_to_markdown, stats_df_to_rich
     from lysis.tools.runcode_sort import smart_sort
     from rich.progress import (
         BarColumn,
@@ -296,7 +201,6 @@ def deg_rate(ctx, path, sort_mode, no_progress, markdown_out, add_intervals, dro
         TextColumn,
         TimeRemainingColumn,
     )
-    from rich.table import Table
 
     console = ctx.obj["console"]
     path = os.path.abspath(path)
@@ -332,6 +236,11 @@ def deg_rate(ctx, path, sort_mode, no_progress, markdown_out, add_intervals, dro
         ctx.exit(1)
         return
 
+    # Short headers for Rich: add units suffix to each column name
+    short_headers = {f"{s}% to {e}%": _interval_label(s, e) for s, e in intervals}
+    # Markdown column headers include units inline
+    md_col_headers = {f"{s}% to {e}%": f"{s}% to {e}% (%/min)" for s, e in intervals}
+
     # -----------------------------------------------------------------------
     if os.path.isfile(path):
         # --- single-file mode ---
@@ -348,20 +257,20 @@ def deg_rate(ctx, path, sort_mode, no_progress, markdown_out, add_intervals, dro
             ctx.exit(1)
             return
 
+        rows = {run_code: stats}
+        df = deg_rate_table(rows, intervals)
+
         if markdown_out is not None:
-            _emit_markdown(
-                _deg_rate_to_markdown({run_code: stats}, intervals, run_code),
+            md_df = df.rename(columns=md_col_headers)
+            emit_markdown(
+                stats_df_to_markdown(md_df, "Run", single_code=run_code),
                 markdown_out,
                 console,
             )
         else:
             console.print(f"[bold]{run_code}[/bold]\n")
-            for s, e in intervals:
-                mean, std = stats[(s, e)]
-                console.print(
-                    f"  {s}% to {e}%: "
-                    f"{_RATE_FMT.format(mean)} \u00b1 {_RATE_FMT.format(std)} %/min"
-                )
+            for col, val in df.loc[run_code].items():
+                console.print(f"  {col}: {val} %/min")
 
     # -----------------------------------------------------------------------
     else:
@@ -409,28 +318,16 @@ def deg_rate(ctx, path, sort_mode, no_progress, markdown_out, add_intervals, dro
             ctx.exit(1)
             return
 
-        ordered = [rc for rc in run_codes if rc in rows]
+        # Preserve sort order, skipping any failed runs
+        ordered = {rc: rows[rc] for rc in run_codes if rc in rows}
+        df = deg_rate_table(ordered, intervals)
 
         if markdown_out is not None:
-            _emit_markdown(
-                _deg_rate_to_markdown(rows, intervals),
+            md_df = df.rename(columns=md_col_headers)
+            emit_markdown(
+                stats_df_to_markdown(md_df, "Run"),
                 markdown_out,
                 console,
             )
         else:
-            table = Table(show_header=True, header_style="bold", show_lines=True)
-            table.add_column("Run", style="bold", no_wrap=True)
-            for s, e in intervals:
-                table.add_column(_interval_label(s, e), justify="right")
-
-            for run_code in ordered:
-                stats = rows[run_code]
-                cells = [run_code]
-                for s, e in intervals:
-                    mean, std = stats[(s, e)]
-                    cells.append(
-                        f"{_RATE_FMT.format(mean)}\n\u00b1 {_RATE_FMT.format(std)}"
-                    )
-                table.add_row(*cells)
-
-            console.print(table)
+            console.print(stats_df_to_rich(df, "Run", short_headers))

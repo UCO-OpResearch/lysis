@@ -30,6 +30,19 @@ def mock_stats():
 
 
 # ---------------------------------------------------------------------------
+# Wrappers around the new public API (replaces removed private helpers)
+# ---------------------------------------------------------------------------
+
+
+def _deg_rate_to_markdown(rows_dict, intervals, single_file_code=None):
+    from lysis.analysis.summary import deg_rate_table
+    from lysis.cli.display import stats_df_to_markdown
+    md_col_headers = {f"{s}% to {e}%": f"{s}% to {e}% (%/min)" for s, e in intervals}
+    df = deg_rate_table(rows_dict, intervals).rename(columns=md_col_headers)
+    return stats_df_to_markdown(df, "Run", single_code=single_file_code)
+
+
+# ---------------------------------------------------------------------------
 # Help
 # ---------------------------------------------------------------------------
 
@@ -112,19 +125,19 @@ class TestParseInterval:
 
 class TestMdTableDegRate:
     def test_header_row(self):
-        from lysis.cli.deg_rate import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         assert out.splitlines()[0] == "| A | B |"
 
     def test_separator_row(self):
-        from lysis.cli.deg_rate import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         assert out.splitlines()[1] == "| --- | --- |"
 
     def test_data_row(self):
-        from lysis.cli.deg_rate import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["hello", "world"]])
         assert "| hello | world |" in out
@@ -132,33 +145,26 @@ class TestMdTableDegRate:
 
 class TestDegRateToMarkdown:
     def test_single_file_heading(self, mock_stats):
-        from lysis.cli.deg_rate import _deg_rate_to_markdown
-
         md = _deg_rate_to_markdown(
             {"run_A": mock_stats}, _DEFAULT_INTERVALS, single_file_code="run_A"
         )
         assert md.startswith("## run_A")
 
-    def test_single_file_three_columns(self, mock_stats):
-        from lysis.cli.deg_rate import _deg_rate_to_markdown
-
+    def test_single_file_two_columns(self, mock_stats):
+        # Single-file markdown now shows combined "mean ± std" in one Value column
         md = _deg_rate_to_markdown(
             {"run_A": mock_stats}, _DEFAULT_INTERVALS, single_file_code="run_A"
         )
-        header_line = [l for l in md.splitlines() if "Interval" in l][0]
-        assert header_line.count("|") == 4  # | Interval | Mean (%/min) | Std Dev (%/min) |
+        header_line = [l for l in md.splitlines() if "Metric" in l][0]
+        assert header_line.count("|") == 3  # | Metric | Value |
 
     def test_single_file_interval_label(self, mock_stats):
-        from lysis.cli.deg_rate import _deg_rate_to_markdown
-
         md = _deg_rate_to_markdown(
             {"run_A": mock_stats}, _DEFAULT_INTERVALS, single_file_code="run_A"
         )
         assert "20% to 80%" in md
 
     def test_single_file_values_formatted(self, mock_stats):
-        from lysis.cli.deg_rate import _deg_rate_to_markdown
-
         md = _deg_rate_to_markdown(
             {"run_A": mock_stats}, _DEFAULT_INTERVALS, single_file_code="run_A"
         )
@@ -166,31 +172,23 @@ class TestDegRateToMarkdown:
         assert "0.0056" in md
 
     def test_directory_run_codes_as_rows(self):
-        from lysis.cli.deg_rate import _deg_rate_to_markdown
-
         rows = {"run_X": _make_stats(0.1, 0.01), "run_Y": _make_stats(0.2, 0.02)}
         md = _deg_rate_to_markdown(rows, _DEFAULT_INTERVALS)
         assert "run_X" in md
         assert "run_Y" in md
 
     def test_directory_header_starts_with_run(self):
-        from lysis.cli.deg_rate import _deg_rate_to_markdown
-
         rows = {"run_X": _make_stats()}
         md = _deg_rate_to_markdown(rows, _DEFAULT_INTERVALS)
         assert md.splitlines()[0].startswith("| Run |")
 
     def test_directory_mean_pm_std_format(self):
-        from lysis.cli.deg_rate import _deg_rate_to_markdown
-
         rows = {"run_X": _make_stats(0.1234, 0.0056)}
         md = _deg_rate_to_markdown(rows, _DEFAULT_INTERVALS)
         assert "0.1234" in md
         assert "\u00b1" in md  # ±
 
     def test_directory_all_intervals_present(self):
-        from lysis.cli.deg_rate import _deg_rate_to_markdown
-
         rows = {"run_X": _make_stats()}
         md = _deg_rate_to_markdown(rows, _DEFAULT_INTERVALS)
         for s, e in _DEFAULT_INTERVALS:
@@ -223,7 +221,7 @@ class TestDegRateMarkdownSingleFile:
         result = runner.invoke(cli, ["deg-rate", str(h5), "--markdown", "-"])
 
         assert result.exit_code == 0
-        assert "| Interval | Mean (%/min) | Std Dev (%/min) |" in result.output
+        assert "| Metric | Value |" in result.output
 
     @patch("lysis.cli.deg_rate._load_run_deg_rates")
     def test_markdown_to_stdout_contains_interval(self, mock_load, runner, mock_stats, tmp_path):
@@ -259,7 +257,7 @@ class TestDegRateMarkdownSingleFile:
 
         content = out_file.read_text()
         assert "## run_E" in content
-        assert "| Interval | Mean (%/min) | Std Dev (%/min) |" in content
+        assert "| Metric | Value |" in content
 
     @patch("lysis.cli.deg_rate._load_run_deg_rates")
     def test_markdown_file_confirmation_message(self, mock_load, runner, mock_stats, tmp_path):

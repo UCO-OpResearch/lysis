@@ -44,6 +44,18 @@ def mock_stats():
 
 
 # ---------------------------------------------------------------------------
+# Wrappers around the new public API (replaces removed private helpers)
+# ---------------------------------------------------------------------------
+
+
+def _micro_stats_to_markdown(rows_dict, single_file_code=None):
+    from lysis.analysis.summary import micro_stats_table
+    from lysis.cli.display import stats_df_to_markdown
+    df = micro_stats_table(rows_dict)
+    return stats_df_to_markdown(df, "Run", single_code=single_file_code)
+
+
+# ---------------------------------------------------------------------------
 # Help
 # ---------------------------------------------------------------------------
 
@@ -73,13 +85,13 @@ class TestMicroStatsHelp:
 
 class TestFmtMetric:
     def test_fibers_degraded_formatted_with_comma(self):
-        from lysis.cli.micro_stats import _fmt_metric
+        from lysis.analysis.summary import _fmt_micro as _fmt_metric
 
         stats = _make_stats(fibers_degraded=1234)
         assert _fmt_metric("Fibers Degraded", stats) == "1,234"
 
     def test_mean_lysis_time_shows_pm(self):
-        from lysis.cli.micro_stats import _fmt_metric
+        from lysis.analysis.summary import _fmt_micro as _fmt_metric
 
         stats = _make_stats(lysis_time_mean=42.0, lysis_time_std=3.5)
         result = _fmt_metric("Mean Lysis Time (min)", stats)
@@ -88,7 +100,7 @@ class TestFmtMetric:
         assert "3.500" in result
 
     def test_median_lysis_time_no_pm(self):
-        from lysis.cli.micro_stats import _fmt_metric
+        from lysis.analysis.summary import _fmt_micro as _fmt_metric
 
         stats = _make_stats(lysis_time_median=41.5)
         result = _fmt_metric("Median Lysis Time (min)", stats)
@@ -96,7 +108,7 @@ class TestFmtMetric:
         assert "41.500" in result
 
     def test_mean_tpa_leaving_shows_pm(self):
-        from lysis.cli.micro_stats import _fmt_metric
+        from lysis.analysis.summary import _fmt_micro as _fmt_metric
 
         stats = _make_stats(tpa_leaving_mean=15.0, tpa_leaving_std=2.0)
         result = _fmt_metric("Mean tPA Leaving Time (sec)", stats)
@@ -105,7 +117,7 @@ class TestFmtMetric:
         assert "2.000" in result
 
     def test_median_tpa_leaving_no_pm(self):
-        from lysis.cli.micro_stats import _fmt_metric
+        from lysis.analysis.summary import _fmt_micro as _fmt_metric
 
         stats = _make_stats(tpa_leaving_median=14.5)
         result = _fmt_metric("Median tPA Leaving Time (sec)", stats)
@@ -113,7 +125,7 @@ class TestFmtMetric:
         assert "14.500" in result
 
     def test_unknown_key_raises(self):
-        from lysis.cli.micro_stats import _fmt_metric
+        from lysis.analysis.summary import _fmt_micro as _fmt_metric
 
         with pytest.raises(KeyError):
             _fmt_metric("Unknown Metric", _make_stats())
@@ -126,19 +138,19 @@ class TestFmtMetric:
 
 class TestMdTableMicroStats:
     def test_header_row(self):
-        from lysis.cli.micro_stats import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         assert out.splitlines()[0] == "| A | B |"
 
     def test_separator_row(self):
-        from lysis.cli.micro_stats import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["1", "2"]])
         assert out.splitlines()[1] == "| --- | --- |"
 
     def test_data_row(self):
-        from lysis.cli.micro_stats import _md_table
+        from lysis.cli.display import md_table as _md_table
 
         out = _md_table(["A", "B"], [["hello", "world"]])
         assert "| hello | world |" in out
@@ -146,61 +158,49 @@ class TestMdTableMicroStats:
 
 class TestMicroStatsToMarkdown:
     def test_single_file_heading(self, mock_stats):
-        from lysis.cli.micro_stats import _micro_stats_to_markdown
-
         md = _micro_stats_to_markdown({"run_A": mock_stats}, single_file_code="run_A")
         assert md.startswith("## run_A")
 
     def test_single_file_two_columns(self, mock_stats):
-        from lysis.cli.micro_stats import _micro_stats_to_markdown
-
         md = _micro_stats_to_markdown({"run_A": mock_stats}, single_file_code="run_A")
         header_line = [l for l in md.splitlines() if "Metric" in l][0]
         # | Metric | Value |
         assert header_line.count("|") == 3
 
     def test_single_file_all_metrics_present(self, mock_stats):
-        from lysis.cli.micro_stats import _micro_stats_to_markdown, _METRICS
+        from lysis.analysis.summary import MICRO_STATS_COLUMNS
 
         md = _micro_stats_to_markdown({"run_A": mock_stats}, single_file_code="run_A")
-        for m in _METRICS:
+        for m in MICRO_STATS_COLUMNS:
             assert m in md
 
     def test_single_file_fibers_degraded_value(self, mock_stats):
-        from lysis.cli.micro_stats import _micro_stats_to_markdown
-
         md = _micro_stats_to_markdown({"run_A": mock_stats}, single_file_code="run_A")
         assert "1,234" in md
 
     def test_single_file_mean_lysis_time_formatted(self, mock_stats):
-        from lysis.cli.micro_stats import _micro_stats_to_markdown
-
         md = _micro_stats_to_markdown({"run_A": mock_stats}, single_file_code="run_A")
         assert "42.000" in md
         assert "\u00b1" in md
 
     def test_directory_run_codes_as_rows(self):
-        from lysis.cli.micro_stats import _micro_stats_to_markdown
-
         rows = {"run_X": _make_stats(), "run_Y": _make_stats(fibers_degraded=500)}
         md = _micro_stats_to_markdown(rows)
         assert "run_X" in md
         assert "run_Y" in md
 
     def test_directory_header_starts_with_run(self):
-        from lysis.cli.micro_stats import _micro_stats_to_markdown
-
         rows = {"run_X": _make_stats()}
         md = _micro_stats_to_markdown(rows)
         assert md.splitlines()[0].startswith("| Run |")
 
     def test_directory_all_metrics_in_header(self):
-        from lysis.cli.micro_stats import _micro_stats_to_markdown, _METRICS
+        from lysis.analysis.summary import MICRO_STATS_COLUMNS
 
         rows = {"run_X": _make_stats()}
         md = _micro_stats_to_markdown(rows)
         header = md.splitlines()[0]
-        for m in _METRICS:
+        for m in MICRO_STATS_COLUMNS:
             assert m in header
 
 
