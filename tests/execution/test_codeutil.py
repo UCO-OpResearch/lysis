@@ -7,9 +7,12 @@ Tests cover:
 * Execution in a working directory (``exec_in_workdir``)
 * Result import into HDF5 (``import_results``)
 * Full end-to-end workflow wrapper (``run_full``)
+* Integration test with real fixture data (``TestImportResultsWithFixture``)
 """
 
+import json
 import os
+import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -502,3 +505,184 @@ class TestFortranMicroRunFull:
         assert created_tmpdirs
         # tmpdir parent should be same as hdf5_path.parent
         assert created_tmpdirs[0].parent == tmp_path
+
+
+# ---------------------------------------------------------------------------
+# Integration test with real fixture data
+# ---------------------------------------------------------------------------
+
+# These constants mirror the ones in tests/dataio/test_real_data.py.
+_MICRO_FILE_CODE = "_PLG2_tPA01_TB-xiii"
+_PARAM_OVERRIDES = {
+    "fibrinogen_length": "45nm",
+    "fibrinogen_radius": "1.2nm",
+    "micro_log_lvl": 40,
+    "micro_version": "micro_rates",
+    "snap_proportion": 0.66666667,
+}
+
+
+def _build_reference_v200(fixture_path: str) -> dict:
+    """Read v1.95.0 fixture data, apply overrides, convert to v2.0.0.
+
+    Returns a dict with v2.0.0 dataset names as keys and numpy arrays as
+    values, plus a ``"params"`` key.
+    """
+    from lysis.dataio.dataspec import dataspec
+    from lysis.dataio.fileops import read_data_collection
+    from lysis.dataio.dataconvert import convert_data
+
+    raw = read_data_collection(
+        fixture_path,
+        collections=[dataspec["v1.95.0"]["microscale_out"]],
+        file_codes=[_MICRO_FILE_CODE],
+    )
+    for key, value in _PARAM_OVERRIDES.items():
+        for section in raw["params"].values():
+            if isinstance(section, dict):
+                section[key] = value
+
+    return convert_data(raw, "v1.95.0", "v2.0.0")
+
+
+class TestImportResultsWithFixture:
+    """Integration tests: import real fixture data and compare to reference.
+
+    Uses the truncated Fortran output in ``tests/fixtures/fortran_sample/``
+    (the same dataset exercised in ``tests/dataio/test_real_data.py``).
+
+    The test simulates what happens after the Fortran binary finishes:
+    copies the fixture files into a staging directory, writes a v1.99.0
+    ``params.json``, then calls :meth:`FortranMicro.import_results`.
+    The resulting HDF5 datasets are compared element-by-element against a
+    reference produced by the established v1.95.0 → v2.0.0 conversion
+    pipeline.
+    """
+
+    @pytest.fixture
+    def reference(self, fortran_sample_path):
+        """Reference v2.0.0 data dict via the established conversion path."""
+        return _build_reference_v200(fortran_sample_path)
+
+    @pytest.fixture
+    def imported_hdf5(self, fortran_sample_path, reference, tmp_path):
+        """Run import_results on a copy of the fixture and return the HDF5 path."""
+        # Copy fixture to staging directory (import_results may delete it)
+        data_dir = tmp_path / "staging" / "data" / "fortran_sample"
+        shutil.copytree(fortran_sample_path, data_dir)
+
+        # Write params.json with micro_params so the v1.99.0 spec can parse
+        # parameters from JSON rather than from the log file.
+        micro_params = reference["params"]["micro_params"]
+        with open(data_dir / "params.json", "w") as fh:
+            json.dump({"micro_params": micro_params}, fh, indent=4, default=str)
+
+        hdf5_path = tmp_path / "result.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass  # empty target file
+
+        FortranMicro.import_results(
+            data_dir, hdf5_path,
+            file_code=_MICRO_FILE_CODE,
+            keep_tmpdir=True,
+        )
+        return hdf5_path
+
+    # ── Dataset presence ────────────────────────────────────────────
+
+    def test_all_microscale_datasets_present(self, imported_hdf5, reference):
+        """Every v2.0.0 microscale_out dataset in the reference must be in the HDF5 file."""
+        from lysis.dataio.dataspec import dataspec
+        spec = dataspec["v2.0.0"]["microscale_out"]
+        with h5py.File(str(imported_hdf5), "r") as f:
+            for name, ds_spec in spec.data.items():
+                if name not in reference:
+                    continue
+                loc = ds_spec.data_location
+                assert loc in f, f"Missing dataset: {loc} (name={name})"
+
+    # ── Per-dataset value comparisons ───────────────────────────────
+
+    def test_pli_first_time_matches(self, imported_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["pli_first_time"].data_location
+        with h5py.File(str(imported_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["pli_first_time"])
+
+    def test_tpa_final_num_matches(self, imported_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["tpa_final_num"].data_location
+        with h5py.File(str(imported_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["tpa_final_num"])
+
+    def test_fiber_degraded_matches(self, imported_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["fiber_degraded"].data_location
+        with h5py.File(str(imported_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["fiber_degraded"])
+
+    def test_sim_final_time_matches(self, imported_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["sim_final_time"].data_location
+        with h5py.File(str(imported_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["sim_final_time"])
+
+    def test_pli_generated_num_matches(self, imported_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["pli_generated_num"].data_location
+        with h5py.File(str(imported_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["pli_generated_num"])
+
+    def test_tpa_leaving_time_matches(self, imported_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["tpa_leaving_time"].data_location
+        with h5py.File(str(imported_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["tpa_leaving_time"])
+
+    def test_tpa_unbound_by_pli_matches(self, imported_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["tpa_unbound_by_pli"].data_location
+        with h5py.File(str(imported_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["tpa_unbound_by_pli"])
+
+    def test_tpa_unbound_kinetic_matches(self, imported_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["tpa_unbound_kinetic"].data_location
+        with h5py.File(str(imported_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["tpa_unbound_kinetic"])
+
+    # ── Dtype checks ────────────────────────────────────────────────
+
+    def test_dtypes_match_spec(self, imported_hdf5):
+        """Each dataset's HDF5 dtype must match the v2.0.0 dataspec."""
+        from lysis.dataio.dataspec import dataspec
+        spec = dataspec["v2.0.0"]["microscale_out"]
+        with h5py.File(str(imported_hdf5), "r") as f:
+            for name, ds_spec in spec.data.items():
+                loc = ds_spec.data_location
+                if loc not in f:
+                    continue
+                expected_dtype = np.dtype(ds_spec.dtype)
+                actual_dtype = f[loc].dtype
+                assert actual_dtype == expected_dtype, (
+                    f"{name}: expected {expected_dtype}, got {actual_dtype}"
+                )
+
+    # ── Shape checks ────────────────────────────────────────────────
+
+    def test_shapes_match_reference(self, imported_hdf5, reference):
+        """Each dataset's shape must match the reference conversion."""
+        from lysis.dataio.dataspec import dataspec
+        spec = dataspec["v2.0.0"]["microscale_out"]
+        with h5py.File(str(imported_hdf5), "r") as f:
+            for name, ds_spec in spec.data.items():
+                if name not in reference:
+                    continue
+                loc = ds_spec.data_location
+                if loc not in f:
+                    continue
+                expected_shape = np.asarray(reference[name]).shape
+                actual_shape = f[loc].shape
+                assert actual_shape == expected_shape, (
+                    f"{name}: expected shape {expected_shape}, got {actual_shape}"
+                )
