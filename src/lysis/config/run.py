@@ -168,6 +168,28 @@ class Run(object):
         else:
             self.macro_params = MacroParameters(micro_params=self.micro_params)
 
+    def load_params_from_hdf5(self) -> None:
+        """Load micro- and macroscale parameters from the run's HDF5 file.
+
+        Opens ``{run_code}.h5`` in read-only mode and populates
+        ``self.micro_params`` from the stored microscale attributes.  If
+        macroscale parameters are present in the file, ``self.macro_params``
+        is populated as well.
+
+        This is the inverse of creating a DataStore with
+        :meth:`~lysis.dataio.datastore.DataStore.create` / storing params via
+        ``initialize_micro_param``.  Use it to reconstruct a fully-parameterised
+        :class:`Run` from an existing HDF5 file without knowing the original
+        parameter values.
+
+        :raises RuntimeError: If ``os_path`` does not contain ``{run_code}.h5``.
+        :raises ValueError: If the HDF5 file's dataspec version is incompatible.
+        """
+        with DataStore(self.run_code, self.os_path, mode="r") as ds:
+            self.micro_params = ds.micro_params
+            if ds.macro_params is not None:
+                self.macro_params = ds.macro_params
+
     def open_data(self, mode: str = "r") -> DataStore:
         """Open the HDF5 DataStore for this run.
 
