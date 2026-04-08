@@ -13,6 +13,7 @@ dependencies = [
     "pint>=0.20",
     "click>=8.0",
     "rich>=13.0",
+    "sympy>=1.12",
 ]
 
 [project.scripts]
