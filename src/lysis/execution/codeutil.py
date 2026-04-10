@@ -278,11 +278,17 @@ class FortranMicro:
     :vartype executable: str
     :ivar out_file_code: Code suffix for output files (e.g., ``_PLG2_tPA01_Q4``)
     :vartype out_file_code: str
-    :ivar index: Optional index for parallel runs.  When set, the RNG seed is
-        split so each index produces an independent stream and
-        ``micro_simulations`` is forced to 1.  Append ``__{index:02}`` to
+    :ivar index: Optional index for parallel runs.  When set together with
+        ``n_array_jobs``, the RNG seed is split via
+        :func:`numpy.random.SeedSequence` and simulations are distributed
+        evenly across all jobs.  Without ``n_array_jobs`` (legacy mode),
+        ``micro_simulations`` is forced to 1.  Appends ``__{index:02}`` to
         ``out_file_code`` automatically.
     :vartype index: int or None
+    :ivar n_array_jobs: Total number of array jobs.  Must be set together with
+        ``index`` to enable array mode.  When ``None`` and ``index`` is set,
+        legacy single-simulation mode is used.
+    :vartype n_array_jobs: int or None
     """
 
     run: Run = None
@@ -290,6 +296,7 @@ class FortranMicro:
     executable: AnyStr = None
     out_file_code: AnyStr = ""
     index: int = None
+    n_array_jobs: int = None
 
     # ------------------------------------------------------------------
     # Construction helpers
@@ -302,6 +309,7 @@ class FortranMicro:
         executable: str,
         out_file_code: str = "",
         index: "int | None" = None,
+        n_array_jobs: "int | None" = None,
     ) -> "FortranMicro":
         """Construct a :class:`FortranMicro` from an existing HDF5 run file.
 
@@ -319,6 +327,10 @@ class FortranMicro:
         :param index: Parallel run index for seed splitting, defaults to
             ``None``.
         :type index: int, optional
+        :param n_array_jobs: Total number of array jobs.  When provided
+            together with ``index``, enables array mode where simulations are
+            distributed across jobs.  Defaults to ``None``.
+        :type n_array_jobs: int, optional
         :return: Fully configured :class:`FortranMicro` instance.
         :rtype: FortranMicro
         :raises RuntimeError: If the HDF5 file's directory is not found.
@@ -328,7 +340,8 @@ class FortranMicro:
         run = Run(str(hdf5_path.parent), run_code=hdf5_path.stem)
         run.load_params_from_hdf5()
         return cls(run=run, executable=str(executable),
-                   out_file_code=out_file_code, index=index)
+                   out_file_code=out_file_code, index=index,
+                   n_array_jobs=n_array_jobs)
 
     # ------------------------------------------------------------------
     # Command building
@@ -348,6 +361,17 @@ class FortranMicro:
 
         Only parameters that differ from their defaults are included.
 
+        **Array mode** (``self.index`` and ``self.n_array_jobs`` both set):
+            Simulations are distributed across ``n_array_jobs`` jobs.  Job
+            ``index`` runs ``micro_simulations // n_array_jobs`` simulations,
+            with the first ``micro_simulations % n_array_jobs`` jobs each
+            receiving one additional simulation.  The seed for job ``i`` is
+            element ``i`` of ``SeedSequence(micro_seed).generate_state(n_array_jobs)``.
+
+        **Legacy mode** (``self.index`` set, ``self.n_array_jobs`` is ``None``):
+            ``micro_simulations`` is forced to 1 and the seed is element
+            ``index`` of ``SeedSequence(micro_seed).generate_state(index + 1)``.
+
         .. note::
             When ``self.index`` is not ``None`` this method mutates
             ``self.out_file_code`` by appending ``__{index:02}``.  Calling it
@@ -363,8 +387,21 @@ class FortranMicro:
         # Seed splitting for parallel (multi-node) runs
         if self.index is not None:
             stream = np.random.SeedSequence(params["micro_seed"])
-            seeds = stream.generate_state(self.index + 1)
-            params["micro_simulations"] = 1
+            if self.n_array_jobs is not None:
+                # Array mode: distribute simulations evenly across all jobs
+                n = self.n_array_jobs
+                total_sims = params["micro_simulations"]
+                base_sims = total_sims // n
+                remainder = total_sims % n
+                # First `remainder` jobs each receive one extra simulation
+                params["micro_simulations"] = (
+                    base_sims + (1 if self.index < remainder else 0)
+                )
+                seeds = stream.generate_state(n)
+            else:
+                # Legacy mode: each job runs exactly one simulation
+                params["micro_simulations"] = 1
+                seeds = stream.generate_state(self.index + 1)
             params["micro_seed"] = int(np.int32(seeds[self.index]))
             self.out_file_code = self.out_file_code + f"__{self.index:02}"
 
@@ -553,6 +590,139 @@ class FortranMicro:
             raise
 
     # ------------------------------------------------------------------
+    # Array import
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def import_array_results(
+        staging_dir: "Path | str",
+        hdf5_path: "Path | str",
+        n_jobs: int,
+        run_code: str,
+        base_file_code: str = "",
+        *,
+        keep_on_failure: bool = False,
+        keep_tmpdir: bool = False,
+    ) -> None:
+        """Concatenate binary output from *n_jobs* array chunks and import.
+
+        After ``n_jobs`` child :class:`FortranMicro` instances (each with a
+        different ``index``) have written their output to
+        ``{staging_dir}/data/{run_code}/``, this method:
+
+        1. Concatenates the binary output files from each chunk in order.
+        2. Creates a merged ``params.json`` whose ``micro_simulations`` equals
+           the total read from *hdf5_path*.
+        3. Calls :meth:`import_results` on the merged directory.
+
+        The merged directory is created at ``{staging_dir}/merged/{run_code}/``
+        and removed on success (unless ``keep_tmpdir=True``).
+
+        Cleanup policy mirrors :meth:`import_results`:
+
+        - **Success**: merged directory removed unless ``keep_tmpdir=True``.
+        - **Failure**: merged directory preserved when ``keep_on_failure=True``
+          *or* ``keep_tmpdir=True``; otherwise removed.
+
+        :param staging_dir: Shared staging directory containing the
+            ``data/{run_code}/`` subdirectory written by all child jobs.
+        :type staging_dir: Path or str
+        :param hdf5_path: Full path to the target ``.h5`` file.  Used to read
+            the total ``micro_simulations`` count from ``micro_params``.
+        :type hdf5_path: Path or str
+        :param n_jobs: Number of array jobs (must match the number of chunks
+            whose output files are present in ``data/{run_code}/``).
+        :type n_jobs: int
+        :param run_code: Run identifier (HDF5 file stem and output subdirectory
+            name).
+        :type run_code: str
+        :param base_file_code: The base output file code used when the array
+            jobs were executed (before the ``__{index:02}`` suffix was
+            appended), defaults to ``""``.
+        :type base_file_code: str, optional
+        :param keep_on_failure: Preserve the merged directory if an exception
+            is raised, defaults to ``False``.
+        :type keep_on_failure: bool, optional
+        :param keep_tmpdir: Always preserve the merged directory, defaults to
+            ``False``.
+        :type keep_tmpdir: bool, optional
+        :raises Exception: Re-raises any exception from the read/convert/write
+            pipeline after applying the cleanup policy.
+        """
+        from ..dataio.dataspec import dataspec
+        from ..config.constants import CONST
+
+        staging_dir = Path(staging_dir)
+        hdf5_path = Path(hdf5_path)
+        data_dir = staging_dir / "data" / run_code
+        merged_dir = staging_dir / "merged" / run_code
+        merged_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # ------------------------------------------------------------------
+            # Determine total simulation count from HDF5 params
+            # ------------------------------------------------------------------
+            with h5py.File(str(hdf5_path), "r") as f:
+                total_sims = int(f["micro_data"].attrs["micro_simulations"])
+
+            # ------------------------------------------------------------------
+            # Read params from data_dir (base values come from any chunk)
+            # ------------------------------------------------------------------
+            params_src = data_dir / "params.json"
+            with open(params_src) as fh:
+                params_data = json.load(fh)
+            params_data["micro_params"]["micro_simulations"] = total_sims
+            with open(merged_dir / "params.json", "w") as fh:
+                json.dump(params_data, fh, indent=4, default=str)
+
+            # ------------------------------------------------------------------
+            # Concatenate binary and text files chunk-by-chunk
+            # ------------------------------------------------------------------
+            src_spec = dataspec[MICRO_FORTRAN_DATASPEC_VERSION]["microscale_out"]
+            for name, ds_spec in src_spec.data.items():
+                if ds_spec.dataset_storage_type not in (
+                    CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
+                    CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
+                ):
+                    continue
+                # Use base_file_code for the merged file name
+                merged_name = ds_spec.data_location.format(file_code=base_file_code)
+                merged_file = merged_dir / merged_name
+                merged_file.parent.mkdir(parents=True, exist_ok=True)
+                mode = "wb" if ds_spec.dataset_storage_type == CONST.DATASET_STORAGE_TYPE.FILE_BINARY else "w"
+                with open(merged_file, mode) as merged_fh:
+                    for i in range(n_jobs):
+                        chunk_code = f"{base_file_code}__{i:02}"
+                        chunk_name = ds_spec.data_location.format(file_code=chunk_code)
+                        chunk_file = data_dir / chunk_name
+                        if not chunk_file.exists():
+                            continue
+                        if mode == "wb":
+                            merged_fh.write(chunk_file.read_bytes())
+                        else:
+                            merged_fh.write(chunk_file.read_text())
+
+            # ------------------------------------------------------------------
+            # Import merged data into HDF5 (always keep merged_dir here;
+            # import_array_results owns the merged_dir lifecycle)
+            # ------------------------------------------------------------------
+            FortranMicro.import_results(
+                merged_dir,
+                hdf5_path,
+                file_code=base_file_code,
+                keep_on_failure=True,
+                keep_tmpdir=True,
+            )
+
+            if not keep_tmpdir:
+                shutil.rmtree(merged_dir, ignore_errors=True)
+
+        except Exception:
+            if not keep_on_failure and not keep_tmpdir:
+                shutil.rmtree(merged_dir, ignore_errors=True)
+            raise
+
+    # ------------------------------------------------------------------
     # Full workflow
     # ------------------------------------------------------------------
 
@@ -602,6 +772,77 @@ class FortranMicro:
                 data_dir,
                 hdf5_path,
                 file_code=self.out_file_code,
+                keep_on_failure=True,
+                keep_tmpdir=keep_tmpdir,
+            )
+        except Exception:
+            if not keep_tmpdir:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+            raise
+        else:
+            if not keep_tmpdir:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def run_array_full(
+        self,
+        hdf5_path: "Path | str",
+        n_jobs: int,
+        *,
+        keep_tmpdir: bool = False,
+    ) -> None:
+        """Execute the complete array workflow locally (serially).
+
+        Runs *n_jobs* :class:`FortranMicro` child instances sequentially in a
+        shared temporary directory, then concatenates and imports all results.
+        Each child receives a unique index and uses the array-mode seed scheme.
+
+        This method is primarily intended for **testing** the array workflow
+        without a Slurm cluster.  For production use with large simulation
+        counts, prefer the Slurm path (``--slurm --array N``).
+
+        The temporary directory is placed alongside the HDF5 file
+        (``hdf5_path.parent``) so that ``/tmp`` (a ramdisk on many HPC nodes)
+        is never used.
+
+        Cleanup policy:
+
+        - **Success**: temporary directory removed unless ``keep_tmpdir=True``.
+        - **Failure**: temporary directory preserved for debugging.
+
+        :param hdf5_path: Full path to the target ``.h5`` file.
+        :type hdf5_path: Path or str
+        :param n_jobs: Number of array jobs (chunks) to create.
+        :type n_jobs: int
+        :param keep_tmpdir: Always preserve the temporary directory,
+            defaults to ``False``.
+        :type keep_tmpdir: bool, optional
+        :raises subprocess.CalledProcessError: If any Fortran binary invocation
+            fails.
+        :raises Exception: Re-raises any exception from the import pipeline.
+        """
+        hdf5_path = Path(hdf5_path)
+        run_code = self.run.run_code
+        tmpdir = Path(tempfile.mkdtemp(
+            prefix=f"lysis-micro-{run_code}-array-",
+            dir=str(hdf5_path.parent),
+        ))
+        try:
+            for i in range(n_jobs):
+                fm_i = FortranMicro(
+                    run=self.run,
+                    executable=self.executable,
+                    out_file_code=self.out_file_code,
+                    index=i,
+                    n_array_jobs=n_jobs,
+                )
+                fm_i.exec_in_workdir(tmpdir)
+
+            self.import_array_results(
+                tmpdir,
+                hdf5_path,
+                n_jobs=n_jobs,
+                run_code=run_code,
+                base_file_code=self.out_file_code,
                 keep_on_failure=True,
                 keep_tmpdir=keep_tmpdir,
             )

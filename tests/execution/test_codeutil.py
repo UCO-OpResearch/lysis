@@ -508,6 +508,472 @@ class TestFortranMicroRunFull:
 
 
 # ---------------------------------------------------------------------------
+# TestFortranMicroArrayExecCommand
+# ---------------------------------------------------------------------------
+
+
+class TestFortranMicroArrayExecCommand:
+    """Tests for array-mode behaviour in :meth:`FortranMicro.exec_command`."""
+
+    def test_array_mode_appends_index_suffix(self, tmp_run):
+        """index=3 with n_array_jobs must append '__03' to out_file_code."""
+        fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe",
+                          index=3, n_array_jobs=10)
+        fm.exec_command()
+        assert fm.out_file_code == "__03"
+
+    def test_array_mode_distributes_simulations_evenly(self, tmp_path):
+        """With 1000 sims / 10 jobs each job should get exactly 100."""
+        r = Run(str(tmp_path))
+        r.initialize_micro_param({"micro_simulations": 1000})
+        fm = FortranMicro(run=r, executable="/bin/micro.exe",
+                          index=0, n_array_jobs=10)
+        cmd = fm.exec_command()
+        assert "--simulations" in cmd
+        assert cmd[cmd.index("--simulations") + 1] == "100"
+
+    def test_array_mode_last_job_no_extra_when_divisible(self, tmp_path):
+        """When total sims is divisible by n_jobs, all jobs get equal count."""
+        r = Run(str(tmp_path))
+        r.initialize_micro_param({"micro_simulations": 100})
+        fm = FortranMicro(run=r, executable="/bin/micro.exe",
+                          index=9, n_array_jobs=10)
+        cmd = fm.exec_command()
+        assert cmd[cmd.index("--simulations") + 1] == "10"
+
+    def test_array_mode_remainder_goes_to_first_jobs(self, tmp_path):
+        """With 103 sims / 10 jobs, jobs 0-2 get 11 and jobs 3-9 get 10."""
+        r = Run(str(tmp_path))
+        r.initialize_micro_param({"micro_simulations": 103})
+
+        fm0 = FortranMicro(run=r, executable="/bin/micro.exe",
+                           index=0, n_array_jobs=10)
+        fm2 = FortranMicro(run=r, executable="/bin/micro.exe",
+                           index=2, n_array_jobs=10)
+        fm3 = FortranMicro(run=r, executable="/bin/micro.exe",
+                           index=3, n_array_jobs=10)
+
+        cmd0 = fm0.exec_command()
+        cmd2 = fm2.exec_command()
+        cmd3 = fm3.exec_command()
+
+        assert cmd0[cmd0.index("--simulations") + 1] == "11"
+        assert cmd2[cmd2.index("--simulations") + 1] == "11"
+        assert cmd3[cmd3.index("--simulations") + 1] == "10"
+
+    def test_array_mode_seed_from_generate_state_n(self, tmp_run):
+        """Array-mode seed for job i must come from generate_state(N)[i]."""
+        seed = tmp_run.micro_params.micro_seed
+        n = 10
+        stream = np.random.SeedSequence(seed)
+        expected_seed = int(np.int32(stream.generate_state(n)[3]))
+
+        fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe",
+                          index=3, n_array_jobs=n)
+        cmd = fm.exec_command()
+        assert "--seed" in cmd
+        assert cmd[cmd.index("--seed") + 1] == str(expected_seed)
+
+    def test_array_mode_seed_uses_generate_state_n_formula(self, tmp_run):
+        """Array-mode seed for job i must use generate_state(N)[i], not generate_state(i+1)[i]."""
+        seed = tmp_run.micro_params.micro_seed
+        n = 10
+        idx = 3
+        # The correct array formula
+        expected = int(np.int32(
+            np.random.SeedSequence(seed).generate_state(n)[idx]
+        ))
+
+        fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe",
+                          index=idx, n_array_jobs=n)
+        cmd = fm.exec_command()
+        assert cmd[cmd.index("--seed") + 1] == str(expected)
+
+    def test_array_mode_seeds_are_independent_per_job(self, tmp_run):
+        """Each job's seed must be unique across all n_jobs."""
+        seed = tmp_run.micro_params.micro_seed
+        n = 10
+        seeds = set()
+        for i in range(n):
+            fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe",
+                              index=i, n_array_jobs=n)
+            cmd = fm.exec_command()
+            s = cmd[cmd.index("--seed") + 1]
+            seeds.add(s)
+        assert len(seeds) == n, "Not all array job seeds are unique"
+
+    def test_legacy_mode_still_forces_one_simulation(self, tmp_run):
+        """Without n_array_jobs, index alone must still force micro_simulations=1."""
+        fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe", index=0)
+        cmd = fm.exec_command()
+        assert "--simulations" in cmd
+        assert cmd[cmd.index("--simulations") + 1] == "1"
+
+
+# ---------------------------------------------------------------------------
+# TestFortranMicroFromHdf5Array
+# ---------------------------------------------------------------------------
+
+
+class TestFortranMicroFromHdf5Array:
+    """Tests for :meth:`FortranMicro.from_hdf5` with ``n_array_jobs``."""
+
+    def test_passes_n_array_jobs(self, micro_hdf5):
+        fm = FortranMicro.from_hdf5(micro_hdf5, "/bin/micro.exe",
+                                     index=2, n_array_jobs=8)
+        assert fm.n_array_jobs == 8
+
+    def test_n_array_jobs_none_by_default(self, micro_hdf5):
+        fm = FortranMicro.from_hdf5(micro_hdf5, "/bin/micro.exe")
+        assert fm.n_array_jobs is None
+
+
+# ---------------------------------------------------------------------------
+# TestFortranMicroImportArrayResults
+# ---------------------------------------------------------------------------
+
+
+class TestFortranMicroImportArrayResults:
+    """Tests for :meth:`FortranMicro.import_array_results`."""
+
+    # Binary dtypes for v1.99.0 microscale_out files
+    _DATASETS = {
+        "firstPLi": np.float64,
+        "lysis":    np.float64,
+        "tPA_time": np.float64,
+        "lasttPA":  np.int32,
+        "lyscomplete": np.uint32,
+        "PLi":      np.int32,
+        "tPAPLiunbd": np.int32,
+        "tPAunbind":  np.int32,
+    }
+
+    def _write_chunk(self, data_dir: Path, index: int, n_sims: int,
+                     run_code: str, base_code: str = "") -> None:
+        """Write fake binary chunk files for job ``index``."""
+        chunk_code = f"{base_code}__{index:02}"
+        for name, dtype in self._DATASETS.items():
+            arr = np.arange(index * n_sims, (index + 1) * n_sims, dtype=dtype)
+            fname = f"{name}{chunk_code}.dat"
+            arr.tofile(data_dir / fname)
+        log_file = data_dir / f"micro{chunk_code}.txt"
+        log_file.write_text(f"chunk {index}\n")
+
+    def _write_hdf5(self, path: Path, total_sims: int) -> None:
+        """Write a minimal HDF5 file with micro_simulations attribute."""
+        mp = MicroParameters(micro_simulations=total_sims)
+        with h5py.File(str(path), "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v2.0.0"
+            grp = f.require_group("micro_data")
+            for k, v in mp.to_basedict().items():
+                grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+
+    @patch.object(FortranMicro, "import_results")
+    def test_calls_import_results(self, mock_import, tmp_path):
+        """import_array_results must delegate to import_results after merging."""
+        n_jobs, n_sims = 3, 4
+        run_code = "run-01"
+        staging = tmp_path / "staging"
+        data_dir = staging / "data" / run_code
+        data_dir.mkdir(parents=True)
+        hdf5 = tmp_path / f"{run_code}.h5"
+        self._write_hdf5(hdf5, n_jobs * n_sims)
+
+        # Write params.json
+        import json
+        (data_dir / "params.json").write_text(
+            json.dumps({"micro_params": {"micro_simulations": n_sims}})
+        )
+        for i in range(n_jobs):
+            self._write_chunk(data_dir, i, n_sims, run_code)
+
+        FortranMicro.import_array_results(
+            staging, hdf5, n_jobs=n_jobs, run_code=run_code,
+            keep_tmpdir=True,
+        )
+        mock_import.assert_called_once()
+
+    @patch.object(FortranMicro, "import_results")
+    def test_merged_binary_has_correct_length(self, mock_import, tmp_path):
+        """The merged binary for 'firstPLi' must have n_jobs*n_sims values."""
+        n_jobs, n_sims = 3, 4
+        run_code = "run-01"
+        staging = tmp_path / "staging"
+        data_dir = staging / "data" / run_code
+        data_dir.mkdir(parents=True)
+        hdf5 = tmp_path / f"{run_code}.h5"
+        self._write_hdf5(hdf5, n_jobs * n_sims)
+
+        import json
+        (data_dir / "params.json").write_text(
+            json.dumps({"micro_params": {"micro_simulations": n_sims}})
+        )
+        for i in range(n_jobs):
+            self._write_chunk(data_dir, i, n_sims, run_code)
+
+        FortranMicro.import_array_results(
+            staging, hdf5, n_jobs=n_jobs, run_code=run_code,
+            keep_tmpdir=True,
+        )
+        merged_file = staging / "merged" / run_code / f"firstPLi.dat"
+        arr = np.fromfile(merged_file, dtype=np.float64)
+        assert len(arr) == n_jobs * n_sims
+
+    @patch.object(FortranMicro, "import_results")
+    def test_merged_binary_is_in_order(self, mock_import, tmp_path):
+        """Chunks must be concatenated in ascending index order."""
+        n_jobs, n_sims = 3, 4
+        run_code = "run-01"
+        staging = tmp_path / "staging"
+        data_dir = staging / "data" / run_code
+        data_dir.mkdir(parents=True)
+        hdf5 = tmp_path / f"{run_code}.h5"
+        self._write_hdf5(hdf5, n_jobs * n_sims)
+
+        import json
+        (data_dir / "params.json").write_text(
+            json.dumps({"micro_params": {"micro_simulations": n_sims}})
+        )
+        for i in range(n_jobs):
+            self._write_chunk(data_dir, i, n_sims, run_code)
+
+        FortranMicro.import_array_results(
+            staging, hdf5, n_jobs=n_jobs, run_code=run_code,
+            keep_tmpdir=True,
+        )
+        merged_file = staging / "merged" / run_code / "firstPLi.dat"
+        arr = np.fromfile(merged_file, dtype=np.float64)
+        expected = np.arange(n_jobs * n_sims, dtype=np.float64)
+        np.testing.assert_array_equal(arr, expected)
+
+    @patch.object(FortranMicro, "import_results")
+    def test_merged_params_json_has_total_simulations(self, mock_import, tmp_path):
+        """merged/params.json must reflect the total simulation count from HDF5."""
+        n_jobs, n_sims = 3, 4
+        total_sims = n_jobs * n_sims
+        run_code = "run-01"
+        staging = tmp_path / "staging"
+        data_dir = staging / "data" / run_code
+        data_dir.mkdir(parents=True)
+        hdf5 = tmp_path / f"{run_code}.h5"
+        self._write_hdf5(hdf5, total_sims)
+
+        import json
+        (data_dir / "params.json").write_text(
+            json.dumps({"micro_params": {"micro_simulations": n_sims}})
+        )
+        for i in range(n_jobs):
+            self._write_chunk(data_dir, i, n_sims, run_code)
+
+        FortranMicro.import_array_results(
+            staging, hdf5, n_jobs=n_jobs, run_code=run_code,
+            keep_tmpdir=True,
+        )
+        merged_params = json.loads(
+            (staging / "merged" / run_code / "params.json").read_text()
+        )
+        assert merged_params["micro_params"]["micro_simulations"] == total_sims
+
+    @patch.object(FortranMicro, "import_results")
+    def test_merged_dir_removed_on_success(self, mock_import, tmp_path):
+        """Merged run_code subdirectory must be removed on success when keep_tmpdir=False."""
+        n_jobs, n_sims = 2, 5
+        run_code = "run-01"
+        staging = tmp_path / "staging"
+        data_dir = staging / "data" / run_code
+        data_dir.mkdir(parents=True)
+        hdf5 = tmp_path / f"{run_code}.h5"
+        self._write_hdf5(hdf5, n_jobs * n_sims)
+
+        import json
+        (data_dir / "params.json").write_text(
+            json.dumps({"micro_params": {"micro_simulations": n_sims}})
+        )
+        for i in range(n_jobs):
+            self._write_chunk(data_dir, i, n_sims, run_code)
+
+        FortranMicro.import_array_results(
+            staging, hdf5, n_jobs=n_jobs, run_code=run_code,
+            keep_tmpdir=False,
+        )
+        assert not (staging / "merged" / run_code).exists()
+
+    @patch.object(FortranMicro, "import_results")
+    def test_merged_dir_preserved_with_keep_tmpdir(self, mock_import, tmp_path):
+        """Merged run_code subdirectory must survive when keep_tmpdir=True."""
+        n_jobs, n_sims = 2, 5
+        run_code = "run-01"
+        staging = tmp_path / "staging"
+        data_dir = staging / "data" / run_code
+        data_dir.mkdir(parents=True)
+        hdf5 = tmp_path / f"{run_code}.h5"
+        self._write_hdf5(hdf5, n_jobs * n_sims)
+
+        import json
+        (data_dir / "params.json").write_text(
+            json.dumps({"micro_params": {"micro_simulations": n_sims}})
+        )
+        for i in range(n_jobs):
+            self._write_chunk(data_dir, i, n_sims, run_code)
+
+        FortranMicro.import_array_results(
+            staging, hdf5, n_jobs=n_jobs, run_code=run_code,
+            keep_tmpdir=True,
+        )
+        assert (staging / "merged" / run_code).exists()
+
+
+# ---------------------------------------------------------------------------
+# TestFortranMicroRunArrayFull
+# ---------------------------------------------------------------------------
+
+
+class TestFortranMicroRunArrayFull:
+    """Tests for :meth:`FortranMicro.run_array_full`."""
+
+    def test_calls_exec_in_workdir_n_times(self, fortran_micro, tmp_path):
+        """run_array_full must call exec_in_workdir once per job."""
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+        n_jobs = 4
+        exec_calls = []
+
+        def fake_exec(work_dir):
+            exec_calls.append(work_dir)
+            return work_dir / "data"
+
+        with (
+            patch.object(FortranMicro, "exec_in_workdir", side_effect=fake_exec),
+            patch.object(FortranMicro, "import_array_results"),
+        ):
+            fortran_micro.run_array_full(hdf5_path, n_jobs=n_jobs)
+
+        assert len(exec_calls) == n_jobs
+
+    def test_each_child_has_correct_index(self, tmp_run, tmp_path):
+        """Each child FortranMicro must have index equal to its position."""
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+        n_jobs = 3
+        created_indices = []
+
+        original_init = FortranMicro.__init__
+
+        def patched_exec(self_fm, work_dir):
+            created_indices.append(self_fm.index)
+            return work_dir / "data"
+
+        fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe")
+        with (
+            patch.object(FortranMicro, "exec_in_workdir", patched_exec),
+            patch.object(FortranMicro, "import_array_results"),
+        ):
+            fm.run_array_full(hdf5_path, n_jobs=n_jobs)
+
+        assert created_indices == list(range(n_jobs))
+
+    def test_calls_import_array_results_once(self, fortran_micro, tmp_path):
+        """run_array_full must call import_array_results exactly once."""
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        with (
+            patch.object(FortranMicro, "exec_in_workdir",
+                         return_value=tmp_path / "data"),
+            patch.object(FortranMicro, "import_array_results") as mock_import,
+        ):
+            fortran_micro.run_array_full(hdf5_path, n_jobs=3)
+
+        mock_import.assert_called_once()
+
+    def test_tmpdir_not_in_system_tmp(self, fortran_micro, tmp_path):
+        """run_array_full must create tmpdir alongside HDF5, not in /tmp."""
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+        created_tmpdirs = []
+
+        def fake_exec(work_dir):
+            created_tmpdirs.append(work_dir)
+            return work_dir / "data"
+
+        with (
+            patch.object(FortranMicro, "exec_in_workdir", side_effect=fake_exec),
+            patch.object(FortranMicro, "import_array_results"),
+        ):
+            fortran_micro.run_array_full(hdf5_path, n_jobs=2)
+
+        assert created_tmpdirs
+        assert created_tmpdirs[0].parent == tmp_path
+
+    def test_tmpdir_removed_on_success(self, fortran_micro, tmp_path):
+        """run_array_full must remove tmpdir on success when keep_tmpdir=False."""
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+        created_tmpdirs = []
+
+        def fake_exec(work_dir):
+            created_tmpdirs.append(work_dir)
+            work_dir.mkdir(parents=True, exist_ok=True)
+            return work_dir / "data"
+
+        with (
+            patch.object(FortranMicro, "exec_in_workdir", side_effect=fake_exec),
+            patch.object(FortranMicro, "import_array_results"),
+        ):
+            fortran_micro.run_array_full(hdf5_path, n_jobs=2, keep_tmpdir=False)
+
+        assert created_tmpdirs
+        assert not created_tmpdirs[0].exists()
+
+    def test_tmpdir_preserved_with_keep_tmpdir(self, fortran_micro, tmp_path):
+        """run_array_full must preserve tmpdir when keep_tmpdir=True."""
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+        created_tmpdirs = []
+
+        def fake_exec(work_dir):
+            created_tmpdirs.append(work_dir)
+            work_dir.mkdir(parents=True, exist_ok=True)
+            return work_dir / "data"
+
+        with (
+            patch.object(FortranMicro, "exec_in_workdir", side_effect=fake_exec),
+            patch.object(FortranMicro, "import_array_results"),
+        ):
+            fortran_micro.run_array_full(hdf5_path, n_jobs=2, keep_tmpdir=True)
+
+        assert created_tmpdirs
+        assert created_tmpdirs[0].exists()
+
+    def test_n_array_jobs_passed_to_children(self, tmp_run, tmp_path):
+        """Each child FortranMicro must receive n_array_jobs equal to n_jobs."""
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+        n_jobs = 5
+        child_n_array_jobs = []
+
+        def patched_exec(self_fm, work_dir):
+            child_n_array_jobs.append(self_fm.n_array_jobs)
+            return work_dir / "data"
+
+        fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe")
+        with (
+            patch.object(FortranMicro, "exec_in_workdir", patched_exec),
+            patch.object(FortranMicro, "import_array_results"),
+        ):
+            fm.run_array_full(hdf5_path, n_jobs=n_jobs)
+
+        assert all(n == n_jobs for n in child_n_array_jobs)
+
+
+# ---------------------------------------------------------------------------
 # Integration test with real fixture data
 # ---------------------------------------------------------------------------
 
