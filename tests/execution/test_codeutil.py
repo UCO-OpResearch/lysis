@@ -686,3 +686,187 @@ class TestImportResultsWithFixture:
                 assert actual_shape == expected_shape, (
                     f"{name}: expected shape {expected_shape}, got {actual_shape}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Fortran binary execution integration test
+# ---------------------------------------------------------------------------
+
+# Number of simulations to run (subset of the 50,000 in the fixture).
+_BINARY_TEST_SIMULATIONS = 1000
+
+# Repo root, used to locate the compiled Fortran binary.
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Fixture seed (from micro_PLG2_tPA01_TB-xiii.txt log file).
+_FIXTURE_SEED = 2133256963
+
+
+@pytest.mark.fortran_binary
+class TestFortranBinaryExecution:
+    """Integration tests that execute the real compiled Fortran binary.
+
+    These tests compile-and-run the microscale simulation with the same
+    parameters as the ``tests/fixtures/fortran_sample/`` fixture but only
+    1,000 simulations (instead of 50,000) and compare the output to the
+    first 1,000 elements of the fixture reference data.
+
+    Requires:
+
+    * The compiled Fortran binary at ``bin/micro_rates`` (repo root).
+    * The ``tests/fixtures/fortran_sample/`` fixture.
+    * The ``lysis`` conda environment on ``$PATH``.
+
+    Skip with ``-m "not fortran_binary"`` to exclude these tests.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _skip_if_no_binary(self):
+        binary = _REPO_ROOT / "bin" / "micro_rates"
+        if not binary.exists():
+            pytest.skip("Compiled Fortran binary not found at bin/micro_rates")
+
+    # Datasets to exclude from comparisons: ``micro_log`` is a text log
+    # whose length depends on total simulations (not sliceable), and
+    # ``params`` is metadata, not numeric output.
+    _SKIP_DATASETS = {"params", "micro_log"}
+
+    @pytest.fixture
+    def reference(self, fortran_sample_path):
+        """Reference v2.0.0 data sliced to the first 1,000 simulations."""
+        ref = _build_reference_v200(fortran_sample_path)
+        sliced = {}
+        for key, value in ref.items():
+            if key in self._SKIP_DATASETS:
+                continue
+            arr = np.asarray(value)
+            if arr.ndim >= 1 and arr.shape[0] >= _BINARY_TEST_SIMULATIONS:
+                sliced[key] = arr[:_BINARY_TEST_SIMULATIONS]
+            else:
+                sliced[key] = arr
+        return sliced
+
+    @pytest.fixture
+    def executed_hdf5(self, tmp_path):
+        """Run the Fortran binary and import results into a fresh HDF5 file.
+
+        Returns the path to the HDF5 file containing the imported results.
+        """
+        from lysis.config.constants import Q_
+
+        binary = str(_REPO_ROOT / "bin" / "micro_rates")
+        hdf5_path = tmp_path / "fortran-run.h5"
+
+        # Create a minimal HDF5 with the fixture's micro parameters
+        mp = MicroParameters(
+            nodes_in_micro_row=13,
+            fiber_radius=Q_("61.5 nanometer"),
+            micro_seed=_FIXTURE_SEED,
+            micro_simulations=_BINARY_TEST_SIMULATIONS,
+        )
+        _write_micro_hdf5(hdf5_path, mp)
+
+        fm = FortranMicro.from_hdf5(hdf5_path, binary)
+        data_dir = fm.exec_in_workdir(tmp_path)
+        FortranMicro.import_results(
+            data_dir, hdf5_path, file_code=fm.out_file_code, keep_tmpdir=True
+        )
+        return hdf5_path
+
+    # ── Dataset presence ────────────────────────────────────────────
+
+    def test_all_microscale_datasets_present(self, executed_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        spec = dataspec["v2.0.0"]["microscale_out"]
+        with h5py.File(str(executed_hdf5), "r") as f:
+            for name in reference:
+                ds_spec = spec.data.get(name)
+                if ds_spec is None:
+                    continue
+                assert ds_spec.data_location in f, (
+                    f"Missing dataset: {ds_spec.data_location} (name={name})"
+                )
+
+    # ── Per-dataset value comparisons ───────────────────────────────
+
+    def test_pli_first_time_matches(self, executed_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["pli_first_time"].data_location
+        with h5py.File(str(executed_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["pli_first_time"])
+
+    def test_tpa_final_num_matches(self, executed_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["tpa_final_num"].data_location
+        with h5py.File(str(executed_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["tpa_final_num"])
+
+    def test_fiber_degraded_matches(self, executed_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["fiber_degraded"].data_location
+        with h5py.File(str(executed_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["fiber_degraded"])
+
+    def test_sim_final_time_matches(self, executed_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["sim_final_time"].data_location
+        with h5py.File(str(executed_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["sim_final_time"])
+
+    def test_pli_generated_num_matches(self, executed_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["pli_generated_num"].data_location
+        with h5py.File(str(executed_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["pli_generated_num"])
+
+    def test_tpa_leaving_time_matches(self, executed_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["tpa_leaving_time"].data_location
+        with h5py.File(str(executed_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["tpa_leaving_time"])
+
+    def test_tpa_unbound_by_pli_matches(self, executed_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["tpa_unbound_by_pli"].data_location
+        with h5py.File(str(executed_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["tpa_unbound_by_pli"])
+
+    def test_tpa_unbound_kinetic_matches(self, executed_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["tpa_unbound_kinetic"].data_location
+        with h5py.File(str(executed_hdf5), "r") as f:
+            np.testing.assert_array_equal(f[loc][...], reference["tpa_unbound_kinetic"])
+
+    # ── Dtype checks ────────────────────────────────────────────────
+
+    def test_dtypes_match_spec(self, executed_hdf5):
+        from lysis.dataio.dataspec import dataspec
+        spec = dataspec["v2.0.0"]["microscale_out"]
+        with h5py.File(str(executed_hdf5), "r") as f:
+            for name, ds_spec in spec.data.items():
+                loc = ds_spec.data_location
+                if loc not in f:
+                    continue
+                expected_dtype = np.dtype(ds_spec.dtype)
+                actual_dtype = f[loc].dtype
+                assert actual_dtype == expected_dtype, (
+                    f"{name}: expected {expected_dtype}, got {actual_dtype}"
+                )
+
+    # ── Shape checks ────────────────────────────────────────────────
+
+    def test_shapes_match_expected(self, executed_hdf5, reference):
+        from lysis.dataio.dataspec import dataspec
+        spec = dataspec["v2.0.0"]["microscale_out"]
+        with h5py.File(str(executed_hdf5), "r") as f:
+            for name, ds_spec in spec.data.items():
+                if name not in reference:
+                    continue
+                loc = ds_spec.data_location
+                if loc not in f:
+                    continue
+                expected_shape = np.asarray(reference[name]).shape
+                actual_shape = f[loc].shape
+                assert actual_shape == expected_shape, (
+                    f"{name}: expected shape {expected_shape}, got {actual_shape}"
+                )

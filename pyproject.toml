@@ -26,6 +26,7 @@ where = ["src"]
 testpaths = ["tests"]
 markers = [
     "real_data: tests requiring the full ~665MB dataset (skipped if missing)",
+    "fortran_binary: tests requiring a compiled Fortran executable (~37s per run)",
 ]
 
 [tool.black]
