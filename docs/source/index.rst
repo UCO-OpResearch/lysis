@@ -10,6 +10,8 @@ This documentation includes both usage guides and API reference.
 
    usage/ontology
    usage/data_specification
+   usage/experiment_init
+   usage/run_microscale
    usage/fortran_microscale
    usage/fortran_macroscale
    usage/octave_notebooks
