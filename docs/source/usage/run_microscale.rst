@@ -103,6 +103,33 @@ Options
 
     Leave this unset if your cluster does not expose per-node scratch storage.
 
+.. option:: --array N
+
+    Split the simulation into ``N`` parallel array jobs.
+
+    * **With** ``--slurm``: submits a single Slurm job array
+      (``#SBATCH --array=0-N-1``).  Each task uses ``$SLURM_ARRAY_TASK_ID``
+      as its chunk index, runs ``micro_simulations / N`` simulations (with the
+      remainder distributed across the first tasks), and derives an
+      independent seed via
+      ``numpy.random.SeedSequence(base_seed).generate_state(N)[index]``.
+      The master job polls for completion and then concatenates the binary
+      chunks before importing into the HDF5 file.
+
+    * **Without** ``--slurm``: executes ``N`` sub-jobs serially in the same
+      process.  Primarily useful for testing the array workflow without a
+      Slurm cluster.
+
+    The value must be ≥ 1.
+
+    .. note::
+
+       Array jobs derive per-chunk seeds from the base ``micro_seed`` using
+       :class:`numpy.random.SeedSequence`.  Each chunk uses a *different*
+       seed from the single-process run.  Aggregate statistics (means,
+       degradation fractions) are equivalent, but results are not
+       bit-for-bit identical to a single-process run.
+
 .. option:: --keep-tmpdir
 
     Always preserve the temporary output directory after the run finishes.
@@ -162,6 +189,35 @@ Submit via Slurm using fast node-local storage:
         --partition normal \
         --fast-tmp-root /nvme/scratch
 
+Submit a Slurm job array of 20 tasks (each runs 2,500 simulations for a
+total of 50,000):
+
+.. code-block:: bash
+
+    lysis run-micro data/my-experiment/run-01.h5 \
+        --executable bin/micro_rates \
+        --slurm \
+        --array 20
+
+Combine with partition and staging options:
+
+.. code-block:: bash
+
+    lysis run-micro data/my-experiment/run-01.h5 \
+        --executable bin/micro_rates \
+        --slurm \
+        --partition normal \
+        --staging-root /work/mygroup/staging \
+        --array 20
+
+Test the array workflow locally (serially) without Slurm:
+
+.. code-block:: bash
+
+    lysis run-micro data/my-experiment/run-01.h5 \
+        --executable bin/micro_rates \
+        --array 10
+
 
 Python API
 ----------
@@ -206,6 +262,33 @@ output files) or want to handle execution and import separately:
 
     # Import results into the HDF5 file
     FortranMicro.import_results(data_dir, hdf5_path, keep_tmpdir=True)
+
+Array workflow (parallel chunks)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use :meth:`~lysis.execution.codeutil.FortranMicro.run_array_full` to split
+a large simulation into independent chunks and run them locally (serially):
+
+.. code-block:: python
+
+    from lysis.execution.codeutil import FortranMicro
+
+    N_JOBS = 10   # number of chunks
+
+    fm = FortranMicro.from_hdf5("data/my-experiment/run-01.h5",
+                                executable="bin/micro_rates")
+    fm.run_array_full("data/my-experiment/run-01.h5", n_jobs=N_JOBS)
+
+Each chunk runs ``micro_simulations / N_JOBS`` simulations with an
+independent seed derived from the base ``micro_seed``.  Results are
+automatically concatenated and imported into the HDF5 file on completion.
+
+.. note::
+
+    :meth:`~lysis.execution.codeutil.FortranMicro.run_array_full` runs all
+    chunks sequentially in the same process.  It is primarily intended for
+    **testing** the array workflow locally.  For production use with large
+    simulation counts, prefer the Slurm path (``--slurm --array N``).
 
 Creating a Run programmatically
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -267,6 +350,19 @@ The intended end-to-end workflow for a new experiment is:
                --partition normal
        done
 
+   For Runs with many simulations, use ``--array N`` to submit a Slurm job
+   array and execute all chunks in parallel:
+
+   .. code-block:: bash
+
+       for h5 in /data/experiments/fiber-sweep/*.h5; do
+           lysis run-micro "$h5" \
+               --executable bin/micro_rates \
+               --slurm \
+               --partition normal \
+               --array 20
+       done
+
 4. **Analyse results** — once the jobs complete, the HDF5 files each contain
    the microscale output datasets (``micro_data/sim_final_time``,
    ``micro_data/fiber_degraded``, etc.) ready for analysis.
@@ -320,3 +416,44 @@ step manually:
     hdf5_path = Path("data/my-experiment/run-01.h5")
 
     FortranMicro.import_results(data_dir, hdf5_path, keep_tmpdir=True)
+
+Array job: some tasks failed, some succeeded
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each array task writes its output to the shared staging directory as a
+separate chunk (e.g. ``data/run-01__00/``, ``data/run-01__01/``, …).  If
+some tasks fail, the master job will detect the missing chunks and preserve
+the staging directory for inspection.
+
+To identify which tasks failed, check the per-task log files in the staging
+directory.  Once you have re-run (or manually placed) the missing chunks, you
+can trigger the concatenation and import manually:
+
+.. code-block:: python
+
+    from pathlib import Path
+    from lysis.execution.codeutil import FortranMicro
+
+    staging_dir = Path("/work/mygroup/staging/lysis-micro-run-01-XXXXX")
+    hdf5_path   = Path("data/my-experiment/run-01.h5")
+    run_code    = "run-01"
+
+    FortranMicro.import_array_results(
+        staging_dir,
+        hdf5_path,
+        n_jobs=20,
+        run_code=run_code,
+        base_file_code="",       # match the --file-code used at submit time
+        keep_tmpdir=True,        # preserve staging for inspection
+    )
+
+Array result count is wrong
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each chunk writes a ``params.json`` file recording the number of simulations
+*it* ran, which may be less than ``micro_simulations / N`` for the last few
+chunks when ``micro_simulations`` is not evenly divisible by ``N``.
+:meth:`~lysis.execution.codeutil.FortranMicro.import_array_results` reads
+the total simulation count from the HDF5 ``micro_data`` group attributes to
+determine the expected total, so the ``micro_simulations`` attribute in the
+HDF5 file must match the value used at submit time.
