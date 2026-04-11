@@ -1336,3 +1336,248 @@ class TestFortranBinaryExecution:
                 assert actual_shape == expected_shape, (
                     f"{name}: expected shape {expected_shape}, got {actual_shape}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Fortran array execution integration test
+# ---------------------------------------------------------------------------
+
+# Number of array jobs and simulations per job for array integration tests.
+_ARRAY_N_JOBS = 10
+_ARRAY_SIMS_PER_JOB = 100
+_ARRAY_TOTAL_SIMS = _ARRAY_N_JOBS * _ARRAY_SIMS_PER_JOB
+
+
+@pytest.mark.fortran_binary
+class TestFortranArrayExecution:
+    """Integration tests for the ``run_array_full`` workflow.
+
+    Executes the real compiled Fortran binary as :data:`_ARRAY_N_JOBS`
+    independent chunk jobs (each running :data:`_ARRAY_SIMS_PER_JOB`
+    simulations), concatenates the results, and verifies:
+
+    1. All datasets are present and have the correct total length.
+    2. Results are reproducible — running again with the same seed yields
+       identical output.
+    3. The aggregated array results are statistically consistent with a
+       single-process run of the same total number of simulations.
+
+    .. note::
+
+        Array jobs use ``numpy.random.SeedSequence`` to derive independent
+        per-chunk seeds from the base ``micro_seed``.  The Fortran KISS32 RNG
+        is initialised with a *different* seed for each chunk, so array output
+        cannot be **bit-for-bit identical** to a single-process run that uses
+        the base seed directly.  Tests therefore compare statistical properties
+        (means, standard deviations) rather than exact values.
+
+    Requires:
+
+    * The compiled Fortran binary at ``bin/micro_rates`` (repo root).
+    * The ``lysis`` conda environment on ``$PATH``.
+
+    Skip with ``-m "not fortran_binary"`` to exclude these tests.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _skip_if_no_binary(self):
+        binary = _REPO_ROOT / "bin" / "micro_rates"
+        if not binary.exists():
+            pytest.skip("Compiled Fortran binary not found at bin/micro_rates")
+
+    _SKIP_DATASETS = {"params", "micro_log"}
+
+    def _make_hdf5(self, tmp_path: Path, seed: int = _FIXTURE_SEED) -> Path:
+        """Write a minimal HDF5 file using the fixture parameters."""
+        from lysis.config.constants import Q_
+
+        hdf5_path = tmp_path / "array-run.h5"
+        mp = MicroParameters(
+            nodes_in_micro_row=13,
+            fiber_radius=Q_("61.5 nanometer"),
+            micro_seed=seed,
+            micro_simulations=_ARRAY_TOTAL_SIMS,
+        )
+        _write_micro_hdf5(hdf5_path, mp)
+        return hdf5_path
+
+    @pytest.fixture
+    def array_hdf5(self, tmp_path):
+        """Execute ``run_array_full`` and return the HDF5 path.
+
+        Runs :data:`_ARRAY_N_JOBS` chunks of :data:`_ARRAY_SIMS_PER_JOB`
+        simulations each using the fixture seed.
+        """
+        binary = str(_REPO_ROOT / "bin" / "micro_rates")
+        hdf5_path = self._make_hdf5(tmp_path)
+        fm = FortranMicro.from_hdf5(hdf5_path, binary)
+        fm.run_array_full(hdf5_path, n_jobs=_ARRAY_N_JOBS)
+        return hdf5_path
+
+    @pytest.fixture
+    def array_hdf5_second_run(self, tmp_path):
+        """Independent second execution with the same seed for reproducibility.
+
+        Uses a separate ``tmp_path`` sub-directory so there is no chance of
+        file-name collisions with :attr:`array_hdf5`.
+        """
+        binary = str(_REPO_ROOT / "bin" / "micro_rates")
+        sub = tmp_path / "second"
+        sub.mkdir()
+        hdf5_path = self._make_hdf5(sub)
+        fm = FortranMicro.from_hdf5(hdf5_path, binary)
+        fm.run_array_full(hdf5_path, n_jobs=_ARRAY_N_JOBS)
+        return hdf5_path
+
+    @pytest.fixture
+    def single_hdf5(self, tmp_path):
+        """Single-process run of :data:`_ARRAY_TOTAL_SIMS` simulations.
+
+        Used as a statistical reference.  Results will not match the array run
+        bit-for-bit because the RNG seeds differ, but aggregate statistics
+        (mean, std) should be equivalent.
+        """
+        from lysis.config.constants import Q_
+
+        binary = str(_REPO_ROOT / "bin" / "micro_rates")
+        sub = tmp_path / "single"
+        sub.mkdir()
+        hdf5_path = sub / "single-run.h5"
+        mp = MicroParameters(
+            nodes_in_micro_row=13,
+            fiber_radius=Q_("61.5 nanometer"),
+            micro_seed=_FIXTURE_SEED,
+            micro_simulations=_ARRAY_TOTAL_SIMS,
+        )
+        _write_micro_hdf5(hdf5_path, mp)
+        fm = FortranMicro.from_hdf5(hdf5_path, binary)
+        data_dir = fm.exec_in_workdir(sub)
+        FortranMicro.import_results(
+            data_dir, hdf5_path, file_code=fm.out_file_code, keep_tmpdir=False
+        )
+        return hdf5_path
+
+    # ── Dataset presence / length ─────────────────────────────────────
+
+    def test_all_datasets_present(self, array_hdf5):
+        """All microscale_out datasets (except skipped ones) must be present."""
+        from lysis.dataio.dataspec import dataspec
+        spec = dataspec["v2.0.0"]["microscale_out"]
+        with h5py.File(str(array_hdf5), "r") as f:
+            for name, ds_spec in spec.data.items():
+                if name in self._SKIP_DATASETS:
+                    continue
+                assert ds_spec.data_location in f, (
+                    f"Missing dataset: {ds_spec.data_location} (name={name})"
+                )
+
+    def test_total_simulation_count(self, array_hdf5):
+        """Leading dimension of every 1-D output must equal the total sims."""
+        from lysis.dataio.dataspec import dataspec
+        spec = dataspec["v2.0.0"]["microscale_out"]
+        with h5py.File(str(array_hdf5), "r") as f:
+            for name, ds_spec in spec.data.items():
+                if name in self._SKIP_DATASETS:
+                    continue
+                loc = ds_spec.data_location
+                if loc not in f:
+                    continue
+                arr = f[loc][...]
+                if arr.ndim >= 1 and arr.shape[0] > 1:
+                    assert arr.shape[0] == _ARRAY_TOTAL_SIMS, (
+                        f"{name}: expected {_ARRAY_TOTAL_SIMS} rows, "
+                        f"got {arr.shape[0]}"
+                    )
+
+    # ── Reproducibility ──────────────────────────────────────────────
+
+    def test_reproducible_pli_first_time(self, array_hdf5, array_hdf5_second_run):
+        """Two array runs with the same seed must produce identical pli_first_time."""
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["pli_first_time"].data_location
+        with h5py.File(str(array_hdf5), "r") as f1, \
+             h5py.File(str(array_hdf5_second_run), "r") as f2:
+            np.testing.assert_array_equal(f1[loc][...], f2[loc][...])
+
+    def test_reproducible_sim_final_time(self, array_hdf5, array_hdf5_second_run):
+        """Two array runs with the same seed must produce identical sim_final_time."""
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["sim_final_time"].data_location
+        with h5py.File(str(array_hdf5), "r") as f1, \
+             h5py.File(str(array_hdf5_second_run), "r") as f2:
+            np.testing.assert_array_equal(f1[loc][...], f2[loc][...])
+
+    def test_reproducible_fiber_degraded(self, array_hdf5, array_hdf5_second_run):
+        """Two array runs with the same seed must produce identical fiber_degraded."""
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["fiber_degraded"].data_location
+        with h5py.File(str(array_hdf5), "r") as f1, \
+             h5py.File(str(array_hdf5_second_run), "r") as f2:
+            np.testing.assert_array_equal(f1[loc][...], f2[loc][...])
+
+    # ── Statistical consistency with single-process run ──────────────
+
+    def test_pli_first_time_mean_consistent(self, array_hdf5, single_hdf5):
+        """Array mean of pli_first_time must be within 5 % of single-run mean.
+
+        The array and single-process runs use different RNG seeds (by design),
+        so exact equality is not expected.  With 1,000 simulations the sampling
+        error is small enough that a 5 % tolerance is a meaningful consistency
+        check without being fragile.
+        """
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["pli_first_time"].data_location
+        with h5py.File(str(array_hdf5), "r") as fa, \
+             h5py.File(str(single_hdf5), "r") as fs:
+            arr_mean = float(np.mean(fa[loc][...]))
+            single_mean = float(np.mean(fs[loc][...]))
+        rel_diff = abs(arr_mean - single_mean) / (abs(single_mean) + 1e-12)
+        assert rel_diff < 0.05, (
+            f"pli_first_time mean differs by {rel_diff:.1%}: "
+            f"array={arr_mean:.4g}, single={single_mean:.4g}"
+        )
+
+    def test_sim_final_time_mean_consistent(self, array_hdf5, single_hdf5):
+        """Array mean of sim_final_time must be within 5 % of single-run mean."""
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["sim_final_time"].data_location
+        with h5py.File(str(array_hdf5), "r") as fa, \
+             h5py.File(str(single_hdf5), "r") as fs:
+            arr_mean = float(np.mean(fa[loc][...]))
+            single_mean = float(np.mean(fs[loc][...]))
+        rel_diff = abs(arr_mean - single_mean) / (abs(single_mean) + 1e-12)
+        assert rel_diff < 0.05, (
+            f"sim_final_time mean differs by {rel_diff:.1%}: "
+            f"array={arr_mean:.4g}, single={single_mean:.4g}"
+        )
+
+    def test_fiber_degraded_fraction_consistent(self, array_hdf5, single_hdf5):
+        """Fraction of degraded fibers must be within 5 % of single-run value."""
+        from lysis.dataio.dataspec import dataspec
+        loc = dataspec["v2.0.0"]["microscale_out"].data["fiber_degraded"].data_location
+        with h5py.File(str(array_hdf5), "r") as fa, \
+             h5py.File(str(single_hdf5), "r") as fs:
+            arr_frac = float(np.mean(fa[loc][...]))
+            single_frac = float(np.mean(fs[loc][...]))
+        rel_diff = abs(arr_frac - single_frac) / (abs(single_frac) + 1e-12)
+        assert rel_diff < 0.05, (
+            f"fiber_degraded fraction differs by {rel_diff:.1%}: "
+            f"array={arr_frac:.4g}, single={single_frac:.4g}"
+        )
+
+    # ── Dtype / shape checks ─────────────────────────────────────────
+
+    def test_dtypes_match_spec(self, array_hdf5):
+        """All datasets must have the dtype specified by the dataspec."""
+        from lysis.dataio.dataspec import dataspec
+        spec = dataspec["v2.0.0"]["microscale_out"]
+        with h5py.File(str(array_hdf5), "r") as f:
+            for name, ds_spec in spec.data.items():
+                loc = ds_spec.data_location
+                if loc not in f:
+                    continue
+                expected_dtype = np.dtype(ds_spec.dtype)
+                actual_dtype = f[loc].dtype
+                assert actual_dtype == expected_dtype, (
+                    f"{name}: expected {expected_dtype}, got {actual_dtype}"
+                )
