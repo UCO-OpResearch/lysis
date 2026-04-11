@@ -81,9 +81,23 @@ from lysis.cli import cli
     show_default=True,
     help="Output file code suffix for the Fortran binary.",
 )
+@click.option(
+    "--array",
+    "n_array_jobs",
+    default=None,
+    type=click.IntRange(min=1),
+    metavar="N",
+    help=(
+        "Split the simulation into N parallel array jobs.  "
+        "With --slurm, submits a Slurm job array (``#SBATCH --array=0-N-1``); "
+        "without --slurm, executes N sub-jobs serially in the same process "
+        "(useful for testing).  Simulations are distributed evenly across "
+        "jobs with independent seeds derived from the base micro_seed."
+    ),
+)
 @click.pass_context
 def run_micro(ctx, hdf5_path, executable, use_slurm, partition, staging_root,
-              fast_tmp_root, keep_tmpdir, file_code):
+              fast_tmp_root, keep_tmpdir, file_code, n_array_jobs):
     """Execute the Fortran microscale simulation for a Run.
 
     HDF5_PATH must point to an existing ``.h5`` file containing
@@ -99,6 +113,8 @@ def run_micro(ctx, hdf5_path, executable, use_slurm, partition, staging_root,
             --partition normal --staging-root /scratch/staging
         lysis run-micro data/run01.h5 --executable bin/micro.exe --slurm \\
             --fast-tmp-root /nvme/scratch
+        lysis run-micro data/run01.h5 --executable bin/micro.exe --slurm \\
+            --array 10
     """
     console = ctx.obj["console"]
 
@@ -113,23 +129,45 @@ def run_micro(ctx, hdf5_path, executable, use_slurm, partition, staging_root,
             fast_tmp_root=fast_tmp_root,
             keep_tmpdir=keep_tmpdir,
             out_code=file_code,
+            n_array_jobs=n_array_jobs,
         )
-        console.print(f"Submitted master Slurm job [bold]{job_id}[/bold]")
+        if n_array_jobs is not None:
+            console.print(
+                f"Submitted master Slurm job [bold]{job_id}[/bold] "
+                f"({n_array_jobs} array tasks)"
+            )
+        else:
+            console.print(f"Submitted master Slurm job [bold]{job_id}[/bold]")
     else:
         from lysis.execution.codeutil import FortranMicro
 
         fm = FortranMicro.from_hdf5(hdf5_path, executable,
                                      out_file_code=file_code)
-        if not ctx.obj.get("verbose", 0):
-            with console.status(
-                f"Running microscale simulation for {fm.run.run_code}..."
-            ):
-                fm.run_full(hdf5_path, keep_tmpdir=keep_tmpdir)
+        if n_array_jobs is not None:
+            if not ctx.obj.get("verbose", 0):
+                with console.status(
+                    f"Running {n_array_jobs}-job array for {fm.run.run_code}..."
+                ):
+                    fm.run_array_full(hdf5_path, n_jobs=n_array_jobs,
+                                      keep_tmpdir=keep_tmpdir)
+            else:
+                console.print(
+                    f"Running [bold]{n_array_jobs}[/bold]-job array for "
+                    f"[bold]{fm.run.run_code}[/bold]"
+                )
+                fm.run_array_full(hdf5_path, n_jobs=n_array_jobs,
+                                  keep_tmpdir=keep_tmpdir)
         else:
-            console.print(
-                f"Running microscale simulation for [bold]{fm.run.run_code}[/bold]"
-            )
-            fm.run_full(hdf5_path, keep_tmpdir=keep_tmpdir)
+            if not ctx.obj.get("verbose", 0):
+                with console.status(
+                    f"Running microscale simulation for {fm.run.run_code}..."
+                ):
+                    fm.run_full(hdf5_path, keep_tmpdir=keep_tmpdir)
+            else:
+                console.print(
+                    f"Running microscale simulation for [bold]{fm.run.run_code}[/bold]"
+                )
+                fm.run_full(hdf5_path, keep_tmpdir=keep_tmpdir)
         console.print(
             f"[green]Microscale results imported into[/green] {hdf5_path}"
         )

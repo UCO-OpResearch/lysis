@@ -273,3 +273,168 @@ class TestRunMicroSlurm:
         # Should succeed (partition is silently ignored in non-slurm mode)
         assert result.exit_code == 0, result.output
         mock_fm.run_full.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# --array flag (local mode)
+# ---------------------------------------------------------------------------
+
+
+class TestRunMicroArrayLocal:
+    """Tests for ``--array N`` without ``--slurm`` (local serial array execution)."""
+
+    @patch("lysis.execution.codeutil.FortranMicro")
+    def test_array_calls_run_array_full(self, mock_cls, runner, micro_hdf5):
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--array", "5",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        mock_fm.run_array_full.assert_called_once()
+
+    @patch("lysis.execution.codeutil.FortranMicro")
+    def test_array_passes_n_jobs(self, mock_cls, runner, micro_hdf5):
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--array", "7",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_fm.run_array_full.call_args.kwargs
+        assert call_kwargs.get("n_jobs") == 7
+
+    @patch("lysis.execution.codeutil.FortranMicro")
+    def test_array_keep_tmpdir_forwarded(self, mock_cls, runner, micro_hdf5):
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--array", "3",
+                "--keep-tmpdir",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_fm.run_array_full.call_args.kwargs
+        assert call_kwargs.get("keep_tmpdir") is True
+
+    @patch("lysis.execution.codeutil.FortranMicro")
+    def test_array_does_not_call_run_full(self, mock_cls, runner, micro_hdf5):
+        """With --array, run_full must NOT be called."""
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--array", "4",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        mock_fm.run_full.assert_not_called()
+
+    @patch("lysis.execution.codeutil.FortranMicro")
+    def test_array_zero_rejected(self, mock_cls, runner, micro_hdf5):
+        """--array 0 should be rejected by Click's IntRange(min=1)."""
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--array", "0",
+            ],
+        )
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# --array flag (Slurm mode)
+# ---------------------------------------------------------------------------
+
+
+class TestRunMicroArraySlurm:
+    """Tests for ``--array N`` combined with ``--slurm``."""
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=42)
+    def test_array_slurm_calls_submit(self, mock_submit, runner, micro_hdf5):
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+                "--array", "10",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        mock_submit.assert_called_once()
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=42)
+    def test_array_slurm_forwards_n_array_jobs(self, mock_submit, runner, micro_hdf5):
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+                "--array", "10",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_submit.call_args.kwargs
+        assert call_kwargs.get("n_array_jobs") == 10
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=42)
+    def test_array_slurm_prints_job_id_and_task_count(self, mock_submit, runner, micro_hdf5):
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+                "--array", "10",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "42" in result.output
+        assert "10" in result.output
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
+    def test_slurm_without_array_sends_none(self, mock_submit, runner, micro_hdf5):
+        """Without --array, n_array_jobs must be None in the submit call."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_submit.call_args.kwargs
+        assert call_kwargs.get("n_array_jobs") is None
+
+    def test_help_mentions_array(self, runner):
+        result = runner.invoke(cli, ["run-micro", "--help"])
+        assert "--array" in result.output
