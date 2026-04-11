@@ -3,9 +3,11 @@
 Tests cover:
 
 * :func:`generate_micro_child_script` — single-tier and two-tier bash script generation
+* :func:`generate_micro_array_child_script` — array script with ``--array`` SBATCH directive
 * :func:`submit_micro_child_job` — writing and submitting a script via ``gs.sbatch``
 * :func:`wait_for_jobs` — polling squeue until jobs complete or fail
 * :func:`submit_micro_slurm_job` — end-to-end staging, script generation, and submission
+  (both standard and array modes)
 """
 
 import os
@@ -18,6 +20,7 @@ import pytest
 from lysis.config.constants import CONST
 from lysis.config.parameters import MicroParameters
 from lysis.tools.slurm import (
+    generate_micro_array_child_script,
     generate_micro_child_script,
     submit_micro_child_job,
     submit_micro_slurm_job,
@@ -402,3 +405,250 @@ class TestSubmitMicroSlurmJob:
                                staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
         assert "run-01" in staging_dir.name
+
+
+# ---------------------------------------------------------------------------
+# TestGenerateMicroArrayChildScript
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateMicroArrayChildScript:
+    """Tests for :func:`generate_micro_array_child_script`."""
+
+    def test_contains_array_sbatch_directive(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=10
+        )
+        assert "--array" in script
+        assert "0-9" in script
+
+    def test_array_range_reflects_n_array_jobs(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=5
+        )
+        assert "0-4" in script
+
+    def test_contains_slurm_array_task_id(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=10
+        )
+        assert "SLURM_ARRAY_TASK_ID" in script
+
+    def test_contains_n_array_jobs_value(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=10
+        )
+        # n_array_jobs=10 must appear in the FortranMicro.from_hdf5 call
+        assert "n_array_jobs=10" in script
+
+    def test_single_tier_no_local_workdir(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=4
+        )
+        assert "local_work_dir" not in script
+
+    def test_two_tier_contains_mktemp(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=4,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "mktemp" in script
+        assert "/nvme/scratch" in script
+
+    def test_two_tier_contains_mv_step(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=4,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "mv" in script
+
+    def test_partition_in_sbatch_header(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=4, partition="long"
+        )
+        assert "partition" in script
+        assert "long" in script
+
+    def test_no_partition_when_not_set(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=4
+        )
+        assert "--partition" not in script
+
+    def test_contains_staging_dir(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=4
+        )
+        assert str(staging) in script
+
+    def test_contains_hdf5_path(self, tmp_path):
+        staging = tmp_path / "staging"
+        h5_path = tmp_path / "run-01.h5"
+        script = generate_micro_array_child_script(
+            staging, "run-01", h5_path, "/bin/micro.exe", n_array_jobs=4
+        )
+        assert str(h5_path) in script
+
+    def test_has_sbatch_shebang(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=4
+        )
+        assert script.startswith("#!/bin/bash")
+
+    def test_returns_string(self, tmp_path):
+        staging = tmp_path / "staging"
+        result = generate_micro_array_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", n_array_jobs=4
+        )
+        assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
+# TestSubmitMicroSlurmJobArray
+# ---------------------------------------------------------------------------
+
+
+class TestSubmitMicroSlurmJobArray:
+    """Tests for :func:`submit_micro_slurm_job` in array mode (``n_array_jobs`` set)."""
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=999)
+    def test_returns_master_job_id(self, mock_sbatch, micro_hdf5, tmp_path):
+        job_id = submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe", staging_root=tmp_path, n_array_jobs=4
+        )
+        assert job_id == 999
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_child_script_written(self, mock_sbatch, micro_hdf5, tmp_path):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root, n_array_jobs=4)
+        staging_dir = list(staging_root.iterdir())[0]
+        assert (staging_dir / "child_array.sh").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_no_child_000_in_array_mode(self, mock_sbatch, micro_hdf5, tmp_path):
+        """Array mode must NOT create child_000.sh."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root, n_array_jobs=4)
+        staging_dir = list(staging_root.iterdir())[0]
+        assert not (staging_dir / "child_000.sh").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_child_script_contains_sbatch_array(self, mock_sbatch, micro_hdf5, tmp_path):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root, n_array_jobs=8)
+        staging_dir = list(staging_root.iterdir())[0]
+        child_content = (staging_dir / "child_array.sh").read_text()
+        assert "--array" in child_content
+        assert "0-7" in child_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_script_written_in_array_mode(self, mock_sbatch, micro_hdf5, tmp_path):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root, n_array_jobs=4)
+        staging_dir = list(staging_root.iterdir())[0]
+        assert (staging_dir / "master.sh").exists()
+        assert (staging_dir / "master.py").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_master_py_calls_import_array_results(self, mock_sbatch, micro_hdf5, tmp_path):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root, n_array_jobs=4)
+        staging_dir = list(staging_root.iterdir())[0]
+        master_py = (staging_dir / "master.py").read_text()
+        assert "import_array_results" in master_py
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_master_py_contains_n_jobs(self, mock_sbatch, micro_hdf5, tmp_path):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root, n_array_jobs=6)
+        staging_dir = list(staging_root.iterdir())[0]
+        master_py = (staging_dir / "master.py").read_text()
+        assert "N_JOBS = 6" in master_py
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_master_py_polls_by_prefix(self, mock_sbatch, micro_hdf5, tmp_path):
+        """Array master must poll squeue using base-job-ID prefix matching."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root, n_array_jobs=4)
+        staging_dir = list(staging_root.iterdir())[0]
+        master_py = (staging_dir / "master.py").read_text()
+        assert "startswith" in master_py
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_partition_forwarded_in_array_mode(self, mock_sbatch, micro_hdf5, tmp_path):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root,
+                               n_array_jobs=4, partition="long")
+        staging_dir = list(staging_root.iterdir())[0]
+        child_content = (staging_dir / "child_array.sh").read_text()
+        assert "partition" in child_content
+        assert "long" in child_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_fast_tmp_root_forwarded_in_array_mode(self, mock_sbatch, micro_hdf5, tmp_path):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root,
+                               n_array_jobs=4, fast_tmp_root="/nvme/scratch")
+        staging_dir = list(staging_root.iterdir())[0]
+        child_content = (staging_dir / "child_array.sh").read_text()
+        assert "/nvme/scratch" in child_content
+        assert "mktemp" in child_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_raises_for_n_array_jobs_zero(self, mock_sbatch, micro_hdf5, tmp_path):
+        with pytest.raises(ValueError, match="n_array_jobs"):
+            submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                                   staging_root=tmp_path, n_array_jobs=0)
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_standard_mode_unchanged_when_n_array_jobs_none(self, mock_sbatch, micro_hdf5, tmp_path):
+        """Without n_array_jobs, standard child_000.sh must still be created."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root)
+        staging_dir = list(staging_root.iterdir())[0]
+        assert (staging_dir / "child_000.sh").exists()
+        assert not (staging_dir / "child_array.sh").exists()

@@ -11,18 +11,28 @@ Workflow overview
 
 1. Creates a unique shared *staging directory* alongside the HDF5 file
    (never in ``/tmp``, which is a ramdisk on many HPC nodes).
-2. Generates one or more *child* bash scripts (one per seed-split index,
-   currently always 1) and writes them to the staging directory.
+2. Generates a *child* bash script and writes it to the staging directory.
 3. Generates a *master* Python script and a thin bash wrapper, both written
    to the staging directory.
 4. Submits the bash wrapper as a Slurm job.  The master job runs on a
-   compute node and orchestrates the children:
+   compute node and orchestrates the child job(s):
 
-   a. Submits child script(s) via ``sbatch``.
+   a. Submits the child script via ``sbatch``.
    b. Polls ``squeue`` until all children finish.
    c. Calls :meth:`~lysis.execution.codeutil.FortranMicro.import_results`
-      to convert Fortran output into the HDF5 file.
+      (or :meth:`~lysis.execution.codeutil.FortranMicro.import_array_results`
+      for array mode) to convert Fortran output into the HDF5 file.
    d. Optionally removes the staging directory.
+
+Array mode (opt-in via *n_array_jobs*)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+When *n_array_jobs* is provided the child script is submitted as a **Slurm
+job array** (``#SBATCH --array=0-N-1``).  Each task uses
+``$SLURM_ARRAY_TASK_ID`` as its index, so simulations are distributed evenly
+across tasks with independent seeds.  The master job monitors the array by
+its base job ID and calls
+:meth:`~lysis.execution.codeutil.FortranMicro.import_array_results` to
+concatenate per-chunk output and import the merged results.
 
 Two-tier storage (opt-in)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -163,6 +173,109 @@ def _generate_master_py(
     )
 
 
+#: Template for the master Python script used in array mode.
+#: Submits a single Slurm job array, monitors it by base job ID prefix,
+#: and calls FortranMicro.import_array_results when complete.
+_ARRAY_MASTER_PY_TEMPLATE = Template('''\
+#!/usr/bin/env python3
+"""Master Slurm job (array mode): submit array job, poll for completion, import results."""
+import time
+import shutil
+from pathlib import Path
+
+import GooseSLURM as gs
+from lysis.execution.codeutil import FortranMicro
+
+STAGING_DIR = Path($staging_dir)
+HDF5_PATH = Path($hdf5_path)
+RUN_CODE = $run_code
+FILE_CODE = $file_code
+N_JOBS = $n_jobs
+KEEP_TMPDIR = $keep_tmpdir
+
+# ---------------------------------------------------------------------------
+# Submit the child array job
+# ---------------------------------------------------------------------------
+array_script = STAGING_DIR / "child_array.sh"
+array_job_id = gs.sbatch([str(array_script)])
+print(f"Submitted array job {array_job_id} ({N_JOBS} tasks)", flush=True)
+
+# ---------------------------------------------------------------------------
+# Poll until all array tasks complete
+# ---------------------------------------------------------------------------
+prefix = str(array_job_id)
+while True:
+    time.sleep(30)
+    squeue_rows = gs.squeue.read()
+    running = [
+        row for row in squeue_rows
+        if row["JOBID"] == prefix or row["JOBID"].startswith(prefix + "_")
+    ]
+    for row in running:
+        state = row.get("STATE", "").upper()
+        if state in ("FAILED", "CANCELLED"):
+            raise RuntimeError(
+                f"Array task {row['JOBID']} entered state {state}"
+            )
+    if not running:
+        break
+
+print("All array tasks complete.", flush=True)
+
+# ---------------------------------------------------------------------------
+# Concatenate per-chunk output and import into HDF5
+# ---------------------------------------------------------------------------
+FortranMicro.import_array_results(
+    STAGING_DIR,
+    HDF5_PATH,
+    n_jobs=N_JOBS,
+    run_code=RUN_CODE,
+    base_file_code=FILE_CODE,
+    keep_on_failure=True,
+    keep_tmpdir=KEEP_TMPDIR,
+)
+print("Results imported successfully.", flush=True)
+
+# ---------------------------------------------------------------------------
+# Clean up staging directory
+# ---------------------------------------------------------------------------
+if not KEEP_TMPDIR:
+    shutil.rmtree(STAGING_DIR, ignore_errors=True)
+    print("Staging directory removed.", flush=True)
+
+print("Master job complete.", flush=True)
+''')
+
+
+def _generate_array_master_py(
+    staging_dir: Path,
+    hdf5_path: Path,
+    run_code: str,
+    file_code: str,
+    n_jobs: int,
+    keep_tmpdir: bool,
+) -> str:
+    """Return the array-mode master Python script with values substituted.
+
+    :param staging_dir: Absolute path to the shared staging directory.
+    :param hdf5_path: Absolute path to the target ``.h5`` file.
+    :param run_code: Run identifier (HDF5 file stem).
+    :param file_code: Output file code suffix for the Fortran binary.
+    :param n_jobs: Total number of array tasks.
+    :param keep_tmpdir: Whether to preserve the staging directory on success.
+    :return: Python script text.
+    :rtype: str
+    """
+    return _ARRAY_MASTER_PY_TEMPLATE.substitute(
+        staging_dir=repr(str(staging_dir)),
+        hdf5_path=repr(str(hdf5_path)),
+        run_code=repr(run_code),
+        file_code=repr(file_code),
+        n_jobs=repr(n_jobs),
+        keep_tmpdir=repr(keep_tmpdir),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -283,6 +396,127 @@ rm -rf "${local_work_dir}" """
     return gs.scripts.plain(sections, **sbatch_opts)
 
 
+def generate_micro_array_child_script(
+    staging_dir: "Path | str",
+    run_code: str,
+    hdf5_path: "Path | str",
+    executable: "Path | str",
+    n_array_jobs: int,
+    out_code: str = "",
+    *,
+    partition: Optional[str] = None,
+    fast_tmp_root: Optional[str] = None,
+) -> str:
+    """Generate a Slurm bash script for an array of microscale Fortran jobs.
+
+    The script uses ``#SBATCH --array=0-{n_array_jobs-1}`` so each Slurm task
+    receives a unique ``$SLURM_ARRAY_TASK_ID`` (0-based).  That ID is passed
+    to :meth:`~lysis.execution.codeutil.FortranMicro.from_hdf5` as ``index``
+    alongside ``n_array_jobs``, enabling array-mode seed splitting and
+    simulation distribution.
+
+    **Single-tier** (default, ``fast_tmp_root=None``): Fortran writes its
+    output directly to ``{staging_dir}/data/{run_code}/``.
+
+    **Two-tier** (``fast_tmp_root`` provided): Fortran writes to a private
+    ``mktemp -d -p {fast_tmp_root}`` directory on the compute node, then the
+    task moves the results to ``{staging_dir}/data/{run_code}/`` before
+    exiting.
+
+    :param staging_dir: Path to the shared staging directory (must already
+        exist when the script runs).
+    :type staging_dir: Path or str
+    :param run_code: Run identifier (used to name the output subdirectory).
+    :type run_code: str
+    :param hdf5_path: Full path to the run's ``.h5`` file.
+    :type hdf5_path: Path or str
+    :param executable: Path to the compiled Fortran microscale binary.
+    :type executable: Path or str
+    :param n_array_jobs: Number of array tasks (``--array=0-{n_array_jobs-1}``
+        is added to the SBATCH header).
+    :type n_array_jobs: int
+    :param out_code: Base output file code suffix (the ``__{task_id:02}``
+        suffix is appended automatically by :class:`FortranMicro`).
+    :type out_code: str, optional
+    :param partition: Slurm partition for ``#SBATCH --partition``, defaults to
+        ``None`` (no partition directive).
+    :type partition: str, optional
+    :param fast_tmp_root: Root directory for fast node-local scratch storage.
+        When ``None`` (default) single-tier mode is used.
+    :type fast_tmp_root: str, optional
+    :return: Slurm bash script text.
+    :rtype: str
+    """
+    staging_dir = Path(staging_dir)
+    hdf5_path = Path(hdf5_path)
+    executable = Path(executable)
+    binary_name = executable.name
+
+    sbatch_opts = {
+        "nodes": 1,
+        "mem": 3096,
+        "ntasks": 1,
+        "cpus-per-task": 1,
+        "array": f"0-{n_array_jobs - 1}",
+    }
+    if partition:
+        sbatch_opts["partition"] = partition
+
+    if fast_tmp_root is None:
+        # ------------------------------------------------------------------
+        # Single-tier: Fortran writes directly to the shared staging dir
+        # ------------------------------------------------------------------
+        setup = f"""\
+# Setup — create output directory and copy binary to staging dir
+staging_datadir="{staging_dir}/data/{run_code}"
+mkdir -p "${{staging_datadir}}"
+cp "{executable}" "{staging_dir}/" """
+
+        execute = f"""\
+# Execute Fortran binary via lysis (array task index from $SLURM_ARRAY_TASK_ID)
+source ~/.bashrc && source ~/lysis.sh
+python -c "
+from pathlib import Path
+from lysis.execution.codeutil import FortranMicro
+fm = FortranMicro.from_hdf5('{hdf5_path}', '{staging_dir}/{binary_name}', out_file_code='{out_code}', index=$SLURM_ARRAY_TASK_ID, n_array_jobs={n_array_jobs})
+fm.exec_in_workdir(Path('{staging_dir}'))
+" """
+
+        sections = [setup, execute]
+
+    else:
+        # ------------------------------------------------------------------
+        # Two-tier: Fortran → fast local dir, then mv to shared staging dir
+        # ------------------------------------------------------------------
+        setup = f"""\
+# Setup — create local fast dir and shared staging dir
+local_work_dir=$(mktemp -d -p "{fast_tmp_root}")
+local_datadir="${{local_work_dir}}/data/{run_code}"
+staging_datadir="{staging_dir}/data/{run_code}"
+mkdir -p "${{local_datadir}}"
+mkdir -p "${{staging_datadir}}"
+cp "{executable}" "${{local_work_dir}}/" """
+
+        execute = f"""\
+# Execute Fortran binary into local fast storage
+source ~/.bashrc && source ~/lysis.sh
+python -c "
+from pathlib import Path
+from lysis.execution.codeutil import FortranMicro
+fm = FortranMicro.from_hdf5('{hdf5_path}', '${{local_work_dir}}/{binary_name}', out_file_code='{out_code}', index=$SLURM_ARRAY_TASK_ID, n_array_jobs={n_array_jobs})
+fm.exec_in_workdir(Path('${{local_work_dir}}'))
+" """
+
+        move = """\
+# Move output to shared staging, then remove local fast dir
+mv "${local_datadir}"/* "${staging_datadir}/"
+rm -rf "${local_work_dir}" """
+
+        sections = [setup, execute, move]
+
+    return gs.scripts.plain(sections, **sbatch_opts)
+
+
 def submit_micro_child_job(script_text: str, script_path: "Path | str") -> int:
     """Write *script_text* to *script_path* and submit it to Slurm.
 
@@ -339,13 +573,28 @@ def submit_micro_slurm_job(
     fast_tmp_root: Optional[str] = None,
     keep_tmpdir: bool = False,
     out_code: str = "",
+    n_array_jobs: Optional[int] = None,
 ) -> int:
     """Submit the full HDF5-integrated microscale workflow as a Slurm master job.
 
     Creates a unique staging directory, writes child and master scripts into
     it, and submits a master Slurm job.  The master job (running on a compute
-    node) orchestrates the child Fortran jobs, imports results into the HDF5
+    node) orchestrates the child Fortran job(s), imports results into the HDF5
     file, and optionally cleans up.
+
+    **Standard mode** (``n_array_jobs=None``):
+        A single child job (``child_000.sh``) is submitted.  The master polls
+        for completion and calls
+        :meth:`~lysis.execution.codeutil.FortranMicro.import_results`.
+
+    **Array mode** (``n_array_jobs`` set):
+        A Slurm job array (``child_array.sh`` with
+        ``#SBATCH --array=0-{n_array_jobs-1}``) is submitted as a single
+        ``sbatch`` call.  Each task uses ``$SLURM_ARRAY_TASK_ID`` as its index
+        and the array-mode seed scheme.  The master polls the array by base job
+        ID and calls
+        :meth:`~lysis.execution.codeutil.FortranMicro.import_array_results` to
+        concatenate per-chunk output.
 
     Directory naming
     ~~~~~~~~~~~~~~~~
@@ -378,10 +627,18 @@ def submit_micro_slurm_job(
     :param out_code: Output file code suffix for the Fortran binary,
         defaults to ``""``.
     :type out_code: str, optional
+    :param n_array_jobs: Number of array tasks.  When set, a Slurm job array
+        is used and simulations are distributed across tasks with independent
+        seeds.  Defaults to ``None`` (standard single-job mode).
+    :type n_array_jobs: int, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
+    :raises ValueError: If ``n_array_jobs`` is provided but is less than 1.
     """
+    if n_array_jobs is not None and n_array_jobs < 1:
+        raise ValueError(f"n_array_jobs must be >= 1, got {n_array_jobs}")
+
     hdf5_path = Path(hdf5_path)
     executable = Path(executable)
     run_code = hdf5_path.stem
@@ -393,23 +650,40 @@ def submit_micro_slurm_job(
         dir=str(staging_root_dir),
     ))
 
-    # ------------------------------------------------------------------
-    # Write child script
-    # ------------------------------------------------------------------
-    child_script = generate_micro_child_script(
-        staging_dir, run_code, hdf5_path, executable, out_code,
-        partition=partition, fast_tmp_root=fast_tmp_root,
-    )
-    child_path = staging_dir / "child_000.sh"
-    child_path.write_text(child_script)
-    child_path.chmod(0o755)
+    if n_array_jobs is not None:
+        # ------------------------------------------------------------------
+        # Array mode: single child_array.sh with --array=0-N-1
+        # ------------------------------------------------------------------
+        child_script = generate_micro_array_child_script(
+            staging_dir, run_code, hdf5_path, executable, n_array_jobs, out_code,
+            partition=partition, fast_tmp_root=fast_tmp_root,
+        )
+        child_path = staging_dir / "child_array.sh"
+        child_path.write_text(child_script)
+        child_path.chmod(0o755)
+
+        master_py_content = _generate_array_master_py(
+            staging_dir, hdf5_path, run_code, out_code, n_array_jobs, keep_tmpdir,
+        )
+    else:
+        # ------------------------------------------------------------------
+        # Standard mode: single child_000.sh submitted by master
+        # ------------------------------------------------------------------
+        child_script = generate_micro_child_script(
+            staging_dir, run_code, hdf5_path, executable, out_code,
+            partition=partition, fast_tmp_root=fast_tmp_root,
+        )
+        child_path = staging_dir / "child_000.sh"
+        child_path.write_text(child_script)
+        child_path.chmod(0o755)
+
+        master_py_content = _generate_master_py(
+            staging_dir, hdf5_path, run_code, out_code, keep_tmpdir,
+        )
 
     # ------------------------------------------------------------------
     # Write master.py
     # ------------------------------------------------------------------
-    master_py_content = _generate_master_py(
-        staging_dir, hdf5_path, run_code, out_code, keep_tmpdir,
-    )
     master_py_path = staging_dir / "master.py"
     master_py_path.write_text(master_py_content)
 
