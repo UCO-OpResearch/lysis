@@ -66,6 +66,14 @@ program micromodel
     !! BRAD 2024-01-14: Change default to zero later
     integer :: seed = 0 ! 981681759
 
+    ! RNG checkpoint files for reproducible array-job execution.
+    ! rngCheckpointIn: if non-empty, restore KISS32 state from this file
+    !                  (overrides seed-based initialization).
+    ! rngCheckpointOut: if non-empty, write the KISS32 state to this file
+    !                   after all simulations complete.
+    character(80) :: rngCheckpointIn = ''
+    character(80) :: rngCheckpointOut = ''
+
     !double precision, dimension(11,2)  :: param  !matrix that holds all the various parameter values we can use
 
     integer, dimension(:, :), allocatable  :: state, statetemp !matrices to save the state of each doublet. There are 6 doublets at each node, and nodes^2 total nodes. recall: in fortran, columns are listed 1st, rows 2nd
@@ -458,6 +466,12 @@ program micromodel
                 stop
             end if
             write (*, *) 'Setting seed = ', seed
+        case ('rngCheckpointIn')
+            rngCheckpointIn = trim(param_value)
+            write (*, *) 'Setting rngCheckpointIn = ', trim(rngCheckpointIn)
+        case ('rngCheckpointOut')
+            rngCheckpointOut = trim(param_value)
+            write (*, *) 'Setting rngCheckpointOut = ', trim(rngCheckpointOut)
         case ('\')
             write(*,*) '\'
         case default
@@ -535,6 +549,20 @@ program micromodel
 
     call get_kiss32(stater)
     !call vurcw1(rvect,M)
+
+    ! If an RNG checkpoint file was specified, restore the full KISS32 state
+    ! from it.  This overrides the seed-based initialization above and allows
+    ! array jobs to pick up exactly where a previous job left off, producing
+    ! bit-for-bit identical output to a single-process run.
+    if (len_trim(rngCheckpointIn) > 0) then
+        open(99, file=trim(rngCheckpointIn), status='old', action='read')
+        read(99, *) stater(1), stater(2), stater(3), stater(4)
+        close(99)
+        call set_kiss32(stater)
+        call get_kiss32(stater)
+        write (*, *) ' RNG state restored from ', trim(rngCheckpointIn)
+        write (*, *) ' stater=', stater(1), stater(2), stater(3), stater(4)
+    end if
 
     Tdoublets = Ntot*nodes**2   !total number of doublets in system
     pi = ACOS(-1.0)
@@ -1803,6 +1831,17 @@ program micromodel
         end if
 
     end do   !enddo for stats loop
+
+    ! If an RNG checkpoint output file was specified, save the current KISS32
+    ! state so that the next array job can restore it and continue the stream.
+    if (len_trim(rngCheckpointOut) > 0) then
+        call get_kiss32(stater)
+        open(99, file=trim(rngCheckpointOut), status='replace', action='write')
+        write(99, *) stater(1), stater(2), stater(3), stater(4)
+        close(99)
+        write (*, *) ' RNG state saved to ', trim(rngCheckpointOut)
+        write (*, *) ' stater=', stater(1), stater(2), stater(3), stater(4)
+    end if
 
     !close(plgunit)
     !close(ctunit)
