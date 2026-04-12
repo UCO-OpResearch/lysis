@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`lysis.execution.codeutil` — FortranMicro class.
+"""Unit tests for :mod:`lysis.execution.codeutil` — FortranMicro and FortranMacro classes.
 
 Tests cover:
 
@@ -8,6 +8,8 @@ Tests cover:
 * Result import into HDF5 (``import_results``)
 * Full end-to-end workflow wrapper (``run_full``)
 * Integration test with real fixture data (``TestImportResultsWithFixture``)
+* :class:`FortranMacro` HDF5 workflow (``from_hdf5``, ``exec_in_workdir``,
+  ``import_results``, ``run_full``)
 """
 
 import json
@@ -21,9 +23,14 @@ import numpy as np
 import pytest
 
 from lysis.config.constants import CONST
-from lysis.config.parameters import MicroParameters
+from lysis.config.parameters import MacroParameters, MicroParameters
 from lysis.config.run import Run
-from lysis.execution.codeutil import FortranMicro, MICRO_FORTRAN_DATASPEC_VERSION
+from lysis.execution.codeutil import (
+    FortranMacro,
+    FortranMicro,
+    MACRO_FORTRAN_DATASPEC_VERSION,
+    MICRO_FORTRAN_DATASPEC_VERSION,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -870,3 +877,492 @@ class TestFortranBinaryExecution:
                 assert actual_shape == expected_shape, (
                     f"{name}: expected shape {expected_shape}, got {actual_shape}"
                 )
+
+
+# ===========================================================================
+# FortranMacro tests
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Helpers / fixtures
+# ---------------------------------------------------------------------------
+
+
+def _write_macro_hdf5(path: Path, mp: MicroParameters = None,
+                      macp: MacroParameters = None) -> None:
+    """Write a minimal v2.0.0 HDF5 file with both Micro- and MacroParameters."""
+    mp = mp or MicroParameters()
+    macp = macp or MacroParameters(micro_params=mp)
+    with h5py.File(str(path), "w") as f:
+        f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v2.0.0"
+        grp = f.require_group("micro_data")
+        for k, v in mp.to_basedict().items():
+            grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+        grp2 = f.require_group("macro_data")
+        for k, v in macp.to_basedict().items():
+            grp2.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+
+
+@pytest.fixture
+def macro_hdf5(tmp_path):
+    """A minimal HDF5 file with both Micro- and MacroParameters; returns Path."""
+    h5_path = tmp_path / "test-run.h5"
+    _write_macro_hdf5(h5_path)
+    return h5_path
+
+
+@pytest.fixture
+def micro_only_hdf5(tmp_path):
+    """A minimal HDF5 file with only MicroParameters (no macro); returns Path."""
+    h5_path = tmp_path / "test-run.h5"
+    _write_micro_hdf5(h5_path)
+    return h5_path
+
+
+@pytest.fixture
+def fortran_macro(macro_hdf5):
+    """A FortranMacro loaded from the minimal macro HDF5 with a dummy executable."""
+    return FortranMacro.from_hdf5(macro_hdf5, "/bin/macro.exe")
+
+
+# ---------------------------------------------------------------------------
+# TestFortranMacroFromHdf5
+# ---------------------------------------------------------------------------
+
+
+class TestFortranMacroFromHdf5:
+    """Tests for :meth:`FortranMacro.from_hdf5`."""
+
+    def test_correct_run_code(self, macro_hdf5):
+        fm = FortranMacro.from_hdf5(macro_hdf5, "/bin/macro.exe")
+        assert fm.run.run_code == macro_hdf5.stem
+
+    def test_loads_micro_params(self, macro_hdf5):
+        fm = FortranMacro.from_hdf5(macro_hdf5, "/bin/macro.exe")
+        assert isinstance(fm.run.micro_params, MicroParameters)
+
+    def test_loads_macro_params(self, macro_hdf5):
+        fm = FortranMacro.from_hdf5(macro_hdf5, "/bin/macro.exe")
+        assert isinstance(fm.run.macro_params, MacroParameters)
+
+    def test_sets_executable(self, macro_hdf5):
+        fm = FortranMacro.from_hdf5(macro_hdf5, "/bin/macro.exe")
+        assert fm.executable == "/bin/macro.exe"
+
+    def test_passes_in_file_code(self, macro_hdf5):
+        fm = FortranMacro.from_hdf5(macro_hdf5, "/bin/macro.exe",
+                                     in_file_code="_in")
+        assert fm.in_file_code == "_in"
+
+    def test_passes_out_file_code(self, macro_hdf5):
+        fm = FortranMacro.from_hdf5(macro_hdf5, "/bin/macro.exe",
+                                     out_file_code="_out")
+        assert fm.out_file_code == "_out"
+
+    def test_passes_index(self, macro_hdf5):
+        fm = FortranMacro.from_hdf5(macro_hdf5, "/bin/macro.exe", index=2)
+        assert fm.index == 2
+
+    def test_raises_when_no_macro_params(self, micro_only_hdf5):
+        with pytest.raises(ValueError):
+            FortranMacro.from_hdf5(micro_only_hdf5, "/bin/macro.exe")
+
+    def test_accepts_str_and_path(self, macro_hdf5):
+        fm_path = FortranMacro.from_hdf5(macro_hdf5, "/bin/macro.exe")
+        fm_str = FortranMacro.from_hdf5(str(macro_hdf5), "/bin/macro.exe")
+        assert fm_path.run.run_code == fm_str.run.run_code
+
+
+# ---------------------------------------------------------------------------
+# TestFortranMacroExecInWorkdir
+# ---------------------------------------------------------------------------
+
+
+def _make_macro_in():
+    """Return a minimal generate_macroscale_in result dict."""
+    return {
+        "bin_edge_proportions": np.zeros(101),
+        "bin_edge_tpa_leaving_time": np.zeros(101),
+        "binned_fiber_degrade_time": np.zeros((10, 5)),
+        "binned_fiber_degraded": np.zeros((10, 5), dtype=np.int32),
+        "edge_grid_neighbors": np.zeros((20, 8), dtype=np.int32),
+    }
+
+
+class TestFortranMacroExecInWorkdir:
+    """Tests for :meth:`FortranMacro.exec_in_workdir`."""
+
+    @patch("lysis.dataio.dataconvert.generate_macroscale_in",
+           return_value=_make_macro_in())
+    @patch("lysis.dataio.fileops.read_data_collection", return_value={"params": {}})
+    def test_creates_data_run_code_dir(self, mock_read, mock_gen,
+                                       fortran_macro, tmp_path):
+        with patch("subprocess.run"):
+            fortran_macro.exec_in_workdir(tmp_path, tmp_path / "run.h5")
+        expected = tmp_path / "data" / fortran_macro.run.run_code
+        assert expected.is_dir()
+
+    @patch("lysis.dataio.dataconvert.generate_macroscale_in",
+           return_value=_make_macro_in())
+    @patch("lysis.dataio.fileops.read_data_collection", return_value={"params": {}})
+    def test_returns_data_dir_path(self, mock_read, mock_gen,
+                                   fortran_macro, tmp_path):
+        with patch("subprocess.run"):
+            result = fortran_macro.exec_in_workdir(tmp_path, tmp_path / "run.h5")
+        expected = tmp_path / "data" / fortran_macro.run.run_code
+        assert result == expected
+
+    @patch("lysis.dataio.dataconvert.generate_macroscale_in",
+           return_value=_make_macro_in())
+    @patch("lysis.dataio.fileops.read_data_collection", return_value={"params": {}})
+    def test_params_json_contains_both_params(self, mock_read, mock_gen,
+                                               fortran_macro, tmp_path):
+        import json as _json
+        with patch("subprocess.run"):
+            data_dir = fortran_macro.exec_in_workdir(tmp_path, tmp_path / "run.h5")
+        with open(data_dir / "params.json") as fh:
+            data = _json.load(fh)
+        assert "micro_params" in data
+        assert "macro_params" in data
+
+    @patch("lysis.dataio.dataconvert.generate_macroscale_in",
+           return_value=_make_macro_in())
+    @patch("lysis.dataio.fileops.read_data_collection", return_value={"params": {}})
+    def test_subprocess_called_with_work_dir_as_cwd(self, mock_read, mock_gen,
+                                                     fortran_macro, tmp_path):
+        with patch("subprocess.run") as mock_run:
+            fortran_macro.exec_in_workdir(tmp_path, tmp_path / "run.h5")
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs["cwd"] == str(tmp_path)
+
+    @patch("lysis.dataio.dataconvert.generate_macroscale_in",
+           return_value=_make_macro_in())
+    @patch("lysis.dataio.fileops.read_data_collection", return_value={"params": {}})
+    def test_macro_input_files_written(self, mock_read, mock_gen,
+                                       fortran_macro, tmp_path):
+        with patch("subprocess.run"):
+            data_dir = fortran_macro.exec_in_workdir(tmp_path, tmp_path / "run.h5")
+        assert (data_dir / "tPAleave.dat").exists()
+        assert (data_dir / "tsectPA.dat").exists()
+        assert (data_dir / "lysismat.dat").exists()
+        assert (data_dir / "lenlysisvect.dat").exists()
+
+    @patch("lysis.dataio.dataconvert.generate_macroscale_in",
+           return_value=_make_macro_in())
+    @patch("lysis.dataio.fileops.read_data_collection", return_value={"params": {}})
+    def test_neighbors_dat_written(self, mock_read, mock_gen,
+                                   fortran_macro, tmp_path):
+        with patch("subprocess.run"):
+            data_dir = fortran_macro.exec_in_workdir(tmp_path, tmp_path / "run.h5")
+        assert (data_dir / "neighbors.dat").exists()
+
+    @patch("lysis.dataio.dataconvert.generate_macroscale_in",
+           return_value=_make_macro_in())
+    @patch("lysis.dataio.fileops.read_data_collection", return_value={"params": {}})
+    def test_accepts_str_work_dir(self, mock_read, mock_gen,
+                                  fortran_macro, tmp_path):
+        with patch("subprocess.run"):
+            result = fortran_macro.exec_in_workdir(str(tmp_path),
+                                                    tmp_path / "run.h5")
+        assert isinstance(result, Path)
+
+
+# ---------------------------------------------------------------------------
+# TestFortranMacroImportResults
+# ---------------------------------------------------------------------------
+
+
+class TestFortranMacroImportResults:
+    """Tests for :meth:`FortranMacro.import_results`."""
+
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
+    def test_uses_macro_dataspec_version_constant(self, mock_read, mock_convert,
+                                                   tmp_path):
+        mock_read.return_value = {}
+        mock_convert.return_value = {}
+
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        FortranMacro.import_results(data_dir, hdf5_path, keep_tmpdir=True)
+
+        from lysis.dataio.dataspec import dataspec
+        expected_spec = dataspec[MACRO_FORTRAN_DATASPEC_VERSION]["macroscale_out"]
+        actual_specs = mock_read.call_args.args[1]
+        assert actual_specs[0] == expected_spec
+
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
+    def test_per_sim_data_written_to_hdf5(self, mock_read, mock_convert, tmp_path):
+        """Converted per-simulation data must be written to sim_{sim:02} groups."""
+        mock_read.return_value = {}
+        mock_convert.return_value = {
+            "snapshot_time": [np.zeros(3, dtype=np.float64),
+                              np.zeros(3, dtype=np.float64)],
+        }
+
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        FortranMacro.import_results(data_dir, hdf5_path, keep_tmpdir=True)
+
+        with h5py.File(str(hdf5_path), "r") as f:
+            assert "macro_data/sim_00/snapshot_time" in f
+            assert "macro_data/sim_01/snapshot_time" in f
+
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
+    def test_cleanup_on_success(self, mock_read, mock_convert, tmp_path):
+        mock_read.return_value = {}
+        mock_convert.return_value = {}
+
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        FortranMacro.import_results(data_dir, hdf5_path, keep_tmpdir=False)
+        assert not data_dir.exists()
+
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
+    def test_keep_tmpdir_preserves_on_success(self, mock_read, mock_convert,
+                                               tmp_path):
+        mock_read.return_value = {}
+        mock_convert.return_value = {}
+
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        FortranMacro.import_results(data_dir, hdf5_path, keep_tmpdir=True)
+        assert data_dir.exists()
+
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
+    def test_preserve_on_failure_keep_on_failure_true(self, mock_read, mock_convert,
+                                                       tmp_path):
+        mock_read.side_effect = RuntimeError("read failed")
+
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        with pytest.raises(RuntimeError):
+            FortranMacro.import_results(
+                data_dir, hdf5_path, keep_on_failure=True, keep_tmpdir=False
+            )
+        assert data_dir.exists()
+
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
+    def test_cleanup_on_failure_default(self, mock_read, mock_convert, tmp_path):
+        mock_read.side_effect = RuntimeError("read failed")
+
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        with pytest.raises(RuntimeError, match="read failed"):
+            FortranMacro.import_results(
+                data_dir, hdf5_path, keep_on_failure=False, keep_tmpdir=False
+            )
+        assert not data_dir.exists()
+
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
+    def test_keep_tmpdir_preserves_on_failure(self, mock_read, mock_convert,
+                                               tmp_path):
+        mock_read.side_effect = RuntimeError("read failed")
+
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        with pytest.raises(RuntimeError):
+            FortranMacro.import_results(
+                data_dir, hdf5_path, keep_on_failure=False, keep_tmpdir=True
+            )
+        assert data_dir.exists()
+
+    @patch("lysis.dataio.dataconvert.convert_data")
+    @patch("lysis.dataio.fileops.read_data_collection")
+    def test_passes_file_code_to_read(self, mock_read, mock_convert, tmp_path):
+        mock_read.return_value = {}
+        mock_convert.return_value = {}
+
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        FortranMacro.import_results(data_dir, hdf5_path, file_code="_code",
+                                    keep_tmpdir=True)
+        actual_codes = mock_read.call_args.args[2]
+        assert actual_codes == ["_code"]
+
+
+# ---------------------------------------------------------------------------
+# TestFortranMacroRunFull
+# ---------------------------------------------------------------------------
+
+
+class TestFortranMacroRunFull:
+    """Tests for :meth:`FortranMacro.run_full`."""
+
+    def test_tmpdir_created_alongside_hdf5(self, fortran_macro, tmp_path):
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        created_tmpdirs = []
+
+        def fake_exec(work_dir, hdf5):
+            created_tmpdirs.append(work_dir)
+            return work_dir / "data"
+
+        with (
+            patch.object(FortranMacro, "exec_in_workdir", side_effect=fake_exec),
+            patch.object(FortranMacro, "import_results"),
+        ):
+            fortran_macro.run_full(hdf5_path)
+
+        assert created_tmpdirs
+        assert created_tmpdirs[0].parent == tmp_path
+
+    def test_tmpdir_prefix_contains_macro(self, fortran_macro, tmp_path):
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        created_tmpdirs = []
+
+        def fake_exec(work_dir, hdf5):
+            created_tmpdirs.append(work_dir)
+            return work_dir / "data"
+
+        with (
+            patch.object(FortranMacro, "exec_in_workdir", side_effect=fake_exec),
+            patch.object(FortranMacro, "import_results"),
+        ):
+            fortran_macro.run_full(hdf5_path)
+
+        assert created_tmpdirs
+        assert created_tmpdirs[0].name.startswith("lysis-macro-")
+
+    def test_exec_in_workdir_called_with_correct_args(self, fortran_macro, tmp_path):
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        call_args_list = []
+
+        def fake_exec(work_dir, hdf5):
+            call_args_list.append((work_dir, hdf5))
+            return work_dir / "data"
+
+        with (
+            patch.object(FortranMacro, "exec_in_workdir", side_effect=fake_exec),
+            patch.object(FortranMacro, "import_results"),
+        ):
+            fortran_macro.run_full(hdf5_path)
+
+        assert len(call_args_list) == 1
+        _, passed_hdf5 = call_args_list[0]
+        assert passed_hdf5 == hdf5_path
+
+    def test_import_results_called_with_data_dir(self, fortran_macro, tmp_path):
+        hdf5_path = tmp_path / "run.h5"
+        data_dir = tmp_path / "data_dir"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        with (
+            patch.object(FortranMacro, "exec_in_workdir",
+                         return_value=data_dir),
+            patch.object(FortranMacro, "import_results") as mock_import,
+        ):
+            fortran_macro.run_full(hdf5_path)
+
+        assert mock_import.call_args.args[0] == data_dir
+
+    def test_tmpdir_removed_on_success(self, fortran_macro, tmp_path):
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        created_tmpdirs = []
+
+        def fake_exec(work_dir, hdf5):
+            created_tmpdirs.append(work_dir)
+            return work_dir / "data"
+
+        with (
+            patch.object(FortranMacro, "exec_in_workdir", side_effect=fake_exec),
+            patch.object(FortranMacro, "import_results"),
+        ):
+            fortran_macro.run_full(hdf5_path, keep_tmpdir=False)
+
+        assert created_tmpdirs
+        assert not created_tmpdirs[0].exists()
+
+    def test_tmpdir_preserved_with_keep_tmpdir(self, fortran_macro, tmp_path):
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        created_tmpdirs = []
+
+        def fake_exec(work_dir, hdf5):
+            created_tmpdirs.append(work_dir)
+            work_dir.mkdir(parents=True, exist_ok=True)
+            return work_dir / "data"
+
+        with (
+            patch.object(FortranMacro, "exec_in_workdir", side_effect=fake_exec),
+            patch.object(FortranMacro, "import_results"),
+        ):
+            fortran_macro.run_full(hdf5_path, keep_tmpdir=True)
+
+        assert created_tmpdirs
+        assert created_tmpdirs[0].exists()
+
+    def test_tmpdir_removed_on_exec_failure(self, fortran_macro, tmp_path):
+        """When exec_in_workdir raises, tmpdir is removed when keep_tmpdir=False."""
+        hdf5_path = tmp_path / "run.h5"
+        with h5py.File(str(hdf5_path), "w") as _:
+            pass
+
+        created_tmpdirs = []
+
+        def fake_exec_fail(work_dir, hdf5):
+            created_tmpdirs.append(work_dir)
+            raise RuntimeError("binary failed")
+
+        with (
+            patch.object(FortranMacro, "exec_in_workdir",
+                         side_effect=fake_exec_fail),
+            patch.object(FortranMacro, "import_results"),
+        ):
+            with pytest.raises(RuntimeError, match="binary failed"):
+                fortran_macro.run_full(hdf5_path, keep_tmpdir=False)
+
+        assert created_tmpdirs
+        assert not created_tmpdirs[0].exists()

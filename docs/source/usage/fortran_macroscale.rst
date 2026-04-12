@@ -1,6 +1,68 @@
 -----------------------
 Macroscale Model
 -----------------------
+
+HDF5-Integrated Python Workflow
+---------------------------------
+
+This is the recommended workflow when working with the lysis Python package.
+All parameters, microscale results, and macroscale output are stored in a
+single HDF5 file.
+
+Prerequisites
++++++++++++++
+
+Before running the macroscale simulation, the following must be complete:
+
+1. Microscale simulations completed and imported — run ``lysis run-micro`` or
+   call :meth:`~lysis.execution.codeutil.FortranMicro.run_full` directly.
+2. Macroscale parameters initialised — run ``lysis init-macroscale`` or call
+   :meth:`~lysis.dataio.datastore.DataStore.initialize_macroscale` directly.
+
+Running locally
++++++++++++++++
+
+.. code-block:: console
+
+   lysis run-macro data/run01.h5 --executable bin/macro.exe
+   lysis run-macro data/run01.h5 --executable bin/macro.exe --keep-tmpdir
+
+The ``--keep-tmpdir`` flag preserves the temporary working directory (useful
+for debugging Fortran output).
+
+Running via Slurm
++++++++++++++++++
+
+.. code-block:: console
+
+   lysis run-macro data/run01.h5 --executable bin/macro.exe --slurm
+   lysis run-macro data/run01.h5 --executable bin/macro.exe --slurm \
+       --partition normal --staging-root /scratch/staging
+
+Use ``--fast-tmp-root`` to enable two-tier storage (fast node-local NVMe
+scratch for Fortran output, shared staging for import):
+
+.. code-block:: console
+
+   lysis run-macro data/run01.h5 --executable bin/macro.exe --slurm \
+       --fast-tmp-root /nvme/scratch
+
+Python API
+++++++++++
+
+.. code-block:: python
+
+   from lysis.execution.codeutil import FortranMacro
+
+   fm = FortranMacro.from_hdf5("data/run01.h5", "bin/macro.exe")
+   fm.run_full("data/run01.h5")
+
+Use ``keep_tmpdir=True`` to preserve the working directory on failure:
+
+.. code-block:: python
+
+   fm.run_full("data/run01.h5", keep_tmpdir=True)
+
 Fortran Script Usage
 ---------------------
 

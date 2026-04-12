@@ -37,6 +37,10 @@ from ..geometry.edge_grid import generate_fortran_neighborhood_structure
 #: Update this constant when the binary's output format changes.
 MICRO_FORTRAN_DATASPEC_VERSION: str = "v1.99.0"
 
+#: Dataspec version produced by the Fortran macroscale binary.
+#: Update this constant when the binary's output format changes.
+MACRO_FORTRAN_DATASPEC_VERSION: str = "v1.99.0"
+
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
@@ -254,6 +258,323 @@ class FortranMacro:
                 stdout=file,  # Capture all Fortran output to file
                 cwd=self.cwd,  # Execute from specified working directory
             )
+
+    # ------------------------------------------------------------------
+    # Construction helpers
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_hdf5(
+        cls,
+        hdf5_path: "Path | str",
+        executable: str,
+        in_file_code: str = "",
+        out_file_code: str = "",
+        index: "int | None" = None,
+    ) -> "FortranMacro":
+        """Construct a :class:`FortranMacro` from an existing HDF5 run file.
+
+        Reads both :class:`~lysis.config.parameters.MicroParameters` and
+        :class:`~lysis.config.parameters.MacroParameters` from the HDF5 file
+        and builds the underlying :class:`~lysis.config.run.Run` automatically.
+
+        The macroscale parameters must already exist in the file (i.e.
+        :meth:`~lysis.dataio.datastore.DataStore.initialize_macroscale` must
+        have been called beforehand).
+
+        :param hdf5_path: Full path to the ``.h5`` file (must contain both
+            ``micro_params`` and ``macro_params``).
+        :type hdf5_path: Path or str
+        :param executable: Path to the compiled Fortran macroscale binary.
+        :type executable: str
+        :param in_file_code: Input file code suffix used when reading the
+            binned microscale statistics files, defaults to ``""``.
+        :type in_file_code: str, optional
+        :param out_file_code: Output file code suffix, defaults to ``""``.
+        :type out_file_code: str, optional
+        :param index: Parallel run index for seed splitting, defaults to
+            ``None``.
+        :type index: int, optional
+        :return: Fully configured :class:`FortranMacro` instance.
+        :rtype: FortranMacro
+        :raises ValueError: If the HDF5 file does not contain macroscale
+            parameters (i.e. :meth:`~lysis.dataio.datastore.DataStore.initialize_macroscale`
+            has not been called).
+        :raises RuntimeError: If the HDF5 file's directory is not found.
+        """
+        hdf5_path = Path(hdf5_path)
+        run = Run(str(hdf5_path.parent), run_code=hdf5_path.stem)
+        run.load_params_from_hdf5()
+        if run.macro_params is None:
+            raise ValueError(
+                f"No macroscale parameters found in {hdf5_path}. "
+                "Call DataStore.initialize_macroscale() before running FortranMacro."
+            )
+        return cls(
+            run=run,
+            executable=str(executable),
+            in_file_code=in_file_code,
+            out_file_code=out_file_code,
+            index=index,
+        )
+
+    # ------------------------------------------------------------------
+    # Execution
+    # ------------------------------------------------------------------
+
+    def exec_in_workdir(
+        self,
+        work_dir: "Path | str",
+        hdf5_path: "Path | str",
+    ) -> Path:
+        """Execute the Fortran binary using *work_dir* as the working directory.
+
+        The Fortran code writes its binary output to ``data/{run_code}/``
+        relative to its working directory, with each simulation placed in a
+        numbered subdirectory (``00/``, ``01/``, …).  This method:
+
+        1. Creates ``{work_dir}/data/{run_code}/``.
+        2. Writes a ``params.json`` there (needed by the v1.99.0 import
+           pipeline to resolve shapes when reading binary files back). Both
+           ``micro_params`` and ``macro_params`` are included because
+           macroscale shapes (e.g. ``m_loc``) reference
+           ``macro_params.total_molecules``.
+        3. Generates macroscale input files from the HDF5 microscale data and
+           writes them to the data directory:
+
+           - ``tPAleave{in_file_code}.dat`` — bin-edge proportions
+           - ``tsectPA{in_file_code}.dat`` — tPA leaving times at bin edges
+           - ``lysismat{in_file_code}.dat`` — binned fiber degrade times
+           - ``lenlysisvect{in_file_code}.dat`` — degraded count per bin
+           - ``neighbors.dat`` — 1-based Fortran neighbor indices (no code)
+
+        4. Executes the binary with ``cwd=work_dir``, redirecting stdout
+           to ``{work_dir}/data/{run_code}/macro{out_code}.txt``.
+
+        :param work_dir: Working directory for the subprocess.
+        :type work_dir: Path or str
+        :param hdf5_path: Full path to the run's ``.h5`` file, used to read
+            the completed microscale output for generating input files.
+        :type hdf5_path: Path or str
+        :return: Path to ``{work_dir}/data/{run_code}/`` — the directory
+            containing all Fortran output for this run.
+        :rtype: Path
+        :raises subprocess.CalledProcessError: If the Fortran binary exits
+            with a non-zero status.
+        """
+        from ..dataio.dataspec import dataspec
+        from ..dataio.fileops import read_data_collection
+        from ..dataio.dataconvert import generate_macroscale_in
+
+        work_dir = Path(work_dir)
+        hdf5_path = Path(hdf5_path)
+        data_dir = work_dir / "data" / self.run.run_code
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write params.json so the v1.99.0 read pipeline can resolve both
+        # micro and macro parameter shapes.
+        params_data = {
+            "micro_params": self.run.micro_params.to_basedict(),
+            "macro_params": self.run.macro_params.to_basedict(),
+        }
+        with open(data_dir / "params.json", "w") as fh:
+            json.dump(params_data, fh, indent=4, default=str)
+
+        # Read completed microscale data from HDF5 and generate the input
+        # files required by the Fortran macroscale binary.
+        micro_spec = dataspec["v2.0.0"]["microscale_out"]
+        raw = read_data_collection(str(hdf5_path), [micro_spec], [""])
+        raw["params"]["macro_params"] = self.run.macro_params.to_basedict()
+        macro_in = generate_macroscale_in(raw)
+
+        # tPAleave — CDF bin-edge proportions (101 values)
+        np.savetxt(
+            data_dir / f"tPAleave{self.in_file_code}.dat",
+            macro_in["bin_edge_proportions"],
+        )
+        # tsectPA — tPA leaving times at bin edges (101 values)
+        np.savetxt(
+            data_dir / f"tsectPA{self.in_file_code}.dat",
+            macro_in["bin_edge_tpa_leaving_time"],
+        )
+        # lysismat — binned fiber degrade times; replace inf with 6000 (Fortran sentinel)
+        lysismat = np.where(
+            np.isinf(macro_in["binned_fiber_degrade_time"]),
+            6_000,
+            macro_in["binned_fiber_degrade_time"],
+        )
+        np.savetxt(data_dir / f"lysismat{self.in_file_code}.dat", lysismat)
+        # lenlysisvect — 1-based count of degraded fibers per bin
+        np.savetxt(
+            data_dir / f"lenlysisvect{self.in_file_code}.dat",
+            macro_in["binned_fiber_degraded"] + 1,
+        )
+        # neighbors.dat — Fortran 1-based neighbor indices, no file code
+        fort_neighbors = (macro_in["edge_grid_neighbors"] + 1).reshape(-1, 1).astype(np.int32)
+        np.savetxt(data_dir / "neighbors.dat", fort_neighbors, fmt="%d")
+
+        command = self.exec_command()
+        log_file = data_dir / f"macro{self.out_file_code}.txt"
+        with open(log_file, "w") as fh:
+            subprocess.run(command, stdout=fh, cwd=str(work_dir), check=True)
+
+        return data_dir
+
+    # ------------------------------------------------------------------
+    # Import
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def import_results(
+        data_dir: "Path | str",
+        hdf5_path: "Path | str",
+        file_code: str = "",
+        *,
+        keep_on_failure: bool = False,
+        keep_tmpdir: bool = False,
+    ) -> None:
+        """Convert Fortran output in *data_dir* and write it to *hdf5_path*.
+
+        Reads the Fortran macroscale output (version
+        :data:`MACRO_FORTRAN_DATASPEC_VERSION`) from *data_dir*, converts it
+        to the HDF5 v2.0.0 format, and writes the resulting datasets into the
+        existing HDF5 file at *hdf5_path*.
+
+        The macroscale output is per-simulation: the Fortran binary writes
+        numbered subdirectories (``00/``, ``01/``, …) inside *data_dir*, and
+        the import reads them all automatically by iterating until a
+        :exc:`FileNotFoundError` is encountered.
+
+        The target HDF5 file should already contain ``macro_params`` and
+        empty macroscale_out dataset stubs (i.e.
+        :meth:`~lysis.dataio.datastore.DataStore.initialize_macroscale` should
+        have been called beforehand).
+
+        Cleanup behaviour:
+
+        - On **success**: *data_dir* is removed unless ``keep_tmpdir=True``.
+        - On **failure**: *data_dir* is preserved when
+          ``keep_on_failure=True`` *or* ``keep_tmpdir=True``; otherwise it is
+          removed.
+
+        :param data_dir: Directory containing the Fortran binary output
+            (``params.json``, simulation subdirectories ``00/``, ``01/``, …).
+            Typically ``{work_dir}/data/{run_code}/``.
+        :type data_dir: Path or str
+        :param hdf5_path: Full path to the target ``.h5`` file.
+        :type hdf5_path: Path or str
+        :param file_code: Output file code suffix used when running the binary,
+            defaults to ``""``.
+        :type file_code: str, optional
+        :param keep_on_failure: Preserve *data_dir* if import raises an
+            exception, defaults to ``False``.
+        :type keep_on_failure: bool, optional
+        :param keep_tmpdir: Always preserve *data_dir*, defaults to ``False``.
+        :type keep_tmpdir: bool, optional
+        :raises Exception: Re-raises any exception from the read/convert/write
+            pipeline after applying the cleanup policy.
+        """
+        from ..dataio.dataspec import dataspec
+        from ..dataio.fileops import read_data_collection
+        from ..dataio.dataconvert import convert_data
+
+        data_dir = Path(data_dir)
+        hdf5_path = Path(hdf5_path)
+
+        try:
+            src_spec = dataspec[MACRO_FORTRAN_DATASPEC_VERSION]["macroscale_out"]
+            raw = read_data_collection(str(data_dir), [src_spec], [file_code])
+            converted = convert_data(raw, MACRO_FORTRAN_DATASPEC_VERSION, "v2.0.0")
+
+            dst_spec = dataspec["v2.0.0"]["macroscale_out"]
+            with h5py.File(str(hdf5_path), "a") as f:
+                for name, ds_spec in dst_spec.data.items():
+                    if name not in converted:
+                        continue
+                    # macroscale_out is per-simulation: converted[name] is a list of arrays
+                    for sim_idx, sim_data in enumerate(converted[name]):
+                        arr = np.asarray(sim_data, dtype=ds_spec.dtype)
+                        loc = ds_spec.data_location.format(sim=sim_idx)
+                        if loc in f:
+                            f[loc].resize(arr.shape)
+                            f[loc][...] = arr
+                        else:
+                            maxshape = tuple(
+                                None if (isinstance(s, str) or s < 0) else s
+                                for s in ds_spec.shape
+                            )
+                            f.create_dataset(
+                                loc, data=arr, maxshape=maxshape,
+                                compression="gzip", dtype=ds_spec.dtype,
+                            )
+
+            if not keep_tmpdir:
+                shutil.rmtree(data_dir)
+
+        except Exception:
+            if not keep_on_failure and not keep_tmpdir:
+                shutil.rmtree(data_dir, ignore_errors=True)
+            raise
+
+    # ------------------------------------------------------------------
+    # Full workflow
+    # ------------------------------------------------------------------
+
+    def run_full(
+        self,
+        hdf5_path: "Path | str",
+        *,
+        keep_tmpdir: bool = False,
+    ) -> None:
+        """Execute the complete HDF5-integrated macroscale workflow.
+
+        Creates a uniquely named temporary working directory (via
+        :func:`tempfile.mkdtemp` with an explicit *dir* argument so that
+        ``/tmp`` — which is a ramdisk on many HPC nodes — is never used),
+        generates the macroscale input files from the HDF5 microscale data,
+        runs the Fortran binary, imports the results into *hdf5_path*, and
+        cleans up.
+
+        The temporary directory is placed alongside the HDF5 file
+        (``hdf5_path.parent``) to avoid using ramdisk storage.
+
+        Cleanup policy:
+
+        - **Success**: temporary directory removed unless ``keep_tmpdir=True``.
+        - **Failure**: temporary directory is **preserved** for debugging.
+          Concretely, :meth:`import_results` is called with
+          ``keep_on_failure=True`` so the data survives an import error; the
+          outer ``except`` block removes it only when ``keep_tmpdir=False``.
+
+        :param hdf5_path: Full path to the target ``.h5`` file.
+        :type hdf5_path: Path or str
+        :param keep_tmpdir: Always preserve the temporary directory,
+            defaults to ``False``.
+        :type keep_tmpdir: bool, optional
+        :raises subprocess.CalledProcessError: If the Fortran binary fails.
+        :raises Exception: Re-raises any exception from the import pipeline.
+        """
+        hdf5_path = Path(hdf5_path)
+        tmpdir = Path(tempfile.mkdtemp(
+            prefix=f"lysis-macro-{self.run.run_code}-",
+            dir=str(hdf5_path.parent),
+        ))
+        try:
+            data_dir = self.exec_in_workdir(tmpdir, hdf5_path)
+            self.import_results(
+                data_dir,
+                hdf5_path,
+                file_code=self.out_file_code,
+                keep_on_failure=True,
+                keep_tmpdir=keep_tmpdir,
+            )
+        except Exception:
+            if not keep_tmpdir:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+            raise
+        else:
+            if not keep_tmpdir:
+                shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 @dataclass
