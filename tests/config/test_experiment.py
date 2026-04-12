@@ -159,6 +159,24 @@ class TestFromCsvBasic:
 
 
 class TestHdf5RoundTrip:
+    def test_hdf5_has_only_microscale_collection(self, tmp_path):
+        """from_csv() produces HDF5 with microscale_out only; macro added later.
+
+        initialize_macroscale() is deferred until after microscale Simulations
+        complete so that forced_unbind can be computed from the results.
+        """
+        import h5py
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+        run = exp.runs[0]
+        h5_path = os.path.join(exp.path, f"{run.run_code}.h5")
+        with h5py.File(h5_path, "r") as f:
+            assert "micro_data" in f
+            assert "macro_data" not in f
+
     def test_micro_params_readable(self, tmp_path):
         csv_path = _two_row_csv(tmp_path)
         data_root = tmp_path / "experiments"
@@ -172,7 +190,14 @@ class TestHdf5RoundTrip:
         assert isinstance(loaded_micro, MicroParameters)
         assert loaded_micro.nodes_in_micro_row == run.micro_params.nodes_in_micro_row
 
-    def test_macro_params_readable(self, tmp_path):
+    def test_macro_params_in_run(self, tmp_path):
+        """from_csv() parses macro params into Run objects (not yet in HDF5).
+
+        initialize_macroscale() is not called by from_csv(), so macro_data
+        is absent from the HDF5 at this stage. The macro parameters live in
+        run.macro_params until initialize_macroscale() is called after
+        microscale Simulations complete.
+        """
         csv_path = _two_row_csv(tmp_path)
         data_root = tmp_path / "experiments"
         data_root.mkdir()
@@ -180,35 +205,42 @@ class TestHdf5RoundTrip:
         exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
         run0 = exp.runs[0]
         run1 = exp.runs[1]
-        ds0 = DataStore(run0.run_code, exp.path, mode="r")
-        ds1 = DataStore(run1.run_code, exp.path, mode="r")
-        macro0 = ds0.macro_params
-        macro1 = ds1.macro_params
-        ds0.close()
-        ds1.close()
 
-        assert macro0.total_molecules == 43074
-        assert macro1.total_molecules == 86148
+        assert isinstance(run0.macro_params, MacroParameters)
+        assert isinstance(run1.macro_params, MacroParameters)
+        assert run0.macro_params.total_molecules == 43074
+        assert run1.macro_params.total_molecules == 86148
 
-    def test_params_match_written_values(self, tmp_path):
+    def test_micro_params_match_written_values(self, tmp_path):
+        """HDF5 micro_params round-trip: loaded values match what was written.
+
+        Macro params are not in the HDF5 after from_csv() (initialize_macroscale()
+        has not been called). Check micro params from HDF5 and macro params
+        from the Run object instead.
+        """
         csv_path = _two_row_csv(tmp_path)
         data_root = tmp_path / "experiments"
         data_root.mkdir()
 
         exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+        import math
         for run in exp.runs:
             ds = DataStore(run.run_code, exp.path, mode="r")
             loaded_micro = ds.micro_params
-            loaded_macro = ds.macro_params
             ds.close()
-            import math
             assert math.isclose(
                 loaded_micro.fiber_radius.to("microns").magnitude,
                 run.micro_params.fiber_radius.to("microns").magnitude,
                 rel_tol=1e-6,
             )
-            assert loaded_macro.cols == run.macro_params.cols
-            assert loaded_macro.rows == run.macro_params.rows
+            # Macro params live in the Run object until initialize_macroscale()
+            # is called after microscale Simulations complete.
+            assert run.macro_params.cols == MacroParameters(
+                micro_params=run.micro_params
+            ).cols
+            assert run.macro_params.rows == MacroParameters(
+                micro_params=run.micro_params
+            ).rows
 
 
 # ─── dry_run ─────────────────────────────────────────────────────────────────

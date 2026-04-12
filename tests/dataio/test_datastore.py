@@ -121,6 +121,42 @@ def _write_macro_datasets(h5file, n_sims=3, n_snapshots=5):
                 h5file.create_dataset(path, data=data)
 
 
+def _fill_microscale_unbinding_data(filepath, n_sims=10):
+    """Resize and fill microscale datasets in an HDF5 created by DataStore.create().
+
+    DataStore.create() produces empty (shape 0) resizable datasets.  This helper
+    fills them with dummy values so that initialize_macroscale() can compute
+    forced_unbind.  Half the simulations have tpa_unbound_by_pli=True, the other
+    half have tpa_unbound_kinetic=True, so forced_unbind will be exactly 0.5.
+    """
+    spec = dataspec["v2.0.0"]["microscale_out"]
+    with h5py.File(filepath, "a") as f:
+        for name, ds_spec in spec.data.items():
+            if ds_spec.data_location is None:
+                continue
+            if ds_spec.dtype == h5py.string_dtype():
+                continue
+            path = ds_spec.data_location
+            if path not in f:
+                continue
+            dataset = f[path]
+            dataset.resize((n_sims,) + dataset.shape[1:])
+            if name == "tpa_unbound_by_pli":
+                dataset[:] = np.array(
+                    [True] * (n_sims // 2) + [False] * (n_sims - n_sims // 2)
+                )
+            elif name == "tpa_unbound_kinetic":
+                dataset[:] = np.array(
+                    [False] * (n_sims // 2) + [True] * (n_sims - n_sims // 2)
+                )
+            elif ds_spec.dtype == np.bool_:
+                dataset[:] = np.ones(n_sims, dtype=bool)
+            elif np.issubdtype(ds_spec.dtype, np.integer):
+                dataset[:] = np.arange(n_sims, dtype=ds_spec.dtype)
+            else:
+                dataset[:] = np.arange(n_sims, dtype=ds_spec.dtype)
+
+
 # ---------------------------------------------------------------------------
 #  DataStatus enum tests
 # ---------------------------------------------------------------------------
@@ -1123,12 +1159,26 @@ class TestDataStoreCreate:
 class TestDataStoreInitializeMacroscale:
     """Tests for the DataStore.initialize_macroscale() instance method."""
 
+    _N_MICRO_SIMS = 10  # number of dummy microscale simulations to write
+
     def _create_micro_store(self, tmp_path, run_code="init_macro"):
-        """Helper: create a microscale-only DataStore."""
+        """Helper: create a microscale-only DataStore with dummy simulation data.
+
+        initialize_macroscale() now requires non-empty tpa_unbound_by_pli and
+        tpa_unbound_kinetic datasets to compute forced_unbind, so we resize and
+        fill all microscale datasets after DataStore.create().
+        """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             micro = MicroParameters()
-        return DataStore.create(run_code, str(tmp_path), micro)
+        ds = DataStore.create(run_code, str(tmp_path), micro)
+        # Datasets created by DataStore.create() are empty (shape 0) and
+        # resizable. Fill them with dummy data so forced_unbind can be computed.
+        filepath = tmp_path / f"{run_code}.h5"
+        _fill_microscale_unbinding_data(filepath, n_sims=self._N_MICRO_SIMS)
+        # Close and reopen so the DataStore sees the newly written data.
+        ds.close()
+        return DataStore(run_code, str(tmp_path), mode="a")
 
     def test_initialize_has_both_collections(self, tmp_path):
         """initialize_macroscale() produces DataStore with both collections."""
@@ -1312,7 +1362,7 @@ class TestDataStoreInitializeMacroscale:
             ds.close()
 
     def test_initialize_preserves_micro_data(self, tmp_path):
-        """initialize_macroscale() preserves existing microscale empty datasets."""
+        """initialize_macroscale() does not erase existing microscale datasets."""
         ds = self._create_micro_store(tmp_path)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
@@ -1321,19 +1371,23 @@ class TestDataStoreInitializeMacroscale:
             )
         ds.initialize_macroscale(macro)
         try:
-            # Microscale datasets should still exist and be empty
+            # Microscale datasets must still exist and retain their pre-existing data.
             dataset = ds.microscale_out.pli_first_time
             assert isinstance(dataset, h5py.Dataset)
-            assert dataset.shape[0] == 0
+            assert dataset.shape[0] == self._N_MICRO_SIMS
         finally:
             ds.close()
 
     def test_initialize_in_context_manager(self, tmp_path):
         """initialize_macroscale() works inside a context manager."""
+        # Use _create_micro_store (which writes microscale data) then reopen
+        # as a context manager so we can verify file handle closure on exit.
+        ds_setup = self._create_micro_store(tmp_path, run_code="ctx_init")
+        ds_setup.close()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             micro = MicroParameters()
-        with DataStore.create("ctx_init", str(tmp_path), micro) as ds:
+        with DataStore("ctx_init", str(tmp_path), mode="a") as ds:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", RuntimeWarning)
                 macro = MacroParameters(
@@ -1377,6 +1431,43 @@ class TestDataStoreInitializeMacroscale:
         finally:
             ds.close()
 
+    def test_initialize_computes_forced_unbind(self, tmp_path):
+        """initialize_macroscale() stores forced_unbind computed from microscale data.
+
+        _create_micro_store sets tpa_unbound_by_pli[:n//2] = True and
+        tpa_unbound_kinetic[n//2:] = True, so forced_unbind = 0.5.
+        The value passed in MacroParameters (nan by default) must be replaced.
+        """
+        ds = self._create_micro_store(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            # Pass the default (nan) to confirm it gets overwritten.
+            macro = MacroParameters(micro_params=ds.micro_params, macro_simulations=2)
+        ds.initialize_macroscale(macro)
+        try:
+            stored = ds.macro_params.forced_unbind
+            assert 0.0 < stored < 1.0, f"expected a valid fraction, got {stored}"
+            # n//2 forced out of n total → 0.5
+            assert stored == pytest.approx(0.5)
+        finally:
+            ds.close()
+
+    def test_initialize_raises_on_empty_microscale(self, tmp_path):
+        """initialize_macroscale() raises ValueError when microscale datasets are empty."""
+        # Create a store with empty datasets (do NOT fill them).
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters()
+        ds = DataStore.create("empty_micro", str(tmp_path), micro)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(micro_params=ds.micro_params, macro_simulations=2)
+        try:
+            with pytest.raises(ValueError, match="microscale datasets are empty"):
+                ds.initialize_macroscale(macro)
+        finally:
+            ds.close()
+
 
 # ---------------------------------------------------------------------------
 #  Dataset write-through tests (append mode)
@@ -1409,6 +1500,12 @@ class TestDataStoreWriteThrough:
             warnings.simplefilter("ignore", RuntimeWarning)
             micro = MicroParameters()
         ds = DataStore.create(run_code, str(tmp_path), micro)
+        # initialize_macroscale() requires non-empty tpa_unbound_* datasets.
+        # Write minimal dummy microscale data before proceeding.
+        filepath = tmp_path / f"{run_code}.h5"
+        _fill_microscale_unbinding_data(filepath)
+        ds.close()
+        ds = DataStore(run_code, str(tmp_path), mode="a")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             macro = MacroParameters(

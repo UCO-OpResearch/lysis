@@ -298,9 +298,18 @@ class Experiment:
            problem at once.
         5. If ``dry_run`` is ``False``: creates the experiment folder,
            writes ``experiment.json``, and calls
-           :meth:`~lysis.dataio.datastore.DataStore.create` +
-           :meth:`~lysis.dataio.datastore.DataStore.initialize_macroscale`
-           for each Run.
+           :meth:`~lysis.dataio.datastore.DataStore.create` for each Run,
+           producing an HDF5 file with microscale parameters and empty
+           microscale dataset stubs.
+
+        .. note::
+            Macroscale parameters are stored in ``experiment.json`` and in
+            each :class:`~lysis.config.run.Run` object but are **not** written
+            to the HDF5 file at this stage.
+            :meth:`~lysis.dataio.datastore.DataStore.initialize_macroscale`
+            must be called after all microscale Simulations have completed;
+            it reads the microscale results to compute ``forced_unbind``
+            and then writes the full macroscale structure to the HDF5.
 
         :param csv_path: Path to the parameter CSV file.
         :type csv_path: str | os.PathLike
@@ -424,9 +433,11 @@ class Experiment:
             json.dump(exp.to_dict(), fh, indent=2)
 
         # ── 6. Create HDF5 files for each Run ───────────────────────────
+        # Only the microscale structure is written here. initialize_macroscale()
+        # must be called separately after microscale Simulations complete,
+        # because it requires microscale output to compute forced_unbind.
         for run in exp._runs:
             ds = DataStore.create(run.run_code, exp_path, run.micro_params)
-            ds.initialize_macroscale(run.macro_params)
             ds.close()
 
         return exp

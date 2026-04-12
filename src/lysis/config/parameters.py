@@ -72,6 +72,7 @@ import dataclasses
 from dataclasses import asdict, dataclass, field
 from typing import List, Tuple, Type, TypeVar
 
+import numpy as np
 from pint import Quantity
 
 from .constants import ureg, Q_
@@ -818,10 +819,18 @@ class MacroParameters(Parameters):
     :Units: cm^2/s
     :Fortran: Diff"""
 
-    # TODO(bpaynter): This value should derive from Microscale Model results
-    forced_unbind: float = 0.0852
+    forced_unbind: float = float("nan")
     """Fraction of times tPA was forced to unbind in microscale model.
-    
+
+    This value must be computed from microscale simulation results using
+    :meth:`MacroParameters.calculate_forced_unbind`. It is set automatically
+    by :meth:`~lysis.dataio.datastore.DataStore.initialize_macroscale` and
+    should never be supplied manually in production workflows.
+
+    The default ``float("nan")`` is intentional: any code that uses this
+    field without first calling ``initialize_macroscale()`` will encounter
+    NaN in float arithmetic rather than silently using a stale value.
+
     :Units: None
     :Fortran: frac_forced"""
 
@@ -1174,3 +1183,42 @@ class MacroParameters(Parameters):
         object.__setattr__(
             self, "number_of_saves", int(self.total_time / self.save_interval) + 1
         )
+
+    @classmethod
+    def calculate_forced_unbind(
+        cls,
+        tpa_unbound_by_pli: np.ndarray,
+        tpa_unbound_kinetic: np.ndarray,
+    ) -> float:
+        """Calculate the ``forced_unbind`` parameter from microscale simulation results.
+
+        Computes the fraction of tPA unbinding events that were forced by PLi
+        (plasmin) action versus kinetic (spontaneous) unbinding. This is the
+        value that should be stored in the :attr:`forced_unbind` field.
+
+        Called automatically by
+        :meth:`~lysis.dataio.datastore.DataStore.initialize_macroscale`; in
+        normal workflows there is no need to call this directly.
+
+        :param tpa_unbound_by_pli: Boolean array with one entry per microscale
+            simulation; ``True`` where tPA was forced to unbind by PLi.
+        :type tpa_unbound_by_pli: np.ndarray
+        :param tpa_unbound_kinetic: Boolean array with one entry per microscale
+            simulation; ``True`` where tPA unbound kinetically (spontaneously).
+        :type tpa_unbound_kinetic: np.ndarray
+        :return: Fraction of unbinding events that were forced, in [0, 1].
+        :rtype: float
+        :raises ValueError: If neither array contains any True values (no
+            unbinding events were recorded in the microscale simulations).
+        """
+        n_forced = int(np.count_nonzero(tpa_unbound_by_pli))
+        n_kinetic = int(np.count_nonzero(tpa_unbound_kinetic))
+        total = n_forced + n_kinetic
+        if total == 0:
+            raise ValueError(
+                "Cannot calculate forced_unbind: no unbinding events found in "
+                "tpa_unbound_by_pli or tpa_unbound_kinetic. Ensure microscale "
+                "simulations have completed successfully before calling "
+                "initialize_macroscale()."
+            )
+        return n_forced / total

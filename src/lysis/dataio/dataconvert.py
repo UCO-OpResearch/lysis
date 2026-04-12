@@ -487,12 +487,11 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
 
     # Calculate the proportion of tPA unbinding events that were forced (by PLi)
     # vs kinetic (spontaneous). This ratio affects macroscale binding dynamics.
-    # Formula: forced_unbind_rate = n_forced / (n_forced + n_kinetic)
-    out_data["params"]["macro_params"]["forced_unbind"] = np.count_nonzero(
-        in_data["tpa_unbound_by_pli"]
-    ) / (
-        np.count_nonzero(in_data["tpa_unbound_by_pli"])
-        + np.count_nonzero(in_data["tpa_unbound_kinetic"])
+    out_data["params"]["macro_params"]["forced_unbind"] = (
+        MacroParameters.calculate_forced_unbind(
+            in_data["tpa_unbound_by_pli"],
+            in_data["tpa_unbound_kinetic"],
+        )
     )
 
     return out_data

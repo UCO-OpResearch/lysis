@@ -16,16 +16,26 @@ initialises a new Experiment from a CSV file:
   constant).
 * It validates that all provided values are mutually consistent.
 * It creates the experiment folder, writes ``experiment.json``, and
-  produces an HDF5 file for each Run.
+  produces an HDF5 file for each Run containing the microscale parameters
+  and empty dataset stubs.
 
 .. code-block:: text
 
     {data_root}/
         {experiment_name}/
             experiment.json          ← name, description, run list
-            {run_code_0}.h5          ← parameters + empty dataset stubs
+            {run_code_0}.h5          ← micro parameters + empty micro stubs
             {run_code_1}.h5
             ...
+
+.. note::
+
+   The HDF5 files created here contain only the **microscale** structure.
+   Macroscale parameters and dataset stubs are added later by
+   :meth:`~lysis.dataio.datastore.DataStore.initialize_macroscale`, which
+   must be called **after** all microscale Simulations have completed.
+   This is required because the ``forced_unbind`` parameter can only be
+   computed from microscale output.
 
 
 CSV Format
@@ -205,7 +215,20 @@ Python API Usage
 :meth:`~lysis.config.experiment.Experiment.from_csv` returns the
 :class:`~lysis.config.experiment.Experiment` object with all
 :class:`~lysis.config.run.Run` objects populated (and, unless
-``dry_run=True``, all HDF5 files written to disk).
+``dry_run=True``, HDF5 files with microscale structure written to disk).
+
+After all microscale Simulations complete, call
+:meth:`~lysis.dataio.datastore.DataStore.initialize_macroscale` for each
+Run to compute ``forced_unbind`` and write the macroscale structure:
+
+.. code-block:: python
+
+    from lysis.dataio.datastore import DataStore
+
+    # After microscale Simulations are done:
+    for run in exp.runs:
+        with DataStore(run.run_code, exp.path, mode="a") as ds:
+            ds.initialize_macroscale(run.macro_params)
 
 
 Error Messages

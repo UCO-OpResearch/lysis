@@ -367,6 +367,57 @@ class TestMacroParametersCustomInit:
 
 
 # ===========================================================================
+# MacroParameters — forced_unbind default and calculate_forced_unbind()
+# ===========================================================================
+
+
+class TestMacroParametersForcedUnbind:
+    """forced_unbind field and MacroParameters.calculate_forced_unbind()."""
+
+    def test_forced_unbind_default_is_nan(self):
+        """Default forced_unbind is float('nan') to prevent accidental use."""
+        import math
+
+        macro = _macro()
+        assert math.isnan(macro.forced_unbind)
+
+    def test_calculate_forced_unbind_basic(self):
+        """calculate_forced_unbind returns the correct fraction."""
+        import numpy as np
+
+        pli = np.array([True, True, False, False])
+        kin = np.array([False, False, True, False])
+        # 2 forced, 1 kinetic → 2/3
+        result = MacroParameters.calculate_forced_unbind(pli, kin)
+        assert result == pytest.approx(2 / 3)
+
+    def test_calculate_forced_unbind_all_forced(self):
+        """All events forced → result is 1.0."""
+        import numpy as np
+
+        pli = np.ones(10, dtype=bool)
+        kin = np.zeros(10, dtype=bool)
+        assert MacroParameters.calculate_forced_unbind(pli, kin) == pytest.approx(1.0)
+
+    def test_calculate_forced_unbind_all_kinetic(self):
+        """All events kinetic → result is 0.0."""
+        import numpy as np
+
+        pli = np.zeros(10, dtype=bool)
+        kin = np.ones(10, dtype=bool)
+        assert MacroParameters.calculate_forced_unbind(pli, kin) == pytest.approx(0.0)
+
+    def test_calculate_forced_unbind_no_events_raises(self):
+        """Both arrays all-False → raises ValueError."""
+        import numpy as np
+
+        pli = np.zeros(10, dtype=bool)
+        kin = np.zeros(10, dtype=bool)
+        with pytest.raises(ValueError, match="no unbinding events"):
+            MacroParameters.calculate_forced_unbind(pli, kin)
+
+
+# ===========================================================================
 # MacroParameters — immutability
 # ===========================================================================
 

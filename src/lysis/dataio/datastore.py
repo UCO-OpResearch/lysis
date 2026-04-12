@@ -79,6 +79,7 @@ COMPATIBLE_DATASPEC_VERSION
     A :class:`UserWarning` is raised at import time if the active dataspec
     ``"hdf5"`` tag points to a different version.
 """
+import dataclasses
 import os
 import warnings
 
@@ -732,23 +733,38 @@ class DataStore:
     def initialize_macroscale(self, macro_params):
         """Add macroscale parameters and empty datasets to this DataStore.
 
-        Writes ``macro_params`` as HDF5 attributes on the ``macro_data``
-        group and creates zero-length per-simulation datasets for all
-        macroscale_out datasets defined in the v2.0.0 specification.
+        Reads the completed microscale output to compute
+        :attr:`~lysis.config.parameters.MacroParameters.forced_unbind`
+        automatically from the ``tpa_unbound_by_pli`` and
+        ``tpa_unbound_kinetic`` datasets, then writes the full macroscale
+        structure (parameters + empty per-simulation dataset stubs) to the
+        HDF5 file.
+
+        **This method must be called after all microscale Simulations have
+        completed and their results have been written to the DataStore.**
+        Calling it before microscale output exists will raise
+        :exc:`ValueError`.
+
+        The value of ``macro_params.forced_unbind`` is silently replaced
+        with the value computed from microscale data; do not rely on
+        whatever value was passed in.
 
         Modifies the DataStore **in place** and returns ``None``.
         Requires the DataStore to be opened in a writable mode
         (e.g., ``"a"``)::
 
-            ds.initialize_macroscale(macro_params)
+            with DataStore(run_code, path, mode="a") as ds:
+                ds.initialize_macroscale(run.macro_params)
 
-        :param macro_params: The macroscale parameters to store.
+        :param macro_params: The macroscale parameters to store.  All
+            fields except ``forced_unbind`` are used as provided.
         :type macro_params: MacroParameters
         :raises IOError: If the DataStore is opened in read-only mode.
         :raises TypeError: If ``macro_params`` is not a
             :class:`~lysis.config.parameters.MacroParameters` instance.
-        :raises ValueError: If microscale_out is not present, or if
-            macroscale_out is already present.
+        :raises ValueError: If microscale_out is not present, if
+            macroscale_out is already present, or if the microscale
+            datasets are empty (i.e. no Simulations have been written).
         """
         if self._mode == "r":
             raise IOError(
@@ -768,6 +784,28 @@ class DataStore:
             raise ValueError(
                 "macroscale_out is already present in this DataStore."
             )
+
+        # Read microscale unbinding arrays and compute forced_unbind from data.
+        # This must happen before self._file is closed.
+        micro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["microscale_out"]
+        pli_loc = micro_spec.data["tpa_unbound_by_pli"].data_location
+        kin_loc = micro_spec.data["tpa_unbound_kinetic"].data_location
+        tpa_unbound_by_pli = self._file[pli_loc][:]
+        tpa_unbound_kinetic = self._file[kin_loc][:]
+
+        if tpa_unbound_by_pli.shape[0] == 0:
+            raise ValueError(
+                "Cannot initialize macroscale: microscale datasets are empty. "
+                "Ensure all microscale Simulations have completed before "
+                "calling initialize_macroscale()."
+            )
+
+        computed_forced_unbind = MacroParameters.calculate_forced_unbind(
+            tpa_unbound_by_pli, tpa_unbound_kinetic
+        )
+        macro_params = dataclasses.replace(
+            macro_params, forced_unbind=computed_forced_unbind
+        )
 
         spec = dataspec[COMPATIBLE_DATASPEC_VERSION]
         macro_spec = spec["macroscale_out"]
