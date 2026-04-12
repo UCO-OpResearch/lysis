@@ -153,10 +153,13 @@ class FortranMacro:
             seeds = stream.generate_state(params["macro_simulations"])
             # This instance will run only one simulation
             params["macro_simulations"] = 1
-            # Use the seed specific to this index, cast to int32 to match Fortran INTEGER*4
-            params["macro_seed"] = int(np.int32(seeds[self.index]))
+            # Use the seed specific to this index
+            params["macro_seed"] = seeds[self.index]
             # Append index to output file code for unique output files
             self.out_file_code = self.out_file_code + f"__{self.index:02}"
+
+        # Cast seed to int32 to match Fortran INTEGER*4
+        params["macro_seed"] = int(np.array(params["macro_seed"]).astype(np.int32))
 
         # Start building the command-line argument list
         arguments = [
@@ -686,8 +689,11 @@ class FortranMicro:
             stream = np.random.SeedSequence(params["micro_seed"])
             seeds = stream.generate_state(self.index + 1)
             params["micro_simulations"] = 1
-            params["micro_seed"] = int(np.int32(seeds[self.index]))
+            params["micro_seed"] = seeds[self.index]
             self.out_file_code = self.out_file_code + f"__{self.index:02}"
+
+        # Cast seed to int32 to match Fortran INTEGER*4
+        params["micro_seed"] = int(np.array(params["micro_seed"]).astype(np.int32))
 
         arguments = [
             "--runCode",
