@@ -18,6 +18,7 @@ test.ipynb
 docs/usage/Lysis-Component.vpp.bak_000f
 **/.DS_Store
 QWEN.md
+slurm-*
 
 # Sphinx documentation build outputs
 docs/build/
