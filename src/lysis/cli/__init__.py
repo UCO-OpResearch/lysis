@@ -38,4 +38,4 @@ def main():
 
 
 # Import command modules to register them with the Click group.
-from lysis.cli import convert, deg_rate, deg_time, init_experiment, macro_stats, micro_stats, parameters, run_micro, validate  # noqa: E402, F401
+from lysis.cli import convert, deg_rate, deg_time, init_experiment, init_macroscale, macro_stats, micro_stats, parameters, run_micro, validate  # noqa: E402, F401

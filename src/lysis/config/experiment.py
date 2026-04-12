@@ -46,6 +46,7 @@ will use defaults or solve algebraically from other columns.
 import csv
 import inspect
 import json
+import math
 import os
 from datetime import datetime
 from importlib.metadata import version as _pkg_version
@@ -259,6 +260,16 @@ class Experiment:
         except Exception:
             lysis_ver = "unknown"
 
+        def _serialisable_macro(macro_params):
+            """Return macro_params as a JSON-safe dict (NaN values excluded)."""
+            if macro_params is None:
+                return None
+            return {
+                k: v
+                for k, v in macro_params.to_basedict().items()
+                if not (isinstance(v, float) and math.isnan(v))
+            }
+
         return {
             "name": self._name,
             "description": self._description,
@@ -269,6 +280,7 @@ class Experiment:
                     "run_code": run.run_code,
                     "row_index": i,
                     "description": getattr(run, "_description", ""),
+                    "macro_params": _serialisable_macro(run.macro_params),
                 }
                 for i, run in enumerate(self._runs)
             ],
@@ -439,5 +451,65 @@ class Experiment:
         for run in exp._runs:
             ds = DataStore.create(run.run_code, exp_path, run.micro_params)
             ds.close()
+
+        return exp
+
+    @classmethod
+    def load(cls, experiment_path: str | os.PathLike) -> "Experiment":
+        """Load an existing Experiment from its folder on disk.
+
+        Reads ``experiment.json`` to reconstruct all :class:`~lysis.config.run.Run`
+        objects, including their macro- and microscale parameters.  Microscale
+        parameters are read from each run's HDF5 file; macroscale parameters are
+        read from ``experiment.json`` (where they were stored by :meth:`from_csv`).
+
+        :param experiment_path: Path to the experiment folder (the directory
+            that contains ``experiment.json`` and the run HDF5 files).
+        :type experiment_path: str | os.PathLike
+        :returns: :class:`Experiment` instance with all :class:`~lysis.config.run.Run`
+            objects populated.
+        :rtype: Experiment
+        :raises FileNotFoundError: If ``experiment.json`` is not found.
+        :raises KeyError: If ``experiment.json`` is missing required fields.
+        :raises ValueError: If macro_params stored in ``experiment.json`` are
+            inconsistent with the micro_params in the corresponding HDF5 file.
+        """
+        experiment_path = Path(experiment_path).resolve()
+        json_path = experiment_path / "experiment.json"
+        if not json_path.exists():
+            raise FileNotFoundError(
+                f"experiment.json not found in {experiment_path}. "
+                "Is this a valid experiment folder?"
+            )
+
+        with open(json_path, encoding="utf-8") as fh:
+            meta = json.load(fh)
+
+        name = meta["name"]
+        description = meta.get("description", "")
+        exp = cls(name, str(experiment_path.parent), description)
+        exp._created = meta.get("created", exp._created)
+
+        for run_meta in meta["runs"]:
+            run_code = run_meta["run_code"]
+            macro_params_dict = run_meta.get("macro_params") or {}
+            run_desc = run_meta.get("description", "")
+
+            # Micro parameters come from the HDF5 file
+            ds = DataStore(run_code, str(experiment_path), mode="r")
+            micro_params = ds.micro_params
+            ds.close()
+
+            # Macro parameters come from experiment.json; forced_unbind is
+            # absent (NaN was excluded when writing) so load_macro_params
+            # will fill in the nan default.  initialize_macroscale() will
+            # compute the real value when called.
+            macro_params = load_macro_params(macro_params_dict, micro_params)
+
+            run = Run(str(experiment_path), run_code)
+            run.micro_params = micro_params
+            run.macro_params = macro_params
+            run._description = run_desc
+            exp._runs.append(run)
 
         return exp
