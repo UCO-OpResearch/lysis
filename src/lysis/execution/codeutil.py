@@ -312,7 +312,7 @@ class FortranMacro:
             )
         return cls(
             run=run,
-            executable=str(executable),
+            executable=str(Path(executable).resolve()),
             in_file_code=in_file_code,
             out_file_code=out_file_code,
             index=index,
@@ -648,7 +648,7 @@ class FortranMicro:
         hdf5_path = Path(hdf5_path)
         run = Run(str(hdf5_path.parent), run_code=hdf5_path.stem)
         run.load_params_from_hdf5()
-        return cls(run=run, executable=str(executable),
+        return cls(run=run, executable=str(Path(executable).resolve()),
                    out_file_code=out_file_code, index=index)
 
     # ------------------------------------------------------------------

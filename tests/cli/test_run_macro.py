@@ -1,5 +1,6 @@
 """Tests for ``lysis run-macro`` CLI command."""
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -275,3 +276,199 @@ class TestRunMacroSlurm:
         )
         assert result.exit_code == 0, result.output
         mock_fm.run_full.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Batch (experiment / directory) helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_experiment_dir(parent: Path, run_codes: list[str]) -> Path:
+    """Create a minimal experiment folder with HDF5 files and experiment.json."""
+    exp_dir = parent / "my-experiment"
+    exp_dir.mkdir()
+    for rc in run_codes:
+        _write_macro_hdf5(exp_dir / f"{rc}.h5")
+    experiment_json = {
+        "name": "my-experiment",
+        "description": "",
+        "created": "2026-01-01T00:00:00",
+        "lysis_version": "test",
+        "runs": [{"run_code": rc, "row_index": i, "description": "", "macro_params": None}
+                 for i, rc in enumerate(run_codes)],
+    }
+    (exp_dir / "experiment.json").write_text(json.dumps(experiment_json))
+    return exp_dir
+
+
+@pytest.fixture
+def experiment_dir(tmp_path):
+    """Experiment folder with experiment.json and two HDF5 files."""
+    return _make_experiment_dir(tmp_path, ["run-01", "run-02"])
+
+
+@pytest.fixture
+def hdf5_dir(tmp_path):
+    """Directory with two HDF5 files but no experiment.json."""
+    d = tmp_path / "raw-runs"
+    d.mkdir()
+    _write_macro_hdf5(d / "run-aa.h5")
+    _write_macro_hdf5(d / "run-bb.h5")
+    return d
+
+
+# ---------------------------------------------------------------------------
+# Batch local execution (experiment folder)
+# ---------------------------------------------------------------------------
+
+
+class TestRunMacroExperimentLocal:
+    @patch("lysis.execution.codeutil.FortranMacro")
+    def test_batch_with_experiment_json_calls_from_hdf5_for_each_run(
+        self, mock_cls, runner, experiment_dir
+    ):
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(experiment_dir), "--executable", "/bin/macro.exe"],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_cls.from_hdf5.call_count == 2
+
+    @patch("lysis.execution.codeutil.FortranMacro")
+    def test_batch_with_experiment_json_calls_run_full_for_each_run(
+        self, mock_cls, runner, experiment_dir
+    ):
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(experiment_dir), "--executable", "/bin/macro.exe"],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_fm.run_full.call_count == 2
+
+    @patch("lysis.execution.codeutil.FortranMacro")
+    def test_batch_glob_calls_from_hdf5_for_each_run(
+        self, mock_cls, runner, hdf5_dir
+    ):
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(hdf5_dir), "--executable", "/bin/macro.exe"],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_cls.from_hdf5.call_count == 2
+
+    @patch("lysis.execution.codeutil.FortranMacro")
+    def test_batch_output_mentions_run_codes(
+        self, mock_cls, runner, experiment_dir
+    ):
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(experiment_dir), "--executable", "/bin/macro.exe"],
+        )
+        assert result.exit_code == 0, result.output
+        # Rich may wrap long paths across lines; join output to check content
+        flat = result.output.replace("\n", "")
+        assert "run-01" in flat
+        assert "run-02" in flat
+
+    def test_file_code_with_directory_raises_error(self, runner, experiment_dir):
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(experiment_dir),
+                "--executable", "/bin/macro.exe",
+                "--file-code", "_x",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "file-code" in result.output.lower() or "directory" in result.output.lower()
+
+    def test_empty_directory_raises_error(self, runner, tmp_path):
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(empty), "--executable", "/bin/macro.exe"],
+        )
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Batch Slurm dispatch (experiment folder)
+# ---------------------------------------------------------------------------
+
+
+class TestRunMacroExperimentSlurm:
+    @patch("lysis.tools.slurm.submit_macro_slurm_job", side_effect=[10001, 10002])
+    def test_batch_slurm_calls_submit_for_each_run(
+        self, mock_submit, runner, experiment_dir
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(experiment_dir),
+                "--executable", "/bin/macro.exe",
+                "--slurm",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_count == 2
+
+    @patch("lysis.tools.slurm.submit_macro_slurm_job", side_effect=[10001, 10002])
+    def test_batch_slurm_prints_all_job_ids(
+        self, mock_submit, runner, experiment_dir
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(experiment_dir),
+                "--executable", "/bin/macro.exe",
+                "--slurm",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "10001" in result.output
+        assert "10002" in result.output
+
+    @patch("lysis.tools.slurm.submit_macro_slurm_job", side_effect=[10001, 10002])
+    def test_batch_slurm_partition_forwarded_to_all_calls(
+        self, mock_submit, runner, experiment_dir
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(experiment_dir),
+                "--executable", "/bin/macro.exe",
+                "--slurm",
+                "--partition", "long",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        for c in mock_submit.call_args_list:
+            assert c.kwargs.get("partition") == "long"
+
+    @patch("lysis.tools.slurm.submit_macro_slurm_job", side_effect=[20001, 20002])
+    def test_batch_glob_slurm_submits_for_each_h5(
+        self, mock_submit, runner, hdf5_dir
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(hdf5_dir),
+                "--executable", "/bin/macro.exe",
+                "--slurm",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_count == 2
