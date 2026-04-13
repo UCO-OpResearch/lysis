@@ -15,10 +15,21 @@ from lysis.config.parameters import MacroParameters, MicroParameters
 
 
 def _write_minimal_csv(path, rows):
+    """Write a transposed CSV: rows = parameters, columns = runs.
+
+    run_code values become column headers; all other keys become parameter rows.
+    """
+    if not rows:
+        return
+    param_names = list(rows[0].keys())
+    run_codes = [r.get("run_code", f"run-{i:02d}") for i, r in enumerate(rows)]
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
-        writer.writeheader()
-        writer.writerows(rows)
+        writer = csv.writer(fh)
+        writer.writerow(["parameter"] + run_codes)
+        for param in param_names:
+            if param == "run_code":
+                continue  # run_code is the column header, not a data row
+            writer.writerow([param] + [str(r.get(param, "")) for r in rows])
 
 
 def _default_micro_row():
