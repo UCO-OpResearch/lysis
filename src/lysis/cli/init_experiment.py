@@ -45,7 +45,7 @@ from lysis.cli import cli
 def init_experiment(ctx, csv_path, data_root, name, description, dry_run, no_progress):
     """Initialise an Experiment from a parameter CSV file.
 
-    Reads CSV_PATH (one row = one Run), resolves any missing dependent
+    Reads CSV_PATH (one column = one Run), resolves any missing dependent
     parameters algebraically, validates consistency, then creates the
     experiment folder under DATA_ROOT with an HDF5 file for each Run.
 

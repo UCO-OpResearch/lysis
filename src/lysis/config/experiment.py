@@ -1,7 +1,7 @@
 """Experiment initialization from a parameter CSV file.
 
 An :class:`Experiment` is a collection of :class:`~lysis.config.run.Run`
-objects that share a common folder.  Each row in the input CSV describes one
+objects that share a common folder.  Each column in the input CSV describes one
 Run's parameters; the :meth:`Experiment.from_csv` class method parses the CSV,
 resolves any algebraic parameter relationships (via
 :mod:`~lysis.config.param_resolver`), validates consistency, creates the
@@ -30,17 +30,19 @@ Typical usage
 CSV format
 ----------
 
-Each **row** describes one Run.  Column headers are Python parameter names
-(e.g. ``fiber_radius``, ``pore_size``) — not Fortran names.  Cell values may
-include Pint-compatible unit strings (e.g. ``"72.7 nm"``).
+Each **column** describes one Run.  The first column contains parameter names
+(e.g. ``fiber_radius``, ``pore_size``) — not Fortran names.  Each additional
+column header is the run code for that Run; remaining cells are the
+corresponding parameter values, which may include Pint-compatible unit strings
+(e.g. ``"72.7 nm"``).
 
-Special (non-parameter) columns:
+Special (non-parameter) rows:
 
-- ``run_code`` — override the auto-generated run code for that row
-- ``run_description`` — prose note stored in ``experiment.json``
+- ``run_description`` — prose note stored in ``experiment.json`` (one cell per run)
 
-Any column absent from the CSV is treated as "not provided" and the resolver
-will use defaults or solve algebraically from other columns.
+The column header (row 0) is the ``run_code``; if left blank an auto-generated
+timestamp-based code is used.  Any row absent from the CSV is treated as
+"not provided" and the resolver will use defaults or solve algebraically.
 """
 
 import csv
@@ -85,15 +87,16 @@ _METADATA_COLS = {"run_code", "run_description"}
 def _classify_columns(
     headers: list[str],
 ) -> tuple[set[str], set[str], set[str]]:
-    """Partition CSV column names into micro params, macro params, and metadata.
+    """Partition parameter names into micro params, macro params, and metadata.
 
     Uses :func:`inspect.signature` on both parameter classes to determine which
-    class each header belongs to.
+    class each name belongs to.  In the transposed CSV format these names come
+    from the first column of data rows (not from column headers).
 
-    :param headers: List of CSV column header strings.
+    :param headers: List of parameter name strings (first column of data rows).
     :returns: ``(micro_names, macro_names, metadata_names)`` — three sets that
-        together cover all provided headers.
-    :raises ValueError: If any header is not recognised as a micro param, macro
+        together cover all provided names.
+    :raises ValueError: If any name is not recognised as a micro param, macro
         param, or known metadata column.
     """
     micro_ind = set(inspect.signature(MicroParameters).parameters.keys())
@@ -299,11 +302,14 @@ class Experiment:
     ) -> "Experiment":
         """Parse a parameter CSV and initialise an Experiment.
 
-        Each row in the CSV describes one Run.  The method:
+        Each column in the CSV describes one Run.  The first column contains
+        parameter names; each subsequent column header is the run code and
+        the cells below it are values for that Run.  The method:
 
-        1. Parses the CSV with :mod:`csv.DictReader`.
-        2. Classifies columns as micro params, macro params, or metadata.
-        3. For each row: resolves algebraic parameter relationships, validates
+        1. Parses the transposed CSV with :mod:`csv.reader`.
+        2. Classifies parameter names (first column) as micro params, macro
+           params, or metadata.
+        3. For each run column: resolves algebraic parameter relationships, validates
            consistency, and constructs :class:`~.parameters.MicroParameters` /
            :class:`~.parameters.MacroParameters` objects.
         4. Collects **all** row errors before raising, so researchers see every
@@ -323,7 +329,8 @@ class Experiment:
             it reads the microscale results to compute ``forced_unbind``
             and then writes the full macroscale structure to the HDF5.
 
-        :param csv_path: Path to the parameter CSV file.
+        :param csv_path: Path to the parameter CSV file (transposed format:
+            first column = parameter names, each additional column = one Run).
         :type csv_path: str | os.PathLike
         :param data_root: Parent directory for the new experiment folder.
         :type data_root: str | os.PathLike
@@ -340,9 +347,9 @@ class Experiment:
         :rtype: Experiment
         :raises FileExistsError: If the experiment folder already exists (only
             when ``dry_run=False``).
-        :raises ValueError: If any CSV row contains unrecognised column names.
-        :raises ParameterConflict: If any CSV row contains mutually inconsistent
-            parameter values.  All row errors are collected before raising.
+        :raises ValueError: If any parameter name in the first column is not recognised.
+        :raises ParameterConflict: If any run column contains mutually inconsistent
+            parameter values.  All run errors are collected before raising.
         :raises ValueError: If ``load_micro_params`` or ``load_macro_params``
             finds missing required parameters or dependent-value mismatches.
         """
@@ -352,25 +359,50 @@ class Experiment:
 
         exp = cls(name, data_root, description)
 
-        # ── 1. Parse CSV ────────────────────────────────────────────────
+        # ── 1. Parse CSV (transposed: rows = params, columns = runs) ────
         with csv_path.open(newline="", encoding="utf-8") as fh:
-            reader = csv.DictReader(fh)
-            if reader.fieldnames is None:
-                raise ValueError(f"CSV file is empty: {csv_path}")
-            micro_cols, macro_cols, meta_cols = _classify_columns(
-                list(reader.fieldnames)
-            )
-            rows = list(reader)
+            reader = csv.reader(fh)
+            all_rows = list(reader)
 
-        if not rows:
+        if not all_rows:
+            raise ValueError(f"CSV file is empty: {csv_path}")
+
+        # Row 0: ["parameter", run_code_0, run_code_1, ...]
+        header_row = all_rows[0]
+        n_runs = len(header_row) - 1
+        if n_runs <= 0:
+            raise ValueError(f"CSV has no run columns: {csv_path}")
+
+        raw_run_codes = [cell.strip() for cell in header_row[1:]]
+
+        # Data rows: [param_name, value_for_run_0, value_for_run_1, ...]
+        data_rows = [r for r in all_rows[1:] if any(cell.strip() for cell in r)]
+        if not data_rows:
             raise ValueError(f"CSV file has no data rows: {csv_path}")
+
+        # Pad rows that are shorter than expected
+        for r in data_rows:
+            while len(r) <= n_runs:
+                r.append("")
+
+        # Skip rows with a blank parameter name
+        data_rows = [r for r in data_rows if r[0].strip()]
+
+        param_names = [r[0].strip() for r in data_rows]
+        micro_cols, macro_cols, meta_cols = _classify_columns(param_names)
+
+        # Build one dict per run column
+        rows = [
+            {r[0].strip(): r[col_idx + 1] for r in data_rows}
+            for col_idx in range(n_runs)
+        ]
 
         # ── 2. Resolve parameters for every row (collect all errors) ────
         base_ts = datetime.now().strftime("%Y-%m-%d-%H%M")
         resolved_rows: list[dict] = []  # {micro_params, macro_params, run_code, run_description}
         errors: list[str] = []
 
-        for row_idx, row in enumerate(rows):
+        for col_idx, row in enumerate(rows):
             micro_provided = {
                 k: _coerce_csv_value(v)
                 for k, v in row.items()
@@ -381,14 +413,14 @@ class Experiment:
                 for k, v in row.items()
                 if k in macro_cols and v != ""
             }
-            run_code = row.get("run_code", "").strip() or _make_run_code(base_ts, row_idx)
+            run_code = raw_run_codes[col_idx] or _make_run_code(base_ts, col_idx)
             run_desc = row.get("run_description", "").strip()
 
             try:
                 resolved_micro = resolve_micro_params(micro_provided)
                 micro_params = load_micro_params(resolved_micro)
             except (ParameterConflict, ValueError) as exc:
-                errors.append(f"Row {row_idx + 1} (run_code={run_code!r}) micro: {exc}")
+                errors.append(f"Run {col_idx + 1} (run_code={run_code!r}) micro: {exc}")
                 continue
 
             try:
@@ -397,7 +429,7 @@ class Experiment:
                 )
                 macro_params = load_macro_params(resolved_macro, micro_params)
             except (ParameterConflict, ValueError) as exc:
-                errors.append(f"Row {row_idx + 1} (run_code={run_code!r}) macro: {exc}")
+                errors.append(f"Run {col_idx + 1} (run_code={run_code!r}) macro: {exc}")
                 continue
 
             resolved_rows.append(
@@ -412,7 +444,7 @@ class Experiment:
         if errors:
             raise ValueError(
                 f"Parameter errors in {csv_path.name} "
-                f"({len(errors)} row(s)):\n"
+                f"({len(errors)} run(s)):\n"
                 + "\n".join(errors)
             )
 

@@ -28,11 +28,21 @@ from lysis.dataio.datastore import DataStore
 
 
 def _write_minimal_csv(path, rows):
-    """Write a CSV with headers from the first row dict and data rows."""
+    """Write a transposed CSV: rows = parameters, columns = runs.
+
+    run_code values become column headers; all other keys become parameter rows.
+    """
+    if not rows:
+        return
+    param_names = list(rows[0].keys())
+    run_codes = [r.get("run_code", f"run-{i:02d}") for i, r in enumerate(rows)]
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
-        writer.writeheader()
-        writer.writerows(rows)
+        writer = csv.writer(fh)
+        writer.writerow(["parameter"] + run_codes)
+        for param in param_names:
+            if param == "run_code":
+                continue  # run_code is the column header, not a data row
+            writer.writerow([param] + [str(r.get(param, "")) for r in rows])
 
 
 def _default_micro_row():
@@ -305,7 +315,8 @@ class TestErrorCases:
 
     def test_empty_csv_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
-        csv_path.write_text("fiber_radius\n")  # headers only, no data rows
+        # Transposed format: header row has run column, but no parameter rows follow
+        csv_path.write_text("parameter,run-00\n")
         data_root = tmp_path / "experiments"
         data_root.mkdir()
 
@@ -326,10 +337,10 @@ class TestErrorCases:
 
         with pytest.raises(ValueError) as exc_info:
             Experiment.from_csv(csv_path, data_root)
-        assert "Row 1" in str(exc_info.value)
+        assert "Run 1" in str(exc_info.value)
 
     def test_all_row_errors_collected(self, tmp_path):
-        """Errors in multiple rows are all reported at once."""
+        """Errors in multiple runs are all reported at once."""
         micro = _default_micro_row()
         macro = _default_macro_row()
         bad_micro = dict(micro)
@@ -344,8 +355,8 @@ class TestErrorCases:
         with pytest.raises(ValueError) as exc_info:
             Experiment.from_csv(csv_path, data_root)
         msg = str(exc_info.value)
-        assert "Row 1" in msg
-        assert "Row 2" in msg
+        assert "Run 1" in msg
+        assert "Run 2" in msg
 
 
 # ─── Parameter inversion via CSV ─────────────────────────────────────────────

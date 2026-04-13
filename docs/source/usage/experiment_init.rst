@@ -10,7 +10,7 @@ elucidate cause-and-effect relationships.  The ``lysis init-experiment``
 command (and its Python API counterpart :meth:`~lysis.config.experiment.Experiment.from_csv`)
 initialises a new Experiment from a CSV file:
 
-* Each **row** in the CSV describes one Run's parameters.
+* Each **column** in the CSV describes one Run's parameters.
 * The system resolves any missing *dependent* parameters algebraically
   (so you can supply, for example, an off-rate instead of a dissociation
   constant).
@@ -41,15 +41,26 @@ initialises a new Experiment from a CSV file:
 CSV Format
 ----------
 
-Column headers
-~~~~~~~~~~~~~~
+The CSV uses a **transposed** layout: parameter names are in the **first
+column** and each additional column represents one Run.
 
-Each column header must be a Python parameter name from
+First column (parameter names)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each cell in the first column must be a Python parameter name from
 :class:`~lysis.config.parameters.MicroParameters` or
-:class:`~lysis.config.parameters.MacroParameters`, or one of the special
-metadata columns listed below.  Use **Python** names (``fiber_radius``,
-``pore_size``), not Fortran names.  Unrecognised headers raise a
+:class:`~lysis.config.parameters.MacroParameters`, or the special metadata
+row name listed below.  Use **Python** names (``fiber_radius``,
+``pore_size``), not Fortran names.  Unrecognised names raise a
 :exc:`ValueError`.
+
+Header row (run codes)
+~~~~~~~~~~~~~~~~~~~~~~
+
+The first row is the header.  The first cell may be ``parameter`` or left
+blank.  Each subsequent cell in the header row is the ``run_code`` for that
+Run.  If a header cell is left blank, a timestamp-based code is generated
+automatically (e.g. ``2026-04-07-1422-00``).
 
 Cell values
 ~~~~~~~~~~~
@@ -64,26 +75,23 @@ unit string::
 If a cell contains a bare number with no units, the canonical unit for
 that parameter is assumed (see :meth:`~lysis.config.parameters.Parameters.units`).
 
-Blank cells and omitted columns
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Blank cells and omitted rows
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A **blank cell** means "not provided for this row".  An **omitted column**
-is equivalent to every cell in that column being blank.  The parameter
+A **blank cell** means "not provided for this Run".  An **omitted row**
+is equivalent to every cell in that row being blank.  The parameter
 resolver will attempt to derive the missing value algebraically from
 whatever is provided.  If it cannot be derived, the parameter's default
 value is used.
 
-Special metadata columns
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Special metadata row
+~~~~~~~~~~~~~~~~~~~~
 
-These columns are not passed to the parameter resolver:
-
-``run_code``
-    Override the auto-generated run code for that row.  If absent, a
-    timestamp-based code is generated (e.g. ``2026-04-07-1422-00``).
+This row is not passed to the parameter resolver:
 
 ``run_description``
     Prose note stored in ``experiment.json`` alongside the run code.
+    One cell per Run column.
 
 
 Parameter Resolution
@@ -109,16 +117,19 @@ automatically.  The following CSV fragments are all equivalent:
 .. code-block:: text
 
     # Provide bind_rate_tPA + diss_const_tPA_woPLG → unbind_rate_tPA_woPLG solved
-    bind_rate_tPA,diss_const_tPA_woPLG
-    0.1 / micromolar / second,0.36 micromolar
+    parameter,run-a
+    bind_rate_tPA,0.1 / micromolar / second
+    diss_const_tPA_woPLG,0.36 micromolar
 
     # Provide bind_rate_tPA + unbind_rate_tPA_woPLG → diss_const_tPA_woPLG solved
-    bind_rate_tPA,unbind_rate_tPA_woPLG
-    0.1 / micromolar / second,0.036 / second
+    parameter,run-b
+    bind_rate_tPA,0.1 / micromolar / second
+    unbind_rate_tPA_woPLG,0.036 / second
 
     # Provide diss_const_tPA_woPLG + unbind_rate_tPA_woPLG → bind_rate_tPA solved
-    diss_const_tPA_woPLG,unbind_rate_tPA_woPLG
-    0.36 micromolar,0.036 / second
+    parameter,run-c
+    diss_const_tPA_woPLG,0.36 micromolar
+    unbind_rate_tPA_woPLG,0.036 / second
 
 Grid geometry example
 ~~~~~~~~~~~~~~~~~~~~~
@@ -267,7 +278,8 @@ Template CSV
 ------------
 
 A template CSV covering every recognised parameter is provided at
-``docs/usage/experiment_template.csv``.  It contains three example rows:
+``docs/templates/experiment_template.csv``.  It contains three example runs
+(columns):
 
 1. **all-defaults** — every independent parameter set to its default value.
 2. **minimal** — only a handful of parameters provided; all others are
@@ -276,6 +288,6 @@ A template CSV covering every recognised parameter is provided at
    ``unbind_rate_PLG_intact``) specified instead of the corresponding
    dissociation constants; the resolver back-calculates the missing values.
 
-.. literalinclude:: ../../../docs/usage/experiment_template.csv
+.. literalinclude:: ../../../docs/templates/experiment_template.csv
    :language: text
-   :caption: docs/usage/experiment_template.csv
+   :caption: docs/templates/experiment_template.csv
