@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`lysis.execution.codeutil` — FortranMicro class.
+"""Unit tests for :mod:`lysis.execution.fortran_micro` — FortranMicro class.
 
 Tests cover:
 
@@ -23,7 +23,8 @@ import pytest
 from lysis.config.constants import CONST
 from lysis.config.parameters import MicroParameters
 from lysis.config.run import Run
-from lysis.execution.codeutil import FortranMicro, MICRO_FORTRAN_DATASPEC_VERSION
+from lysis.execution.fortran_micro import FortranMicro
+from lysis.execution.fortran import MICRO_FORTRAN_DATASPEC_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -233,12 +234,7 @@ class TestFortranMicroExecInWorkdir:
         """stdout is redirected to micro{out_code}.txt inside data_dir."""
         with patch("subprocess.run") as mock_run:
             data_dir = fortran_micro.exec_in_workdir(tmp_path)
-        log_path = data_dir / "micro.txt"
-        # Check that open was called with the log file path (it's used as context
-        # manager, so subprocess.run itself is only called once)
         assert mock_run.call_count == 1
-        # stdout kwarg should be an open file object; we verify by checking
-        # that the expected log file location exists in the call kwargs
         call_kwargs = mock_run.call_args.kwargs
         assert "cwd" in call_kwargs
         assert call_kwargs["cwd"] == str(tmp_path)
@@ -294,8 +290,6 @@ class TestFortranMicroImportResults:
 
         FortranMicro.import_results(data_dir, hdf5_path, keep_tmpdir=True)
 
-        # read_data_collection should have been called with the spec for the
-        # module constant version
         assert mock_read.call_count == 1
         from lysis.dataio.dataspec import dataspec
         expected_spec = dataspec[MICRO_FORTRAN_DATASPEC_VERSION]["microscale_out"]
@@ -481,7 +475,6 @@ class TestFortranMicroRunFull:
             fortran_micro.run_full(hdf5_path, keep_tmpdir=True)
 
         assert created_tmpdirs
-        # keep_tmpdir=True means the directory is preserved
         assert created_tmpdirs[0].exists()
 
     def test_tmpdir_not_in_system_tmp(self, fortran_micro, tmp_path):
@@ -503,7 +496,6 @@ class TestFortranMicroRunFull:
             fortran_micro.run_full(hdf5_path, keep_tmpdir=False)
 
         assert created_tmpdirs
-        # tmpdir parent should be same as hdf5_path.parent
         assert created_tmpdirs[0].parent == tmp_path
 
 
@@ -567,12 +559,9 @@ class TestImportResultsWithFixture:
     @pytest.fixture
     def imported_hdf5(self, fortran_sample_path, reference, tmp_path):
         """Run import_results on a copy of the fixture and return the HDF5 path."""
-        # Copy fixture to staging directory (import_results may delete it)
         data_dir = tmp_path / "staging" / "data" / "fortran_sample"
         shutil.copytree(fortran_sample_path, data_dir)
 
-        # Write params.json with micro_params so the v1.99.0 spec can parse
-        # parameters from JSON rather than from the log file.
         micro_params = reference["params"]["micro_params"]
         with open(data_dir / "params.json", "w") as fh:
             json.dump({"micro_params": micro_params}, fh, indent=4, default=str)
@@ -692,13 +681,8 @@ class TestImportResultsWithFixture:
 # Fortran binary execution integration test
 # ---------------------------------------------------------------------------
 
-# Number of simulations to run (subset of the 50,000 in the fixture).
 _BINARY_TEST_SIMULATIONS = 1000
-
-# Repo root, used to locate the compiled Fortran binary.
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-
-# Fixture seed (from micro_PLG2_tPA01_TB-xiii.txt log file).
 _FIXTURE_SEED = 2133256963
 
 
@@ -726,9 +710,6 @@ class TestFortranBinaryExecution:
         if not binary.exists():
             pytest.skip("Compiled Fortran binary not found at bin/micro_rates")
 
-    # Datasets to exclude from comparisons: ``micro_log`` is a text log
-    # whose length depends on total simulations (not sliceable), and
-    # ``params`` is metadata, not numeric output.
     _SKIP_DATASETS = {"params", "micro_log"}
 
     @pytest.fixture
@@ -748,16 +729,12 @@ class TestFortranBinaryExecution:
 
     @pytest.fixture
     def executed_hdf5(self, tmp_path):
-        """Run the Fortran binary and import results into a fresh HDF5 file.
-
-        Returns the path to the HDF5 file containing the imported results.
-        """
+        """Run the Fortran binary and import results into a fresh HDF5 file."""
         from lysis.config.constants import Q_
 
         binary = str(_REPO_ROOT / "bin" / "micro_rates")
         hdf5_path = tmp_path / "fortran-run.h5"
 
-        # Create a minimal HDF5 with the fixture's micro parameters
         mp = MicroParameters(
             nodes_in_micro_row=13,
             fiber_radius=Q_("61.5 nanometer"),
@@ -773,8 +750,6 @@ class TestFortranBinaryExecution:
         )
         return hdf5_path
 
-    # ── Dataset presence ────────────────────────────────────────────
-
     def test_all_microscale_datasets_present(self, executed_hdf5, reference):
         from lysis.dataio.dataspec import dataspec
         spec = dataspec["v2.0.0"]["microscale_out"]
@@ -786,8 +761,6 @@ class TestFortranBinaryExecution:
                 assert ds_spec.data_location in f, (
                     f"Missing dataset: {ds_spec.data_location} (name={name})"
                 )
-
-    # ── Per-dataset value comparisons ───────────────────────────────
 
     def test_pli_first_time_matches(self, executed_hdf5, reference):
         from lysis.dataio.dataspec import dataspec
@@ -837,8 +810,6 @@ class TestFortranBinaryExecution:
         with h5py.File(str(executed_hdf5), "r") as f:
             np.testing.assert_array_equal(f[loc][...], reference["tpa_unbound_kinetic"])
 
-    # ── Dtype checks ────────────────────────────────────────────────
-
     def test_dtypes_match_spec(self, executed_hdf5):
         from lysis.dataio.dataspec import dataspec
         spec = dataspec["v2.0.0"]["microscale_out"]
@@ -852,8 +823,6 @@ class TestFortranBinaryExecution:
                 assert actual_dtype == expected_dtype, (
                     f"{name}: expected {expected_dtype}, got {actual_dtype}"
                 )
-
-    # ── Shape checks ────────────────────────────────────────────────
 
     def test_shapes_match_expected(self, executed_hdf5, reference):
         from lysis.dataio.dataspec import dataspec

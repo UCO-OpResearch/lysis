@@ -6,7 +6,7 @@ Overview
 --------
 
 The ``lysis run-micro`` command (and its Python API counterpart
-:class:`~lysis.execution.codeutil.FortranMicro`) executes the compiled
+:class:`~lysis.execution.fortran_micro.FortranMicro`) executes the compiled
 Fortran microscale binary for a Run (see :doc:`ontology`), then automatically
 imports the results back into the same HDF5 file.
 
@@ -167,20 +167,20 @@ Python API
 ----------
 
 The same functionality is available directly from Python via
-:class:`~lysis.execution.codeutil.FortranMicro`.
+:class:`~lysis.execution.fortran_micro.FortranMicro`.
 
 Simple one-call workflow
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-    from lysis.execution.codeutil import FortranMicro
+    from lysis.execution.fortran_micro import FortranMicro
 
     fm = FortranMicro.from_hdf5("data/my-experiment/run-01.h5",
                                 executable="bin/micro_rates")
     fm.run_full("data/my-experiment/run-01.h5")
 
-:meth:`~lysis.execution.codeutil.FortranMicro.run_full` creates a temporary
+:meth:`~lysis.execution.fortran_micro.FortranMicro.run_full` creates a temporary
 directory, executes the binary, imports results into the HDF5 file, and
 removes the temporary directory.
 
@@ -193,7 +193,7 @@ output files) or want to handle execution and import separately:
 .. code-block:: python
 
     from pathlib import Path
-    from lysis.execution.codeutil import FortranMicro
+    from lysis.execution.fortran_micro import FortranMicro
 
     hdf5_path = Path("data/my-experiment/run-01.h5")
     work_dir  = Path("data/my-experiment/run-01-workdir")
@@ -219,7 +219,7 @@ file directly:
     from lysis.config.constants import CONST, Q_
     from lysis.config.parameters import MicroParameters
     from lysis.config.run import Run
-    from lysis.execution.codeutil import FortranMicro
+    from lysis.execution.fortran_micro import FortranMicro
 
     # Build parameters
     mp = MicroParameters(
@@ -280,7 +280,7 @@ Binary exits immediately without writing output
 
 The Fortran binary writes data to ``data/{run_code}/`` **relative to its
 working directory**.  If that subdirectory does not exist the binary may fail
-silently.  :meth:`~lysis.execution.codeutil.FortranMicro.exec_in_workdir`
+silently.  :meth:`~lysis.execution.fortran_micro.FortranMicro.exec_in_workdir`
 creates it automatically; if you are invoking the binary manually, create the
 directory first.
 
@@ -313,7 +313,7 @@ step manually:
 .. code-block:: python
 
     from pathlib import Path
-    from lysis.execution.codeutil import FortranMicro
+    from lysis.execution.fortran_micro import FortranMicro
 
     # Path printed when the child job was submitted, or found in staging-root
     data_dir  = Path("/work/mygroup/staging/lysis-micro-run-01-XXXXX/data/run-01")

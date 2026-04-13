@@ -87,7 +87,7 @@ class TestRunMicroMissingArgs:
 
 
 class TestRunMicroLocal:
-    @patch("lysis.execution.codeutil.FortranMicro")
+    @patch("lysis.execution.fortran_micro.FortranMicro")
     def test_calls_from_hdf5(self, mock_cls, runner, micro_hdf5):
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
@@ -102,7 +102,7 @@ class TestRunMicroLocal:
         assert str(micro_hdf5) in str(call_args.args[0])
         assert call_args.args[1] == "/bin/micro.exe"
 
-    @patch("lysis.execution.codeutil.FortranMicro")
+    @patch("lysis.execution.fortran_micro.FortranMicro")
     def test_calls_run_full(self, mock_cls, runner, micro_hdf5):
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
@@ -114,7 +114,7 @@ class TestRunMicroLocal:
         assert result.exit_code == 0, result.output
         mock_fm.run_full.assert_called_once()
 
-    @patch("lysis.execution.codeutil.FortranMicro")
+    @patch("lysis.execution.fortran_micro.FortranMicro")
     def test_keep_tmpdir_flag_passed_to_run_full(self, mock_cls, runner, micro_hdf5):
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
@@ -131,7 +131,7 @@ class TestRunMicroLocal:
         call_kwargs = mock_fm.run_full.call_args.kwargs
         assert call_kwargs.get("keep_tmpdir") is True
 
-    @patch("lysis.execution.codeutil.FortranMicro")
+    @patch("lysis.execution.fortran_micro.FortranMicro")
     def test_file_code_passed_to_from_hdf5(self, mock_cls, runner, micro_hdf5):
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
@@ -148,7 +148,7 @@ class TestRunMicroLocal:
         call_kwargs = mock_cls.from_hdf5.call_args.kwargs
         assert call_kwargs.get("out_file_code") == "_code"
 
-    @patch("lysis.execution.codeutil.FortranMicro")
+    @patch("lysis.execution.fortran_micro.FortranMicro")
     def test_output_mentions_hdf5_path(self, mock_cls, runner, micro_hdf5):
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
@@ -256,7 +256,7 @@ class TestRunMicroSlurm:
         call_kwargs = mock_submit.call_args.kwargs
         assert call_kwargs.get("keep_tmpdir") is True
 
-    @patch("lysis.execution.codeutil.FortranMicro")
+    @patch("lysis.execution.fortran_micro.FortranMicro")
     def test_partition_without_slurm_does_not_crash(self, mock_cls, runner, micro_hdf5):
         """--partition without --slurm should not cause an error (it's ignored)."""
         mock_fm = MagicMock()

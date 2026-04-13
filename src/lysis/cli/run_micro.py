@@ -116,7 +116,7 @@ def run_micro(ctx, hdf5_path, executable, use_slurm, partition, staging_root,
         )
         console.print(f"Submitted master Slurm job [bold]{job_id}[/bold]")
     else:
-        from lysis.execution.codeutil import FortranMicro
+        from lysis.execution.fortran_micro import FortranMicro
 
         fm = FortranMicro.from_hdf5(hdf5_path, executable,
                                      out_file_code=file_code)
