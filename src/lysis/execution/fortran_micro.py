@@ -13,7 +13,6 @@ For step-by-step control use :meth:`FortranMicro.exec_in_workdir` followed
 by :meth:`FortranMicro.import_results`.
 """
 
-import json
 import shutil
 import tempfile
 
@@ -21,11 +20,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import AnyStr
 
-import h5py
 import numpy as np
 
 from ..config.parameters import MicroParameters
 from ..config.run import Run
+from ..dataio.dataspec import dataspec
+from ..dataio.fileops import init_hdf5_version, write_dataset
 from .fortran import FortranRunner, MICRO_FORTRAN_DATASPEC_VERSION
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -187,8 +187,11 @@ class FortranMicro(FortranRunner):
 
         # Write params.json so the v1.99.0 read pipeline can resolve parameters.
         params_data = {"micro_params": self.run.micro_params.to_basedict()}
-        with open(data_dir / "params.json", "w") as fh:
-            json.dump(params_data, fh, indent=4, default=str)
+        write_dataset(
+            params_data,
+            str(data_dir),
+            dataspec[MICRO_FORTRAN_DATASPEC_VERSION]["microscale_out"].params,
+        )
 
         command = self.exec_command()
         log_file = data_dir / f"micro{self.out_file_code}.txt"
@@ -249,7 +252,6 @@ class FortranMicro(FortranRunner):
         :raises Exception: Re-raises any exception from the read/convert/write
             pipeline after applying the cleanup policy.
         """
-        from ..dataio.dataspec import dataspec
         from ..dataio.fileops import read_data_collection
         from ..dataio.dataconvert import convert_data
 
@@ -262,29 +264,12 @@ class FortranMicro(FortranRunner):
             converted = convert_data(raw, MICRO_FORTRAN_DATASPEC_VERSION, "v2.0.0")
 
             dst_spec = dataspec["v2.0.0"]["microscale_out"]
-            with h5py.File(str(hdf5_path), "a") as f:
-                for name, ds_spec in dst_spec.data.items():
-                    if name not in converted:
-                        continue
-                    arr = np.asarray(converted[name], dtype=ds_spec.dtype)
-                    loc = ds_spec.data_location
-                    if loc in f:
-                        # Resize existing empty dataset created by DataStore.create()
-                        f[loc].resize(arr.shape)
-                        f[loc][...] = arr
-                    else:
-                        # Dataset absent — create it
-                        maxshape = tuple(
-                            None if (isinstance(s, str) or s < 0) else s
-                            for s in ds_spec.shape
-                        )
-                        f.create_dataset(
-                            loc,
-                            data=arr,
-                            maxshape=maxshape,
-                            compression="gzip",
-                            dtype=ds_spec.dtype,
-                        )
+            init_hdf5_version(str(hdf5_path), dst_spec.version)
+            for name, ds_spec in dst_spec.data.items():
+                if name not in converted:
+                    continue
+                arr = np.asarray(converted[name], dtype=ds_spec.dtype)
+                write_dataset(arr, str(hdf5_path), ds_spec, overwrite=True)
 
             if not keep_tmpdir:
                 shutil.rmtree(data_dir)

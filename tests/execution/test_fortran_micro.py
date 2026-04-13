@@ -256,6 +256,26 @@ class TestFortranMicroExecInWorkdir:
             data_dir = fortran_micro.exec_in_workdir(tmp_path)
         assert (data_dir / "params.json").exists()
 
+    def test_params_json_contains_micro_params_key(self, fortran_micro, tmp_path):
+        """params.json must be a valid JSON file with a 'micro_params' key."""
+        with patch("subprocess.run"):
+            data_dir = fortran_micro.exec_in_workdir(tmp_path)
+        with open(data_dir / "params.json") as fh:
+            loaded = json.load(fh)
+        assert "micro_params" in loaded
+
+    def test_params_json_pint_quantities_serialised_as_strings(self, fortran_micro, tmp_path):
+        """Pint Quantity values in MicroParameters must be stored as strings in params.json."""
+        with patch("subprocess.run"):
+            data_dir = fortran_micro.exec_in_workdir(tmp_path)
+        with open(data_dir / "params.json") as fh:
+            loaded = json.load(fh)
+        # Every value in micro_params must be JSON-native (str, int, float, bool, None)
+        for v in loaded["micro_params"].values():
+            assert isinstance(v, (str, int, float, bool, type(None))), (
+                f"Non-serialisable value leaked into params.json: {v!r}"
+            )
+
     def test_accepts_str_work_dir(self, fortran_micro, tmp_path):
         with patch("subprocess.run"):
             result = fortran_micro.exec_in_workdir(str(tmp_path))

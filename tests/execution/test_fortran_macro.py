@@ -134,6 +134,36 @@ class TestFortranMacroGenerateNeighborhoods:
         # All values should be >= 1 (Fortran 1-based indexing)
         assert all(v >= 1 for v in values)
 
+    def test_output_matches_legacy_tofile_content(self, tmp_run, tmp_path):
+        """write_dataset output must contain the same integers as the old tofile path.
+
+        The new implementation uses np.savetxt (one integer per line) instead
+        of ndarray.tofile(sep=os.linesep).  Both write integer values in the
+        same row-major order; the only allowed difference is a trailing newline.
+        """
+        import os
+        import numpy as np
+        from lysis.geometry.edge_grid import generate_fortran_neighborhood_structure
+
+        fm = FortranMacro(run=tmp_run, executable="/bin/macro.exe")
+
+        # --- new path ---
+        fm.generate_neighborhoods()
+        new_content = (tmp_path / "neighbors.dat").read_text()
+        new_values = [int(ln) for ln in new_content.splitlines() if ln.strip()]
+
+        # --- legacy path ---
+        fort_neighbors = (
+            generate_fortran_neighborhood_structure(
+                tmp_run.macro_params.rows, tmp_run.macro_params.cols
+            )
+            + 1
+        )
+        legacy_str = os.linesep.join(str(v) for v in fort_neighbors.flatten())
+        legacy_values = [int(v) for v in legacy_str.split() if v.strip()]
+
+        assert new_values == legacy_values
+
 
 # ---------------------------------------------------------------------------
 # TestFortranMacroExecute

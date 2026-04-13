@@ -572,6 +572,38 @@ def ensure_hdf5_version(path: AnyStr, version: str, data: dict = None):
                 file.attrs[CONST.CONVERTED_FROM_ATTR] = converted_from
 
 
+def init_hdf5_version(path: AnyStr, version: str) -> None:
+    """Set the ``dataspec_version`` attribute on an HDF5 file, creating it if needed.
+
+    Unlike :func:`ensure_hdf5_version`, this function is permissive toward
+    existing files that lack the attribute — it writes the attribute rather
+    than raising.  If the file already has the correct version attribute it
+    does nothing.  If it has a *different* version attribute it raises.
+
+    This is intended for import workflows that write data into a file that
+    may not have been created through the normal :meth:`DataStore.create`
+    path.
+
+    :param path: Path to the HDF5 file.
+    :type path: AnyStr
+    :param version: Version string to write (e.g. ``"v2.0.0"``).  Empty
+        string is a no-op.
+    :type version: str
+    :raises ValueError: If the file has a *different* version attribute.
+    """
+    if not version:
+        return
+    with h5py.File(path, "a") as file:
+        found = file.attrs.get(CONST.DATASPEC_VERSION_ATTR)
+        if found is None:
+            file.attrs[CONST.DATASPEC_VERSION_ATTR] = version
+        elif found != version:
+            raise ValueError(
+                f"HDF5 file version mismatch: expected '{version}', "
+                f"found '{found}': {path}"
+            )
+
+
 def _read_hdf5_attr(
     path: AnyStr,
     spec: DataSetSpec,
@@ -843,6 +875,7 @@ def _write_file_text(
     params: BaseParamsType = None,
     sim: int = None,
     file_code: str = "",
+    overwrite: bool = False,
 ):
     """
     Writes an array to disk as a text file
@@ -864,6 +897,9 @@ def _write_file_text(
     :type sim: int, optional
     :param file_code: Any code that needs to be attached to the filename, defaults to ""
     :type file_code: str, optional
+    :param overwrite: Accepted for interface uniformity; file-based writers always
+        overwrite existing files, defaults to False
+    :type overwrite: bool, optional
     :raises TypeError: Raised if the data does not match the specification.
     :raises ValueError: Raised if the data's dtype is not supported for text output.
     """
@@ -890,6 +926,7 @@ def _write_file_binary(
     params: BaseParamsType = None,
     sim: int = None,
     file_code: str = "",
+    overwrite: bool = False,
 ):
     """Write an array to disk as a raw binary file.
 
@@ -908,6 +945,9 @@ def _write_file_binary(
     :type sim: int, optional
     :param file_code: Code to insert into the filename, defaults to ""
     :type file_code: str, optional
+    :param overwrite: Accepted for interface uniformity; file-based writers always
+        overwrite existing files, defaults to False
+    :type overwrite: bool, optional
     :raises TypeError: Raised if the data does not meet the specification.
     """
     if not check_dataset_spec(data, spec, params=params):
@@ -926,11 +966,16 @@ def _write_file_json(
     params: BaseParamsType = None,
     sim: int = None,
     file_code: str = "",
+    overwrite: bool = False,
 ):
     """Write a parameter dictionary to a JSON file.
 
     Inverse of :func:`_read_file_json`. Writes the data dictionary to a
     human-readable JSON file with 4-space indentation.
+
+    Non-serializable objects (e.g. Pint :class:`~pint.Quantity` values
+    returned by :meth:`~lysis.config.parameters.Parameters.to_basedict`) are
+    converted to strings via ``default=str``.
 
     :param data: Parameter dictionary to write
     :type data: BaseParamsType
@@ -944,11 +989,14 @@ def _write_file_json(
     :type sim: int, optional
     :param file_code: Additional code to insert into filename
     :type file_code: str, optional
+    :param overwrite: Accepted for interface uniformity; file-based writers always
+        overwrite existing files, defaults to False
+    :type overwrite: bool, optional
     """
     with open(
         os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)), "w"
     ) as file:
-        json.dump(data, file, indent=4)
+        json.dump(data, file, indent=4, default=str)
 
 
 def _write_hdf5_dataset(
@@ -958,6 +1006,7 @@ def _write_hdf5_dataset(
     params: BaseParamsType = None,
     sim: int = None,
     file_code: str = "",
+    overwrite: bool = False,
 ):
     """
     Writes an array to an HDF5 file as a DataSet
@@ -976,6 +1025,11 @@ def _write_hdf5_dataset(
     :type sim: int, optional
     :param file_code: Any code that needs to be attached to the filename, defaults to ""
     :type file_code: str, optional
+    :param overwrite: When ``True`` and the dataset already exists (e.g. a
+        zero-length placeholder created by
+        :meth:`~lysis.dataio.datastore.DataStore.create`), delete it before
+        writing, defaults to False
+    :type overwrite: bool, optional
     :raises TypeError: Raised if the data does not match the specification.
     """
     ensure_hdf5_version(path, spec.version)
@@ -990,9 +1044,12 @@ def _write_hdf5_dataset(
         else:
             maxshape.append(i)
     maxshape = tuple(maxshape)
+    loc = spec.data_location.format(sim=sim, file_code=file_code)
     with h5py.File(path, "a") as file:
+        if overwrite and loc in file:
+            del file[loc]
         file.create_dataset(
-            spec.data_location.format(sim=sim, file_code=file_code),
+            loc,
             maxshape=maxshape,
             compression="gzip",
             dtype=spec.dtype,
@@ -1008,6 +1065,7 @@ def _write_hdf5_attr(
     params: BaseParamsType = None,
     sim: int = None,
     file_code: str = "",
+    overwrite: bool = False,
 ):
     """Write parameters as HDF5 group attributes.
 
@@ -1030,6 +1088,9 @@ def _write_hdf5_attr(
     :type sim: int, optional
     :param file_code: Additional code to insert into group path
     :type file_code: str, optional
+    :param overwrite: Accepted for interface uniformity; HDF5 attr writer uses
+        ``require_group`` which is idempotent, defaults to False
+    :type overwrite: bool, optional
     """
     ensure_hdf5_version(path, spec.version, data=data)
     with h5py.File(path, "a") as file:
@@ -1079,6 +1140,7 @@ def write_dataset(
     params: BaseParamsType = None,
     sim: int = None,
     file_code: str = "",
+    overwrite: bool = False,
 ) -> None:
     """Write a single dataset using the appropriate writer for its storage type.
 
@@ -1101,6 +1163,9 @@ def write_dataset(
     :type sim: int, optional
     :param file_code: Optional string to insert into filename/path patterns
     :type file_code: str, optional
+    :param overwrite: When ``True``, overwrite an existing HDF5 dataset (ignored
+        for file-based writers which always overwrite), defaults to False
+    :type overwrite: bool, optional
 
     See Also
     --------
@@ -1108,7 +1173,7 @@ def write_dataset(
     :func:`read_dataset` : Read individual datasets
     """
     data_writers[spec.dataset_storage_type](
-        data, path, spec, params=params, sim=sim, file_code=file_code
+        data, path, spec, params=params, sim=sim, file_code=file_code, overwrite=overwrite
     )
 
 

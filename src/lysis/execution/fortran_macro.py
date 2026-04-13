@@ -7,12 +7,14 @@ generates the required neighbor-structure input file, and captures binary
 stdout to a log file.
 """
 
-import os
-
 from dataclasses import dataclass
 from typing import AnyStr
 
+import numpy as np
+
 from ..config.parameters import MacroParameters, MicroParameters
+from ..dataio.dataspec import dataspec
+from ..dataio.fileops import write_dataset
 from ..geometry.edge_grid import generate_fortran_neighborhood_structure
 from .fortran import FortranRunner
 
@@ -128,9 +130,11 @@ class FortranMacro(FortranRunner):
                 self.run.macro_params.rows, self.run.macro_params.cols
             )
             + 1  # Convert 0-based (Python) → 1-based (Fortran)
-        )
-        fort_neighbors.tofile(
-            os.path.join(self.run.os_path, "neighbors.dat"), sep=os.linesep
+        ).flatten().astype(np.int32)
+        write_dataset(
+            fort_neighbors,
+            self.run.os_path,
+            dataspec["v1.99.0"]["macroscale_in"].data["neighbors"],
         )
 
     # ------------------------------------------------------------------

@@ -45,6 +45,7 @@ from lysis.dataio.fileops import (
     data_readers,
     data_writers,
     ensure_hdf5_version,
+    init_hdf5_version,
     parse_macro_log,
     parse_micro_file_code,
     parse_micro_log,
@@ -252,6 +253,25 @@ class TestWriteFileJson:
             loaded = json.load(fh)
         assert loaded == params
 
+    def test_non_serializable_converted_to_str(self, tmp_path, json_spec):
+        """Non-JSON-serializable values (e.g. Pint Quantity) must be stored as strings."""
+        q = Quantity("5 nanometer")
+        params = {"micro_params": {"fiber_radius": q}}
+        _write_file_json(params, str(tmp_path), json_spec)
+        with open(tmp_path / "params.json", "r") as fh:
+            loaded = json.load(fh)
+        assert isinstance(loaded["micro_params"]["fiber_radius"], str)
+        assert "5" in loaded["micro_params"]["fiber_radius"]
+
+    def test_pure_serializable_unchanged(self, tmp_path, json_spec):
+        """Plain int/float/str values must survive the round-trip unchanged."""
+        params = {"micro_params": {"micro_simulations": 42, "label": "test"}}
+        _write_file_json(params, str(tmp_path), json_spec)
+        with open(tmp_path / "params.json", "r") as fh:
+            loaded = json.load(fh)
+        assert loaded["micro_params"]["micro_simulations"] == 42
+        assert loaded["micro_params"]["label"] == "test"
+
 
 class TestWriteHdf5Dataset:
     """Tests for :func:`_write_hdf5_dataset`."""
@@ -264,6 +284,46 @@ class TestWriteHdf5Dataset:
         with h5py.File(h5_path, "r") as fh:
             loaded = fh["data/arr"][:]
         np.testing.assert_array_almost_equal(loaded, original)
+
+    def test_overwrite_true_replaces_existing_dataset(self, tmp_path, hdf5_dataset_spec):
+        """overwrite=True must delete a pre-existing dataset and write the new data."""
+        h5_path = str(tmp_path / "out.h5")
+        original = np.zeros(15, dtype=np.float64)
+        replacement = np.linspace(0, 1, 15, dtype=np.float64)
+
+        _write_hdf5_dataset(original, h5_path, hdf5_dataset_spec)
+        _write_hdf5_dataset(replacement, h5_path, hdf5_dataset_spec, overwrite=True)
+
+        with h5py.File(h5_path, "r") as fh:
+            loaded = fh["data/arr"][:]
+        np.testing.assert_array_almost_equal(loaded, replacement)
+
+    def test_overwrite_false_raises_on_existing_dataset(self, tmp_path, hdf5_dataset_spec):
+        """Without overwrite=True, writing to an existing dataset must raise."""
+        import h5py as _h5py
+
+        h5_path = str(tmp_path / "out.h5")
+        data = np.zeros(15, dtype=np.float64)
+        _write_hdf5_dataset(data, h5_path, hdf5_dataset_spec)
+        with pytest.raises(Exception):
+            _write_hdf5_dataset(data, h5_path, hdf5_dataset_spec, overwrite=False)
+
+    def test_overwrite_true_empty_dataset_correct_shape(self, tmp_path, hdf5_dataset_spec):
+        """overwrite=True on a zero-length pre-allocated dataset must produce the right shape."""
+        h5_path = str(tmp_path / "out.h5")
+        replacement = np.linspace(0, 1, 15, dtype=np.float64)
+
+        # Pre-allocate an empty (zero-length) resizable dataset like DataStore.create() does
+        with h5py.File(h5_path, "a") as fh:
+            fh.attrs[CONST.DATASPEC_VERSION_ATTR] = hdf5_dataset_spec.version
+            fh.create_dataset("data/arr", shape=(0,), maxshape=(None,), dtype=np.float64)
+
+        _write_hdf5_dataset(replacement, h5_path, hdf5_dataset_spec, overwrite=True)
+
+        with h5py.File(h5_path, "r") as fh:
+            loaded = fh["data/arr"][:]
+        assert loaded.shape == replacement.shape
+        np.testing.assert_array_almost_equal(loaded, replacement)
 
 
 class TestWriteHdf5Attr:
@@ -567,6 +627,47 @@ class TestEnsureHdf5Version:
         h5_path = str(tmp_path / "skip.h5")
         # File doesn't exist, empty version => no file created
         ensure_hdf5_version(h5_path, "")
+        assert not (tmp_path / "skip.h5").exists()
+
+
+class TestInitHdf5Version:
+    """Tests for :func:`init_hdf5_version`."""
+
+    def test_sets_version_on_empty_file(self, tmp_path):
+        """When file exists without version attr, sets the attribute."""
+        h5_path = str(tmp_path / "empty.h5")
+        with h5py.File(h5_path, "w"):
+            pass
+        init_hdf5_version(h5_path, "v2.0.0")
+        with h5py.File(h5_path, "r") as f:
+            assert f.attrs[CONST.DATASPEC_VERSION_ATTR] == "v2.0.0"
+
+    def test_creates_file_when_missing(self, tmp_path):
+        """When file does not exist, creates it with the version attribute."""
+        h5_path = str(tmp_path / "new.h5")
+        init_hdf5_version(h5_path, "v2.0.0")
+        with h5py.File(h5_path, "r") as f:
+            assert f.attrs[CONST.DATASPEC_VERSION_ATTR] == "v2.0.0"
+
+    def test_no_op_when_version_matches(self, tmp_path):
+        """When file already has the correct version, does not raise."""
+        h5_path = str(tmp_path / "ok.h5")
+        with h5py.File(h5_path, "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v2.0.0"
+        init_hdf5_version(h5_path, "v2.0.0")  # Must not raise
+
+    def test_raises_on_version_mismatch(self, tmp_path):
+        """When file has a *different* version, raises ValueError."""
+        h5_path = str(tmp_path / "wrong.h5")
+        with h5py.File(h5_path, "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v1.0.0"
+        with pytest.raises(ValueError, match="mismatch"):
+            init_hdf5_version(h5_path, "v2.0.0")
+
+    def test_no_op_on_empty_version(self, tmp_path):
+        """Empty version string is a no-op."""
+        h5_path = str(tmp_path / "skip.h5")
+        init_hdf5_version(h5_path, "")
         assert not (tmp_path / "skip.h5").exists()
 
 
