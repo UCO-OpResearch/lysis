@@ -86,6 +86,7 @@ import warnings
 from enum import Flag, auto, unique
 from typing import AnyStr
 
+import numpy as np
 import h5py
 
 from ..config.constants import CONST
@@ -176,11 +177,13 @@ def _group_path_from_spec(collection_spec):
 
 
 class SimulationView:
-    """Read-only view of one simulation's datasets within a per-sim collection.
+    """Structured view of one simulation's datasets within a per-sim collection.
 
     Provides dot-access to HDF5 datasets for a single simulation index.
     Dataset names are resolved via the spec's ``data_location`` field,
-    formatted with the simulation index.
+    formatted with the simulation index.  Whether datasets are writable
+    depends on the mode of the underlying :class:`h5py.File`; this class
+    imposes no read-only restriction.
 
     :param h5file: The open HDF5 file handle.
     :type h5file: h5py.File
@@ -233,7 +236,10 @@ class SimulationView:
 
 
 class DataCollection:
-    """Read-only interface to one data collection within the HDF5 file.
+    """Structured interface to one data collection within the HDF5 file.
+
+    Whether datasets are writable depends on the mode of the underlying
+    :class:`h5py.File`; this class imposes no read-only restriction.
 
     Behavior depends on whether simulations are combined:
 
@@ -349,7 +355,9 @@ class DerivedDataCollection:
     Provides the same dot-access interface as :class:`DataCollection` for
     combined collections, but stores numpy arrays in memory rather than
     ``h5py.Dataset`` objects.  Data is generated on first access by calling
-    the supplied *generator* callable, and cached for subsequent accesses.
+    the supplied *generator* callable, cached for subsequent accesses, and
+    immediately marked non-writeable — attempts to modify a returned array
+    will raise :exc:`ValueError`.
 
     :param name: The collection name (e.g., ``"macroscale_in"``).
     :type name: str
@@ -367,9 +375,16 @@ class DerivedDataCollection:
         self._data = None  # populated on first access
 
     def _ensure_generated(self):
-        """Call the generator if data has not yet been generated."""
+        """Call the generator if data has not yet been generated.
+
+        After generation, all numpy arrays in the result are marked
+        non-writeable so callers cannot mutate the cached data.
+        """
         if self._data is None:
             self._data = self._generator()
+            for value in self._data.values():
+                if isinstance(value, np.ndarray):
+                    value.flags.writeable = False
 
     @property
     def datasets(self):
