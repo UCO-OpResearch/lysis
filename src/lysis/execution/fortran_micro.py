@@ -130,7 +130,7 @@ class FortranMicro(FortranRunner):
         run.load_params_from_hdf5()
         return cls(
             run=run,
-            executable=str(executable),
+            executable=str(Path(executable).resolve()),
             out_file_code=out_file_code,
             index=index,
         )
