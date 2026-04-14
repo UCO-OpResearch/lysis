@@ -112,9 +112,9 @@ def _write_macro_datasets(h5file, n_sims=3, n_snapshots=5):
                 # Structured dtype
                 data = np.zeros(n_snapshots, dtype=ds_spec.dtype)
                 h5file.create_dataset(path, data=data)
-            elif ds_spec.dtype == np.int32:
-                # tpa_location_snapshot: shape (n_tpa, 2, n_snapshots)
-                data = np.zeros((2, 2, n_snapshots), dtype=np.int32)
+            elif len(ds_spec.shape) == 3:
+                # Multi-dimensional dataset (tpa_location_snapshot: n × 2 × n_snapshots)
+                data = np.zeros((2, 2, n_snapshots), dtype=ds_spec.dtype)
                 h5file.create_dataset(path, data=data)
             else:
                 data = np.random.rand(n_snapshots).astype(ds_spec.dtype)
@@ -1693,6 +1693,511 @@ class TestDataStoreWriteThrough:
             dataset = ds2.microscale_out.pli_first_time
             with pytest.raises((OSError, RuntimeError)):
                 dataset.resize((10,))
+
+
+# ---------------------------------------------------------------------------
+#  import_collection tests
+# ---------------------------------------------------------------------------
+
+
+class TestDataStoreImportCollection:
+    """Tests for DataStore.import_collection().
+
+    Covers importing microscale_out and macroscale_out from both Fortran
+    (v1.95.0) and HDF5 (v2.0.0) sources, plus all precondition error paths.
+    """
+
+    # File codes and param overrides matching tests/fixtures/fortran_sample/
+    _MICRO_FILE_CODE = "_PLG2_tPA01_TB-xiii"
+    _MACRO_FILE_CODE = "_TB-xiii__21_105"
+    _PARAM_OVERRIDES = {
+        "fibrinogen_length": "45nm",
+        "fibrinogen_radius": "1.2nm",
+        "micro_log_lvl": 40,
+        "micro_version": "micro_rates",
+        "snap_proportion": 0.66666667,
+    }
+    # The truncated fixture has 50 000 microscale simulations and 1 macro sim.
+    _N_MICRO_SIMS = 50000
+    _N_MACRO_SIMS = 1  # only simulation 00 in the fixture
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _create_empty_store(tmp_path, run_code="import_test", n_sims=10):
+        """Create a DataStore via DataStore.create() with empty datasets."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = MicroParameters(micro_simulations=n_sims)
+        return DataStore.create(run_code, str(tmp_path), micro)
+
+    @staticmethod
+    def _create_filled_micro_hdf5(tmp_path, n_micro=10):
+        """Write a filled v2.0.0 HDF5 containing only microscale_out datasets.
+
+        Returns the HDF5 file path as a string.
+        """
+        filepath = tmp_path / "micro_source.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, **{"micro_simulations": n_micro})
+            _write_micro_datasets(f, n_sims=n_micro)
+        return str(filepath)
+
+    @staticmethod
+    def _create_filled_macro_hdf5(tmp_path, n_micro=10, n_macro=3,
+                                  n_snapshots=5):
+        """Write a filled v2.0.0 HDF5 with both micro and macro datasets.
+
+        Returns the HDF5 file path as a string.
+        """
+        filepath = tmp_path / "macro_source.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f, **{"micro_simulations": n_micro})
+            _write_micro_datasets(f, n_sims=n_micro)
+            _write_macro_attrs(f, n_sims=n_macro)
+            _write_macro_datasets(f, n_sims=n_macro, n_snapshots=n_snapshots)
+        return str(filepath)
+
+    @staticmethod
+    def _prepare_store_for_macro_import(tmp_path, run_code, n_micro, n_macro):
+        """Create a DataStore ready to receive macroscale data.
+
+        Flow: create → fill microscale → initialize_macroscale → return.
+        The returned DataStore is in 'a' mode with empty macroscale datasets.
+        """
+        ds = TestDataStoreImportCollection._create_empty_store(
+            tmp_path, run_code=run_code, n_sims=n_micro
+        )
+        filepath = tmp_path / f"{run_code}.h5"
+        _fill_microscale_unbinding_data(filepath, n_sims=n_micro)
+        ds.close()
+
+        ds = DataStore(run_code, str(tmp_path), mode="a")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params, macro_simulations=n_macro
+            )
+        ds.initialize_macroscale(macro)
+        return ds
+
+    # ------------------------------------------------------------------
+    # Microscale import from Fortran fixture (v1.95.0)
+    # ------------------------------------------------------------------
+
+    def test_import_microscale_from_fortran(self, fortran_sample_path, tmp_path):
+        """Importing microscale_out from v1.95.0 Fortran data fills all datasets."""
+        ds = self._create_empty_store(
+            tmp_path, n_sims=self._N_MICRO_SIMS
+        )
+        try:
+            ds.import_collection(
+                "microscale_out",
+                "v1.95.0",
+                fortran_sample_path,
+                [self._MICRO_FILE_CODE],
+                param_overrides=self._PARAM_OVERRIDES,
+            )
+            assert "microscale_out" in ds.collections
+            # At least one numeric dataset must be non-empty.
+            pli = ds.microscale_out.pli_first_time
+            assert isinstance(pli, h5py.Dataset)
+            assert pli.shape[0] == self._N_MICRO_SIMS
+        finally:
+            ds.close()
+
+    def test_import_microscale_all_datasets_filled(self, fortran_sample_path,
+                                                    tmp_path):
+        """All numeric microscale_out datasets have shape[0] == N after import."""
+        ds = self._create_empty_store(
+            tmp_path, n_sims=self._N_MICRO_SIMS
+        )
+        try:
+            ds.import_collection(
+                "microscale_out",
+                "v1.95.0",
+                fortran_sample_path,
+                [self._MICRO_FILE_CODE],
+                param_overrides=self._PARAM_OVERRIDES,
+            )
+            spec = dataspec["v2.0.0"]["microscale_out"]
+            for ds_name, ds_spec in spec.data.items():
+                if ds_spec.data_location is None:
+                    continue
+                if ds_spec.dtype == h5py.string_dtype():
+                    continue
+                dataset = ds.microscale_out.__getattr__(ds_name)
+                assert dataset.shape[0] == self._N_MICRO_SIMS, (
+                    f"Dataset '{ds_name}' has shape {dataset.shape}, "
+                    f"expected first dim {self._N_MICRO_SIMS}"
+                )
+        finally:
+            ds.close()
+
+    def test_import_microscale_data_integrity(self, fortran_sample_path,
+                                              tmp_path):
+        """Imported data matches an independent read + convert of the same source."""
+        from lysis.dataio.fileops import read_data_collection
+        from lysis.dataio.dataconvert import convert_data
+        from lysis.dataio.dataspec import dataspec as _ds
+
+        # Independent pipeline: read → override → convert
+        ref_data = read_data_collection(
+            fortran_sample_path,
+            [_ds["v1.95.0"]["microscale_out"]],
+            [self._MICRO_FILE_CODE],
+        )
+        for key, value in self._PARAM_OVERRIDES.items():
+            for section in ref_data["params"].values():
+                if isinstance(section, dict):
+                    section[key] = value
+        ref_converted = convert_data(ref_data, "v1.95.0", "v2.0.0")
+
+        ds = self._create_empty_store(
+            tmp_path, n_sims=self._N_MICRO_SIMS
+        )
+        try:
+            ds.import_collection(
+                "microscale_out",
+                "v1.95.0",
+                fortran_sample_path,
+                [self._MICRO_FILE_CODE],
+                param_overrides=self._PARAM_OVERRIDES,
+            )
+            # Compare a numeric dataset.
+            np.testing.assert_array_equal(
+                ds.microscale_out.pli_first_time[:],
+                ref_converted["pli_first_time"],
+            )
+            np.testing.assert_array_equal(
+                ds.microscale_out.tpa_leaving_time[:],
+                ref_converted["tpa_leaving_time"],
+            )
+        finally:
+            ds.close()
+
+    def test_import_microscale_preserves_params(self, fortran_sample_path,
+                                                tmp_path):
+        """micro_params loaded from HDF5 attributes are unchanged after import."""
+        ds = self._create_empty_store(
+            tmp_path, n_sims=self._N_MICRO_SIMS
+        )
+        original_n = ds.micro_params.micro_simulations
+        try:
+            ds.import_collection(
+                "microscale_out",
+                "v1.95.0",
+                fortran_sample_path,
+                [self._MICRO_FILE_CODE],
+                param_overrides=self._PARAM_OVERRIDES,
+            )
+            assert ds.micro_params.micro_simulations == original_n
+        finally:
+            ds.close()
+
+    def test_import_microscale_preserves_mode(self, fortran_sample_path,
+                                               tmp_path):
+        """DataStore mode is unchanged after import."""
+        ds = self._create_empty_store(
+            tmp_path, n_sims=self._N_MICRO_SIMS
+        )
+        try:
+            ds.import_collection(
+                "microscale_out",
+                "v1.95.0",
+                fortran_sample_path,
+                [self._MICRO_FILE_CODE],
+                param_overrides=self._PARAM_OVERRIDES,
+            )
+            assert ds.mode == "a"
+        finally:
+            ds.close()
+
+    def test_import_microscale_returns_none(self, fortran_sample_path,
+                                            tmp_path):
+        """import_collection() returns None (in-place modification)."""
+        ds = self._create_empty_store(
+            tmp_path, n_sims=self._N_MICRO_SIMS
+        )
+        try:
+            result = ds.import_collection(
+                "microscale_out",
+                "v1.95.0",
+                fortran_sample_path,
+                [self._MICRO_FILE_CODE],
+                param_overrides=self._PARAM_OVERRIDES,
+            )
+            assert result is None
+        finally:
+            ds.close()
+
+    # ------------------------------------------------------------------
+    # Microscale import from HDF5 source (v2.0.0)
+    # ------------------------------------------------------------------
+
+    def test_import_microscale_from_hdf5(self, tmp_path):
+        """Importing microscale_out from a v2.0.0 HDF5 source works."""
+        n_micro = 10
+        source_path = self._create_filled_micro_hdf5(tmp_path, n_micro=n_micro)
+
+        ds = self._create_empty_store(tmp_path, run_code="hdf5_import",
+                                      n_sims=n_micro)
+        try:
+            ds.import_collection(
+                "microscale_out", "v2.0.0", source_path, [""]
+            )
+            assert "microscale_out" in ds.collections
+            assert ds.microscale_out.pli_first_time.shape[0] == n_micro
+        finally:
+            ds.close()
+
+    def test_import_microscale_hdf5_tag_alias(self, tmp_path):
+        """The 'hdf5' tag alias is resolved correctly as a source spec."""
+        n_micro = 5
+        source_path = self._create_filled_micro_hdf5(tmp_path, n_micro=n_micro)
+
+        ds = self._create_empty_store(tmp_path, run_code="tag_import",
+                                      n_sims=n_micro)
+        try:
+            ds.import_collection(
+                "microscale_out", "hdf5", source_path, [""]
+            )
+            assert ds.microscale_out.pli_first_time.shape[0] == n_micro
+        finally:
+            ds.close()
+
+    def test_import_microscale_hdf5_data_integrity(self, tmp_path):
+        """Data round-trips correctly through HDF5 → DataStore import."""
+        n_micro = 8
+        source_path = self._create_filled_micro_hdf5(tmp_path, n_micro=n_micro)
+
+        # Read the reference data directly from the source HDF5
+        with h5py.File(source_path, "r") as f:
+            ref = f["micro_data/pli_first_time"][:]
+
+        ds = self._create_empty_store(tmp_path, run_code="integrity_test",
+                                      n_sims=n_micro)
+        try:
+            ds.import_collection(
+                "microscale_out", "v2.0.0", source_path, [""]
+            )
+            np.testing.assert_array_equal(
+                ds.microscale_out.pli_first_time[:], ref
+            )
+        finally:
+            ds.close()
+
+    # ------------------------------------------------------------------
+    # Macroscale import from HDF5 source (v2.0.0)
+    # ------------------------------------------------------------------
+
+    def test_import_macroscale_from_hdf5(self, tmp_path):
+        """Importing macroscale_out from a v2.0.0 HDF5 source works."""
+        n_micro, n_macro = 10, 3
+        source_path = self._create_filled_macro_hdf5(
+            tmp_path, n_micro=n_micro, n_macro=n_macro
+        )
+
+        ds = self._prepare_store_for_macro_import(
+            tmp_path, "macro_import", n_micro=n_micro, n_macro=n_macro
+        )
+        try:
+            ds.import_collection(
+                "macroscale_out", "v2.0.0", source_path, [""]
+            )
+            assert "macroscale_out" in ds.collections
+            # Verify at least one per-sim dataset is non-empty.
+            snap = ds.macroscale_out[0].snapshot_time
+            assert snap.shape[0] > 0
+        finally:
+            ds.close()
+
+    def test_import_macroscale_all_sims_filled(self, tmp_path):
+        """All macro simulations have non-empty datasets after import."""
+        n_micro, n_macro, n_snapshots = 10, 3, 5
+        source_path = self._create_filled_macro_hdf5(
+            tmp_path, n_micro=n_micro, n_macro=n_macro, n_snapshots=n_snapshots
+        )
+
+        ds = self._prepare_store_for_macro_import(
+            tmp_path, "all_sims", n_micro=n_micro, n_macro=n_macro
+        )
+        try:
+            ds.import_collection(
+                "macroscale_out", "v2.0.0", source_path, [""]
+            )
+            for sim_idx in range(n_macro):
+                snap = ds.macroscale_out[sim_idx].snapshot_time
+                assert snap.shape[0] == n_snapshots, (
+                    f"sim {sim_idx}: expected {n_snapshots} snapshots, "
+                    f"got {snap.shape[0]}"
+                )
+        finally:
+            ds.close()
+
+    def test_import_macroscale_per_sim_data_integrity(self, tmp_path):
+        """snapshot_time round-trips correctly through HDF5 → DataStore import."""
+        n_micro, n_macro, n_snapshots = 10, 2, 4
+        source_path = self._create_filled_macro_hdf5(
+            tmp_path, n_micro=n_micro, n_macro=n_macro, n_snapshots=n_snapshots
+        )
+
+        # Capture reference data from the source HDF5
+        with h5py.File(source_path, "r") as f:
+            ref_0 = f["macro_data/sim_00/snapshot_time"][:]
+
+        ds = self._prepare_store_for_macro_import(
+            tmp_path, "integrity_macro", n_micro=n_micro, n_macro=n_macro
+        )
+        try:
+            ds.import_collection(
+                "macroscale_out", "v2.0.0", source_path, [""]
+            )
+            np.testing.assert_array_equal(
+                ds.macroscale_out[0].snapshot_time[:], ref_0
+            )
+        finally:
+            ds.close()
+
+    # ------------------------------------------------------------------
+    # Macroscale import from Fortran fixture (v1.95.0)
+    # ------------------------------------------------------------------
+
+    def test_import_macroscale_from_fortran(self, fortran_sample_path, tmp_path):
+        """Importing macroscale_out from v1.95.0 Fortran data fills datasets."""
+        # Create store, import microscale, then initialize and import macroscale
+        ds = self._create_empty_store(
+            tmp_path, run_code="fort_macro", n_sims=self._N_MICRO_SIMS
+        )
+        ds.import_collection(
+            "microscale_out",
+            "v1.95.0",
+            fortran_sample_path,
+            [self._MICRO_FILE_CODE],
+            param_overrides=self._PARAM_OVERRIDES,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(
+                micro_params=ds.micro_params,
+                macro_simulations=self._N_MACRO_SIMS,
+            )
+        ds.initialize_macroscale(macro)
+
+        try:
+            ds.import_collection(
+                "macroscale_out",
+                "v1.95.0",
+                fortran_sample_path,
+                [self._MACRO_FILE_CODE],
+                param_overrides=self._PARAM_OVERRIDES,
+            )
+            assert "macroscale_out" in ds.collections
+            snap = ds.macroscale_out[0].snapshot_time
+            assert snap.shape[0] > 0
+        finally:
+            ds.close()
+
+    # ------------------------------------------------------------------
+    # Error cases
+    # ------------------------------------------------------------------
+
+    def test_import_read_only_raises(self, tmp_path):
+        """import_collection() raises IOError on a read-only DataStore."""
+        ds = self._create_empty_store(tmp_path)
+        ds.close()
+
+        ds = DataStore("import_test", str(tmp_path))  # read-only by default
+        try:
+            with pytest.raises(IOError, match="read-only"):
+                ds.import_collection(
+                    "microscale_out", "v2.0.0", str(tmp_path), [""]
+                )
+        finally:
+            ds.close()
+
+    def test_import_invalid_collection_raises(self, tmp_path):
+        """import_collection() raises ValueError for unsupported collection names."""
+        ds = self._create_empty_store(tmp_path)
+        try:
+            with pytest.raises(ValueError, match="Only 'microscale_out'"):
+                ds.import_collection(
+                    "macroscale_in", "v2.0.0", str(tmp_path), [""]
+                )
+        finally:
+            ds.close()
+
+    def test_import_microscale_not_created_raises(self, tmp_path):
+        """Importing microscale_out raises if create() was not called first."""
+        # Create a bare HDF5 with only the version attribute.
+        bare_path = tmp_path / "bare.h5"
+        with h5py.File(bare_path, "w") as f:
+            _write_version_attr(f)
+
+        ds = DataStore("bare", str(tmp_path), mode="a")
+        try:
+            with pytest.raises(ValueError, match="does not exist"):
+                ds.import_collection(
+                    "microscale_out", "v2.0.0", str(bare_path), [""]
+                )
+        finally:
+            ds.close()
+
+    def test_import_macroscale_before_initialize_raises(self, tmp_path):
+        """Importing macroscale_out raises if initialize_macroscale() was not called."""
+        ds = self._create_empty_store(tmp_path)
+        try:
+            with pytest.raises(ValueError, match="does not exist"):
+                ds.import_collection(
+                    "macroscale_out", "v2.0.0", str(tmp_path), [""]
+                )
+        finally:
+            ds.close()
+
+    def test_import_microscale_already_filled_raises(self, fortran_sample_path,
+                                                      tmp_path):
+        """Second import_collection() call raises when datasets already contain data."""
+        ds = self._create_empty_store(
+            tmp_path, n_sims=self._N_MICRO_SIMS
+        )
+        ds.import_collection(
+            "microscale_out",
+            "v1.95.0",
+            fortran_sample_path,
+            [self._MICRO_FILE_CODE],
+            param_overrides=self._PARAM_OVERRIDES,
+        )
+        try:
+            with pytest.raises(ValueError, match="already contains data"):
+                ds.import_collection(
+                    "microscale_out",
+                    "v1.95.0",
+                    fortran_sample_path,
+                    [self._MICRO_FILE_CODE],
+                    param_overrides=self._PARAM_OVERRIDES,
+                )
+        finally:
+            ds.close()
+
+    def test_import_macroscale_sim_count_mismatch_raises(self, tmp_path):
+        """Importing macroscale_out raises if simulation count doesn't match."""
+        n_micro, n_macro = 10, 3
+        # Source has 3 macro sims, DataStore initialized for 2.
+        source_path = self._create_filled_macro_hdf5(
+            tmp_path, n_micro=n_micro, n_macro=n_macro
+        )
+        ds = self._prepare_store_for_macro_import(
+            tmp_path, "mismatch", n_micro=n_micro, n_macro=2  # 2, not 3
+        )
+        try:
+            with pytest.raises(ValueError, match="simulation"):
+                ds.import_collection(
+                    "macroscale_out", "v2.0.0", source_path, [""]
+                )
+        finally:
+            ds.close()
 
 
 # ---------------------------------------------------------------------------

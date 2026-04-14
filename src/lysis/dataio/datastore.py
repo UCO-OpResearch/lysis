@@ -91,8 +91,8 @@ import h5py
 
 from ..config.constants import CONST
 from ..config.parameters import MicroParameters, MacroParameters
-from .dataspec import DataCollectionSpec, DataSetSpec, dataspec, parse_shape
-from .fileops import read_dataset, write_dataset, _validate_hdf5_version
+from .dataspec import DataCollectionSpec, DataSetSpec, dataspec, parse_shape, tags
+from .fileops import read_dataset, write_dataset, _validate_hdf5_version, read_data_collection
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -848,6 +848,236 @@ class DataStore:
         )
 
         # Re-initialize in place (reloads all collections, params, etc.)
+        self.__init__(self._run_code, self._path, mode=self._mode)
+
+    def _write_array_to_dataset(self, ds_spec, arr, sim=None):
+        """Write a numpy array to an existing empty HDF5 dataset.
+
+        Handles both numeric arrays (resize then slice-assign) and variable-
+        length string arrays (delete the empty placeholder and recreate with
+        data, since h5py string datasets cannot be reliably resized and
+        slice-assigned).
+
+        :param ds_spec: Specification for the target dataset.
+        :type ds_spec: DataSetSpec
+        :param arr: The array to write.
+        :type arr: numpy.ndarray
+        :param sim: Simulation index for per-simulation datasets.  ``None``
+            for combined-simulation datasets.
+        :type sim: int, optional
+        """
+        if sim is not None:
+            loc = ds_spec.data_location.format(sim=sim)
+        else:
+            loc = ds_spec.data_location
+
+        if ds_spec.dtype == h5py.string_dtype():
+            # Variable-length string datasets: delete the shape-0 placeholder
+            # and recreate with the actual data.
+            if loc in self._file:
+                del self._file[loc]
+            self._file.create_dataset(
+                loc,
+                data=arr,
+                dtype=h5py.string_dtype(),
+                maxshape=(None,),
+                compression="gzip",
+            )
+        else:
+            h5ds = self._file[loc]
+            h5ds.resize(arr.shape)
+            h5ds[:] = arr
+
+    def import_collection(
+        self,
+        collection_name,
+        source_spec,
+        source_path,
+        file_codes,
+        param_overrides=None,
+        param_aliases=None,
+    ):
+        """Import a data collection from an external source into this DataStore.
+
+        Reads data from *source_path* using the *source_spec* format, converts
+        it to v2.0.0 if necessary, then writes the resulting numpy arrays
+        directly into the existing empty HDF5 datasets managed by this
+        DataStore.
+
+        The target collection must already exist with empty datasets:
+
+        - For ``"microscale_out"``: call :meth:`create` first.
+        - For ``"macroscale_out"``: call :meth:`initialize_macroscale` first
+          (which itself requires filled microscale data).
+
+        Modifies the DataStore **in place** and returns ``None``.
+        Requires the DataStore to be opened in writable mode (``"a"``)::
+
+            ds = DataStore.create(run_code, path, micro_params)
+            ds.import_collection(
+                "microscale_out", "v1.95.0", fortran_path,
+                [micro_file_code], param_overrides=overrides
+            )
+
+        :param collection_name: The collection to populate.  Must be
+            ``"microscale_out"`` or ``"macroscale_out"``.
+        :type collection_name: str
+        :param source_spec: Dataspec version of the source data, or a tag
+            alias (e.g. ``"v1.95.0"``, ``"fortran"``, ``"v2.0.0"``,
+            ``"hdf5"``).  Tag aliases are resolved automatically.
+        :type source_spec: str
+        :param source_path: Path to the source data.  For Fortran-format
+            specs, a directory containing simulation output files.  For
+            HDF5-format specs, the full path to the HDF5 file.
+        :type source_path: str
+        :param file_codes: List of file-code strings passed to
+            :func:`~lysis.dataio.fileops.read_data_collection`.  Typically
+            one entry (e.g. ``["_PLG2_tPA01_TB-xiii"]`` for a Fortran
+            microscale source, or ``[""]`` for an HDF5 source).
+        :type file_codes: list[str]
+        :param param_overrides: Optional key-value pairs injected into the
+            read parameters before conversion.  Useful when Fortran log files
+            omit fields that downstream converters require.
+        :type param_overrides: dict, optional
+        :param param_aliases: Optional ``{python_name: fortran_name}`` mapping
+            used to rename Fortran parameter keys before conversion.  For
+            example, ``{"micro_simulations": "runs"}`` renames the ``runs``
+            key produced by v1.90.0 log parsing.
+        :type param_aliases: dict, optional
+        :raises IOError: If the DataStore is in read-only mode.
+        :raises ValueError: If *collection_name* is not ``"microscale_out"``
+            or ``"macroscale_out"``, if the target collection does not yet
+            exist (call :meth:`create` / :meth:`initialize_macroscale` first),
+            if any target dataset already contains data, or if the number of
+            simulations in the source does not match
+            ``macro_params.macro_simulations`` (for ``"macroscale_out"``).
+        """
+        # ------------------------------------------------------------------
+        # Precondition checks
+        # ------------------------------------------------------------------
+        if self._mode == "r":
+            raise IOError(
+                "Cannot import data on a read-only DataStore. "
+                "Open with mode='a'."
+            )
+        if collection_name not in ("microscale_out", "macroscale_out"):
+            raise ValueError(
+                f"Cannot import collection '{collection_name}'. "
+                "Only 'microscale_out' and 'macroscale_out' are importable."
+            )
+        if collection_name not in self._collections:
+            if collection_name == "microscale_out":
+                raise ValueError(
+                    "Cannot import microscale_out: collection does not exist. "
+                    "Call DataStore.create() first."
+                )
+            else:
+                raise ValueError(
+                    "Cannot import macroscale_out: collection does not exist. "
+                    "Call initialize_macroscale() first."
+                )
+
+        # All storable datasets in the target collection must be empty.
+        target_spec = dataspec[COMPATIBLE_DATASPEC_VERSION][collection_name]
+        for ds_name, ds_spec in target_spec.data.items():
+            if ds_spec.data_location is None:
+                continue
+            if target_spec.simulations_combined:
+                loc = ds_spec.data_location
+            else:
+                loc = ds_spec.data_location.format(sim=0)
+            if loc in self._file and self._file[loc].shape[0] != 0:
+                raise ValueError(
+                    f"Cannot import {collection_name}: dataset '{ds_name}' "
+                    "already contains data. Import is only allowed once, "
+                    "on empty datasets."
+                )
+
+        # ------------------------------------------------------------------
+        # Resolve tag aliases in source_spec
+        # ------------------------------------------------------------------
+        source_version = source_spec
+        while source_version in tags:
+            source_version = tags[source_version]
+
+        # ------------------------------------------------------------------
+        # Read from the external source
+        # ------------------------------------------------------------------
+        # Import convert_data lazily to avoid circular imports
+        # (dataconvert → geometry.edge_grid → config.run → datastore).
+        from .dataconvert import convert_data  # noqa: PLC0415
+
+        source_collection_spec = dataspec[source_version][collection_name]
+        data = read_data_collection(source_path, [source_collection_spec], file_codes)
+
+        # Apply optional param overrides (inject missing Fortran log fields)
+        if param_overrides:
+            for key, value in param_overrides.items():
+                for section in data["params"].values():
+                    if isinstance(section, dict):
+                        section[key] = value
+
+        # Apply optional param aliases (rename Fortran parameter keys)
+        if param_aliases:
+            for py_name, fort_name in param_aliases.items():
+                fort_lower = fort_name.lower()
+                for section in data["params"].values():
+                    if isinstance(section, dict) and fort_lower in section:
+                        section[py_name] = section.pop(fort_lower)
+
+        # Inject already-loaded micro_params so the converter has complete
+        # parameters (particularly unit-bearing values).
+        if self._micro_params is not None:
+            if not isinstance(data["params"].get("micro_params"), dict):
+                data["params"]["micro_params"] = {}
+            data["params"]["micro_params"].update(self._micro_params.to_basedict())
+
+        # ------------------------------------------------------------------
+        # Convert to v2.0.0 (short-circuits if already at that version)
+        # ------------------------------------------------------------------
+        converted = convert_data(data, source_version, COMPATIBLE_DATASPEC_VERSION)
+
+        # ------------------------------------------------------------------
+        # Validate simulation count for per-simulation collections
+        # ------------------------------------------------------------------
+        if not target_spec.simulations_combined:
+            for ds_name, ds_spec in target_spec.data.items():
+                if ds_spec.data_location is None or ds_name not in converted:
+                    continue
+                n_source = len(converted[ds_name])
+                n_target = self._macro_params.macro_simulations
+                if n_source != n_target:
+                    raise ValueError(
+                        f"Source data has {n_source} simulation(s) but "
+                        f"DataStore expects {n_target} "
+                        f"(from macro_params.macro_simulations). "
+                        "Simulation count must match."
+                    )
+                break  # one dataset is enough to confirm the count
+
+        # ------------------------------------------------------------------
+        # Write converted arrays directly into the existing HDF5 datasets
+        # ------------------------------------------------------------------
+        for ds_name, ds_spec in target_spec.data.items():
+            if ds_spec.data_location is None:
+                continue  # derived dataset — not stored on disk
+            if ds_name not in converted:
+                continue  # optional dataset not produced by this converter
+            if target_spec.simulations_combined:
+                self._write_array_to_dataset(ds_spec, converted[ds_name])
+            else:
+                for sim_idx, arr in enumerate(converted[ds_name]):
+                    self._write_array_to_dataset(ds_spec, arr, sim=sim_idx)
+
+        # Record provenance if conversion happened
+        if CONST.CONVERTED_FROM_ATTR in converted.get("params", {}):
+            self._file.attrs[CONST.CONVERTED_FROM_ATTR] = (
+                converted["params"][CONST.CONVERTED_FROM_ATTR]
+            )
+
+        # Re-initialize in place (reloads all collections, params, etc.)
+        self._file.flush()
+        self._file.close()
         self.__init__(self._run_code, self._path, mode=self._mode)
 
     # ------------------------------------------------------------------
