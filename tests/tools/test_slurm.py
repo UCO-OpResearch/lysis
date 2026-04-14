@@ -447,3 +447,28 @@ class TestSubmitMicroSlurmJob:
         master_content = (staging_dir / "master.py").read_text()
         assert "FortranMicro.import_results(" not in master_content
         assert "fm.import_results(" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_relative_executable_resolved_to_absolute(self, mock_sbatch, micro_hdf5, tmp_path):
+        """Relative executable paths must be resolved to absolute in generated scripts."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        # Pass a relative path by making it relative to cwd
+        import os
+        rel_exe = os.path.relpath("/bin/micro.exe")
+        submit_micro_slurm_job(micro_hdf5, rel_exe, staging_root=staging_root)
+        staging_dir = list(staging_root.iterdir())[0]
+        child_content = (staging_dir / "child_000.sh").read_text()
+        assert "/bin/micro.exe" in child_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_relative_hdf5_path_resolved_to_absolute(self, mock_sbatch, micro_hdf5, tmp_path):
+        """Relative HDF5 paths must be resolved to absolute in generated scripts."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        import os
+        rel_h5 = os.path.relpath(str(micro_hdf5))
+        submit_micro_slurm_job(rel_h5, "/bin/micro.exe", staging_root=staging_root)
+        staging_dir = list(staging_root.iterdir())[0]
+        child_content = (staging_dir / "child_000.sh").read_text()
+        assert str(micro_hdf5) in child_content

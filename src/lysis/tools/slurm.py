@@ -383,8 +383,8 @@ def submit_micro_slurm_job(
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
     """
-    hdf5_path = Path(hdf5_path)
-    executable = Path(executable)
+    hdf5_path = Path(hdf5_path).resolve()
+    executable = Path(executable).resolve()
     run_code = hdf5_path.stem
 
     # Create unique staging directory — never use /tmp
