@@ -572,38 +572,6 @@ def ensure_hdf5_version(path: AnyStr, version: str, data: dict = None):
                 file.attrs[CONST.CONVERTED_FROM_ATTR] = converted_from
 
 
-def init_hdf5_version(path: AnyStr, version: str) -> None:
-    """Set the ``dataspec_version`` attribute on an HDF5 file, creating it if needed.
-
-    Unlike :func:`ensure_hdf5_version`, this function is permissive toward
-    existing files that lack the attribute — it writes the attribute rather
-    than raising.  If the file already has the correct version attribute it
-    does nothing.  If it has a *different* version attribute it raises.
-
-    This is intended for import workflows that write data into a file that
-    may not have been created through the normal :meth:`DataStore.create`
-    path.
-
-    :param path: Path to the HDF5 file.
-    :type path: AnyStr
-    :param version: Version string to write (e.g. ``"v2.0.0"``).  Empty
-        string is a no-op.
-    :type version: str
-    :raises ValueError: If the file has a *different* version attribute.
-    """
-    if not version:
-        return
-    with h5py.File(path, "a") as file:
-        found = file.attrs.get(CONST.DATASPEC_VERSION_ATTR)
-        if found is None:
-            file.attrs[CONST.DATASPEC_VERSION_ATTR] = version
-        elif found != version:
-            raise ValueError(
-                f"HDF5 file version mismatch: expected '{version}', "
-                f"found '{found}': {path}"
-            )
-
-
 def _read_hdf5_attr(
     path: AnyStr,
     spec: DataSetSpec,

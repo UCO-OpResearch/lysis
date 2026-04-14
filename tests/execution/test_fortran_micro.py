@@ -23,6 +23,7 @@ import pytest
 from lysis.config.constants import CONST
 from lysis.config.parameters import MicroParameters
 from lysis.config.run import Run
+from lysis.dataio.datastore import DataStore
 from lysis.execution.fortran_micro import FortranMicro
 from lysis.execution.fortran import MICRO_FORTRAN_DATASPEC_VERSION
 
@@ -290,135 +291,123 @@ class TestFortranMicroExecInWorkdir:
 class TestFortranMicroImportResults:
     """Tests for :meth:`FortranMicro.import_results`."""
 
-    def _mock_converted(self):
-        """Return a minimal converted data dict with one array."""
-        return {"tpa_leaving_time": np.zeros(10, dtype=np.float32)}
+    @pytest.fixture
+    def mock_datastore(self):
+        """Return (mock_cls, mock_ds): a mocked DataStore class + open instance."""
+        mock_ds = MagicMock()
+        mock_cm = MagicMock()
+        mock_cm.__enter__ = MagicMock(return_value=mock_ds)
+        mock_cm.__exit__ = MagicMock(return_value=False)
+        mock_cls = MagicMock(return_value=mock_cm)
+        return mock_cls, mock_ds
 
-    @patch("lysis.dataio.dataconvert.convert_data")
-    @patch("lysis.dataio.fileops.read_data_collection")
-    def test_uses_module_constant_not_literal(self, mock_read, mock_convert, tmp_path):
-        """import_results must use MICRO_FORTRAN_DATASPEC_VERSION, not 'v1.99.0'."""
-        mock_read.return_value = {}
-        mock_convert.return_value = {}
-
+    def test_opens_datastore_with_run_code(self, fortran_micro, tmp_path, mock_datastore):
+        """DataStore must be constructed with self.run.run_code."""
+        mock_cls, _ = mock_datastore
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        hdf5_path = tmp_path / "run.h5"
+        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+            fortran_micro.import_results(data_dir, keep_tmpdir=True)
+        assert mock_cls.call_args.args[0] == fortran_micro.run.run_code
 
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass  # empty file
+    def test_opens_datastore_with_run_os_path(self, fortran_micro, tmp_path, mock_datastore):
+        """DataStore must be constructed with self.run.os_path."""
+        mock_cls, _ = mock_datastore
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+            fortran_micro.import_results(data_dir, keep_tmpdir=True)
+        assert mock_cls.call_args.args[1] == fortran_micro.run.os_path
 
-        FortranMicro.import_results(data_dir, hdf5_path, keep_tmpdir=True)
+    def test_opens_datastore_in_append_mode(self, fortran_micro, tmp_path, mock_datastore):
+        """DataStore must be opened with mode='a'."""
+        mock_cls, _ = mock_datastore
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+            fortran_micro.import_results(data_dir, keep_tmpdir=True)
+        assert mock_cls.call_args.kwargs.get("mode") == "a"
 
-        assert mock_read.call_count == 1
-        from lysis.dataio.dataspec import dataspec
-        expected_spec = dataspec[MICRO_FORTRAN_DATASPEC_VERSION]["microscale_out"]
-        actual_specs = mock_read.call_args.args[1]
-        assert actual_specs[0] == expected_spec
+    def test_delegates_to_import_collection(self, fortran_micro, tmp_path, mock_datastore):
+        """import_results must call ds.import_collection with the correct arguments."""
+        mock_cls, mock_ds = mock_datastore
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+            fortran_micro.import_results(data_dir, keep_tmpdir=True)
+        assert mock_ds.import_collection.call_count == 1
+        args = mock_ds.import_collection.call_args.args
+        assert args[0] == "microscale_out"
+        assert args[1] == MICRO_FORTRAN_DATASPEC_VERSION
+        assert args[2] == str(data_dir)
+        assert args[3] == [fortran_micro.out_file_code]
 
-    @patch("lysis.dataio.dataconvert.convert_data")
-    @patch("lysis.dataio.fileops.read_data_collection")
-    def test_cleanup_on_success(self, mock_read, mock_convert, tmp_path):
+    def test_passes_out_file_code(self, tmp_run, tmp_path, mock_datastore):
+        """self.out_file_code must be forwarded to import_collection."""
+        mock_cls, mock_ds = mock_datastore
+        fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe", out_file_code="_code")
+        data_dir = tmp_path / "data_dir"
+        data_dir.mkdir()
+        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+            fm.import_results(data_dir, keep_tmpdir=True)
+        assert mock_ds.import_collection.call_args.args[3] == ["_code"]
+
+    def test_cleanup_on_success(self, fortran_micro, tmp_path, mock_datastore):
         """data_dir must be removed after successful import (keep_tmpdir=False)."""
-        mock_read.return_value = {}
-        mock_convert.return_value = {}
-
+        mock_cls, _ = mock_datastore
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        hdf5_path = tmp_path / "run.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
-
-        FortranMicro.import_results(data_dir, hdf5_path, keep_tmpdir=False)
+        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+            fortran_micro.import_results(data_dir, keep_tmpdir=False)
         assert not data_dir.exists()
 
-    @patch("lysis.dataio.dataconvert.convert_data")
-    @patch("lysis.dataio.fileops.read_data_collection")
-    def test_keep_tmpdir_preserves_on_success(self, mock_read, mock_convert, tmp_path):
+    def test_keep_tmpdir_preserves_on_success(self, fortran_micro, tmp_path, mock_datastore):
         """data_dir must be preserved when keep_tmpdir=True."""
-        mock_read.return_value = {}
-        mock_convert.return_value = {}
-
+        mock_cls, _ = mock_datastore
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        hdf5_path = tmp_path / "run.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
-
-        FortranMicro.import_results(data_dir, hdf5_path, keep_tmpdir=True)
+        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+            fortran_micro.import_results(data_dir, keep_tmpdir=True)
         assert data_dir.exists()
 
-    @patch("lysis.dataio.dataconvert.convert_data")
-    @patch("lysis.dataio.fileops.read_data_collection")
-    def test_cleanup_on_failure_keep_on_failure_false(self, mock_read, mock_convert, tmp_path):
+    def test_cleanup_on_failure_keep_on_failure_false(self, fortran_micro, tmp_path, mock_datastore):
         """data_dir must be removed on failure when keep_on_failure=False."""
-        mock_read.side_effect = RuntimeError("read failed")
-
+        mock_cls, mock_ds = mock_datastore
+        mock_ds.import_collection.side_effect = RuntimeError("import failed")
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        hdf5_path = tmp_path / "run.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
-
-        with pytest.raises(RuntimeError, match="read failed"):
-            FortranMicro.import_results(
-                data_dir, hdf5_path, keep_on_failure=False, keep_tmpdir=False
-            )
+        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+            with pytest.raises(RuntimeError, match="import failed"):
+                fortran_micro.import_results(
+                    data_dir, keep_on_failure=False, keep_tmpdir=False
+                )
         assert not data_dir.exists()
 
-    @patch("lysis.dataio.dataconvert.convert_data")
-    @patch("lysis.dataio.fileops.read_data_collection")
-    def test_preserve_on_failure_keep_on_failure_true(self, mock_read, mock_convert, tmp_path):
+    def test_preserve_on_failure_keep_on_failure_true(self, fortran_micro, tmp_path, mock_datastore):
         """data_dir must be preserved on failure when keep_on_failure=True."""
-        mock_read.side_effect = RuntimeError("read failed")
-
+        mock_cls, mock_ds = mock_datastore
+        mock_ds.import_collection.side_effect = RuntimeError("import failed")
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        hdf5_path = tmp_path / "run.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
-
-        with pytest.raises(RuntimeError):
-            FortranMicro.import_results(
-                data_dir, hdf5_path, keep_on_failure=True, keep_tmpdir=False
-            )
+        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+            with pytest.raises(RuntimeError):
+                fortran_micro.import_results(
+                    data_dir, keep_on_failure=True, keep_tmpdir=False
+                )
         assert data_dir.exists()
 
-    @patch("lysis.dataio.dataconvert.convert_data")
-    @patch("lysis.dataio.fileops.read_data_collection")
-    def test_keep_tmpdir_preserves_on_failure(self, mock_read, mock_convert, tmp_path):
+    def test_keep_tmpdir_preserves_on_failure(self, fortran_micro, tmp_path, mock_datastore):
         """data_dir must be preserved on failure when keep_tmpdir=True."""
-        mock_read.side_effect = RuntimeError("read failed")
-
+        mock_cls, mock_ds = mock_datastore
+        mock_ds.import_collection.side_effect = RuntimeError("import failed")
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        hdf5_path = tmp_path / "run.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
-
-        with pytest.raises(RuntimeError):
-            FortranMicro.import_results(
-                data_dir, hdf5_path, keep_on_failure=False, keep_tmpdir=True
-            )
+        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+            with pytest.raises(RuntimeError):
+                fortran_micro.import_results(
+                    data_dir, keep_on_failure=False, keep_tmpdir=True
+                )
         assert data_dir.exists()
-
-    @patch("lysis.dataio.dataconvert.convert_data")
-    @patch("lysis.dataio.fileops.read_data_collection")
-    def test_passes_file_code_to_read(self, mock_read, mock_convert, tmp_path):
-        """file_code must be forwarded to read_data_collection."""
-        mock_read.return_value = {}
-        mock_convert.return_value = {}
-
-        data_dir = tmp_path / "data_dir"
-        data_dir.mkdir()
-        hdf5_path = tmp_path / "run.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
-
-        FortranMicro.import_results(data_dir, hdf5_path, file_code="_code",
-                                    keep_tmpdir=True)
-        actual_codes = mock_read.call_args.args[2]
-        assert actual_codes == ["_code"]
 
 
 # ---------------------------------------------------------------------------
@@ -430,36 +419,26 @@ class TestFortranMicroRunFull:
     """Tests for :meth:`FortranMicro.run_full`."""
 
     def test_exec_in_workdir_called(self, fortran_micro, tmp_path):
-        hdf5_path = tmp_path / "run.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
         with (
             patch.object(FortranMicro, "exec_in_workdir",
                          return_value=tmp_path / "data_dir") as mock_exec,
             patch.object(FortranMicro, "import_results") as mock_import,
         ):
-            fortran_micro.run_full(hdf5_path)
+            fortran_micro.run_full()
         assert mock_exec.call_count == 1
 
     def test_import_results_called_with_data_dir(self, fortran_micro, tmp_path):
-        hdf5_path = tmp_path / "run.h5"
         data_dir = tmp_path / "data_dir"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
         with (
             patch.object(FortranMicro, "exec_in_workdir",
                          return_value=data_dir),
             patch.object(FortranMicro, "import_results") as mock_import,
         ):
-            fortran_micro.run_full(hdf5_path)
+            fortran_micro.run_full()
         assert mock_import.call_args.args[0] == data_dir
 
     def test_tmpdir_cleaned_on_success(self, fortran_micro, tmp_path):
         """The outer tmpdir must be removed after a successful run."""
-        hdf5_path = tmp_path / "run.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
-
         created_tmpdirs = []
 
         def fake_exec(work_dir):
@@ -470,17 +449,13 @@ class TestFortranMicroRunFull:
             patch.object(FortranMicro, "exec_in_workdir", side_effect=fake_exec),
             patch.object(FortranMicro, "import_results"),
         ):
-            fortran_micro.run_full(hdf5_path, keep_tmpdir=False)
+            fortran_micro.run_full(keep_tmpdir=False)
 
         assert created_tmpdirs, "exec_in_workdir was never called"
         assert not created_tmpdirs[0].exists()
 
     def test_tmpdir_preserved_with_keep_tmpdir(self, fortran_micro, tmp_path):
         """The outer tmpdir must be preserved when keep_tmpdir=True."""
-        hdf5_path = tmp_path / "run.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
-
         created_tmpdirs = []
 
         def fake_exec(work_dir):
@@ -492,17 +467,13 @@ class TestFortranMicroRunFull:
             patch.object(FortranMicro, "exec_in_workdir", side_effect=fake_exec),
             patch.object(FortranMicro, "import_results"),
         ):
-            fortran_micro.run_full(hdf5_path, keep_tmpdir=True)
+            fortran_micro.run_full(keep_tmpdir=True)
 
         assert created_tmpdirs
         assert created_tmpdirs[0].exists()
 
-    def test_tmpdir_not_in_system_tmp(self, fortran_micro, tmp_path):
-        """run_full must create its tmpdir alongside the HDF5 file, not in /tmp."""
-        hdf5_path = tmp_path / "run.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass
-
+    def test_tmpdir_in_run_os_path(self, fortran_micro, tmp_path):
+        """run_full must create its tmpdir in run.os_path, not in /tmp."""
         created_tmpdirs = []
 
         def fake_exec(work_dir):
@@ -513,7 +484,7 @@ class TestFortranMicroRunFull:
             patch.object(FortranMicro, "exec_in_workdir", side_effect=fake_exec),
             patch.object(FortranMicro, "import_results"),
         ):
-            fortran_micro.run_full(hdf5_path, keep_tmpdir=False)
+            fortran_micro.run_full(keep_tmpdir=False)
 
         assert created_tmpdirs
         assert created_tmpdirs[0].parent == tmp_path
@@ -577,25 +548,26 @@ class TestImportResultsWithFixture:
         return _build_reference_v200(fortran_sample_path)
 
     @pytest.fixture
-    def imported_hdf5(self, fortran_sample_path, reference, tmp_path):
+    def imported_hdf5(self, fortran_sample_path, tmp_path):
         """Run import_results on a copy of the fixture and return the HDF5 path."""
-        data_dir = tmp_path / "staging" / "data" / "fortran_sample"
+        run_code = "test-import"
+
+        # Create the HDF5 file with empty microscale_out datasets.
+        with DataStore.create(run_code, str(tmp_path), MicroParameters()):
+            pass
+
+        # Copy fixture files to a staging directory that mirrors the path
+        # structure the Fortran binary produces: data/{run_code}/.
+        data_dir = tmp_path / "staging" / "data" / run_code
         shutil.copytree(fortran_sample_path, data_dir)
 
-        micro_params = reference["params"]["micro_params"]
-        with open(data_dir / "params.json", "w") as fh:
-            json.dump({"micro_params": micro_params}, fh, indent=4, default=str)
+        run = Run(str(tmp_path), run_code=run_code)
+        run.initialize_micro_param()
+        fm = FortranMicro(run=run, executable="/bin/micro.exe",
+                          out_file_code=_MICRO_FILE_CODE)
+        fm.import_results(data_dir, keep_tmpdir=True)
 
-        hdf5_path = tmp_path / "result.h5"
-        with h5py.File(str(hdf5_path), "w") as _:
-            pass  # empty target file
-
-        FortranMicro.import_results(
-            data_dir, hdf5_path,
-            file_code=_MICRO_FILE_CODE,
-            keep_tmpdir=True,
-        )
-        return hdf5_path
+        return tmp_path / f"{run_code}.h5"
 
     # ── Dataset presence ────────────────────────────────────────────
 
@@ -753,7 +725,7 @@ class TestFortranBinaryExecution:
         from lysis.config.constants import Q_
 
         binary = str(_REPO_ROOT / "bin" / "micro_rates")
-        hdf5_path = tmp_path / "fortran-run.h5"
+        run_code = "fortran-run"
 
         mp = MicroParameters(
             nodes_in_micro_row=13,
@@ -761,13 +733,13 @@ class TestFortranBinaryExecution:
             micro_seed=_FIXTURE_SEED,
             micro_simulations=_BINARY_TEST_SIMULATIONS,
         )
-        _write_micro_hdf5(hdf5_path, mp)
+        with DataStore.create(run_code, str(tmp_path), mp):
+            pass
 
+        hdf5_path = tmp_path / f"{run_code}.h5"
         fm = FortranMicro.from_hdf5(hdf5_path, binary)
         data_dir = fm.exec_in_workdir(tmp_path)
-        FortranMicro.import_results(
-            data_dir, hdf5_path, file_code=fm.out_file_code, keep_tmpdir=True
-        )
+        fm.import_results(data_dir, keep_tmpdir=True)
         return hdf5_path
 
     def test_all_microscale_datasets_present(self, executed_hdf5, reference):

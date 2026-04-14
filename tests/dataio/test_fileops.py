@@ -45,7 +45,6 @@ from lysis.dataio.fileops import (
     data_readers,
     data_writers,
     ensure_hdf5_version,
-    init_hdf5_version,
     parse_macro_log,
     parse_micro_file_code,
     parse_micro_log,
@@ -627,47 +626,6 @@ class TestEnsureHdf5Version:
         h5_path = str(tmp_path / "skip.h5")
         # File doesn't exist, empty version => no file created
         ensure_hdf5_version(h5_path, "")
-        assert not (tmp_path / "skip.h5").exists()
-
-
-class TestInitHdf5Version:
-    """Tests for :func:`init_hdf5_version`."""
-
-    def test_sets_version_on_empty_file(self, tmp_path):
-        """When file exists without version attr, sets the attribute."""
-        h5_path = str(tmp_path / "empty.h5")
-        with h5py.File(h5_path, "w"):
-            pass
-        init_hdf5_version(h5_path, "v2.0.0")
-        with h5py.File(h5_path, "r") as f:
-            assert f.attrs[CONST.DATASPEC_VERSION_ATTR] == "v2.0.0"
-
-    def test_creates_file_when_missing(self, tmp_path):
-        """When file does not exist, creates it with the version attribute."""
-        h5_path = str(tmp_path / "new.h5")
-        init_hdf5_version(h5_path, "v2.0.0")
-        with h5py.File(h5_path, "r") as f:
-            assert f.attrs[CONST.DATASPEC_VERSION_ATTR] == "v2.0.0"
-
-    def test_no_op_when_version_matches(self, tmp_path):
-        """When file already has the correct version, does not raise."""
-        h5_path = str(tmp_path / "ok.h5")
-        with h5py.File(h5_path, "w") as f:
-            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v2.0.0"
-        init_hdf5_version(h5_path, "v2.0.0")  # Must not raise
-
-    def test_raises_on_version_mismatch(self, tmp_path):
-        """When file has a *different* version, raises ValueError."""
-        h5_path = str(tmp_path / "wrong.h5")
-        with h5py.File(h5_path, "w") as f:
-            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v1.0.0"
-        with pytest.raises(ValueError, match="mismatch"):
-            init_hdf5_version(h5_path, "v2.0.0")
-
-    def test_no_op_on_empty_version(self, tmp_path):
-        """Empty version string is a no-op."""
-        h5_path = str(tmp_path / "skip.h5")
-        init_hdf5_version(h5_path, "")
         assert not (tmp_path / "skip.h5").exists()
 
 

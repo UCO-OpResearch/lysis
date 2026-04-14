@@ -18,14 +18,12 @@ import tempfile
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import AnyStr
-
-import numpy as np
 
 from ..config.parameters import MicroParameters
 from ..config.run import Run
 from ..dataio.dataspec import dataspec
-from ..dataio.fileops import init_hdf5_version, write_dataset
+from ..dataio.datastore import DataStore
+from ..dataio.fileops import write_dataset
 from .fortran import FortranRunner, MICRO_FORTRAN_DATASPEC_VERSION
 
 __author__ = "Brittany Bannish and Bradley Paynter"
@@ -204,29 +202,27 @@ class FortranMicro(FortranRunner):
     # Import
     # ------------------------------------------------------------------
 
-    @staticmethod
     def import_results(
+        self,
         data_dir: "Path | str",
-        hdf5_path: "Path | str",
-        file_code: str = "",
         *,
         keep_on_failure: bool = False,
         keep_tmpdir: bool = False,
     ) -> None:
-        """Convert Fortran output in *data_dir* and write it to *hdf5_path*.
+        """Convert Fortran output in *data_dir* and write it to the run's HDF5 file.
 
-        Reads the Fortran microscale output (version
-        :data:`~lysis.execution.fortran.MICRO_FORTRAN_DATASPEC_VERSION`)
-        from *data_dir*, converts it to the HDF5 v2.0.0 format, and writes
-        the resulting datasets into the existing HDF5 file at *hdf5_path*.
+        Opens the run's HDF5 file (``{run.os_path}/{run.run_code}.h5``) in
+        append mode and delegates to
+        :meth:`~lysis.dataio.datastore.DataStore.import_collection` to read
+        the Fortran microscale output (version
+        :data:`~lysis.execution.fortran.MICRO_FORTRAN_DATASPEC_VERSION`),
+        convert it to HDF5 v2.0.0, and populate the empty ``microscale_out``
+        datasets.
 
         The target HDF5 file should already contain ``micro_params`` and
-        empty microscale_out datasets (i.e.
+        empty ``microscale_out`` datasets (i.e.
         :meth:`~lysis.dataio.datastore.DataStore.create` should have been
-        called beforehand).  If a dataset is missing it will be created; if
-        it already exists (zero-length from
-        :meth:`~lysis.dataio.datastore.DataStore.create`) it will be resized
-        and filled.
+        called beforehand).
 
         Cleanup behaviour:
 
@@ -239,37 +235,24 @@ class FortranMicro(FortranRunner):
             (``lysis{code}.dat``, ``micro{code}.txt``, ``params.json``, …).
             Typically ``{work_dir}/data/{run_code}/``.
         :type data_dir: Path or str
-        :param hdf5_path: Full path to the target ``.h5`` file.
-        :type hdf5_path: Path or str
-        :param file_code: Output file code suffix used when running the
-            binary (e.g. ``"_PLG2_tPA01_Q4"``), defaults to ``""``.
-        :type file_code: str, optional
         :param keep_on_failure: Preserve *data_dir* if import raises an
             exception, defaults to ``False``.
         :type keep_on_failure: bool, optional
         :param keep_tmpdir: Always preserve *data_dir*, defaults to ``False``.
         :type keep_tmpdir: bool, optional
-        :raises Exception: Re-raises any exception from the read/convert/write
-            pipeline after applying the cleanup policy.
+        :raises Exception: Re-raises any exception from the import pipeline
+            after applying the cleanup policy.
         """
-        from ..dataio.fileops import read_data_collection
-        from ..dataio.dataconvert import convert_data
-
         data_dir = Path(data_dir)
-        hdf5_path = Path(hdf5_path)
 
         try:
-            src_spec = dataspec[MICRO_FORTRAN_DATASPEC_VERSION]["microscale_out"]
-            raw = read_data_collection(str(data_dir), [src_spec], [file_code])
-            converted = convert_data(raw, MICRO_FORTRAN_DATASPEC_VERSION, "v2.0.0")
-
-            dst_spec = dataspec["v2.0.0"]["microscale_out"]
-            init_hdf5_version(str(hdf5_path), dst_spec.version)
-            for name, ds_spec in dst_spec.data.items():
-                if name not in converted:
-                    continue
-                arr = np.asarray(converted[name], dtype=ds_spec.dtype)
-                write_dataset(arr, str(hdf5_path), ds_spec, overwrite=True)
+            with DataStore(self.run.run_code, self.run.os_path, mode="a") as ds:
+                ds.import_collection(
+                    "microscale_out",
+                    MICRO_FORTRAN_DATASPEC_VERSION,
+                    str(data_dir),
+                    [self.out_file_code],
+                )
 
             if not keep_tmpdir:
                 shutil.rmtree(data_dir)
@@ -285,7 +268,6 @@ class FortranMicro(FortranRunner):
 
     def run_full(
         self,
-        hdf5_path: "Path | str",
         *,
         keep_tmpdir: bool = False,
     ) -> None:
@@ -294,11 +276,12 @@ class FortranMicro(FortranRunner):
         Creates a uniquely named temporary working directory (via
         :func:`tempfile.mkdtemp` with an explicit *dir* argument so that
         ``/tmp`` — which is a ramdisk on many HPC nodes — is never used),
-        runs the Fortran binary, imports the results into *hdf5_path*, and
-        cleans up.
+        runs the Fortran binary, imports the results into the run's HDF5 file,
+        and cleans up.
 
-        The temporary directory is placed alongside the HDF5 file
-        (``hdf5_path.parent``) to avoid using ramdisk storage.
+        The temporary directory is placed in :attr:`run.os_path
+        <lysis.config.run.Run.os_path>` (the run's data directory) to avoid
+        using ramdisk storage.
 
         Cleanup policy:
 
@@ -307,27 +290,22 @@ class FortranMicro(FortranRunner):
           (``import_results`` is called with ``keep_on_failure=True``); the
           outer ``except`` block removes it only when ``keep_tmpdir=False``.
 
-        :param hdf5_path: Full path to the target ``.h5`` file.
-        :type hdf5_path: Path or str
         :param keep_tmpdir: Always preserve the temporary directory,
             defaults to ``False``.
         :type keep_tmpdir: bool, optional
         :raises subprocess.CalledProcessError: If the Fortran binary fails.
         :raises Exception: Re-raises any exception from the import pipeline.
         """
-        hdf5_path = Path(hdf5_path)
         tmpdir = Path(
             tempfile.mkdtemp(
                 prefix=f"lysis-micro-{self.run.run_code}-",
-                dir=str(hdf5_path.parent),
+                dir=self.run.os_path,
             )
         )
         try:
             data_dir = self.exec_in_workdir(tmpdir)
             self.import_results(
                 data_dir,
-                hdf5_path,
-                file_code=self.out_file_code,
                 keep_on_failure=True,
                 keep_tmpdir=keep_tmpdir,
             )

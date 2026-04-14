@@ -185,6 +185,27 @@ class TestGenerateMicroChildScript:
         )
         assert script.startswith("#!/bin/bash")
 
+    def test_single_tier_uses_fortran_micro_import(self, tmp_path):
+        """Child script must import from fortran_micro, not the old codeutil."""
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", ""
+        )
+        assert "lysis.execution.fortran_micro" in script
+        assert "codeutil" not in script
+
+    def test_two_tier_uses_fortran_micro_import(self, tmp_path):
+        """Two-tier child script must import from fortran_micro, not codeutil."""
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "lysis.execution.fortran_micro" in script
+        assert "codeutil" not in script
+
 
 # ---------------------------------------------------------------------------
 # TestSubmitMicroChildJob
@@ -402,3 +423,27 @@ class TestSubmitMicroSlurmJob:
                                staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
         assert "run-01" in staging_dir.name
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_imports_fortran_micro_module(self, mock_sbatch, micro_hdf5, tmp_path):
+        """master.py must import from fortran_micro, not the old codeutil."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root)
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "master.py").read_text()
+        assert "lysis.execution.fortran_micro" in master_content
+        assert "codeutil" not in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_calls_import_results_as_instance_method(self, mock_sbatch, micro_hdf5, tmp_path):
+        """master.py must call import_results on an instance, not as a static method."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root)
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "master.py").read_text()
+        assert "FortranMicro.import_results(" not in master_content
+        assert "fm.import_results(" in master_content

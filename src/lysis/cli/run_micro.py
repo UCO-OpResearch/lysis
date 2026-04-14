@@ -124,12 +124,12 @@ def run_micro(ctx, hdf5_path, executable, use_slurm, partition, staging_root,
             with console.status(
                 f"Running microscale simulation for {fm.run.run_code}..."
             ):
-                fm.run_full(hdf5_path, keep_tmpdir=keep_tmpdir)
+                fm.run_full(keep_tmpdir=keep_tmpdir)
         else:
             console.print(
                 f"Running microscale simulation for [bold]{fm.run.run_code}[/bold]"
             )
-            fm.run_full(hdf5_path, keep_tmpdir=keep_tmpdir)
+            fm.run_full(keep_tmpdir=keep_tmpdir)
         console.print(
             f"[green]Microscale results imported into[/green] {hdf5_path}"
         )

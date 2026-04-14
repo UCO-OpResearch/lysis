@@ -20,7 +20,7 @@ Workflow overview
 
    a. Submits child script(s) via ``sbatch``.
    b. Polls ``squeue`` until all children finish.
-   c. Calls :meth:`~lysis.execution.codeutil.FortranMicro.import_results`
+   c. Calls :meth:`~lysis.execution.fortran_micro.FortranMicro.import_results`
       to convert Fortran output into the HDF5 file.
    d. Optionally removes the staging directory.
 
@@ -74,7 +74,8 @@ import shutil
 from pathlib import Path
 
 import GooseSLURM as gs
-from lysis.execution.codeutil import FortranMicro
+from lysis.config.run import Run
+from lysis.execution.fortran_micro import FortranMicro
 
 STAGING_DIR = Path($staging_dir)
 HDF5_PATH = Path($hdf5_path)
@@ -117,10 +118,10 @@ print("All child jobs complete.", flush=True)
 # Import results into HDF5
 # ---------------------------------------------------------------------------
 data_dir = STAGING_DIR / "data" / RUN_CODE
-FortranMicro.import_results(
+run = Run(str(HDF5_PATH.parent), run_code=RUN_CODE)
+fm = FortranMicro(run=run, out_file_code=FILE_CODE)
+fm.import_results(
     data_dir,
-    HDF5_PATH,
-    file_code=FILE_CODE,
     keep_on_failure=True,
     keep_tmpdir=KEEP_TMPDIR,
 )
@@ -182,7 +183,7 @@ def generate_micro_child_script(
 
     The child script sources the user's shell environment, copies the
     executable into the working directory, and calls
-    :meth:`~lysis.execution.codeutil.FortranMicro.exec_in_workdir` via
+    :meth:`~lysis.execution.fortran_micro.FortranMicro.exec_in_workdir` via
     ``python -c``.
 
     **Single-tier** (default, ``fast_tmp_root=None``): Fortran writes its
@@ -199,7 +200,7 @@ def generate_micro_child_script(
     :param run_code: Run identifier (used to name the output subdirectory).
     :type run_code: str
     :param hdf5_path: Full path to the run's ``.h5`` file (passed to
-        :meth:`~lysis.execution.codeutil.FortranMicro.from_hdf5`).
+        :meth:`~lysis.execution.fortran_micro.FortranMicro.from_hdf5`).
     :type hdf5_path: Path or str
     :param executable: Path to the compiled Fortran microscale binary.
     :type executable: Path or str
@@ -243,7 +244,7 @@ cp "{executable}" "{staging_dir}/" """
 source ~/.bashrc && source ~/lysis.sh
 python -c "
 from pathlib import Path
-from lysis.execution.codeutil import FortranMicro
+from lysis.execution.fortran_micro import FortranMicro
 fm = FortranMicro.from_hdf5('{hdf5_path}', '{staging_dir}/{binary_name}', out_file_code='{out_code}')
 fm.exec_in_workdir(Path('{staging_dir}'))
 " """
@@ -268,7 +269,7 @@ cp "{executable}" "${{local_work_dir}}/" """
 source ~/.bashrc && source ~/lysis.sh
 python -c "
 from pathlib import Path
-from lysis.execution.codeutil import FortranMicro
+from lysis.execution.fortran_micro import FortranMicro
 fm = FortranMicro.from_hdf5('{hdf5_path}', '${{local_work_dir}}/{binary_name}', out_file_code='{out_code}')
 fm.exec_in_workdir(Path('${{local_work_dir}}'))
 " """
