@@ -187,9 +187,10 @@ class TestFortranMicroFromHdf5:
         assert fm.run.micro_params is not None
         assert isinstance(fm.run.micro_params, MicroParameters)
 
-    def test_sets_executable(self, micro_hdf5):
-        fm = FortranMicro.from_hdf5(micro_hdf5, "/bin/micro.exe")
-        assert fm.executable == "/bin/micro.exe"
+    def test_sets_executable(self, micro_hdf5, tmp_path):
+        exe = tmp_path / "micro.exe"
+        fm = FortranMicro.from_hdf5(micro_hdf5, str(exe))
+        assert fm.executable == str(exe.resolve())
 
     def test_passes_out_file_code(self, micro_hdf5):
         fm = FortranMicro.from_hdf5(micro_hdf5, "/bin/micro.exe",
