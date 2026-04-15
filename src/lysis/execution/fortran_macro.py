@@ -218,6 +218,35 @@ class FortranMacro(FortranRunner):
     # Setup helpers
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _link_setup_files(source_dir: Path, target_dir: Path) -> None:
+        """Symlink all non-directory entries from *source_dir* into *target_dir*.
+
+        :param source_dir: Directory containing pre-staged setup files.
+        :type source_dir: Path
+        :param target_dir: Per-simulation directory to receive the symlinks.
+        :type target_dir: Path
+        """
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for entry in source_dir.iterdir():
+            if not entry.is_dir():
+                link = target_dir / entry.name
+                if not link.exists():
+                    link.symlink_to(entry)
+
+    @staticmethod
+    def _remove_symlinks(target_dir: Path) -> None:
+        """Remove all symbolic links from *target_dir*.
+
+        Called after the Fortran binary finishes to leave only its output.
+
+        :param target_dir: Per-simulation directory to clean up.
+        :type target_dir: Path
+        """
+        for entry in target_dir.iterdir():
+            if entry.is_symlink():
+                entry.unlink()
+
     def _generate_macroscale_input_files(self, data_dir: Path) -> None:
         """Read microscale output from HDF5 and write v1.99.0 macroscale_in files.
 
@@ -308,10 +337,12 @@ class FortranMacro(FortranRunner):
     def exec_in_workdir(self, work_dir: "Path | str") -> Path:
         """Execute the Fortran macroscale binary for each simulation.
 
-        The Fortran code writes its binary output to ``data/{run_code}/``
-        relative to its working directory.  This method:
+        Each simulation runs in its own isolated subdirectory so that
+        concurrent Slurm array tasks never collide.  The Fortran binary is
+        invoked with ``--runCode {run_code}/{sim:02}`` so it writes directly to
+        ``data/{run_code}/{sim:02}/`` relative to *work_dir*.
 
-        1. Creates ``{work_dir}/data/{run_code}/`` (the shared data directory).
+        1. Creates ``{work_dir}/data/{run_code}/`` (the shared parent dir).
         2. Writes setup files (``params.json``, macroscale_in text files,
            ``neighbors.dat``) unless :attr:`index` is set (in which case they
            are assumed to be pre-staged by the caller, e.g.
@@ -320,20 +351,22 @@ class FortranMacro(FortranRunner):
            that simulation; otherwise runs all ``macro_simulations``.
         4. For each simulation:
 
-           a. Builds a per-simulation command with
+           a. Creates ``{data_dir}/{sim:02}/`` and symlinks pre-staged setup
+              files from ``{data_dir}/`` into it so Fortran can read its input.
+           b. Builds a per-simulation command with
+              ``--runCode {run_code}/{sim:02}`` and
               ``--outFileCode {out_file_code}_{sim:02}``.
-           b. Runs the Fortran binary, capturing stdout to
-              ``{data_dir}/macro{out_file_code}_{sim:02}.txt``.
-           c. Creates ``{data_dir}/{sim:02}/`` and moves all output files
-              matching ``*{out_file_code}_{sim:02}*`` into it, producing
-              the directory layout expected by :meth:`import_results`.
+           c. Runs the Fortran binary with ``cwd=work_dir``, capturing stdout
+              to ``{data_dir}/{sim:02}/macro{out_file_code}_{sim:02}.txt``.
+           d. Removes the symlinks from the per-sim directory, leaving only
+              Fortran output.
 
         :param work_dir: Working directory for the subprocess.  The binary
             itself must already be present at :attr:`executable` (absolute
             path recommended).
         :type work_dir: Path or str
         :return: Path to ``{work_dir}/data/{run_code}/`` — the directory
-            containing all Fortran output for this run.
+            containing all Fortran output subdirectories for this run.
         :rtype: Path
         :raises subprocess.CalledProcessError: If any Fortran invocation exits
             with a non-zero status.
@@ -356,15 +389,21 @@ class FortranMacro(FortranRunner):
 
         for sim in sims:
             sim_code = f"{self.out_file_code}_{sim:02}"
+            sim_run_code = f"{self.run.run_code}/{sim:02}"
+
+            # Create per-sim subdirectory and symlink setup files into it so
+            # Fortran can read its input while writing output to the same dir.
+            sim_dir = data_dir / f"{sim:02}"
+            self._link_setup_files(data_dir, sim_dir)
 
             # Build per-simulation params: 1 sim, this sim's seed
             params = asdict(self.run.macro_params)
             params["macro_simulations"] = 1
             params["macro_seed"] = int(np.array(seeds[sim]).astype(np.int32))
 
-            # Build command
+            # Build command with per-sim runCode
             sim_arguments = [
-                "--runCode", self.run.run_code,
+                "--runCode", sim_run_code,
                 "--inFileCode", self.in_file_code,
                 "--outFileCode", sim_code,
             ]
@@ -372,15 +411,12 @@ class FortranMacro(FortranRunner):
             sim_arguments += self._post_arguments(params)
             command = [self.executable] + sim_arguments
 
-            # Execute, capturing stdout to the log file in data_dir
-            log_file = data_dir / f"macro{sim_code}.txt"
+            # Execute — Fortran writes directly into sim_dir via the runCode path
+            log_file = sim_dir / f"macro{sim_code}.txt"
             with open(log_file, "w") as fh:
                 subprocess.run(command, stdout=fh, cwd=str(work_dir), check=True)
 
-            # Organize output into {sim:02}/ subdirectory
-            sim_subdir = data_dir / f"{sim:02}"
-            sim_subdir.mkdir(exist_ok=True)
-            for f in data_dir.glob(f"*{sim_code}*"):
-                f.rename(sim_subdir / f.name)
+            # Remove symlinks so only actual Fortran output remains
+            self._remove_symlinks(sim_dir)
 
         return data_dir

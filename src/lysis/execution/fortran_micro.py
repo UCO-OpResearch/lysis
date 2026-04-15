@@ -140,6 +140,23 @@ class FortranMicro(FortranRunner):
         )
 
     # ------------------------------------------------------------------
+    # Setup helpers
+    # ------------------------------------------------------------------
+
+    def _write_setup_files(self, data_dir: Path) -> None:
+        """Write ``params.json`` needed by the v1.99.0 import pipeline.
+
+        :param data_dir: Directory to write the file into.
+        :type data_dir: Path
+        """
+        params_data = {"micro_params": self.run.micro_params.to_basedict()}
+        write_dataset(
+            params_data,
+            str(data_dir),
+            dataspec[MICRO_FORTRAN_DATASPEC_VERSION]["microscale_out"].params,
+        )
+
+    # ------------------------------------------------------------------
     # Execution
     # ------------------------------------------------------------------
 
@@ -150,8 +167,9 @@ class FortranMicro(FortranRunner):
         ``data/{run_code}/`` relative to its working directory.  This method:
 
         1. Creates ``{work_dir}/data/{run_code}/``.
-        2. Writes a ``params.json`` there (needed by the v1.99.0 import
-           pipeline to resolve shapes when reading binary files back).
+        2. Writes ``params.json`` there (needed by the v1.99.0 import pipeline
+           to resolve shapes) unless :attr:`index` is set, in which case the
+           caller is assumed to have pre-staged it.
         3. Executes the binary with ``cwd=work_dir``, redirecting stdout
            (the log file) to ``{work_dir}/data/{run_code}/micro{out_code}.txt``
            so that all import inputs are co-located.
@@ -171,13 +189,10 @@ class FortranMicro(FortranRunner):
         data_dir = work_dir / "data" / self.run.run_code
         data_dir.mkdir(parents=True, exist_ok=True)
 
-        # Write params.json so the v1.99.0 read pipeline can resolve parameters.
-        params_data = {"micro_params": self.run.micro_params.to_basedict()}
-        write_dataset(
-            params_data,
-            str(data_dir),
-            dataspec[MICRO_FORTRAN_DATASPEC_VERSION]["microscale_out"].params,
-        )
+        # Write params.json for local (non-indexed) runs.
+        # When index is set the caller pre-stages the setup files.
+        if self.index is None:
+            self._write_setup_files(data_dir)
 
         command = self.exec_command()
         log_file = data_dir / f"micro{self.out_file_code}.txt"

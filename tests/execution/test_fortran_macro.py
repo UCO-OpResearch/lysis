@@ -370,15 +370,14 @@ class TestFortranMacroExecInWorkdir:
         for sim in range(n_sims):
             assert (data_dir / f"{sim:02}").is_dir()
 
-    def test_log_file_moved_to_sim_subdir(self, fortran_macro_mock_setup, tmp_path):
-        """Log file for sim 0 must land in data_dir/00/."""
+    def test_log_file_in_sim_subdir(self, fortran_macro_mock_setup, tmp_path):
+        """Log file for sim 0 must be written directly to data_dir/00/."""
         fm = fortran_macro_mock_setup
         with (
             patch.object(FortranMacro, "_write_setup_files"),
             patch("subprocess.run"),
         ):
             data_dir = fm.exec_in_workdir(tmp_path)
-        # Log file for sim 0
         log_name = f"macro{fm.out_file_code}_00.txt"
         assert (data_dir / "00" / log_name).exists()
 
@@ -403,6 +402,123 @@ class TestFortranMacroExecInWorkdir:
         ):
             result = fm.exec_in_workdir(str(tmp_path))
         assert isinstance(result, Path)
+
+    def test_run_code_includes_sim_subdir(self, tmp_run, tmp_path):
+        """--runCode passed to binary must be run_code/{sim:02} for each sim."""
+        fm = FortranMacro(run=tmp_run, executable="/bin/macro.exe", index=2)
+        with (
+            patch.object(FortranMacro, "_write_setup_files"),
+            patch("subprocess.run") as mock_run,
+        ):
+            fm.exec_in_workdir(tmp_path)
+        command = mock_run.call_args.args[0]
+        idx = command.index("--runCode")
+        assert command[idx + 1] == f"{fm.run.run_code}/02"
+
+    def test_run_code_includes_sim_subdir_local_runs(self, fortran_macro_mock_setup, tmp_path):
+        """--runCode must include /{sim:02} suffix for every sim in a local run."""
+        fm = fortran_macro_mock_setup
+        n_sims = fm.run.macro_params.macro_simulations
+        with (
+            patch.object(FortranMacro, "_write_setup_files"),
+            patch("subprocess.run") as mock_run,
+        ):
+            fm.exec_in_workdir(tmp_path)
+        for i, c in enumerate(mock_run.call_args_list):
+            command = c.args[0]
+            idx = command.index("--runCode")
+            assert command[idx + 1] == f"{fm.run.run_code}/{i:02}"
+
+    def test_no_symlinks_in_sim_subdir_after_exec(self, fortran_macro_mock_setup, tmp_path):
+        """No symlinks must remain in per-sim dirs after exec_in_workdir completes."""
+        fm = fortran_macro_mock_setup
+        with (
+            patch.object(FortranMacro, "_write_setup_files"),
+            patch("subprocess.run"),
+        ):
+            data_dir = fm.exec_in_workdir(tmp_path)
+        for sim_dir in data_dir.iterdir():
+            if sim_dir.is_dir():
+                for entry in sim_dir.iterdir():
+                    assert not entry.is_symlink(), (
+                        f"Symlink {entry} should have been removed after execution"
+                    )
+
+
+# ---------------------------------------------------------------------------
+# TestFortranMacroLinkSetupFiles
+# ---------------------------------------------------------------------------
+
+
+class TestFortranMacroLinkSetupFiles:
+    """Tests for :meth:`FortranMacro._link_setup_files`."""
+
+    def test_creates_symlinks_for_files(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "file1.dat").write_text("data1")
+        (source / "file2.dat").write_text("data2")
+        target = tmp_path / "target"
+        FortranMacro._link_setup_files(source, target)
+        assert (target / "file1.dat").is_symlink()
+        assert (target / "file2.dat").is_symlink()
+
+    def test_skips_directories(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "subdir").mkdir()
+        target = tmp_path / "target"
+        FortranMacro._link_setup_files(source, target)
+        assert not (target / "subdir").exists()
+
+    def test_does_not_overwrite_existing_entry(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "file.dat").write_text("new")
+        target = tmp_path / "target"
+        target.mkdir()
+        existing = target / "file.dat"
+        existing.write_text("existing")
+        FortranMacro._link_setup_files(source, target)
+        assert existing.read_text() == "existing"
+
+    def test_creates_target_dir_if_missing(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        target = tmp_path / "target" / "nested"
+        FortranMacro._link_setup_files(source, target)
+        assert target.is_dir()
+
+
+# ---------------------------------------------------------------------------
+# TestFortranMacroRemoveSymlinks
+# ---------------------------------------------------------------------------
+
+
+class TestFortranMacroRemoveSymlinks:
+    """Tests for :meth:`FortranMacro._remove_symlinks`."""
+
+    def test_removes_symlinks(self, tmp_path):
+        real_file = tmp_path / "real.dat"
+        real_file.write_text("content")
+        link = tmp_path / "link.dat"
+        link.symlink_to(real_file)
+        FortranMacro._remove_symlinks(tmp_path)
+        assert not link.exists()
+
+    def test_preserves_regular_files(self, tmp_path):
+        real_file = tmp_path / "output.dat"
+        real_file.write_text("output")
+        link = tmp_path / "input.dat"
+        link.symlink_to(real_file)
+        FortranMacro._remove_symlinks(tmp_path)
+        assert real_file.exists()
+
+    def test_preserves_subdirectories(self, tmp_path):
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        FortranMacro._remove_symlinks(tmp_path)
+        assert subdir.is_dir()
 
 
 # ---------------------------------------------------------------------------

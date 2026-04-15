@@ -384,6 +384,8 @@ def submit_micro_slurm_job(
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
     """
+    from lysis.execution.fortran_micro import FortranMicro  # noqa: PLC0415
+
     hdf5_path = Path(hdf5_path).resolve()
     executable = Path(executable).resolve()
     run_code = hdf5_path.stem
@@ -394,6 +396,16 @@ def submit_micro_slurm_job(
         prefix=f"lysis-micro-{run_code}-",
         dir=str(staging_root_dir),
     ))
+
+    # ------------------------------------------------------------------
+    # Pre-stage setup files (params.json)
+    # ------------------------------------------------------------------
+    staging_data_dir = staging_dir / "data" / run_code
+    staging_data_dir.mkdir(parents=True, exist_ok=True)
+    fm_setup = FortranMicro.from_hdf5(
+        hdf5_path, str(executable), out_file_code=out_code,
+    )
+    fm_setup._write_setup_files(staging_data_dir)
 
     # ------------------------------------------------------------------
     # Write child script
@@ -565,6 +577,12 @@ def generate_macro_array_script(
     ``SLURM_ARRAY_TASK_ID``), calling
     :meth:`~lysis.execution.fortran_macro.FortranMacro.exec_in_workdir` with
     the task index.
+
+    Each task passes ``--runCode {run_code}/{sim:02}`` to the Fortran binary so
+    it writes directly to ``data/{run_code}/{sim:02}/`` relative to its CWD,
+    isolating each task in its own subdirectory.  Setup files pre-staged in
+    ``{staging_dir}/data/{run_code}/`` are symlinked into each per-sim subdir
+    before execution and removed afterwards.
 
     **Single-tier** (default, ``fast_tmp_root=None``): Fortran writes its
     output directly to ``{staging_dir}/data/{run_code}/{sim:02}/``.

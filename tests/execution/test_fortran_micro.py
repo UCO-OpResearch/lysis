@@ -283,6 +283,44 @@ class TestFortranMicroExecInWorkdir:
             result = fortran_micro.exec_in_workdir(str(tmp_path))
         assert isinstance(result, Path)
 
+    def test_calls_write_setup_files_when_no_index(self, fortran_micro, tmp_path):
+        """exec_in_workdir must write params.json when index is None."""
+        with (
+            patch.object(FortranMicro, "_write_setup_files") as mock_setup,
+            patch("subprocess.run"),
+        ):
+            fortran_micro.exec_in_workdir(tmp_path)
+        assert mock_setup.call_count == 1
+
+    def test_skips_write_setup_files_when_index_set(self, tmp_run, tmp_path):
+        """exec_in_workdir must skip params.json when index is set (pre-staged)."""
+        fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe", index=0)
+        with (
+            patch.object(FortranMicro, "_write_setup_files") as mock_setup,
+            patch("subprocess.run"),
+        ):
+            fm.exec_in_workdir(tmp_path)
+        assert mock_setup.call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# TestFortranMicroWriteSetupFiles
+# ---------------------------------------------------------------------------
+
+
+class TestFortranMicroWriteSetupFiles:
+    """Tests for :meth:`FortranMicro._write_setup_files`."""
+
+    def test_creates_params_json(self, fortran_micro, tmp_path):
+        fortran_micro._write_setup_files(tmp_path)
+        assert (tmp_path / "params.json").exists()
+
+    def test_params_json_contains_micro_params_key(self, fortran_micro, tmp_path):
+        fortran_micro._write_setup_files(tmp_path)
+        with open(tmp_path / "params.json") as fh:
+            loaded = json.load(fh)
+        assert "micro_params" in loaded
+
 
 # ---------------------------------------------------------------------------
 # TestFortranMicroImportResults
