@@ -41,8 +41,17 @@ from lysis.cli import cli
     default=False,
     help="Suppress progress indicators.",
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help=(
+        "If the experiment folder already exists, delete it and recreate from scratch. "
+        "WARNING: all existing data in the folder will be lost."
+    ),
+)
 @click.pass_context
-def init_experiment(ctx, csv_path, data_root, name, description, dry_run, no_progress):
+def init_experiment(ctx, csv_path, data_root, name, description, dry_run, no_progress, force):
     """Initialise an Experiment from a parameter CSV file.
 
     Reads CSV_PATH (one column = one Run), resolves any missing dependent
@@ -99,6 +108,19 @@ def init_experiment(ctx, csv_path, data_root, name, description, dry_run, no_pro
         return
 
     # ── Real run ──────────────────────────────────────────────────────────
+    # If --force, delete the existing experiment folder before recreating.
+    if force:
+        import shutil
+
+        stem = os.path.splitext(os.path.basename(csv_path))[0]
+        exp_name = name or stem
+        exp_path = os.path.join(data_root, exp_name)
+        if os.path.isdir(exp_path):
+            shutil.rmtree(exp_path)
+            console.print(
+                f"[yellow]Removed existing folder:[/yellow] {exp_path}"
+            )
+
     try:
         exp = Experiment.from_csv(
             csv_path, data_root, name=name, description=description, dry_run=False
@@ -108,7 +130,8 @@ def init_experiment(ctx, csv_path, data_root, name, description, dry_run, no_pro
         console.print(f"[bold red]Error:[/bold red] {exc}")
         console.print(
             f"Tip: use [bold]--name[/bold] to choose a different folder name "
-            f"(e.g. [bold]--name {stem}-v2[/bold])."
+            f"(e.g. [bold]--name {stem}-v2[/bold]), or use [bold]--force[/bold] "
+            f"to replace the existing folder."
         )
         ctx.exit(1)
         return

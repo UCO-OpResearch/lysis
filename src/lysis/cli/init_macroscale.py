@@ -66,8 +66,17 @@ def _coerce_value(val_str: str):
     default=False,
     help="Suppress progress indicators.",
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help=(
+        "If macroscale structure already exists, replace it with blank tables. "
+        "WARNING: any existing macroscale simulation data will be lost."
+    ),
+)
 @click.pass_context
-def init_macroscale(ctx, path, params, dry_run, no_progress):
+def init_macroscale(ctx, path, params, dry_run, no_progress, force):
     """Initialise macroscale structure in one or more HDF5 files.
 
     PATH may be an experiment folder (initialises all runs) or a single HDF5
@@ -107,11 +116,11 @@ def init_macroscale(ctx, path, params, dry_run, no_progress):
     # ── Dispatch: folder or single H5 file ───────────────────────────────
     if path_obj.is_dir():
         _init_experiment_folder(
-            ctx, console, path_obj, param_overrides, dry_run, no_progress
+            ctx, console, path_obj, param_overrides, dry_run, no_progress, force
         )
     elif path_obj.suffix == ".h5":
         _init_single_h5(
-            ctx, console, path_obj, param_overrides, dry_run, no_progress
+            ctx, console, path_obj, param_overrides, dry_run, no_progress, force
         )
     else:
         console.print(
@@ -124,7 +133,7 @@ def init_macroscale(ctx, path, params, dry_run, no_progress):
 # ─── Folder mode ──────────────────────────────────────────────────────────────
 
 
-def _init_experiment_folder(ctx, console, folder_path, param_overrides, dry_run, no_progress):
+def _init_experiment_folder(ctx, console, folder_path, param_overrides, dry_run, no_progress, force):
     """Initialise macroscale for every run in an experiment folder."""
     from lysis.config.experiment import Experiment
     from lysis.dataio.datastore import DataStore
@@ -159,6 +168,8 @@ def _init_experiment_folder(ctx, console, folder_path, param_overrides, dry_run,
                     _check_microscale_ready(ds, run.run_code)
                 results.append((run.run_code, "dry-run OK"))
             else:
+                if force:
+                    _delete_macroscale_data(h5_path)
                 with DataStore(run.run_code, exp.path, mode="a") as ds:
                     ds.initialize_macroscale(run.macro_params)
                 results.append((run.run_code, "initialized"))
@@ -174,7 +185,7 @@ def _init_experiment_folder(ctx, console, folder_path, param_overrides, dry_run,
 # ─── Single H5 mode ───────────────────────────────────────────────────────────
 
 
-def _init_single_h5(ctx, console, h5_path, param_overrides, dry_run, no_progress):
+def _init_single_h5(ctx, console, h5_path, param_overrides, dry_run, no_progress, force):
     """Initialise macroscale for a single HDF5 file."""
     from lysis.config.paramcheck import load_macro_params
     from lysis.dataio.datastore import DataStore
@@ -215,6 +226,10 @@ def _init_single_h5(ctx, console, h5_path, param_overrides, dry_run, no_progress
         )
         return
 
+    # If --force, wipe any existing macroscale data before reinitializing.
+    if force:
+        _delete_macroscale_data(str(h5_path))
+
     # Initialize macroscale
     try:
         with DataStore(run_code, run_dir, mode="a") as ds:
@@ -231,6 +246,24 @@ def _init_single_h5(ctx, console, h5_path, param_overrides, dry_run, no_progress
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _delete_macroscale_data(hdf5_path: str):
+    """Remove all macroscale datasets and parameter groups from an HDF5 file.
+
+    Deletes the ``macro_data`` group (which holds macroscale parameters as
+    attributes and all per-simulation datasets) and any
+    ``log_files/macro_log__sim_*`` entries.  Microscale data is untouched.
+    """
+    import h5py
+
+    with h5py.File(hdf5_path, "a") as f:
+        if "macro_data" in f:
+            del f["macro_data"]
+        if "log_files" in f:
+            macro_keys = [k for k in f["log_files"] if k.startswith("macro_log__sim_")]
+            for key in macro_keys:
+                del f[f"log_files/{key}"]
 
 
 def _check_microscale_ready(ds, run_code):
