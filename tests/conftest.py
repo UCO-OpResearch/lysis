@@ -118,7 +118,7 @@ _FIXTURE_DIR = _REPO_ROOT / "tests" / "fixtures" / "fortran_sample"
 _FULL_DATA_DIR = _REPO_ROOT / "data" / "2026-02-18-1723"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def fortran_sample_path():
     """Path to the committed truncated Fortran data fixture.
 
@@ -130,7 +130,7 @@ def fortran_sample_path():
     return str(_FIXTURE_DIR)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def full_data_path():
     """Path to the full (~665MB) Fortran data directory (local only).
 
@@ -146,7 +146,7 @@ _FIXTURE_V190_DIR = _REPO_ROOT / "tests" / "fixtures" / "fortran_v190_sample"
 _FULL_DATA_V190_DIR = _REPO_ROOT / "data" / "2026-02-28-1907"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def fortran_v190_sample_path():
     """Path to the committed truncated v1.90.0 Fortran data fixture.
 
@@ -159,7 +159,7 @@ def fortran_v190_sample_path():
     return str(_FIXTURE_V190_DIR)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def full_data_v190_path():
     """Path to the full (~190MB) v1.90.0 Fortran data directory (local only).
 

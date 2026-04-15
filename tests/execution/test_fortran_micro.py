@@ -543,15 +543,16 @@ class TestImportResultsWithFixture:
     pipeline.
     """
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def reference(self, fortran_sample_path):
         """Reference v2.0.0 data dict via the established conversion path."""
         return _build_reference_v200(fortran_sample_path)
 
-    @pytest.fixture
-    def imported_hdf5(self, fortran_sample_path, tmp_path):
+    @pytest.fixture(scope="class")
+    def imported_hdf5(self, fortran_sample_path, tmp_path_factory):
         """Run import_results on a copy of the fixture and return the HDF5 path."""
         run_code = "test-import"
+        tmp_path = tmp_path_factory.mktemp("import_fixture")
 
         # Create the HDF5 file with empty microscale_out datasets.
         with DataStore.create(run_code, str(tmp_path), MicroParameters()):
@@ -705,7 +706,7 @@ class TestFortranBinaryExecution:
 
     _SKIP_DATASETS = {"params", "micro_log"}
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def reference(self, fortran_sample_path):
         """Reference v2.0.0 data sliced to the first 1,000 simulations."""
         ref = _build_reference_v200(fortran_sample_path)
@@ -720,13 +721,14 @@ class TestFortranBinaryExecution:
                 sliced[key] = arr
         return sliced
 
-    @pytest.fixture
-    def executed_hdf5(self, tmp_path):
+    @pytest.fixture(scope="class")
+    def executed_hdf5(self, tmp_path_factory):
         """Run the Fortran binary and import results into a fresh HDF5 file."""
         from lysis.config.constants import Q_
 
         binary = str(_REPO_ROOT / "bin" / "micro_rates")
         run_code = "fortran-run"
+        tmp_path = tmp_path_factory.mktemp("fortran_binary")
 
         mp = MicroParameters(
             nodes_in_micro_row=13,
