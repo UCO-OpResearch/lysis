@@ -225,7 +225,7 @@ def generate_micro_child_script(
         "mem": 3096,
         "ntasks": 1,
         "cpus-per-task": 1,
-        "exclusive": "user",
+        "exclusive=user": "",
     }
     if partition:
         sbatch_opts["partition"] = partition
@@ -425,7 +425,7 @@ def submit_micro_slurm_job(
         "mem": 3096,
         "ntasks": 1,
         "cpus-per-task": 1,
-        "exclusive": "user",
+        "exclusive=user": "",
     }
     if partition:
         sbatch_opts["partition"] = partition
@@ -609,7 +609,7 @@ def generate_macro_array_script(
         "mem": 3096,
         "ntasks": 1,
         "cpus-per-task": 1,
-        "exclusive": "user",
+        "exclusive=user": "",
     }
     if partition:
         sbatch_opts["partition"] = partition
@@ -795,7 +795,7 @@ def submit_macro_slurm_job(
         "mem": 3096,
         "ntasks": 1,
         "cpus-per-task": 1,
-        "exclusive": "user",
+        "exclusive=user": "",
     }
     if partition:
         sbatch_opts["partition"] = partition
