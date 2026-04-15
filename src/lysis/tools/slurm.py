@@ -509,6 +509,9 @@ while True:
 
 print("All array tasks complete.", flush=True)
 
+# Allow NFS to flush writes from the compute nodes before reading.
+time.sleep(60)
+
 # ---------------------------------------------------------------------------
 # Import results into HDF5
 # ---------------------------------------------------------------------------
