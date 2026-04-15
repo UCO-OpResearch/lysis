@@ -91,11 +91,9 @@ __status__ = "Development"
 
 ################################
 ###  NOTE:
-###  In the following dataclass definitions, do not use double-quotes (")
+###  In the following dataclass definitions, do not use triple-quotes (""")
 ###  Except for the docstrings below each definition.
-###  Otherwise it will mess up the units() and fortran() regexes
-###
-### TODO: Fix the regexes so that this is no longer a problem
+###  Single and double-quotes are fine within docstrings.
 ################################
 
 
@@ -203,7 +201,7 @@ class Parameters:
             + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
             + r":.*[\r\n]*"  # the rest of that line
             + r".*\"\"\""  # a triple-quote
-            + r"[^\"]*"  # text that is not a douple-quote
+            + r"(?:(?!\"\"\")[\s\S])*?"  # docstring content (may include quotes)
             + r":Units:\s"  # the units tag
             + r"([^\n\r]+)"  # Second capture group, the units
             + r"[\r\n]",  # A line break
@@ -256,7 +254,7 @@ class Parameters:
             + r"([a-zA-Z0-9_]+)"  # First capture group, the name of the parameter
             + r":.*[\r\n]*"  # the rest of that line
             + r".*\"\"\""  # a triple-quote
-            + r"[^\"]*"  # text that is not a douple-quote
+            + r"(?:(?!\"\"\")[\s\S])*?"  # docstring content (may include quotes)
             + r":Fortran:\s"  # the Fortran tag
             + r"([\w_]+(-1)?)"  # Second capture group, the fortran name, possibly with a -1
             + r"(\s=[^\"]*)?"  # Third capture group (optional), a formula for the parameter in Fortran

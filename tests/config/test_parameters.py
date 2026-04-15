@@ -298,6 +298,56 @@ class TestMicroParametersMetadata:
         assert fn.get("binding_sites") == "bs"
 
 
+class TestMetadataRegexCompleteness:
+    """Verify units() and fortran_names() capture every tagged parameter.
+
+    These tests independently parse parameters.py to find all :Units: and
+    :Fortran: tags, then check that the regex-based methods don't silently
+    drop any of them (e.g. because a docstring contains double-quotes).
+    """
+
+    @staticmethod
+    def _parse_tags(tag_name):
+        """Parse all non-None :tag_name: values from parameter docstrings."""
+        import pkgutil
+        import re
+
+        text = pkgutil.get_data("lysis.config", "parameters.py").decode("utf-8")
+        # Match 4-space-indented field declarations whose docstring contains
+        # the given tag.  The lookahead prevents crossing """ boundaries.
+        tag_pattern = re.compile(
+            r"^\s{4}([a-zA-Z0-9_]+):.*\n"  # field declaration
+            r"\s{4}\"{3}(?:(?!\"{3})[\s\S])*?"  # docstring content (stops at """)
+            rf":{tag_name}:\s+([^\s\"]+)",  # tag value (excludes quotes)
+            re.M,
+        )
+        return {
+            m.group(1): m.group(2)
+            for m in tag_pattern.finditer(text)
+            if m.group(2) != "None"
+        }
+
+    def test_no_missing_fortran_tags(self):
+        """Every non-None :Fortran: tag in parameters.py is captured."""
+        expected = self._parse_tags("Fortran")
+        actual = MicroParameters.fortran_names()
+        missing = set(expected) - set(actual)
+        assert not missing, (
+            f"fortran_names() is missing parameters: {missing}. "
+            f"The regex likely fails on docstrings containing double-quotes."
+        )
+
+    def test_no_missing_units_tags(self):
+        """Every non-None :Units: tag in parameters.py is captured."""
+        expected = self._parse_tags("Units")
+        actual = MicroParameters.units()
+        missing = set(expected) - set(actual)
+        assert not missing, (
+            f"units() is missing parameters: {missing}. "
+            f"The regex likely fails on docstrings containing double-quotes."
+        )
+
+
 # ===========================================================================
 # MacroParameters — instantiation
 # ===========================================================================
