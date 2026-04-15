@@ -620,6 +620,19 @@ class TestGenerateMacroArrayScript:
         )
         assert "/nvme/scratch" in script
 
+    def test_single_tier_no_cp_of_executable(self, tmp_path):
+        """Single-tier script must not copy the executable (pre-staged by submit_macro_slurm_job).
+
+        Regression test: all array tasks share the same staging dir, so any
+        ``cp`` in the array script causes a race where tasks 1..N fail with
+        "File exists" after task 0 wins the copy.
+        """
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+        )
+        assert "cp " not in script
+
 
 # ---------------------------------------------------------------------------
 # TestSubmitMacroSlurmJob
@@ -631,10 +644,10 @@ class TestSubmitMacroSlurmJob:
 
     @pytest.fixture
     def mock_write_setup(self):
-        """Patch FortranMacro._write_setup_files to avoid needing HDF5 data."""
+        """Patch FortranMacro._write_setup_files and shutil.copy2 to avoid needing real files."""
         with patch(
             "lysis.execution.fortran_macro.FortranMacro._write_setup_files"
-        ) as mock:
+        ) as mock, patch("lysis.tools.slurm.shutil.copy2"):
             yield mock
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=999)
@@ -760,3 +773,22 @@ class TestSubmitMacroSlurmJob:
             macro_hdf5, "/bin/macro.exe", staging_root=staging_root
         )
         assert mock_write_setup.call_count == 1
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_executable_pre_staged_in_staging_dir(
+        self, mock_sbatch, macro_hdf5, tmp_path
+    ):
+        """Executable must be copied to staging dir before the array job is submitted.
+
+        Regression test: without pre-staging, each array task races to cp the
+        binary to the shared staging dir and all but the first fail with
+        "File exists".
+        """
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        fake_exe = tmp_path / "macro.exe"
+        fake_exe.write_bytes(b"fake binary")
+        with patch("lysis.execution.fortran_macro.FortranMacro._write_setup_files"):
+            submit_macro_slurm_job(macro_hdf5, str(fake_exe), staging_root=staging_root)
+        staging_dir = list(staging_root.iterdir())[0]
+        assert (staging_dir / "macro.exe").exists()

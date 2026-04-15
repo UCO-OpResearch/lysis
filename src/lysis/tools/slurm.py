@@ -634,12 +634,10 @@ def generate_macro_array_script(
 
     if fast_tmp_root is None:
         # ------------------------------------------------------------------
-        # Single-tier: Fortran writes directly to the shared staging dir
+        # Single-tier: Fortran writes directly to the shared staging dir.
+        # The executable is pre-staged by submit_macro_slurm_job() before
+        # any array tasks start, so no cp is needed here.
         # ------------------------------------------------------------------
-        setup = f"""\
-# Setup — copy binary to staging dir (setup files already pre-staged)
-cp "{executable}" "{staging_dir}/" """
-
         execute = f"""\
 # Execute macroscale Fortran binary via lysis
 source ~/.bashrc && source ~/lysis.sh
@@ -655,7 +653,7 @@ fm = FortranMacro.from_hdf5(
 fm.exec_in_workdir(Path('{staging_dir}'))
 " """
 
-        sections = [setup, execute]
+        sections = [execute]
 
     else:
         # ------------------------------------------------------------------
@@ -778,6 +776,9 @@ def submit_macro_slurm_job(
         hdf5_path, str(executable), in_file_code=in_code, out_file_code=out_code,
     )
     fm_setup._write_setup_files(staging_data_dir)
+    # Pre-stage the executable so no array task needs to cp it — avoids a
+    # race where multiple tasks simultaneously try to create the same file.
+    shutil.copy2(executable, staging_dir)
 
     # Read n_sims from the run's macro_params
     n_sims = fm_setup.run.macro_params.macro_simulations
