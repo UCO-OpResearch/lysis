@@ -927,6 +927,28 @@ def _write_file_binary(
     )
 
 
+def _params_json_default(obj):
+    """JSON encoder for parameter dicts: numpy scalars → native Python, others → str.
+
+    The inverse of
+    :meth:`~lysis.config.parameters.Parameters.to_quantity_or_number`: numpy
+    wrapper types are unwrapped to plain Python ``int`` / ``float`` / ``bool``
+    so ``json.dump`` writes them as JSON numbers rather than quoted strings.
+    Pint :class:`~pint.Quantity` objects (and any other non-serialisable type)
+    fall back to their ``str()`` representation, which preserves the unit.
+
+    :param obj: Object to encode.
+    :return: JSON-serialisable equivalent.
+    """
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    return str(obj)
+
+
 def _write_file_json(
     data: BaseParamsType,
     path: AnyStr,
@@ -941,9 +963,11 @@ def _write_file_json(
     Inverse of :func:`_read_file_json`. Writes the data dictionary to a
     human-readable JSON file with 4-space indentation.
 
-    Non-serializable objects (e.g. Pint :class:`~pint.Quantity` values
-    returned by :meth:`~lysis.config.parameters.Parameters.to_basedict`) are
-    converted to strings via ``default=str``.
+    NumPy scalar types (``np.integer``, ``np.floating``, ``np.bool_``) are
+    written as plain JSON numbers so they round-trip correctly when the file
+    is read back.  Pint :class:`~pint.Quantity` values (and any other
+    non-serialisable type) fall back to their ``str()`` representation,
+    preserving the unit string.
 
     :param data: Parameter dictionary to write
     :type data: BaseParamsType
@@ -964,7 +988,7 @@ def _write_file_json(
     with open(
         os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)), "w"
     ) as file:
-        json.dump(data, file, indent=4, default=str)
+        json.dump(data, file, indent=4, default=_params_json_default)
 
 
 def _write_hdf5_dataset(

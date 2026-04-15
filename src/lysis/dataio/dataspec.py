@@ -1120,7 +1120,9 @@ def parse_shape(
             # String dimension - resolve from parameter dictionary
             # Format: "dict_name.param_name" e.g., "macro_params.total_molecules"
             parts = i.split(".")
-            parsed_shape.append(params[parts[0]][parts[1]])
+            # Convert to int: params may come from JSON (stored as strings via
+            # default=str) or from to_basedict() (np.int64), so normalise here.
+            parsed_shape.append(int(params[parts[0]][parts[1]]))
         else:
             raise RuntimeError(f"Incorrect shape format: {i}. Expected int or str.")
     return tuple(parsed_shape)
