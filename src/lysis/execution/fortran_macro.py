@@ -5,18 +5,27 @@ Fortran macroscale simulation.  It converts Python
 :class:`~lysis.config.run.Run` parameters to command-line arguments,
 generates the required neighbor-structure input file, and captures binary
 stdout to a log file.
+
+The preferred high-level entry point is :meth:`FortranMacro.run_full`.
+For step-by-step control use :meth:`FortranMacro.exec_in_workdir` followed
+by :meth:`FortranMacro.import_results`.
 """
 
-from dataclasses import dataclass
+import subprocess
+
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import AnyStr
 
 import numpy as np
 
 from ..config.parameters import MacroParameters, MicroParameters
+from ..config.run import Run
 from ..dataio.dataspec import dataspec
-from ..dataio.fileops import write_dataset
+from ..dataio.datastore import DataStore, COMPATIBLE_DATASPEC_VERSION
+from ..dataio.fileops import write_dataset, write_data_collection
 from ..geometry.edge_grid import generate_fortran_neighborhood_structure
-from .fortran import FortranRunner
+from .fortran import FortranRunner, MACRO_FORTRAN_DATASPEC_VERSION
 
 __author__ = "Brittany Bannish and Bradley Paynter"
 __copyright__ = "Copyright 2025, Brittany Bannish"
@@ -34,8 +43,9 @@ class FortranMacro(FortranRunner):
 
     Manages execution of the compiled Fortran macroscale simulation binary.
     Converts Python :class:`~lysis.config.run.Run` parameters to
-    command-line arguments, generates the required neighbor-structure input
-    file (``neighbors.dat``), and captures binary stdout to a log file.
+    command-line arguments, generates the required input files
+    (macroscale_in data, ``neighbors.dat``), and captures binary stdout
+    to a log file.
 
     Supports parallel execution by splitting the RNG seed when :attr:`index`
     is set.
@@ -111,8 +121,71 @@ class FortranMacro(FortranRunner):
     def _log_prefix(self) -> str:
         return "macro"
 
+    def _collection_name(self) -> str:
+        return "macroscale_out"
+
+    def _fortran_dataspec_version(self) -> str:
+        return MACRO_FORTRAN_DATASPEC_VERSION
+
+    def _pre_execute(self) -> None:
+        """Generate neighborhoods before the legacy ``execute()`` path runs."""
+        self.generate_neighborhoods()
+
     # ------------------------------------------------------------------
-    # Neighborhood generation
+    # Construction helpers
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_hdf5(
+        cls,
+        hdf5_path: "Path | str",
+        executable: str,
+        in_file_code: str = "",
+        out_file_code: str = "",
+        index: "int | None" = None,
+    ) -> "FortranMacro":
+        """Construct a :class:`FortranMacro` from an existing HDF5 run file.
+
+        Reads :class:`~lysis.config.parameters.MicroParameters` and
+        :class:`~lysis.config.parameters.MacroParameters` from the HDF5 file
+        and builds the underlying :class:`~lysis.config.run.Run` automatically.
+
+        :param hdf5_path: Full path to the ``.h5`` file (must contain both
+            ``micro_params`` and ``macro_params``).
+        :type hdf5_path: Path or str
+        :param executable: Path to the compiled Fortran macroscale binary.
+        :type executable: str
+        :param in_file_code: Input file code suffix, defaults to ``""``.
+        :type in_file_code: str, optional
+        :param out_file_code: Output file code suffix, defaults to ``""``.
+        :type out_file_code: str, optional
+        :param index: Parallel run index for seed splitting, defaults to
+            ``None``.
+        :type index: int, optional
+        :return: Fully configured :class:`FortranMacro` instance.
+        :rtype: FortranMacro
+        :raises ValueError: If the HDF5 file does not contain ``macro_params``
+            (i.e. ``initialize_macroscale`` has not been called).
+        """
+        hdf5_path = Path(hdf5_path)
+        run = Run(str(hdf5_path.parent), run_code=hdf5_path.stem)
+        run.load_params_from_hdf5()
+        if run.macro_params is None:
+            raise ValueError(
+                f"HDF5 file '{hdf5_path}' does not contain macro_params. "
+                "Call DataStore.initialize_macroscale() before running "
+                "the macroscale simulation."
+            )
+        return cls(
+            run=run,
+            executable=str(Path(executable).resolve()),
+            in_file_code=in_file_code,
+            out_file_code=out_file_code,
+            index=index,
+        )
+
+    # ------------------------------------------------------------------
+    # Neighborhood generation (legacy path)
     # ------------------------------------------------------------------
 
     def generate_neighborhoods(self):
@@ -122,6 +195,10 @@ class FortranMacro(FortranRunner):
         hexagonal grid and writes it to ``neighbors.dat`` in
         ``run.os_path``.  Fortran uses 1-based indexing, so all indices are
         incremented by 1.
+
+        Used by the legacy :meth:`execute` path.  The HDF5-integrated
+        :meth:`exec_in_workdir` path generates neighbors via
+        :meth:`_generate_macroscale_input_files` instead.
 
         :raises OSError: If the output file cannot be written.
         """
@@ -138,27 +215,172 @@ class FortranMacro(FortranRunner):
         )
 
     # ------------------------------------------------------------------
+    # Setup helpers
+    # ------------------------------------------------------------------
+
+    def _generate_macroscale_input_files(self, data_dir: Path) -> None:
+        """Read microscale output from HDF5 and write v1.99.0 macroscale_in files.
+
+        1. Opens the run's HDF5 DataStore in read-only mode.
+        2. Reads the six required microscale datasets as numpy arrays.
+        3. Calls :func:`~lysis.dataio.dataconvert.generate_macroscale_in`
+           to produce v2.0.0 macroscale_in data (including
+           ``edge_grid_neighbors``).
+        4. Converts the result to v1.99.0 via
+           :func:`~lysis.dataio.dataconvert.convert_data`.
+        5. Writes the v1.99.0 text files (``tPAleave``, ``tsectPA``,
+           ``lysismat``, ``lenlysisvect``, ``neighbors``) to *data_dir*.
+
+        :param data_dir: Directory to write the macroscale input files into.
+        :type data_dir: Path
+        """
+        # Lazy imports to avoid circular imports
+        from ..dataio.dataconvert import generate_macroscale_in, convert_data  # noqa: PLC0415
+
+        micro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["microscale_out"]
+        dataset_names = [
+            "pli_first_time",
+            "tpa_leaving_time",
+            "fiber_degraded",
+            "sim_final_time",
+            "tpa_unbound_by_pli",
+            "tpa_unbound_kinetic",
+        ]
+
+        with DataStore(self.run.run_code, self.run.os_path, mode="r") as ds:
+            in_data = {}
+            for name in dataset_names:
+                ds_spec = micro_spec.data[name]
+                in_data[name] = ds._file[ds_spec.data_location][:]
+
+            in_data["params"] = {
+                "micro_params": self.run.micro_params.to_basedict(),
+                "macro_params": self.run.macro_params.to_basedict(),
+            }
+
+        # Generate v2.0.0 macroscale_in (includes edge_grid_neighbors)
+        macro_in_v200 = generate_macroscale_in(in_data)
+
+        # Convert to v1.99.0 for Fortran consumption
+        macro_in_v199 = convert_data(macro_in_v200, "v2.0.0", "v1.99.0")
+
+        # Write v1.99.0 text files to data_dir
+        write_data_collection(
+            macro_in_v199,
+            str(data_dir),
+            [dataspec["v1.99.0"]["macroscale_in"]],
+            [self.in_file_code],
+        )
+
+    def _write_setup_files(self, data_dir: Path) -> None:
+        """Write all shared input files needed before the Fortran binary runs.
+
+        Writes:
+
+        1. ``params.json`` — both ``micro_params`` and ``macro_params``
+           (needed by the v1.99.0 import pipeline to resolve dataset shapes).
+        2. Macroscale input text files and ``neighbors.dat`` — generated
+           from HDF5 microscale output via
+           :meth:`_generate_macroscale_input_files`.
+
+        :param data_dir: Directory to write setup files into.
+        :type data_dir: Path
+        """
+        # Write params.json with both micro and macro params
+        params_data = {
+            "micro_params": self.run.micro_params.to_basedict(),
+            "macro_params": self.run.macro_params.to_basedict(),
+        }
+        write_dataset(
+            params_data,
+            str(data_dir),
+            dataspec[MACRO_FORTRAN_DATASPEC_VERSION]["macroscale_out"].params,
+        )
+
+        # Write macroscale_in text files (tPAleave, tsectPA, lysismat,
+        # lenlysisvect, neighbors)
+        self._generate_macroscale_input_files(data_dir)
+
+    # ------------------------------------------------------------------
     # Execution
     # ------------------------------------------------------------------
 
-    def execute(self) -> None:
-        """Execute the Fortran macroscale simulation.
+    def exec_in_workdir(self, work_dir: "Path | str") -> Path:
+        """Execute the Fortran macroscale binary for each simulation.
 
-        Performs the complete workflow:
+        The Fortran code writes its binary output to ``data/{run_code}/``
+        relative to its working directory.  This method:
 
-        1. Generates ``neighbors.dat`` via :meth:`generate_neighborhoods`.
-        2. Builds command-line arguments via :meth:`exec_command`.
-        3. Runs the Fortran binary, capturing stdout to
-           ``macro{out_file_code}.txt`` in ``run.os_path``.
+        1. Creates ``{work_dir}/data/{run_code}/`` (the shared data directory).
+        2. Writes setup files (``params.json``, macroscale_in text files,
+           ``neighbors.dat``) unless :attr:`index` is set (in which case they
+           are assumed to be pre-staged by the caller, e.g.
+           :func:`~lysis.tools.slurm.submit_macro_slurm_job`).
+        3. Determines the simulation range: if :attr:`index` is set, runs only
+           that simulation; otherwise runs all ``macro_simulations``.
+        4. For each simulation:
 
-        Blocks until the Fortran binary exits.
+           a. Builds a per-simulation command with
+              ``--outFileCode {out_file_code}_{sim:02}``.
+           b. Runs the Fortran binary, capturing stdout to
+              ``{data_dir}/macro{out_file_code}_{sim:02}.txt``.
+           c. Creates ``{data_dir}/{sim:02}/`` and moves all output files
+              matching ``*{out_file_code}_{sim:02}*`` into it, producing
+              the directory layout expected by :meth:`import_results`.
 
-        :raises FileNotFoundError: If the executable does not exist.
-        :raises OSError: If output files cannot be created.
-
-        Side effects:
-            - Writes ``neighbors.dat`` to ``run.os_path``.
-            - Writes ``macro{out_file_code}.txt`` to ``run.os_path``.
+        :param work_dir: Working directory for the subprocess.  The binary
+            itself must already be present at :attr:`executable` (absolute
+            path recommended).
+        :type work_dir: Path or str
+        :return: Path to ``{work_dir}/data/{run_code}/`` — the directory
+            containing all Fortran output for this run.
+        :rtype: Path
+        :raises subprocess.CalledProcessError: If any Fortran invocation exits
+            with a non-zero status.
         """
-        self.generate_neighborhoods()
-        super().execute()
+        work_dir = Path(work_dir)
+        data_dir = work_dir / "data" / self.run.run_code
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write setup files only for local (non-indexed) runs.
+        # When index is set the caller pre-stages the setup files.
+        if self.index is None:
+            self._write_setup_files(data_dir)
+
+        # Determine simulation range
+        n_sims = self.run.macro_params.macro_simulations
+        macro_seed = self.run.macro_params.macro_seed
+        seeds = np.random.SeedSequence(macro_seed).generate_state(n_sims)
+
+        sims = [self.index] if self.index is not None else list(range(n_sims))
+
+        for sim in sims:
+            sim_code = f"{self.out_file_code}_{sim:02}"
+
+            # Build per-simulation params: 1 sim, this sim's seed
+            params = asdict(self.run.macro_params)
+            params["macro_simulations"] = 1
+            params["macro_seed"] = int(np.array(seeds[sim]).astype(np.int32))
+
+            # Build command
+            sim_arguments = [
+                "--runCode", self.run.run_code,
+                "--inFileCode", self.in_file_code,
+                "--outFileCode", sim_code,
+            ]
+            sim_arguments += self._params_to_arguments(params)
+            sim_arguments += self._post_arguments(params)
+            command = [self.executable] + sim_arguments
+
+            # Execute, capturing stdout to the log file in data_dir
+            log_file = data_dir / f"macro{sim_code}.txt"
+            with open(log_file, "w") as fh:
+                subprocess.run(command, stdout=fh, cwd=str(work_dir), check=True)
+
+            # Organize output into {sim:02}/ subdirectory
+            sim_subdir = data_dir / f"{sim:02}"
+            sim_subdir.mkdir(exist_ok=True)
+            for f in data_dir.glob(f"*{sim_code}*"):
+                f.rename(sim_subdir / f.name)
+
+        return data_dir

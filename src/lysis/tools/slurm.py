@@ -440,3 +440,371 @@ def submit_micro_slurm_job(
     master_sh_path.chmod(0o755)
 
     return gs.sbatch([str(master_sh_path)])
+
+
+# ---------------------------------------------------------------------------
+# Macroscale Slurm support
+# ---------------------------------------------------------------------------
+
+#: Template for the macro master Python script.  Substitution keys use
+#: ``$name`` syntax so Python braces in the template body are untouched.
+_MACRO_MASTER_PY_TEMPLATE = Template('''\
+#!/usr/bin/env python3
+"""Master Slurm job: submit macro array job, poll for completion, import results."""
+import time
+import shutil
+from pathlib import Path
+
+import GooseSLURM as gs
+from lysis.config.run import Run
+from lysis.execution.fortran_macro import FortranMacro
+
+STAGING_DIR = Path($staging_dir)
+HDF5_PATH = Path($hdf5_path)
+RUN_CODE = $run_code
+OUT_FILE_CODE = $out_file_code
+KEEP_TMPDIR = $keep_tmpdir
+
+# ---------------------------------------------------------------------------
+# Submit array job
+# ---------------------------------------------------------------------------
+array_script = STAGING_DIR / "array.sh"
+array_job_id = gs.sbatch([str(array_script)])
+print(f"Submitted array job {array_job_id}: {array_script.name}", flush=True)
+
+# ---------------------------------------------------------------------------
+# Poll until all array tasks complete
+# ---------------------------------------------------------------------------
+base_prefix = str(array_job_id) + "_"
+# Initial sleep to allow tasks to appear in the queue
+time.sleep(30)
+while True:
+    squeue_rows = gs.squeue.read()
+    running_ids = {row["JOBID"] for row in squeue_rows}
+    for row in squeue_rows:
+        if row["JOBID"].startswith(base_prefix):
+            state = row.get("STATE", "").upper()
+            if state in ("FAILED", "CANCELLED"):
+                raise RuntimeError(
+                    f"Array task {row[\'JOBID\']} entered state {state}"
+                )
+    still_running = any(jid.startswith(base_prefix) for jid in running_ids)
+    if not still_running:
+        break
+    time.sleep(30)
+
+print("All array tasks complete.", flush=True)
+
+# ---------------------------------------------------------------------------
+# Import results into HDF5
+# ---------------------------------------------------------------------------
+data_dir = STAGING_DIR / "data" / RUN_CODE
+run = Run(str(HDF5_PATH.parent), run_code=RUN_CODE)
+fm = FortranMacro(run=run, out_file_code=OUT_FILE_CODE)
+fm.import_results(
+    data_dir,
+    keep_on_failure=True,
+    keep_tmpdir=KEEP_TMPDIR,
+)
+print("Results imported successfully.", flush=True)
+
+# ---------------------------------------------------------------------------
+# Clean up staging directory
+# ---------------------------------------------------------------------------
+if not KEEP_TMPDIR:
+    shutil.rmtree(STAGING_DIR, ignore_errors=True)
+    print("Staging directory removed.", flush=True)
+
+print("Master job complete.", flush=True)
+''')
+
+
+def _generate_macro_master_py(
+    staging_dir: Path,
+    hdf5_path: Path,
+    run_code: str,
+    out_file_code: str,
+    keep_tmpdir: bool,
+) -> str:
+    """Return the content of the macro master Python script with values substituted.
+
+    :param staging_dir: Absolute path to the shared staging directory.
+    :param hdf5_path: Absolute path to the target ``.h5`` file.
+    :param run_code: Run identifier (HDF5 file stem).
+    :param out_file_code: Output file code suffix for the Fortran binary.
+    :param keep_tmpdir: Whether to preserve the staging directory on success.
+    :return: Python script text.
+    :rtype: str
+    """
+    return _MACRO_MASTER_PY_TEMPLATE.substitute(
+        staging_dir=repr(str(staging_dir)),
+        hdf5_path=repr(str(hdf5_path)),
+        run_code=repr(run_code),
+        out_file_code=repr(out_file_code),
+        keep_tmpdir=repr(keep_tmpdir),
+    )
+
+
+def generate_macro_array_script(
+    staging_dir: "Path | str",
+    run_code: str,
+    hdf5_path: "Path | str",
+    executable: "Path | str",
+    n_sims: int,
+    in_code: str = "",
+    out_code: str = "",
+    *,
+    partition: Optional[str] = None,
+    fast_tmp_root: Optional[str] = None,
+) -> str:
+    """Generate a Slurm array job script for the macroscale Fortran simulation.
+
+    Each array task handles one simulation (indexed by
+    ``SLURM_ARRAY_TASK_ID``), calling
+    :meth:`~lysis.execution.fortran_macro.FortranMacro.exec_in_workdir` with
+    the task index.
+
+    **Single-tier** (default, ``fast_tmp_root=None``): Fortran writes its
+    output directly to ``{staging_dir}/data/{run_code}/{sim:02}/``.
+
+    **Two-tier** (``fast_tmp_root`` provided): Fortran writes to a private
+    ``mktemp -d -p {fast_tmp_root}`` directory on the compute node.  Setup
+    files are copied from staging first, the simulation runs locally, and the
+    per-simulation output directory is then moved to staging.
+
+    :param staging_dir: Path to the shared staging directory (must already
+        exist when the script runs).
+    :type staging_dir: Path or str
+    :param run_code: Run identifier (used to name the output subdirectory).
+    :type run_code: str
+    :param hdf5_path: Full path to the run's ``.h5`` file.
+    :type hdf5_path: Path or str
+    :param executable: Path to the compiled Fortran macroscale binary.
+    :type executable: Path or str
+    :param n_sims: Total number of simulations (sets ``--array=0-{n_sims-1}``).
+    :type n_sims: int
+    :param in_code: Input file code suffix, defaults to ``""``.
+    :type in_code: str, optional
+    :param out_code: Output file code suffix, defaults to ``""``.
+    :type out_code: str, optional
+    :param partition: Slurm partition for ``#SBATCH --partition``, defaults
+        to ``None`` (no partition directive).
+    :type partition: str, optional
+    :param fast_tmp_root: Root directory for fast node-local scratch.  When
+        ``None`` (default) single-tier mode is used.
+    :type fast_tmp_root: str, optional
+    :return: Slurm array job bash script text.
+    :rtype: str
+    """
+    staging_dir = Path(staging_dir)
+    hdf5_path = Path(hdf5_path)
+    executable = Path(executable)
+    binary_name = executable.name
+
+    sbatch_opts = {
+        "array": f"0-{n_sims - 1}",
+        "nodes": 1,
+        "mem": 3096,
+        "ntasks": 1,
+        "cpus-per-task": 1,
+    }
+    if partition:
+        sbatch_opts["partition"] = partition
+
+    if fast_tmp_root is None:
+        # ------------------------------------------------------------------
+        # Single-tier: Fortran writes directly to the shared staging dir
+        # ------------------------------------------------------------------
+        setup = f"""\
+# Setup — copy binary to staging dir (setup files already pre-staged)
+cp "{executable}" "{staging_dir}/" """
+
+        execute = f"""\
+# Execute macroscale Fortran binary via lysis
+source ~/.bashrc && source ~/lysis.sh
+python -c "
+import os
+from pathlib import Path
+from lysis.execution.fortran_macro import FortranMacro
+fm = FortranMacro.from_hdf5(
+    '{hdf5_path}', '{staging_dir}/{binary_name}',
+    in_file_code='{in_code}', out_file_code='{out_code}',
+    index=int(os.environ['SLURM_ARRAY_TASK_ID'])
+)
+fm.exec_in_workdir(Path('{staging_dir}'))
+" """
+
+        sections = [setup, execute]
+
+    else:
+        # ------------------------------------------------------------------
+        # Two-tier: copy setup files → local fast dir, run, then mv to staging
+        # ------------------------------------------------------------------
+        setup = f"""\
+# Setup — create local fast dir, copy setup files and binary
+SIM=$(printf "%02d" ${{SLURM_ARRAY_TASK_ID}})
+local_work_dir=$(mktemp -d -p "{fast_tmp_root}")
+local_datadir="${{local_work_dir}}/data/{run_code}"
+staging_datadir="{staging_dir}/data/{run_code}"
+mkdir -p "${{local_datadir}}"
+cp "${{staging_datadir}}/"* "${{local_datadir}}/"
+cp "{executable}" "${{local_work_dir}}/" """
+
+        execute = f"""\
+# Execute macroscale Fortran binary into local fast storage
+source ~/.bashrc && source ~/lysis.sh
+python -c "
+import os
+from pathlib import Path
+from lysis.execution.fortran_macro import FortranMacro
+fm = FortranMacro.from_hdf5(
+    '{hdf5_path}', '${{local_work_dir}}/{binary_name}',
+    in_file_code='{in_code}', out_file_code='{out_code}',
+    index=int(os.environ['SLURM_ARRAY_TASK_ID'])
+)
+fm.exec_in_workdir(Path('${{local_work_dir}}'))
+" """
+
+        move = """\
+# Move per-simulation output to shared staging, then clean up local dir
+mv "${local_datadir}/${SIM}" "${staging_datadir}/"
+rm -rf "${local_work_dir}" """
+
+        sections = [setup, execute, move]
+
+    return gs.scripts.plain(sections, **sbatch_opts)
+
+
+def submit_macro_slurm_job(
+    hdf5_path: "Path | str",
+    executable: "Path | str",
+    *,
+    staging_root: Optional["Path | str"] = None,
+    partition: Optional[str] = None,
+    fast_tmp_root: Optional[str] = None,
+    keep_tmpdir: bool = False,
+    in_code: str = "",
+    out_code: str = "",
+) -> int:
+    """Submit the full HDF5-integrated macroscale workflow as a Slurm master job.
+
+    Creates a unique staging directory, pre-stages setup files (macroscale_in
+    text files and ``params.json``), writes an array job script and a master
+    orchestration script, and submits the master.  The master job orchestrates
+    the array tasks, imports results into the HDF5 file, and optionally cleans
+    up.
+
+    Directory naming
+    ~~~~~~~~~~~~~~~~
+    The staging directory is created with::
+
+        tempfile.mkdtemp(
+            prefix=f"lysis-macro-{run_code}-",
+            dir=staging_root or hdf5_path.parent,
+        )
+
+    The ``dir`` argument is **always explicit** — ``/tmp`` is never used.
+
+    :param hdf5_path: Full path to the run's ``.h5`` file.  Must contain both
+        ``micro_params`` and ``macro_params``.
+    :type hdf5_path: Path or str
+    :param executable: Path to the compiled Fortran macroscale binary.
+    :type executable: Path or str
+    :param staging_root: Root directory under which the staging temp dir is
+        created.  Defaults to ``hdf5_path.parent``.
+    :type staging_root: Path or str, optional
+    :param partition: Slurm partition for both master and array jobs.
+    :type partition: str, optional
+    :param fast_tmp_root: Root directory for fast node-local scratch (opt-in
+        two-tier storage).  When ``None`` (default) array tasks write directly
+        to the shared staging directory.
+    :type fast_tmp_root: str, optional
+    :param keep_tmpdir: If ``True``, preserve the staging directory after the
+        master job completes (useful for debugging).
+    :type keep_tmpdir: bool, optional
+    :param in_code: Input file code suffix for the Fortran binary,
+        defaults to ``""``.
+    :type in_code: str, optional
+    :param out_code: Output file code suffix for the Fortran binary,
+        defaults to ``""``.
+    :type out_code: str, optional
+    :return: Master Slurm job ID.
+    :rtype: int
+    :raises subprocess.CalledProcessError: If ``sbatch`` fails.
+    :raises ValueError: If the HDF5 file does not contain ``macro_params``.
+    """
+    from lysis.execution.fortran_macro import FortranMacro  # noqa: PLC0415
+
+    hdf5_path = Path(hdf5_path).resolve()
+    executable = Path(executable).resolve()
+    run_code = hdf5_path.stem
+
+    # Create unique staging directory — never use /tmp
+    staging_root_dir = (
+        Path(staging_root) if staging_root is not None else hdf5_path.parent
+    )
+    staging_dir = Path(tempfile.mkdtemp(
+        prefix=f"lysis-macro-{run_code}-",
+        dir=str(staging_root_dir),
+    ))
+
+    # ------------------------------------------------------------------
+    # Pre-stage setup files (macroscale_in + params.json)
+    # ------------------------------------------------------------------
+    staging_data_dir = staging_dir / "data" / run_code
+    staging_data_dir.mkdir(parents=True, exist_ok=True)
+    fm_setup = FortranMacro.from_hdf5(
+        hdf5_path, str(executable), in_file_code=in_code, out_file_code=out_code,
+    )
+    fm_setup._write_setup_files(staging_data_dir)
+
+    # Read n_sims from the run's macro_params
+    n_sims = fm_setup.run.macro_params.macro_simulations
+
+    # ------------------------------------------------------------------
+    # Write array job script
+    # ------------------------------------------------------------------
+    array_script = generate_macro_array_script(
+        staging_dir, run_code, hdf5_path, executable, n_sims,
+        in_code=in_code, out_code=out_code,
+        partition=partition, fast_tmp_root=fast_tmp_root,
+    )
+    array_path = staging_dir / "array.sh"
+    array_path.write_text(array_script)
+    array_path.chmod(0o755)
+
+    # ------------------------------------------------------------------
+    # Write master.py
+    # ------------------------------------------------------------------
+    master_py_content = _generate_macro_master_py(
+        staging_dir, hdf5_path, run_code, out_code, keep_tmpdir,
+    )
+    master_py_path = staging_dir / "master.py"
+    master_py_path.write_text(master_py_content)
+
+    # ------------------------------------------------------------------
+    # Write master bash wrapper and submit
+    # ------------------------------------------------------------------
+    sbatch_opts = {
+        "job-name": f"lysis-macro-{run_code}",
+        "out": str(hdf5_path.parent / "job.slurm-%j.out"),
+        "nodes": 1,
+        "mem": 3096,
+        "ntasks": 1,
+        "cpus-per-task": 1,
+    }
+    if partition:
+        sbatch_opts["partition"] = partition
+
+    master_sh_content = gs.scripts.plain(
+        [
+            "source ~/.bashrc && source ~/lysis.sh",
+            f'python "{master_py_path}"',
+        ],
+        **sbatch_opts,
+    )
+    master_sh_path = staging_dir / "master.sh"
+    master_sh_path.write_text(master_sh_content)
+    master_sh_path.chmod(0o755)
+
+    return gs.sbatch([str(master_sh_path)])

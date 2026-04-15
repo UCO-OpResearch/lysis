@@ -16,9 +16,11 @@ import h5py
 import pytest
 
 from lysis.config.constants import CONST
-from lysis.config.parameters import MicroParameters
+from lysis.config.parameters import MacroParameters, MicroParameters
 from lysis.tools.slurm import (
+    generate_macro_array_script,
     generate_micro_child_script,
+    submit_macro_slurm_job,
     submit_micro_child_job,
     submit_micro_slurm_job,
     wait_for_jobs,
@@ -472,3 +474,289 @@ class TestSubmitMicroSlurmJob:
         staging_dir = list(staging_root.iterdir())[0]
         child_content = (staging_dir / "child_000.sh").read_text()
         assert str(micro_hdf5) in child_content
+
+
+# ---------------------------------------------------------------------------
+# Macro Slurm helpers and fixtures
+# ---------------------------------------------------------------------------
+
+
+def _write_macro_hdf5(path: Path) -> None:
+    """Write a minimal v2.0.0 HDF5 with default Micro and MacroParameters."""
+    mp = MicroParameters()
+    mcp = MacroParameters(micro_params=mp)
+    with h5py.File(str(path), "w") as f:
+        f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v2.0.0"
+        micro_grp = f.require_group("micro_data")
+        for k, v in mp.to_basedict().items():
+            micro_grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+        macro_grp = f.require_group("macro_data")
+        for k, v in mcp.to_basedict().items():
+            macro_grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+
+
+@pytest.fixture
+def macro_hdf5(tmp_path):
+    """Minimal HDF5 file with both Micro and MacroParameters."""
+    h5_path = tmp_path / "run-01.h5"
+    _write_macro_hdf5(h5_path)
+    return h5_path
+
+
+# ---------------------------------------------------------------------------
+# TestGenerateMacroArrayScript
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateMacroArrayScript:
+    """Tests for :func:`generate_macro_array_script`."""
+
+    def test_returns_string(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=5,
+        )
+        assert isinstance(script, str)
+
+    def test_has_sbatch_shebang(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=5,
+        )
+        assert script.startswith("#!/bin/bash")
+
+    def test_array_directive_present(self, tmp_path):
+        """Script must contain #SBATCH --array 0-{n_sims-1}."""
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=5,
+        )
+        assert "--array" in script
+        assert "0-4" in script
+
+    def test_single_tier_no_local_workdir(self, tmp_path):
+        """Single-tier script must not use a local working directory."""
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+        )
+        assert "local_work_dir" not in script
+
+    def test_single_tier_uses_fortran_macro_import(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+        )
+        assert "lysis.execution.fortran_macro" in script
+
+    def test_single_tier_uses_slurm_array_task_id(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+        )
+        assert "SLURM_ARRAY_TASK_ID" in script
+
+    def test_single_tier_contains_in_code(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+            in_code="_incode",
+        )
+        assert "_incode" in script
+
+    def test_single_tier_contains_out_code(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+            out_code="_outcode",
+        )
+        assert "_outcode" in script
+
+    def test_single_tier_partition_in_header(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+            partition="long",
+        )
+        assert "partition" in script
+        assert "long" in script
+
+    def test_single_tier_no_partition_when_not_set(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+        )
+        assert "--partition" not in script
+
+    def test_two_tier_contains_mktemp(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "mktemp" in script
+
+    def test_two_tier_contains_mv_step(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "mv" in script
+
+    def test_two_tier_contains_cleanup(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "rm -rf" in script
+
+    def test_two_tier_contains_fast_tmp_root(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "/nvme/scratch" in script
+
+
+# ---------------------------------------------------------------------------
+# TestSubmitMacroSlurmJob
+# ---------------------------------------------------------------------------
+
+
+class TestSubmitMacroSlurmJob:
+    """Tests for :func:`submit_macro_slurm_job`."""
+
+    @pytest.fixture
+    def mock_write_setup(self):
+        """Patch FortranMacro._write_setup_files to avoid needing HDF5 data."""
+        with patch(
+            "lysis.execution.fortran_macro.FortranMacro._write_setup_files"
+        ) as mock:
+            yield mock
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=999)
+    def test_returns_master_job_id(self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup):
+        job_id = submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=tmp_path
+        )
+        assert job_id == 999
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_staging_dir_created_in_staging_root(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        children = list(staging_root.iterdir())
+        assert len(children) == 1
+        assert children[0].is_dir()
+        assert "lysis-macro" in children[0].name
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_staging_dir_name_contains_run_code(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        assert "run-01" in staging_dir.name
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_script_written(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        assert (staging_dir / "array.sh").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_scripts_written(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        assert (staging_dir / "master.sh").exists()
+        assert (staging_dir / "master.py").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_sbatch_called_with_master_sh(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        expected_path = str(staging_dir / "master.sh")
+        mock_sbatch.assert_called_once_with([expected_path])
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_sh_has_array_directive(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        array_content = (staging_dir / "array.sh").read_text()
+        assert "--array" in array_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_imports_fortran_macro(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "master.py").read_text()
+        assert "lysis.execution.fortran_macro" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_partition_in_master_script(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe",
+            staging_root=staging_root, partition="long"
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "master.sh").read_text()
+        assert "partition" in master_content
+        assert "long" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_write_setup_files_called(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        """setup files must be pre-staged in the staging data dir."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        assert mock_write_setup.call_count == 1

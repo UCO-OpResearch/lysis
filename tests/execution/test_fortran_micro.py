@@ -306,7 +306,7 @@ class TestFortranMicroImportResults:
         mock_cls, _ = mock_datastore
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+        with patch("lysis.execution.fortran.DataStore", mock_cls):
             fortran_micro.import_results(data_dir, keep_tmpdir=True)
         assert mock_cls.call_args.args[0] == fortran_micro.run.run_code
 
@@ -315,7 +315,7 @@ class TestFortranMicroImportResults:
         mock_cls, _ = mock_datastore
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+        with patch("lysis.execution.fortran.DataStore", mock_cls):
             fortran_micro.import_results(data_dir, keep_tmpdir=True)
         assert mock_cls.call_args.args[1] == fortran_micro.run.os_path
 
@@ -324,7 +324,7 @@ class TestFortranMicroImportResults:
         mock_cls, _ = mock_datastore
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+        with patch("lysis.execution.fortran.DataStore", mock_cls):
             fortran_micro.import_results(data_dir, keep_tmpdir=True)
         assert mock_cls.call_args.kwargs.get("mode") == "a"
 
@@ -333,7 +333,7 @@ class TestFortranMicroImportResults:
         mock_cls, mock_ds = mock_datastore
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+        with patch("lysis.execution.fortran.DataStore", mock_cls):
             fortran_micro.import_results(data_dir, keep_tmpdir=True)
         assert mock_ds.import_collection.call_count == 1
         args = mock_ds.import_collection.call_args.args
@@ -348,7 +348,7 @@ class TestFortranMicroImportResults:
         fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe", out_file_code="_code")
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+        with patch("lysis.execution.fortran.DataStore", mock_cls):
             fm.import_results(data_dir, keep_tmpdir=True)
         assert mock_ds.import_collection.call_args.args[3] == ["_code"]
 
@@ -357,7 +357,7 @@ class TestFortranMicroImportResults:
         mock_cls, _ = mock_datastore
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+        with patch("lysis.execution.fortran.DataStore", mock_cls):
             fortran_micro.import_results(data_dir, keep_tmpdir=False)
         assert not data_dir.exists()
 
@@ -366,7 +366,7 @@ class TestFortranMicroImportResults:
         mock_cls, _ = mock_datastore
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+        with patch("lysis.execution.fortran.DataStore", mock_cls):
             fortran_micro.import_results(data_dir, keep_tmpdir=True)
         assert data_dir.exists()
 
@@ -376,7 +376,7 @@ class TestFortranMicroImportResults:
         mock_ds.import_collection.side_effect = RuntimeError("import failed")
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+        with patch("lysis.execution.fortran.DataStore", mock_cls):
             with pytest.raises(RuntimeError, match="import failed"):
                 fortran_micro.import_results(
                     data_dir, keep_on_failure=False, keep_tmpdir=False
@@ -389,7 +389,7 @@ class TestFortranMicroImportResults:
         mock_ds.import_collection.side_effect = RuntimeError("import failed")
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+        with patch("lysis.execution.fortran.DataStore", mock_cls):
             with pytest.raises(RuntimeError):
                 fortran_micro.import_results(
                     data_dir, keep_on_failure=True, keep_tmpdir=False
@@ -402,7 +402,7 @@ class TestFortranMicroImportResults:
         mock_ds.import_collection.side_effect = RuntimeError("import failed")
         data_dir = tmp_path / "data_dir"
         data_dir.mkdir()
-        with patch("lysis.execution.fortran_micro.DataStore", mock_cls):
+        with patch("lysis.execution.fortran.DataStore", mock_cls):
             with pytest.raises(RuntimeError):
                 fortran_micro.import_results(
                     data_dir, keep_on_failure=False, keep_tmpdir=True

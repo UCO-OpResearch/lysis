@@ -47,6 +47,13 @@ def _make_stub_class(params_override=None):
         def _log_prefix(self):
             return "micro"
 
+        def _collection_name(self):
+            return "microscale_out"
+
+        def _fortran_dataspec_version(self):
+            from lysis.execution.fortran import MICRO_FORTRAN_DATASPEC_VERSION
+            return MICRO_FORTRAN_DATASPEC_VERSION
+
     return _StubRunner
 
 
