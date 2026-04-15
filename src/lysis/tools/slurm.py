@@ -63,10 +63,10 @@ __status__ = "Development"
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-#: Template for the master Python script.  Substitution keys use ``$name``
+#: Template for the micro master Python script.  Substitution keys use ``$name``
 #: syntax (not ``{name}``) so Python braces in the template body are left
 #: untouched.
-_MASTER_PY_TEMPLATE = Template('''\
+_MICRO_MASTER_PY_TEMPLATE = Template('''\
 #!/usr/bin/env python3
 """Master Slurm job: submit child Fortran jobs, poll for completion, import results."""
 import time
@@ -138,7 +138,7 @@ print("Master job complete.", flush=True)
 ''')
 
 
-def _generate_master_py(
+def _generate_micro_master_py(
     staging_dir: Path,
     hdf5_path: Path,
     run_code: str,
@@ -155,7 +155,7 @@ def _generate_master_py(
     :return: Python script text.
     :rtype: str
     """
-    return _MASTER_PY_TEMPLATE.substitute(
+    return _MICRO_MASTER_PY_TEMPLATE.substitute(
         staging_dir=repr(str(staging_dir)),
         hdf5_path=repr(str(hdf5_path)),
         run_code=repr(run_code),
@@ -409,7 +409,7 @@ def submit_micro_slurm_job(
     # ------------------------------------------------------------------
     # Write master.py
     # ------------------------------------------------------------------
-    master_py_content = _generate_master_py(
+    master_py_content = _generate_micro_master_py(
         staging_dir, hdf5_path, run_code, out_code, keep_tmpdir,
     )
     master_py_path = staging_dir / "master.py"
