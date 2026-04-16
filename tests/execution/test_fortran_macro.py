@@ -19,8 +19,13 @@ from lysis.execution.fortran_macro import FortranMacro
 # ---------------------------------------------------------------------------
 
 
-def _write_macro_hdf5(path: Path) -> None:
-    """Write a minimal v2.0.0 HDF5 file with default Micro and MacroParameters."""
+def _write_macro_hdf5(path: Path, micro_data_populated: bool = True) -> None:
+    """Write a minimal v2.0.0 HDF5 file with default Micro and MacroParameters.
+
+    By default writes a non-empty ``micro_data/tpa_leaving_time`` to simulate
+    the post-run-micro state required by :meth:`FortranMacro.from_hdf5`.
+    Pass ``micro_data_populated=False`` to write an empty dataset instead.
+    """
     mp = MicroParameters()
     mcp = MacroParameters(micro_params=mp)
     with h5py.File(str(path), "w") as f:
@@ -28,6 +33,19 @@ def _write_macro_hdf5(path: Path) -> None:
         micro_grp = f.require_group("micro_data")
         for k, v in mp.to_basedict().items():
             micro_grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+        if micro_data_populated:
+            f.create_dataset(
+                "micro_data/tpa_leaving_time",
+                data=np.array([1.0]),
+                dtype=np.float64,
+            )
+        else:
+            f.create_dataset(
+                "micro_data/tpa_leaving_time",
+                shape=(0,),
+                maxshape=(None,),
+                dtype=np.float64,
+            )
         macro_grp = f.require_group("macro_data")
         for k, v in mcp.to_basedict().items():
             macro_grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
@@ -287,6 +305,26 @@ class TestFortranMacroFromHdf5:
     def test_accepts_str_path(self, macro_hdf5):
         fm = FortranMacro.from_hdf5(str(macro_hdf5), "/bin/macro.exe")
         assert isinstance(fm, FortranMacro)
+
+    def test_raises_when_micro_datasets_empty(self, tmp_path):
+        """Should raise ValueError if microscale datasets are empty (not yet run)."""
+        h5_path = tmp_path / "empty-micro.h5"
+        _write_macro_hdf5(h5_path, micro_data_populated=False)
+        with pytest.raises(ValueError, match="microscale simulation"):
+            FortranMacro.from_hdf5(h5_path, "/bin/macro.exe")
+
+    def test_raises_when_macro_already_ran(self, tmp_path):
+        """Should raise ValueError if macroscale datasets are already populated."""
+        h5_path = tmp_path / "already-ran.h5"
+        _write_macro_hdf5(h5_path)
+        with h5py.File(str(h5_path), "a") as f:
+            f.create_dataset(
+                "macro_data/sim_00/snapshot_time",
+                data=np.array([1.0]),
+                dtype=np.float64,
+            )
+        with pytest.raises(ValueError, match="macroscale simulation"):
+            FortranMacro.from_hdf5(h5_path, "/bin/macro.exe")
 
 
 # ---------------------------------------------------------------------------

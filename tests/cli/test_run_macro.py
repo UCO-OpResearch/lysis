@@ -212,6 +212,30 @@ class TestRunMacroLocal:
         assert result.exit_code == 0, result.output
         assert "run-01" in result.output
 
+    @patch("lysis.execution.fortran_macro.FortranMacro")
+    def test_exits_nonzero_when_from_hdf5_raises_valueerror(
+        self, mock_cls, runner, macro_hdf5
+    ):
+        """A ValueError from from_hdf5 (e.g. wrong HDF5 state) must exit non-zero."""
+        mock_cls.from_hdf5.side_effect = ValueError("macroscale simulation has already been run")
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(macro_hdf5), "--executable", "/bin/macro.exe"],
+        )
+        assert result.exit_code != 0
+
+    @patch("lysis.execution.fortran_macro.FortranMacro")
+    def test_error_message_shown_when_from_hdf5_raises(
+        self, mock_cls, runner, macro_hdf5
+    ):
+        """Error message from ValueError must appear in CLI output."""
+        mock_cls.from_hdf5.side_effect = ValueError("macroscale simulation has already been run")
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(macro_hdf5), "--executable", "/bin/macro.exe"],
+        )
+        assert "macroscale simulation has already been run" in result.output
+
 
 # ---------------------------------------------------------------------------
 # Slurm dispatch

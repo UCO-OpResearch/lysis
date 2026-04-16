@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 from lysis.config.constants import CONST
-from lysis.config.parameters import MicroParameters
+from lysis.config.parameters import MacroParameters, MicroParameters
 from lysis.config.run import Run
 from lysis.dataio.datastore import DataStore
 from lysis.execution.fortran_micro import FortranMicro
@@ -210,6 +210,35 @@ class TestFortranMicroFromHdf5:
         fm_path = FortranMicro.from_hdf5(micro_hdf5, "/bin/micro.exe")
         fm_str = FortranMicro.from_hdf5(str(micro_hdf5), "/bin/micro.exe")
         assert fm_path.run.run_code == fm_str.run.run_code
+
+    def test_raises_when_macro_data_present(self, tmp_path):
+        """Should raise ValueError if macro_data group already exists (macroscale initialized)."""
+        h5_path = tmp_path / "post-init-macro.h5"
+        mp = MicroParameters()
+        mcp = MacroParameters(micro_params=mp)
+        with h5py.File(str(h5_path), "w") as f:
+            f.attrs[CONST.DATASPEC_VERSION_ATTR] = "v2.0.0"
+            micro_grp = f.require_group("micro_data")
+            for k, v in mp.to_basedict().items():
+                micro_grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+            macro_grp = f.require_group("macro_data")
+            for k, v in mcp.to_basedict().items():
+                macro_grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+        with pytest.raises(ValueError, match="macroscale data"):
+            FortranMicro.from_hdf5(h5_path, "/bin/micro.exe")
+
+    def test_raises_when_micro_already_ran(self, tmp_path):
+        """Should raise ValueError if micro datasets are non-empty (already ran)."""
+        h5_path = tmp_path / "post-run-micro.h5"
+        _write_micro_hdf5(h5_path)
+        with h5py.File(str(h5_path), "a") as f:
+            f.create_dataset(
+                "micro_data/tpa_leaving_time",
+                data=np.array([1.0]),
+                dtype=np.float64,
+            )
+        with pytest.raises(ValueError, match="microscale simulation"):
+            FortranMicro.from_hdf5(h5_path, "/bin/micro.exe")
 
 
 # ---------------------------------------------------------------------------

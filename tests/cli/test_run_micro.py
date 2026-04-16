@@ -162,6 +162,30 @@ class TestRunMicroLocal:
         # Either the filename or path should appear in the output
         assert "run-01" in result.output
 
+    @patch("lysis.execution.fortran_micro.FortranMicro")
+    def test_exits_nonzero_when_from_hdf5_raises_valueerror(
+        self, mock_cls, runner, micro_hdf5
+    ):
+        """A ValueError from from_hdf5 (e.g. wrong HDF5 state) must exit non-zero."""
+        mock_cls.from_hdf5.side_effect = ValueError("microscale simulation has already been run")
+        result = runner.invoke(
+            cli,
+            ["run-micro", str(micro_hdf5), "--executable", "/bin/micro.exe"],
+        )
+        assert result.exit_code != 0
+
+    @patch("lysis.execution.fortran_micro.FortranMicro")
+    def test_error_message_shown_when_from_hdf5_raises(
+        self, mock_cls, runner, micro_hdf5
+    ):
+        """Error message from ValueError must appear in CLI output."""
+        mock_cls.from_hdf5.side_effect = ValueError("microscale simulation has already been run")
+        result = runner.invoke(
+            cli,
+            ["run-micro", str(micro_hdf5), "--executable", "/bin/micro.exe"],
+        )
+        assert "microscale simulation has already been run" in result.output
+
 
 # ---------------------------------------------------------------------------
 # Slurm dispatch

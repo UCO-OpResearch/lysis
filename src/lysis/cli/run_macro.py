@@ -150,16 +150,19 @@ def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
 
         submitted = []
         for hdf5_path in hdf5_paths:
-            job_id = submit_macro_slurm_job(
-                hdf5_path,
-                executable,
-                staging_root=staging_root,
-                partition=partition,
-                fast_tmp_root=fast_tmp_root,
-                keep_tmpdir=keep_tmpdir,
-                in_code=in_file_code,
-                out_code=out_file_code,
-            )
+            try:
+                job_id = submit_macro_slurm_job(
+                    hdf5_path,
+                    executable,
+                    staging_root=staging_root,
+                    partition=partition,
+                    fast_tmp_root=fast_tmp_root,
+                    keep_tmpdir=keep_tmpdir,
+                    in_code=in_file_code,
+                    out_code=out_file_code,
+                )
+            except ValueError as e:
+                raise click.ClickException(str(e))
             submitted.append((hdf5_path.stem, job_id))
             console.print(
                 f"Submitted master Slurm job [bold]{job_id}[/bold]"
@@ -177,10 +180,13 @@ def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
         for i, hdf5_path in enumerate(hdf5_paths):
             prefix = f"[{i + 1}/{n}] " if n > 1 else ""
 
-            fm = FortranMacro.from_hdf5(
-                hdf5_path, executable,
-                in_file_code=in_file_code, out_file_code=out_file_code,
-            )
+            try:
+                fm = FortranMacro.from_hdf5(
+                    hdf5_path, executable,
+                    in_file_code=in_file_code, out_file_code=out_file_code,
+                )
+            except ValueError as e:
+                raise click.ClickException(str(e))
             if not ctx.obj.get("verbose", 0):
                 with console.status(
                     f"{prefix}Running macroscale simulation for"

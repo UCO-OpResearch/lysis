@@ -18,9 +18,12 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import h5py
+
 from ..config.parameters import MicroParameters
 from ..config.run import Run
 from ..dataio.dataspec import dataspec
+from ..dataio.datastore import COMPATIBLE_DATASPEC_VERSION
 from ..dataio.fileops import write_dataset
 from .fortran import FortranRunner, MICRO_FORTRAN_DATASPEC_VERSION
 
@@ -127,11 +130,32 @@ class FortranMicro(FortranRunner):
         :return: Fully configured :class:`FortranMicro` instance.
         :rtype: FortranMicro
         :raises RuntimeError: If the HDF5 file's directory is not found.
-        :raises ValueError: If the HDF5 file has an incompatible dataspec.
+        :raises ValueError: If the HDF5 file has an incompatible dataspec, if
+            macroscale data is already present, or if microscale datasets are
+            non-empty (simulation has already been run).
         """
         hdf5_path = Path(hdf5_path)
         run = Run(str(hdf5_path.parent), run_code=hdf5_path.stem)
         run.load_params_from_hdf5()
+
+        micro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["microscale_out"]
+        with h5py.File(hdf5_path, "r") as f:
+            if "macro_data" in f:
+                raise ValueError(
+                    f"HDF5 file '{hdf5_path}' already contains macroscale data. "
+                    "The microscale simulation cannot be run after macroscale "
+                    "has been initialized. Expected file state: empty microscale "
+                    "datasets, no macroscale data (post init-experiment)."
+                )
+            check_loc = micro_spec.data["tpa_leaving_time"].data_location
+            if check_loc in f and f[check_loc].shape[0] != 0:
+                raise ValueError(
+                    f"HDF5 file '{hdf5_path}' already contains microscale "
+                    "simulation results. The microscale simulation has already "
+                    "been run. Expected file state: empty microscale datasets, "
+                    "no macroscale data (post init-experiment)."
+                )
+
         return cls(
             run=run,
             executable=str(Path(executable).resolve()),
