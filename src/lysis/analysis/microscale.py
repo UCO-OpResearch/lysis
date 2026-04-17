@@ -59,11 +59,18 @@ def compute_micro_statistics(run: "Run") -> dict:
 
     lysis_times = sim_final_time[fiber_degraded]
 
+    if lysis_times.size == 0:
+        lysis_mean = lysis_std = lysis_median = float("nan")
+    else:
+        lysis_mean = float(np.mean(lysis_times) / 60)
+        lysis_std = float(np.std(lysis_times) / 60)
+        lysis_median = float(np.median(lysis_times) / 60)
+
     return {
         "fibers_degraded": int(np.sum(fiber_degraded)),
-        "lysis_time_mean": float(np.mean(lysis_times) / 60),
-        "lysis_time_std": float(np.std(lysis_times) / 60),
-        "lysis_time_median": float(np.median(lysis_times) / 60),
+        "lysis_time_mean": lysis_mean,
+        "lysis_time_std": lysis_std,
+        "lysis_time_median": lysis_median,
         "tpa_leaving_mean": float(np.mean(tpa_leaving_time)),
         "tpa_leaving_std": float(np.std(tpa_leaving_time)),
         "tpa_leaving_median": float(np.median(tpa_leaving_time)),
