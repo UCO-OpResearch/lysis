@@ -88,6 +88,7 @@ class TestReadFileText:
             tmp_path / "struct.dat",
             np.column_stack([rows["time"], rows["idx"], rows["val"]]),
             delimiter=",",
+            fmt=["%.18e", "%d", "%.18e"],
         )
         result = _read_file_text(str(tmp_path), spec)
         # loadtxt with structured dtype returns 1D structured array
