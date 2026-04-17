@@ -22,6 +22,7 @@ from lysis.dataio.datastore import (
     DerivedDataCollection,
     SimulationView,
     DataStatus,
+    HDF5State,
     h5_tree,
     _group_path_from_spec,
 )
@@ -205,6 +206,77 @@ class TestDataStatus:
     def test_none_value_is_zero(self):
         """NONE must have the integer value 0."""
         assert DataStatus.NONE.value == 0
+
+
+# ---------------------------------------------------------------------------
+#  HDF5State enum and hdf5_state property tests
+# ---------------------------------------------------------------------------
+
+
+class TestHDF5State:
+    """Tests for the HDF5State enum and DataStore.hdf5_state property."""
+
+    def test_all_values_exist(self):
+        """All expected members are present on the enum."""
+        assert hasattr(HDF5State, "MICRO_EMPTY")
+        assert hasattr(HDF5State, "MICRO_FILLED")
+        assert hasattr(HDF5State, "MACRO_EMPTY")
+        assert hasattr(HDF5State, "MACRO_FILLED")
+
+    def test_values_are_unique(self):
+        """Every member has a unique underlying value."""
+        values = [m.value for m in HDF5State]
+        assert len(values) == len(set(values))
+
+    def test_micro_empty_state(self, tmp_path):
+        """micro_data with params but no datasets → MICRO_EMPTY."""
+        h5_path = tmp_path / "micro-empty.h5"
+        with h5py.File(str(h5_path), "w") as f:
+            _write_micro_attrs(f)
+        with DataStore("micro-empty", str(tmp_path)) as ds:
+            assert ds.hdf5_state == HDF5State.MICRO_EMPTY
+
+    def test_micro_filled_state(self, tmp_path):
+        """micro_data with non-empty tpa_leaving_time → MICRO_FILLED."""
+        h5_path = tmp_path / "micro-filled.h5"
+        with h5py.File(str(h5_path), "w") as f:
+            _write_micro_attrs(f)
+            f.create_dataset("micro_data/tpa_leaving_time", data=np.array([1.0]))
+        with DataStore("micro-filled", str(tmp_path)) as ds:
+            assert ds.hdf5_state == HDF5State.MICRO_FILLED
+
+    def test_macro_empty_state(self, tmp_path):
+        """micro filled + macro_data with params but no datasets → MACRO_EMPTY."""
+        h5_path = tmp_path / "macro-empty.h5"
+        with h5py.File(str(h5_path), "w") as f:
+            _write_micro_attrs(f)
+            f.create_dataset("micro_data/tpa_leaving_time", data=np.array([1.0]))
+            _write_macro_attrs(f)
+        with DataStore("macro-empty", str(tmp_path)) as ds:
+            assert ds.hdf5_state == HDF5State.MACRO_EMPTY
+
+    def test_macro_filled_state(self, tmp_path):
+        """micro filled + macro filled → MACRO_FILLED."""
+        h5_path = tmp_path / "macro-filled.h5"
+        with h5py.File(str(h5_path), "w") as f:
+            _write_micro_attrs(f)
+            f.create_dataset("micro_data/tpa_leaving_time", data=np.array([1.0]))
+            _write_macro_attrs(f)
+            f.create_dataset(
+                "macro_data/sim_00/snapshot_time",
+                data=np.array([1.0], dtype=np.float64),
+            )
+        with DataStore("macro-filled", str(tmp_path)) as ds:
+            assert ds.hdf5_state == HDF5State.MACRO_FILLED
+
+    def test_inconsistent_state(self, tmp_path):
+        """macro_data present but micro not filled → INCONSISTENT."""
+        h5_path = tmp_path / "inconsistent.h5"
+        with h5py.File(str(h5_path), "w") as f:
+            _write_micro_attrs(f)
+            _write_macro_attrs(f)
+        with DataStore("inconsistent", str(tmp_path)) as ds:
+            assert ds.hdf5_state == HDF5State.INCONSISTENT
 
 
 # ---------------------------------------------------------------------------

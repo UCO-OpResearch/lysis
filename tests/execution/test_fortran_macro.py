@@ -291,7 +291,7 @@ class TestFortranMacroFromHdf5:
         assert fm.index is None
 
     def test_raises_without_macro_params(self, tmp_path):
-        """Should raise ValueError if the HDF5 file has no macro_params."""
+        """Should raise ValueError if the HDF5 file has no macroscale init (MICRO_EMPTY state)."""
         h5_path = tmp_path / "micro-only.h5"
         mp = MicroParameters()
         with h5py.File(str(h5_path), "w") as f:
@@ -299,7 +299,7 @@ class TestFortranMacroFromHdf5:
             micro_grp = f.require_group("micro_data")
             for k, v in mp.to_basedict().items():
                 micro_grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
-        with pytest.raises(ValueError, match="macro_params"):
+        with pytest.raises(ValueError, match="microscale simulation"):
             FortranMacro.from_hdf5(h5_path, "/bin/macro.exe")
 
     def test_accepts_str_path(self, macro_hdf5):

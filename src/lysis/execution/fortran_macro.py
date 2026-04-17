@@ -17,13 +17,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import AnyStr
 
-import h5py
 import numpy as np
 
 from ..config.parameters import MacroParameters, MicroParameters
 from ..config.run import Run
 from ..dataio.dataspec import dataspec
-from ..dataio.datastore import DataStore, COMPATIBLE_DATASPEC_VERSION
+from ..dataio.datastore import DataStore, HDF5State, COMPATIBLE_DATASPEC_VERSION
 from ..dataio.fileops import write_dataset, write_data_collection
 from ..geometry.edge_grid import generate_fortran_neighborhood_structure
 from .fortran import FortranRunner, MACRO_FORTRAN_DATASPEC_VERSION
@@ -165,43 +164,37 @@ class FortranMacro(FortranRunner):
         :type index: int, optional
         :return: Fully configured :class:`FortranMacro` instance.
         :rtype: FortranMacro
-        :raises ValueError: If the HDF5 file does not contain ``macro_params``
-            (i.e. ``initialize_macroscale`` has not been called), if microscale
-            datasets are empty (microscale not yet run), or if macroscale
-            datasets are non-empty (macroscale has already been run).
+        :raises ValueError: If microscale datasets are empty (microscale not yet
+            run), if macroscale has not been initialized
+            (``initialize_macroscale`` not called), or if macroscale datasets
+            are non-empty (macroscale has already been run).
         """
         hdf5_path = Path(hdf5_path)
         run = Run(str(hdf5_path.parent), run_code=hdf5_path.stem)
         run.load_params_from_hdf5()
-        if run.macro_params is None:
-            raise ValueError(
-                f"HDF5 file '{hdf5_path}' does not contain macro_params. "
-                "Call DataStore.initialize_macroscale() before running "
-                "the macroscale simulation."
-            )
 
-        micro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["microscale_out"]
-        macro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["macroscale_out"]
-        with h5py.File(hdf5_path, "r") as f:
-            micro_check_loc = micro_spec.data["tpa_leaving_time"].data_location
-            if micro_check_loc not in f or f[micro_check_loc].shape[0] == 0:
-                raise ValueError(
-                    f"HDF5 file '{hdf5_path}' does not contain completed "
-                    "microscale simulation data. The microscale simulation must "
-                    "be run before the macroscale simulation. Expected file "
-                    "state: populated microscale datasets, empty macroscale "
-                    "datasets (post init-macroscale)."
-                )
-            macro_check_loc = macro_spec.data["snapshot_time"].data_location.format(
-                sim=0
+        with DataStore(hdf5_path.stem, str(hdf5_path.parent), mode="r") as ds:
+            state = ds.hdf5_state
+        if state in (HDF5State.MICRO_EMPTY, HDF5State.INCONSISTENT):
+            raise ValueError(
+                f"HDF5 file '{hdf5_path}' does not contain completed "
+                "microscale simulation data. The microscale simulation must "
+                f"be run before the macroscale simulation. Expected state: "
+                f"{HDF5State.MACRO_EMPTY.name}."
             )
-            if macro_check_loc in f and f[macro_check_loc].shape[0] != 0:
-                raise ValueError(
-                    f"HDF5 file '{hdf5_path}' already contains macroscale "
-                    "simulation results. The macroscale simulation has already "
-                    "been run. Expected file state: populated microscale "
-                    "datasets, empty macroscale datasets (post init-macroscale)."
-                )
+        if state == HDF5State.MICRO_FILLED:
+            raise ValueError(
+                f"HDF5 file '{hdf5_path}' has not been initialized for "
+                "macroscale simulation. Call DataStore.initialize_macroscale() "
+                f"before running macroscale. Expected state: "
+                f"{HDF5State.MACRO_EMPTY.name}."
+            )
+        if state == HDF5State.MACRO_FILLED:
+            raise ValueError(
+                f"HDF5 file '{hdf5_path}' already contains macroscale "
+                "simulation results. The macroscale simulation has already "
+                f"been run. Expected state: {HDF5State.MACRO_EMPTY.name}."
+            )
 
         return cls(
             run=run,

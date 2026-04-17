@@ -482,7 +482,13 @@ class TestSubmitMicroSlurmJob:
 
 
 def _write_macro_hdf5(path: Path) -> None:
-    """Write a minimal v2.0.0 HDF5 with default Micro and MacroParameters."""
+    """Write a minimal v2.0.0 HDF5 with default Micro and MacroParameters.
+
+    Includes a non-empty ``micro_data/tpa_leaving_time`` to satisfy the
+    post-run-micro state required by :meth:`FortranMacro.from_hdf5`.
+    """
+    import numpy as np
+
     mp = MicroParameters()
     mcp = MacroParameters(micro_params=mp)
     with h5py.File(str(path), "w") as f:
@@ -490,6 +496,11 @@ def _write_macro_hdf5(path: Path) -> None:
         micro_grp = f.require_group("micro_data")
         for k, v in mp.to_basedict().items():
             micro_grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+        f.create_dataset(
+            "micro_data/tpa_leaving_time",
+            data=np.array([1.0]),
+            dtype=np.float64,
+        )
         macro_grp = f.require_group("macro_data")
         for k, v in mcp.to_basedict().items():
             macro_grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v

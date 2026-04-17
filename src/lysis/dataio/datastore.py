@@ -83,7 +83,7 @@ import dataclasses
 import os
 import warnings
 
-from enum import Flag, auto, unique
+from enum import Enum, Flag, auto, unique
 from typing import AnyStr
 
 import numpy as np
@@ -123,6 +123,40 @@ class DataStatus(Flag):
     LOADED = auto()
     SAVED = auto()
     FILLED = auto()
+
+
+@unique
+class HDF5State(Enum):
+    """Lifecycle state of a lysis HDF5 run file.
+
+    Describes which simulation stages have been completed, as inferred from
+    which data groups are present and whether their datasets are populated.
+
+    States follow the pipeline order:
+
+    ``MICRO_EMPTY`` → ``MICRO_FILLED`` → ``MACRO_EMPTY`` → ``MACRO_FILLED``
+
+    :cvar MICRO_EMPTY: Microscale group present with empty datasets.
+        File is in the post-:meth:`~DataStore.create` (init-experiment) state,
+        ready for the microscale simulation to be run.
+    :cvar MICRO_FILLED: Microscale datasets populated; no macroscale group.
+        File is in the post-run-micro state, ready for
+        :meth:`~DataStore.initialize_macroscale`.
+    :cvar MACRO_EMPTY: Macroscale group present with empty datasets; microscale
+        datasets populated.  File is in the post-:meth:`~DataStore.initialize_macroscale`
+        state, ready for the macroscale simulation to be run.
+    :cvar MACRO_FILLED: Both microscale and macroscale datasets populated.
+        File is in the post-run-macro (complete) state.
+    :cvar INCONSISTENT: Macroscale group present but microscale datasets are
+        empty.  This state should not arise in normal usage; it indicates the
+        HDF5 file has been modified outside the normal pipeline.
+    """
+
+    MICRO_EMPTY = auto()
+    MICRO_FILLED = auto()
+    MACRO_EMPTY = auto()
+    MACRO_FILLED = auto()
+    INCONSISTENT = auto()
 
 
 def h5_tree(val: h5py.Dataset, pre: AnyStr = "") -> str:
@@ -610,10 +644,42 @@ class DataStore:
         """
         return self._status
 
+    @property
+    def hdf5_state(self) -> HDF5State:
+        """Pipeline lifecycle state inferred from dataset fill status.
+
+        Inspects the ``micro_data/tpa_leaving_time`` dataset to determine
+        whether microscale results have been written, and (when the macroscale
+        group is present) ``macro_data/sim_00/snapshot_time`` to determine
+        whether macroscale results have been written.
+
+        :return: One of :class:`HDF5State` ``MICRO_EMPTY``, ``MICRO_FILLED``,
+            ``MACRO_EMPTY``, ``MACRO_FILLED``, or ``INCONSISTENT``.
+        :rtype: HDF5State
+        """
+        micro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["microscale_out"]
+        check_loc = micro_spec.data["tpa_leaving_time"].data_location
+        micro_filled = (
+            check_loc in self._file and self._file[check_loc].shape[0] > 0
+        )
+
+        if "macroscale_out" not in self._collections:
+            return HDF5State.MICRO_FILLED if micro_filled else HDF5State.MICRO_EMPTY
+
+        if not micro_filled:
+            return HDF5State.INCONSISTENT
+
+        macro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["macroscale_out"]
+        check_loc = macro_spec.data["snapshot_time"].data_location.format(sim=0)
+        macro_filled = (
+            check_loc in self._file and self._file[check_loc].shape[0] > 0
+        )
+        return HDF5State.MACRO_FILLED if macro_filled else HDF5State.MACRO_EMPTY
+
     def __getattr__(self, name):
         if name.startswith("_"):
             raise AttributeError(name)
-        if name in ("mode", "micro_params", "macro_params", "collections", "status"):
+        if name in ("mode", "micro_params", "macro_params", "collections", "status", "hdf5_state"):
             # These are properties — if we're here, the object isn't
             # fully initialized yet. Avoid infinite recursion.
             raise AttributeError(name)
