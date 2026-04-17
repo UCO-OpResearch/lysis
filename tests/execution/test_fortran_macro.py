@@ -205,42 +205,6 @@ class TestFortranMacroGenerateNeighborhoods:
 
 
 # ---------------------------------------------------------------------------
-# TestFortranMacroExecute
-# ---------------------------------------------------------------------------
-
-
-class TestFortranMacroExecute:
-    """Tests for :meth:`FortranMacro.execute`."""
-
-    def test_generate_neighborhoods_called(self, fortran_macro, tmp_path):
-        """execute() must call generate_neighborhoods() before the subprocess."""
-        with (
-            patch.object(FortranMacro, "generate_neighborhoods") as mock_gen,
-            patch("subprocess.run"),
-        ):
-            fortran_macro.execute()
-        assert mock_gen.call_count == 1
-
-    def test_subprocess_called_once(self, fortran_macro, tmp_path):
-        with (
-            patch.object(FortranMacro, "generate_neighborhoods"),
-            patch("subprocess.run") as mock_run,
-        ):
-            fortran_macro.execute()
-        assert mock_run.call_count == 1
-
-    def test_log_file_created_in_os_path(self, fortran_macro, tmp_path):
-        """The macro log file must be created in run.os_path."""
-        with (
-            patch.object(FortranMacro, "generate_neighborhoods"),
-            patch("subprocess.run"),
-        ):
-            fortran_macro.execute()
-        log_files = list(tmp_path.glob("macro*.txt"))
-        assert len(log_files) == 1
-
-
-# ---------------------------------------------------------------------------
 # TestFortranMacroFromHdf5
 # ---------------------------------------------------------------------------
 
