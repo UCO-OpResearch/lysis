@@ -28,6 +28,20 @@ markers = [
     "real_data: tests requiring the full ~665MB dataset (skipped if missing)",
     "fortran_binary: tests requiring a compiled Fortran executable (~37s per run)",
 ]
+# sympy 1.14's `sympy.core.evalf.bitcount` still calls `mpmath.libmp.bitcount`,
+# which mpmath 1.4 deprecated. The warning fires from any code path that
+# triggers sympy evalf (e.g. `lysis.config.param_resolver.resolve_micro_params`,
+# which builds `sympy.Eq` / `sympy.solve` calls). We can't fix the upstream
+# chain, so silence this one specific deprecation to keep test output clean.
+#
+# TODO(sympy>=1.15): remove this filter once sympy ships the fix.
+#   Fix merged to sympy main 2025-05-11 as PR #28060
+#   (https://github.com/sympy/sympy/pull/28060), expected in the 1.15 release.
+#   When sympy 1.15 is out: bump the `sympy>=1.12` pin in [project].dependencies,
+#   confirm the test suite runs warning-free without this filter, then delete.
+filterwarnings = [
+    "ignore:bitcount function is deprecated:DeprecationWarning:mpmath.libmp.libintmath",
+]
 
 [tool.black]
 line-length = 88
