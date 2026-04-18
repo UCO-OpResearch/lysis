@@ -178,6 +178,7 @@ def generate_micro_child_script(
     *,
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
+    slurm_log_dir: Optional["Path | str"] = None,
 ) -> str:
     """Generate a Slurm bash script for a single child microscale Fortran job.
 
@@ -212,6 +213,9 @@ def generate_micro_child_script(
     :param fast_tmp_root: Root directory for fast node-local scratch storage.
         When ``None`` (default) single-tier mode is used.
     :type fast_tmp_root: str, optional
+    :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
+        ``hdf5_path.parent / ".slurm"``.
+    :type slurm_log_dir: Path or str, optional
     :return: Slurm bash script text.
     :rtype: str
     """
@@ -219,8 +223,12 @@ def generate_micro_child_script(
     hdf5_path = Path(hdf5_path)
     executable = Path(executable)
     binary_name = executable.name
+    if slurm_log_dir is None:
+        slurm_log_dir = hdf5_path.parent / ".slurm"
+    slurm_log_dir = Path(slurm_log_dir)
 
     sbatch_opts = {
+        "out": str(slurm_log_dir / "child.slurm-%j.out"),
         "nodes": 1,
         "mem": 3096,
         "ntasks": 1,
@@ -397,6 +405,10 @@ def submit_micro_slurm_job(
         dir=str(staging_root_dir),
     ))
 
+    # Slurm log directory (sibling to the HDF5 file)
+    slurm_log_dir = hdf5_path.parent / ".slurm"
+    slurm_log_dir.mkdir(parents=True, exist_ok=True)
+
     # ------------------------------------------------------------------
     # Pre-stage setup files (params.json)
     # ------------------------------------------------------------------
@@ -413,6 +425,7 @@ def submit_micro_slurm_job(
     child_script = generate_micro_child_script(
         staging_dir, run_code, hdf5_path, executable, out_code,
         partition=partition, fast_tmp_root=fast_tmp_root,
+        slurm_log_dir=slurm_log_dir,
     )
     child_path = staging_dir / "child_000.sh"
     child_path.write_text(child_script)
@@ -432,7 +445,7 @@ def submit_micro_slurm_job(
     # ------------------------------------------------------------------
     sbatch_opts = {
         "job-name": f"lysis-micro-{run_code}",
-        "out": str(hdf5_path.parent / "job.slurm-%j.out"),
+        "out": str(slurm_log_dir / "master.slurm-%j.out"),
         "nodes": 1,
         "mem": 3096,
         "ntasks": 1,
@@ -573,6 +586,7 @@ def generate_macro_array_script(
     *,
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
+    slurm_log_dir: Optional["Path | str"] = None,
 ) -> str:
     """Generate a Slurm array job script for the macroscale Fortran simulation.
 
@@ -616,6 +630,9 @@ def generate_macro_array_script(
     :param fast_tmp_root: Root directory for fast node-local scratch.  When
         ``None`` (default) single-tier mode is used.
     :type fast_tmp_root: str, optional
+    :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
+        ``hdf5_path.parent / ".slurm"``.
+    :type slurm_log_dir: Path or str, optional
     :return: Slurm array job bash script text.
     :rtype: str
     """
@@ -623,9 +640,13 @@ def generate_macro_array_script(
     hdf5_path = Path(hdf5_path)
     executable = Path(executable)
     binary_name = executable.name
+    if slurm_log_dir is None:
+        slurm_log_dir = hdf5_path.parent / ".slurm"
+    slurm_log_dir = Path(slurm_log_dir)
 
     sbatch_opts = {
         "array": f"0-{n_sims - 1}",
+        "out": str(slurm_log_dir / "array.slurm-%A_%a.out"),
         "nodes": 1,
         "mem": 3096,
         "ntasks": 1,
@@ -770,6 +791,10 @@ def submit_macro_slurm_job(
         dir=str(staging_root_dir),
     ))
 
+    # Slurm log directory (sibling to the HDF5 file)
+    slurm_log_dir = hdf5_path.parent / ".slurm"
+    slurm_log_dir.mkdir(parents=True, exist_ok=True)
+
     # ------------------------------------------------------------------
     # Pre-stage setup files (macroscale_in + params.json)
     # ------------------------------------------------------------------
@@ -793,6 +818,7 @@ def submit_macro_slurm_job(
         staging_dir, run_code, hdf5_path, executable, n_sims,
         in_code=in_code, out_code=out_code,
         partition=partition, fast_tmp_root=fast_tmp_root,
+        slurm_log_dir=slurm_log_dir,
     )
     array_path = staging_dir / "array.sh"
     array_path.write_text(array_script)
@@ -812,7 +838,7 @@ def submit_macro_slurm_job(
     # ------------------------------------------------------------------
     sbatch_opts = {
         "job-name": f"lysis-macro-{run_code}",
-        "out": str(hdf5_path.parent / "job.slurm-%j.out"),
+        "out": str(slurm_log_dir / "master.slurm-%j.out"),
         "nodes": 1,
         "mem": 3096,
         "ntasks": 1,
