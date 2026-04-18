@@ -87,7 +87,7 @@ KEEP_TMPDIR = $keep_tmpdir
 # Submit child jobs
 # ---------------------------------------------------------------------------
 child_ids = []
-for script in sorted(STAGING_DIR.glob("child_*.sh")):
+for script in sorted(STAGING_DIR.glob(f"lysis-micro-child__{RUN_CODE}*.sh")):
     job_id = gs.sbatch([str(script)])
     child_ids.append(job_id)
     print(f"Submitted child job {job_id}: {script.name}", flush=True)
@@ -228,7 +228,8 @@ def generate_micro_child_script(
     slurm_log_dir = Path(slurm_log_dir)
 
     sbatch_opts = {
-        "out": str(slurm_log_dir / "child.slurm-%j.out"),
+        "job-name": f"lysis-micro-child__{run_code}",
+        "out": str(slurm_log_dir / f"lysis-micro-child__{run_code}.out"),
         "nodes": 1,
         "mem": 3096,
         "ntasks": 1,
@@ -427,7 +428,7 @@ def submit_micro_slurm_job(
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
     )
-    child_path = staging_dir / "child_000.sh"
+    child_path = staging_dir / f"lysis-micro-child__{run_code}.sh"
     child_path.write_text(child_script)
     child_path.chmod(0o755)
 
@@ -437,15 +438,15 @@ def submit_micro_slurm_job(
     master_py_content = _generate_micro_master_py(
         staging_dir, hdf5_path, run_code, out_code, keep_tmpdir,
     )
-    master_py_path = staging_dir / "master.py"
+    master_py_path = staging_dir / f"lysis-micro-master__{run_code}.py"
     master_py_path.write_text(master_py_content)
 
     # ------------------------------------------------------------------
     # Write master bash wrapper and submit
     # ------------------------------------------------------------------
     sbatch_opts = {
-        "job-name": f"lysis-micro-{run_code}",
-        "out": str(slurm_log_dir / "master.slurm-%j.out"),
+        "job-name": f"lysis-micro-master__{run_code}",
+        "out": str(slurm_log_dir / f"lysis-micro-master__{run_code}.out"),
         "nodes": 1,
         "mem": 3096,
         "ntasks": 1,
@@ -462,7 +463,7 @@ def submit_micro_slurm_job(
         ],
         **sbatch_opts,
     )
-    master_sh_path = staging_dir / "master.sh"
+    master_sh_path = staging_dir / f"lysis-micro-master__{run_code}.sh"
     master_sh_path.write_text(master_sh_content)
     master_sh_path.chmod(0o755)
 
@@ -495,7 +496,7 @@ KEEP_TMPDIR = $keep_tmpdir
 # ---------------------------------------------------------------------------
 # Submit array job
 # ---------------------------------------------------------------------------
-array_script = STAGING_DIR / "array.sh"
+array_script = STAGING_DIR / f"lysis-macro-array__{RUN_CODE}.sh"
 array_job_id = gs.sbatch([str(array_script)])
 print(f"Submitted array job {array_job_id}: {array_script.name}", flush=True)
 
@@ -646,7 +647,8 @@ def generate_macro_array_script(
 
     sbatch_opts = {
         "array": f"0-{n_sims - 1}",
-        "out": str(slurm_log_dir / "array.slurm-%A_%a.out"),
+        "job-name": f"lysis-macro-array__{run_code}__%a",
+        "out": str(slurm_log_dir / f"lysis-macro-array__{run_code}__%a.out"),
         "nodes": 1,
         "mem": 3096,
         "ntasks": 1,
@@ -820,7 +822,7 @@ def submit_macro_slurm_job(
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
     )
-    array_path = staging_dir / "array.sh"
+    array_path = staging_dir / f"lysis-macro-array__{run_code}.sh"
     array_path.write_text(array_script)
     array_path.chmod(0o755)
 
@@ -830,15 +832,15 @@ def submit_macro_slurm_job(
     master_py_content = _generate_macro_master_py(
         staging_dir, hdf5_path, run_code, out_code, keep_tmpdir,
     )
-    master_py_path = staging_dir / "master.py"
+    master_py_path = staging_dir / f"lysis-macro-master__{run_code}.py"
     master_py_path.write_text(master_py_content)
 
     # ------------------------------------------------------------------
     # Write master bash wrapper and submit
     # ------------------------------------------------------------------
     sbatch_opts = {
-        "job-name": f"lysis-macro-{run_code}",
-        "out": str(slurm_log_dir / "master.slurm-%j.out"),
+        "job-name": f"lysis-macro-master__{run_code}",
+        "out": str(slurm_log_dir / f"lysis-macro-master__{run_code}.out"),
         "nodes": 1,
         "mem": 3096,
         "ntasks": 1,
@@ -855,7 +857,7 @@ def submit_macro_slurm_job(
         ],
         **sbatch_opts,
     )
-    master_sh_path = staging_dir / "master.sh"
+    master_sh_path = staging_dir / f"lysis-macro-master__{run_code}.sh"
     master_sh_path.write_text(master_sh_content)
     master_sh_path.chmod(0o755)
 

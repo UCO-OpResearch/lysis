@@ -361,7 +361,7 @@ class TestSubmitMicroSlurmJob:
         submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
                                staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
-        assert (staging_dir / "child_000.sh").exists()
+        assert (staging_dir / "lysis-micro-child__run-01.sh").exists()
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_master_script_written_to_staging_dir(self, mock_sbatch, micro_hdf5, tmp_path):
@@ -370,8 +370,8 @@ class TestSubmitMicroSlurmJob:
         submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
                                staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
-        assert (staging_dir / "master.sh").exists()
-        assert (staging_dir / "master.py").exists()
+        assert (staging_dir / "lysis-micro-master__run-01.sh").exists()
+        assert (staging_dir / "lysis-micro-master__run-01.py").exists()
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_sbatch_called_with_master_sh(self, mock_sbatch, micro_hdf5, tmp_path):
@@ -380,7 +380,7 @@ class TestSubmitMicroSlurmJob:
         submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
                                staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
-        expected_path = str(staging_dir / "master.sh")
+        expected_path = str(staging_dir / "lysis-micro-master__run-01.sh")
         mock_sbatch.assert_called_once_with([expected_path])
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
@@ -390,7 +390,7 @@ class TestSubmitMicroSlurmJob:
         submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
                                staging_root=staging_root, partition="long")
         staging_dir = list(staging_root.iterdir())[0]
-        master_content = (staging_dir / "master.sh").read_text()
+        master_content = (staging_dir / "lysis-micro-master__run-01.sh").read_text()
         assert "partition" in master_content
         assert "long" in master_content
 
@@ -401,7 +401,7 @@ class TestSubmitMicroSlurmJob:
         submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
                                staging_root=staging_root, partition="long")
         staging_dir = list(staging_root.iterdir())[0]
-        child_content = (staging_dir / "child_000.sh").read_text()
+        child_content = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
         assert "partition" in child_content
         assert "long" in child_content
 
@@ -413,7 +413,7 @@ class TestSubmitMicroSlurmJob:
                                staging_root=staging_root,
                                fast_tmp_root="/nvme/scratch")
         staging_dir = list(staging_root.iterdir())[0]
-        child_content = (staging_dir / "child_000.sh").read_text()
+        child_content = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
         assert "/nvme/scratch" in child_content
         assert "mktemp" in child_content
 
@@ -434,7 +434,7 @@ class TestSubmitMicroSlurmJob:
         submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
                                staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
-        master_content = (staging_dir / "master.py").read_text()
+        master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
         assert "lysis.execution.fortran_micro" in master_content
         assert "codeutil" not in master_content
 
@@ -446,7 +446,7 @@ class TestSubmitMicroSlurmJob:
         submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
                                staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
-        master_content = (staging_dir / "master.py").read_text()
+        master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
         assert "FortranMicro.import_results(" not in master_content
         assert "fm.import_results(" in master_content
 
@@ -460,7 +460,7 @@ class TestSubmitMicroSlurmJob:
         rel_exe = os.path.relpath("/bin/micro.exe")
         submit_micro_slurm_job(micro_hdf5, rel_exe, staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
-        child_content = (staging_dir / "child_000.sh").read_text()
+        child_content = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
         assert "/bin/micro.exe" in child_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
@@ -472,7 +472,7 @@ class TestSubmitMicroSlurmJob:
         rel_h5 = os.path.relpath(str(micro_hdf5))
         submit_micro_slurm_job(rel_h5, "/bin/micro.exe", staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
-        child_content = (staging_dir / "child_000.sh").read_text()
+        child_content = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
         assert str(micro_hdf5) in child_content
 
 
@@ -704,7 +704,7 @@ class TestSubmitMacroSlurmJob:
             macro_hdf5, "/bin/macro.exe", staging_root=staging_root
         )
         staging_dir = list(staging_root.iterdir())[0]
-        assert (staging_dir / "array.sh").exists()
+        assert (staging_dir / "lysis-macro-array__run-01.sh").exists()
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_master_scripts_written(
@@ -716,8 +716,8 @@ class TestSubmitMacroSlurmJob:
             macro_hdf5, "/bin/macro.exe", staging_root=staging_root
         )
         staging_dir = list(staging_root.iterdir())[0]
-        assert (staging_dir / "master.sh").exists()
-        assert (staging_dir / "master.py").exists()
+        assert (staging_dir / "lysis-macro-master__run-01.sh").exists()
+        assert (staging_dir / "lysis-macro-master__run-01.py").exists()
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_sbatch_called_with_master_sh(
@@ -729,7 +729,7 @@ class TestSubmitMacroSlurmJob:
             macro_hdf5, "/bin/macro.exe", staging_root=staging_root
         )
         staging_dir = list(staging_root.iterdir())[0]
-        expected_path = str(staging_dir / "master.sh")
+        expected_path = str(staging_dir / "lysis-macro-master__run-01.sh")
         mock_sbatch.assert_called_once_with([expected_path])
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
@@ -742,7 +742,7 @@ class TestSubmitMacroSlurmJob:
             macro_hdf5, "/bin/macro.exe", staging_root=staging_root
         )
         staging_dir = list(staging_root.iterdir())[0]
-        array_content = (staging_dir / "array.sh").read_text()
+        array_content = (staging_dir / "lysis-macro-array__run-01.sh").read_text()
         assert "--array" in array_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
@@ -755,7 +755,7 @@ class TestSubmitMacroSlurmJob:
             macro_hdf5, "/bin/macro.exe", staging_root=staging_root
         )
         staging_dir = list(staging_root.iterdir())[0]
-        master_content = (staging_dir / "master.py").read_text()
+        master_content = (staging_dir / "lysis-macro-master__run-01.py").read_text()
         assert "lysis.execution.fortran_macro" in master_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
@@ -769,7 +769,7 @@ class TestSubmitMacroSlurmJob:
             staging_root=staging_root, partition="long"
         )
         staging_dir = list(staging_root.iterdir())[0]
-        master_content = (staging_dir / "master.sh").read_text()
+        master_content = (staging_dir / "lysis-macro-master__run-01.sh").read_text()
         assert "partition" in master_content
         assert "long" in master_content
 
