@@ -489,20 +489,20 @@ print(f"Submitted array job {array_job_id}: {array_script.name}", flush=True)
 # ---------------------------------------------------------------------------
 # Poll until all array tasks complete
 # ---------------------------------------------------------------------------
-base_prefix = str(array_job_id) + "_"
 # Initial sleep to allow tasks to appear in the queue
 time.sleep(30)
 while True:
     squeue_rows = gs.squeue.read()
-    running_ids = {row["JOBID"] for row in squeue_rows}
-    for row in squeue_rows:
-        if row["JOBID"].startswith(base_prefix):
-            state = row.get("STATE", "").upper()
-            if state in ("FAILED", "CANCELLED"):
-                raise RuntimeError(
-                    f"Array task {row[\'JOBID\']} entered state {state}"
-                )
-    still_running = any(jid.startswith(base_prefix) for jid in running_ids)
+    child_job_rows = [
+        row for row in squeue_rows if row["ARRAY_JOB_ID"].startswith(str(array_job_id))
+    ]
+    for row in child_job_rows:
+        state = row.get("STATE", "").upper()
+        if state in ("FAILED", "CANCELLED"):
+            raise RuntimeError(
+                f"Array task {row[\'JOBID\']} entered state {state}"
+            )
+    still_running = len(child_job_rows) > 0
     if not still_running:
         break
     time.sleep(30)
