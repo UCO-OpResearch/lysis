@@ -29,3 +29,7 @@ docs/html/
 # Uncomment these if you want to exclude auto-generated API docs
 # docs/source/modules.rst
 # docs/source/lysis*.rst
+
+# Generated Graphviz source for the internal-imports diagram
+# (regenerate with scripts/regen_import_graph.py; .svg/.png are committed)
+docs/planning/lysis_internal_imports.dot
