@@ -80,7 +80,12 @@ class FortranMicro(FortranRunner):
         return "micro_simulations"
 
     def _seed_split_count(self, params: dict) -> int:
-        return self.index + 1
+        # Array path: every sibling task draws from the same fixed-size
+        # seed stream so the partition is reproducibility-correct.
+        # Legacy single-sim-per-task path (``num_children=None``) keeps
+        # the historical ``self.index + 1`` count to preserve bit-for-bit
+        # reproducibility of pre-existing single-task artifacts.
+        return self.num_children if self.num_children is not None else self.index + 1
 
     def _base_arguments(self) -> list:
         return [

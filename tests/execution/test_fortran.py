@@ -39,7 +39,7 @@ def _make_stub_class(params_override=None):
             return "micro_simulations"
 
         def _seed_split_count(self, params):
-            return self.index + 1
+            return self.num_children if self.num_children is not None else self.index + 1
 
         def _base_arguments(self):
             return ["--runCode", self.run.run_code, "--outFileCode", self.out_file_code]
@@ -216,3 +216,68 @@ class TestExecCommandTemplate:
                      out_file_code="orig", index=None)
         runner.exec_command()
         assert runner.out_file_code == "orig"
+
+    # ------------------------------------------------------------------
+    # Array partition (num_children set)
+    # ------------------------------------------------------------------
+
+    def test_partition_clean_division(self, tmp_path):
+        """N=50000, k=10 → every task gets exactly 5000."""
+        r = Run(str(tmp_path))
+        r.initialize_micro_param({"micro_simulations": 50000})
+        cls = _make_stub_class()
+        for i in range(10):
+            runner = cls(run=r, executable="/bin/stub.exe", index=i, num_children=10)
+            cmd = runner.exec_command()
+            assert "--simulations" in cmd, f"task {i} missing --simulations"
+            assert cmd[cmd.index("--simulations") + 1] == "5000"
+
+    def test_partition_with_remainder(self, tmp_path):
+        """N=53, k=10 → tasks 0..2 get 6, tasks 3..9 get 5; total = N."""
+        r = Run(str(tmp_path))
+        r.initialize_micro_param({"micro_simulations": 53})
+        cls = _make_stub_class()
+        per_task = []
+        for i in range(10):
+            runner = cls(run=r, executable="/bin/stub.exe", index=i, num_children=10)
+            cmd = runner.exec_command()
+            assert "--simulations" in cmd
+            per_task.append(int(cmd[cmd.index("--simulations") + 1]))
+
+        assert per_task[:3] == [6, 6, 6]
+        assert per_task[3:] == [5] * 7
+        assert sum(per_task) == 53
+
+    def test_num_children_none_preserves_legacy_one_sim(self, tmp_run):
+        """index set, num_children=None → simulations=1 (legacy path)."""
+        cls = _make_stub_class()
+        runner = cls(
+            run=tmp_run, executable="/bin/stub.exe", index=2, num_children=None
+        )
+        cmd = runner.exec_command()
+        assert "--simulations" in cmd
+        assert cmd[cmd.index("--simulations") + 1] == "1"
+
+    def test_seed_split_count_returns_num_children_when_set(self, tmp_run):
+        """When num_children is set, every sibling draws from the same-sized stream."""
+        seed = tmp_run.micro_params.micro_seed
+        stream = np.random.SeedSequence(seed)
+        seeds = stream.generate_state(10)
+
+        cls = _make_stub_class()
+        for i in range(10):
+            runner = cls(run=tmp_run, executable="/bin/stub.exe",
+                         index=i, num_children=10)
+            cmd = runner.exec_command()
+            assert "--seed" in cmd
+            expected = int(np.int32(seeds[i]))
+            assert cmd[cmd.index("--seed") + 1] == str(expected)
+
+    def test_partition_with_num_children_one(self, tmp_path):
+        """num_children=1 → the single task gets all N simulations."""
+        r = Run(str(tmp_path))
+        r.initialize_micro_param({"micro_simulations": 42})
+        cls = _make_stub_class()
+        runner = cls(run=r, executable="/bin/stub.exe", index=0, num_children=1)
+        cmd = runner.exec_command()
+        assert cmd[cmd.index("--simulations") + 1] == "42"

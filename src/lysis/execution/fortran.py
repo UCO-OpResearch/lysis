@@ -78,9 +78,21 @@ class FortranRunner(SimulationRunner):
     :ivar out_file_code: Code suffix for output files (e.g. ``_PLG2_tPA01_Q4``).
     :vartype out_file_code: str
     :ivar index: Optional index for parallel runs.  When set, the RNG seed is
-        split so each index produces an independent stream, ``{simulations}``
-        is forced to 1, and ``__{index:02}`` is appended to ``out_file_code``.
+        split so each index produces an independent stream and
+        ``__{index:02}`` is appended to ``out_file_code``.  The simulation
+        count for this task is determined by :attr:`num_children`: when
+        ``num_children`` is ``None`` (legacy single-sim-per-task path) the
+        count is forced to 1; otherwise it is partitioned across
+        ``num_children`` tasks (see :meth:`exec_command`).
     :vartype index: int or None
+    :ivar num_children: Optional number of sibling tasks sharing this run.
+        When set with :attr:`index`, the parameter ``{simulations}`` is
+        partitioned across ``num_children`` tasks (with the remainder
+        distributed across the lowest-indexed tasks).  Subclasses must
+        return ``num_children`` from :meth:`_seed_split_count` so all
+        sibling tasks draw seeds from a stream of identical size.  Defaults
+        to ``None`` (preserves legacy single-sim-per-task behavior).
+    :vartype num_children: int or None
     """
 
     run: Run = None
@@ -88,6 +100,7 @@ class FortranRunner(SimulationRunner):
     executable: AnyStr = None
     out_file_code: AnyStr = ""
     index: int = None
+    num_children: int = None
 
     # ------------------------------------------------------------------
     # Abstract hooks (implemented by subclasses)
@@ -133,7 +146,16 @@ class FortranRunner(SimulationRunner):
         """Return the count for :meth:`numpy.random.SeedSequence.generate_state`.
 
         Called *before* ``params`` is mutated (i.e. before the simulations
-        field is set to 1), so implementations may safely read ``params``.
+        field is partitioned), so implementations may safely read ``params``.
+
+        Implementations **must** return a value that is identical across
+        sibling tasks sharing the same base seed; otherwise sibling tasks
+        will draw seeds from streams of different sizes and the partition
+        will not be reproducibility-correct.  The standard implementation
+        returns :attr:`num_children` when set (array path) and falls back
+        to ``self.index + 1`` for the legacy single-sim-per-task path,
+        which preserves bit-for-bit reproducibility of pre-existing
+        single-task artifacts.
 
         :param params: The parameters dict (from :func:`dataclasses.asdict`).
         :type params: dict
@@ -277,7 +299,17 @@ class FortranRunner(SimulationRunner):
             stream = np.random.SeedSequence(params[self._seed_field()])
             split_count = self._seed_split_count(params)  # read before mutation
             seeds = stream.generate_state(split_count)
-            params[self._simulations_field()] = 1
+            sim_field = self._simulations_field()
+            if self.num_children is None:
+                # Legacy: one simulation per task.
+                params[sim_field] = 1
+            else:
+                # Array partition: distribute total sims across children,
+                # giving the lowest-indexed tasks the remainder so
+                # sum(per_task) == total.
+                total = int(params[sim_field])
+                k = self.num_children
+                params[sim_field] = total // k + (1 if self.index < total % k else 0)
             params[self._seed_field()] = seeds[self.index]
             self.out_file_code = self.out_file_code + f"__{self.index:02}"
 
