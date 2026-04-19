@@ -803,3 +803,25 @@ class TestSubmitMacroSlurmJob:
             submit_macro_slurm_job(macro_hdf5, str(fake_exe), staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
         assert (staging_dir / "macro.exe").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_filters_squeue_by_array_job_id_equality(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        """Master script must use ``==`` not ``startswith`` for ARRAY_JOB_ID.
+
+        Regression test: ``str(123).startswith(str(123))`` is True, but it
+        also matches array_job_id 1234 / 12345 / etc. — a prefix collision
+        that would block the master from ever exiting the polling loop on
+        large clusters where neighbouring jobs share a prefix.
+        """
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_py = (staging_dir / "lysis-macro-master__run-01.py").read_text()
+        assert "ARRAY_JOB_ID" in master_py
+        assert ".startswith(" not in master_py
+        assert 'row["ARRAY_JOB_ID"] == str(array_job_id)' in master_py
