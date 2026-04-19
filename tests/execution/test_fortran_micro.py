@@ -201,6 +201,17 @@ class TestFortranMicroFromHdf5:
         fm = FortranMicro.from_hdf5(micro_hdf5, "/bin/micro.exe", index=3)
         assert fm.index == 3
 
+    def test_passes_num_children(self, micro_hdf5):
+        fm = FortranMicro.from_hdf5(
+            micro_hdf5, "/bin/micro.exe", index=0, num_children=10
+        )
+        assert fm.num_children == 10
+
+    def test_num_children_defaults_to_none(self, micro_hdf5):
+        """Legacy callers (no kwarg) get num_children=None — preserves bit-for-bit reproducibility."""
+        fm = FortranMicro.from_hdf5(micro_hdf5, "/bin/micro.exe", index=0)
+        assert fm.num_children is None
+
     def test_raises_for_missing_file(self, tmp_path):
         missing = tmp_path / "nonexistent.h5"
         with pytest.raises((RuntimeError, OSError)):

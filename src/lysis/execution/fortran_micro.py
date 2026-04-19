@@ -134,6 +134,7 @@ class FortranMicro(FortranRunner):
         executable: str,
         out_file_code: str = "",
         index: "int | None" = None,
+        num_children: "int | None" = None,
     ) -> "FortranMicro":
         """Construct a :class:`FortranMicro` from an existing HDF5 run file.
 
@@ -151,6 +152,12 @@ class FortranMicro(FortranRunner):
         :param index: Parallel run index for seed splitting, defaults to
             ``None``.
         :type index: int, optional
+        :param num_children: Total number of sibling array tasks sharing
+            this run.  When set together with ``index``,
+            :meth:`exec_command` partitions ``micro_simulations`` across
+            the children (see :class:`~lysis.execution.fortran.FortranRunner`
+            for details).  Defaults to ``None`` (legacy single-sim-per-task).
+        :type num_children: int, optional
         :return: Fully configured :class:`FortranMicro` instance.
         :rtype: FortranMicro
         :raises RuntimeError: If the HDF5 file's directory is not found.
@@ -183,6 +190,7 @@ class FortranMicro(FortranRunner):
             executable=str(Path(executable).resolve()),
             out_file_code=out_file_code,
             index=index,
+            num_children=num_children,
         )
 
     # ------------------------------------------------------------------
