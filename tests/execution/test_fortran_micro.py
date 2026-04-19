@@ -912,3 +912,112 @@ class TestFortranBinaryExecution:
                 assert actual_shape == expected_shape, (
                     f"{name}: expected shape {expected_shape}, got {actual_shape}"
                 )
+
+    def test_concat_produces_dataio_equivalent_output(self, tmp_path_factory):
+        """Byte-concat of per-child binary outputs is dataio-equivalent.
+
+        Runs the Fortran binary three times with different seeds and a
+        small number of simulations each, reads each output through
+        :func:`read_data_collection`, then stages the per-task ``.dat``
+        files into a combined directory under the
+        ``__NN``-suffixed naming convention used by
+        :meth:`FortranMicro.concatenate_child_outputs`.  After
+        concatenation, reading the combined directory must yield arrays
+        bit-for-bit equal to ``np.concatenate`` of the per-task arrays
+        for every dataset in
+        :data:`lysis.execution.fortran_micro.MICROSCALE_BINARY_DATASETS`.
+        """
+        from lysis.dataio.dataspec import dataspec
+        from lysis.dataio.fileops import read_data_collection, write_dataset
+        from lysis.execution.fortran_micro import (
+            MICROSCALE_BINARY_DATASETS,
+        )
+
+        binary = str(_REPO_ROOT / "bin" / "micro_rates")
+        n_runs = 3
+        sims_per_run = 5
+        base_seed = 9999
+        out_code = "_CAT"
+
+        tmp_path = tmp_path_factory.mktemp("micro_concat")
+
+        # Step 1: execute the binary n_runs times in its own workdir.
+        run_data_dirs = []
+        for i in range(n_runs):
+            run_code = f"sim-{i:02d}"
+            workdir = tmp_path / run_code
+            workdir.mkdir(parents=True, exist_ok=True)
+            run = Run(str(workdir), run_code=run_code)
+            run.initialize_micro_param(
+                {"micro_simulations": sims_per_run, "micro_seed": base_seed + i}
+            )
+            fm = FortranMicro(
+                run=run, executable=binary, out_file_code=out_code,
+            )
+            run_data_dirs.append(fm.exec_in_workdir(workdir))
+
+        # Step 2: read each run individually with dataio.
+        spec = dataspec[MICRO_FORTRAN_DATASPEC_VERSION]["microscale_out"]
+        individual = []
+        for d in run_data_dirs:
+            data = read_data_collection(
+                path=str(d), collections=[spec], file_codes=[out_code],
+            )
+            individual.append(
+                {name: np.asarray(data[name]) for name in MICROSCALE_BINARY_DATASETS}
+            )
+
+        # Step 3: stage per-task __NN files into a combined dir, then concat.
+        combined_dir = tmp_path / "combined"
+        combined_dir.mkdir(parents=True, exist_ok=True)
+        for i, src_dir in enumerate(run_data_dirs):
+            for dataset in MICROSCALE_BINARY_DATASETS:
+                src = src_dir / f"{dataset}{out_code}.dat"
+                dst = combined_dir / f"{dataset}{out_code}__{i:02d}.dat"
+                shutil.copyfile(src, dst)
+            log_src = src_dir / f"micro{out_code}.txt"
+            if log_src.exists():
+                shutil.copyfile(
+                    log_src, combined_dir / f"micro{out_code}__{i:02d}.txt",
+                )
+
+        # Pre-stage params.json with the aggregate simulation count so the
+        # combined dir is a complete microscale_out collection.
+        combined_mp = MicroParameters(
+            micro_simulations=n_runs * sims_per_run, micro_seed=0,
+        )
+        write_dataset(
+            {"micro_params": combined_mp.to_basedict()},
+            str(combined_dir),
+            spec.params,
+        )
+
+        fm_concat = FortranMicro(
+            run=Run(str(combined_dir.parent), run_code=combined_dir.name),
+            executable=binary,
+            out_file_code=out_code,
+        )
+        fm_concat.concatenate_child_outputs(combined_dir, num_children=n_runs)
+
+        # Step 4: read combined directory with dataio.
+        combined_data = read_data_collection(
+            path=str(combined_dir), collections=[spec], file_codes=[out_code],
+        )
+        combined = {
+            name: np.asarray(combined_data[name])
+            for name in MICROSCALE_BINARY_DATASETS
+        }
+
+        # Step 5: per-dataset bit-for-bit equality.
+        for dataset in MICROSCALE_BINARY_DATASETS:
+            expected = np.concatenate([ind[dataset] for ind in individual])
+            actual = combined[dataset]
+            assert actual.shape == expected.shape, (
+                f"{dataset}: shape {actual.shape} vs {expected.shape}"
+            )
+            assert actual.dtype == expected.dtype, (
+                f"{dataset}: dtype {actual.dtype} vs {expected.dtype}"
+            )
+            assert np.array_equal(actual, expected), (
+                f"{dataset}: {int(np.sum(actual != expected))} elements differ"
+            )
