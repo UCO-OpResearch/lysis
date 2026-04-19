@@ -775,6 +775,64 @@ def wait_for_jobs(job_ids: List[int], poll_interval: int = 30) -> None:
         remaining = [j for j in remaining if str(j) in running_ids]
 
 
+def _micro_spec(num_children: int, out_code: str) -> _SlurmJobSpec:
+    """Build the microscale array-mode dispatch spec."""
+    return _SlurmJobSpec(
+        scale="micro",
+        runner_module="lysis.execution.fortran_micro",
+        runner_class="FortranMicro",
+        num_array_tasks=num_children,
+        needs_concat_step=True,
+        nfs_wait_seconds=60,
+        prestage_executable=True,
+        out_file_code=out_code,
+        in_file_code=None,
+        num_children=num_children,
+    )
+
+
+def generate_micro_array_script(
+    staging_dir: "Path | str",
+    run_code: str,
+    hdf5_path: "Path | str",
+    executable: "Path | str",
+    num_children: int,
+    out_code: str = "",
+    *,
+    partition: Optional[str] = None,
+    fast_tmp_root: Optional[str] = None,
+    slurm_log_dir: Optional["Path | str"] = None,
+) -> str:
+    """Generate a Slurm array job script for the microscale Fortran simulation.
+
+    Thin wrapper over :func:`generate_array_script` with a micro
+    :class:`_SlurmJobSpec`.  See that function for the bash script
+    contract; micro-specific notes:
+
+    * Each array task handles ``micro_simulations / num_children`` of the
+      total simulations (with the lowest-indexed tasks absorbing the
+      remainder, partitioned by
+      :meth:`~lysis.execution.fortran.FortranRunner.exec_command`).
+    * Each task writes flat ``__NN``-suffixed files into
+      ``data/{run_code}/``; the master concatenates them after all
+      tasks complete.
+
+    :param num_children: Number of array tasks (sets
+        ``--array=0-{num_children-1}`` and is threaded into
+        :meth:`~lysis.execution.fortran_micro.FortranMicro.from_hdf5` so
+        the partition contract is honoured).
+    :type num_children: int
+    :param out_code: Output file code suffix, defaults to ``""``.
+    :type out_code: str, optional
+    """
+    spec = _micro_spec(num_children, out_code)
+    return generate_array_script(
+        spec, staging_dir, run_code, hdf5_path, executable,
+        partition=partition, fast_tmp_root=fast_tmp_root,
+        slurm_log_dir=slurm_log_dir,
+    )
+
+
 def submit_micro_slurm_job(
     hdf5_path: "Path | str",
     executable: "Path | str",
@@ -784,13 +842,21 @@ def submit_micro_slurm_job(
     fast_tmp_root: Optional[str] = None,
     keep_tmpdir: bool = False,
     out_code: str = "",
+    num_children: Optional[int] = None,
 ) -> int:
     """Submit the full HDF5-integrated microscale workflow as a Slurm master job.
 
-    Creates a unique staging directory, writes child and master scripts into
-    it, and submits a master Slurm job.  The master job (running on a compute
-    node) orchestrates the child Fortran jobs, imports results into the HDF5
-    file, and optionally cleans up.
+    Two execution modes:
+
+    * **Single-child (legacy)**: ``num_children=None`` (default).  Submits
+      one child Fortran job that runs all microscale simulations
+      sequentially, then imports.  Bit-for-bit reproducible with
+      pre-existing single-task artifacts.
+    * **Array (opt-in)**: ``num_children >= 1``.  Submits a Slurm array
+      of ``num_children`` tasks; the master concatenates their per-task
+      outputs and imports.  Each task runs
+      ``micro_simulations // num_children`` simulations (with the
+      lowest-indexed tasks absorbing the remainder).
 
     Directory naming
     ~~~~~~~~~~~~~~~~
@@ -811,10 +877,10 @@ def submit_micro_slurm_job(
     :param staging_root: Root directory under which the staging temp dir is
         created.  Defaults to ``hdf5_path.parent``.
     :type staging_root: Path or str, optional
-    :param partition: Slurm partition for both master and child jobs.
+    :param partition: Slurm partition for both master and child/array jobs.
     :type partition: str, optional
     :param fast_tmp_root: Root directory for fast node-local scratch (opt-in
-        two-tier storage).  When ``None`` (default) the child writes directly
+        two-tier storage).  When ``None`` (default) tasks write directly
         to the shared staging directory.
     :type fast_tmp_root: str, optional
     :param keep_tmpdir: If ``True``, preserve the staging directory after the
@@ -823,9 +889,15 @@ def submit_micro_slurm_job(
     :param out_code: Output file code suffix for the Fortran binary,
         defaults to ``""``.
     :type out_code: str, optional
+    :param num_children: When set to a positive integer, switches to the
+        Slurm array execution mode and partitions ``micro_simulations``
+        across that many tasks.  ``None`` (default) selects the legacy
+        single-child path.
+    :type num_children: int, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
+    :raises ValueError: If ``num_children`` is set and is less than 1.
     """
     from lysis.execution.fortran_micro import FortranMicro  # noqa: PLC0415
 
@@ -833,8 +905,29 @@ def submit_micro_slurm_job(
     executable = Path(executable).resolve()
     run_code = hdf5_path.stem
 
-    # Create unique staging directory — never use /tmp
-    staging_root_dir = Path(staging_root) if staging_root is not None else hdf5_path.parent
+    # Resolve staging root once; both branches use it.
+    staging_root_dir = (
+        Path(staging_root) if staging_root is not None else hdf5_path.parent
+    )
+
+    # ------------------------------------------------------------------
+    # Array path: delegate to the unified array-mode dispatch.
+    # ------------------------------------------------------------------
+    if num_children is not None:
+        if num_children < 1:
+            raise ValueError(
+                f"num_children must be >= 1 when set, got {num_children}"
+            )
+        spec = _micro_spec(num_children, out_code)
+        return submit_slurm_job(
+            spec, hdf5_path, executable, staging_root_dir,
+            partition=partition, fast_tmp_root=fast_tmp_root,
+            keep_tmpdir=keep_tmpdir,
+        )
+
+    # ------------------------------------------------------------------
+    # Legacy single-child path.
+    # ------------------------------------------------------------------
     staging_dir = Path(tempfile.mkdtemp(
         prefix=f"lysis-micro-{run_code}-",
         dir=str(staging_root_dir),

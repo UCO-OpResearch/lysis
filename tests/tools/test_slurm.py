@@ -19,6 +19,7 @@ from lysis.config.constants import CONST
 from lysis.config.parameters import MacroParameters, MicroParameters
 from lysis.tools.slurm import (
     generate_macro_array_script,
+    generate_micro_array_script,
     generate_micro_child_script,
     submit_macro_slurm_job,
     submit_micro_child_job,
@@ -825,3 +826,299 @@ class TestSubmitMacroSlurmJob:
         assert "ARRAY_JOB_ID" in master_py
         assert ".startswith(" not in master_py
         assert 'row["ARRAY_JOB_ID"] == str(array_job_id)' in master_py
+
+
+# ---------------------------------------------------------------------------
+# TestGenerateMicroArrayScript
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateMicroArrayScript:
+    """Tests for :func:`generate_micro_array_script`."""
+
+    def test_returns_string(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=10,
+        )
+        assert isinstance(script, str)
+
+    def test_has_sbatch_shebang(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=10,
+        )
+        assert script.startswith("#!/bin/bash")
+
+    def test_array_directive_uses_num_children(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=10,
+        )
+        assert "--array" in script
+        assert "0-9" in script
+
+    def test_single_tier_no_local_workdir(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=10,
+        )
+        assert "local_work_dir" not in script
+
+    def test_single_tier_uses_fortran_micro_import(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=10,
+        )
+        assert "lysis.execution.fortran_micro" in script
+        assert "FortranMicro" in script
+
+    def test_single_tier_uses_slurm_array_task_id(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=10,
+        )
+        assert "SLURM_ARRAY_TASK_ID" in script
+
+    def test_single_tier_threads_num_children_into_from_hdf5(self, tmp_path):
+        """The python -c body must pass num_children=K to from_hdf5."""
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=10,
+        )
+        assert "num_children=10" in script
+
+    def test_single_tier_contains_out_code(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=4,
+            out_code="_outcode",
+        )
+        assert "_outcode" in script
+
+    def test_single_tier_partition_in_header(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=4,
+            partition="long",
+        )
+        assert "partition" in script
+        assert "long" in script
+
+    def test_single_tier_no_partition_when_not_set(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=4,
+        )
+        assert "--partition" not in script
+
+    def test_single_tier_no_cp_of_executable(self, tmp_path):
+        """Single-tier script must not copy the executable (pre-staged by submit_micro_slurm_job).
+
+        Regression test: all array tasks share the same staging dir, so any
+        ``cp`` in the array script causes a race where tasks 1..N fail with
+        "File exists" after task 0 wins the copy.
+        """
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=4,
+        )
+        assert "cp " not in script
+
+    def test_two_tier_contains_mktemp(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=4,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "mktemp" in script
+
+    def test_two_tier_contains_mv_step(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=4,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "mv " in script
+
+    def test_two_tier_mv_uses_glob_not_per_sim_subdir(self, tmp_path):
+        """Micro array tasks write flat files; the mv must glob, not target {SIM}."""
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=4,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert '"${local_datadir}"/*' in script
+        assert "${SIM}" not in script.split("# Move")[1]
+
+    def test_two_tier_contains_cleanup(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=4,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "rm -rf" in script
+
+    def test_two_tier_contains_fast_tmp_root(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=4,
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "/nvme/scratch" in script
+
+
+# ---------------------------------------------------------------------------
+# TestSubmitMicroSlurmJob — array path (num_children >= 1)
+# ---------------------------------------------------------------------------
+
+
+class TestSubmitMicroSlurmJobArrayPath:
+    """Tests for the array branch of :func:`submit_micro_slurm_job`.
+
+    Activated by passing ``num_children >= 1``; these complement the
+    legacy single-child tests in :class:`TestSubmitMicroSlurmJob`.
+    """
+
+    @pytest.fixture
+    def mock_write_setup(self):
+        """Patch FortranMicro._write_setup_files and shutil.copy2 to avoid real files."""
+        with patch(
+            "lysis.execution.fortran_micro.FortranMicro._write_setup_files"
+        ) as mock, patch("lysis.tools.slurm.shutil.copy2"):
+            yield mock
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=999)
+    def test_returns_master_job_id(
+        self, mock_sbatch, micro_hdf5, tmp_path, mock_write_setup
+    ):
+        job_id = submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=tmp_path, num_children=10,
+        )
+        assert job_id == 999
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_script_written(
+        self, mock_sbatch, micro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root, num_children=10,
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        assert (staging_dir / "lysis-micro-array__run-01.sh").exists()
+        # Legacy child script must NOT be written in array mode
+        assert not (staging_dir / "lysis-micro-child__run-01.sh").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_scripts_written(
+        self, mock_sbatch, micro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root, num_children=10,
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        assert (staging_dir / "lysis-micro-master__run-01.sh").exists()
+        assert (staging_dir / "lysis-micro-master__run-01.py").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_calls_concatenate(
+        self, mock_sbatch, micro_hdf5, tmp_path, mock_write_setup
+    ):
+        """Master must concat per-task outputs before importing."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root, num_children=10,
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_py = (staging_dir / "lysis-micro-master__run-01.py").read_text()
+        assert "concatenate_child_outputs" in master_py
+        assert "num_children=10" in master_py
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_sh_has_array_directive(
+        self, mock_sbatch, micro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root, num_children=10,
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        array_content = (staging_dir / "lysis-micro-array__run-01.sh").read_text()
+        assert "--array" in array_content
+        assert "0-9" in array_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_imports_fortran_micro(
+        self, mock_sbatch, micro_hdf5, tmp_path, mock_write_setup
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root, num_children=10,
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
+        assert "lysis.execution.fortran_micro" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_executable_pre_staged_in_staging_dir(
+        self, mock_sbatch, micro_hdf5, tmp_path
+    ):
+        """Executable must be copied to staging dir before the array tasks run.
+
+        Regression test: identical to the macro version — without
+        pre-staging, each array task would race to ``cp`` the binary
+        and all but the first would fail with "File exists".
+        """
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        fake_exe = tmp_path / "micro.exe"
+        fake_exe.write_bytes(b"fake binary")
+        with patch("lysis.execution.fortran_micro.FortranMicro._write_setup_files"):
+            submit_micro_slurm_job(
+                micro_hdf5, str(fake_exe),
+                staging_root=staging_root, num_children=10,
+            )
+        staging_dir = list(staging_root.iterdir())[0]
+        assert (staging_dir / "micro.exe").exists()
+
+    def test_num_children_zero_raises(self, micro_hdf5, tmp_path):
+        with pytest.raises(ValueError):
+            submit_micro_slurm_job(
+                micro_hdf5, "/bin/micro.exe",
+                staging_root=tmp_path, num_children=0,
+            )
+
+    def test_num_children_negative_raises(self, micro_hdf5, tmp_path):
+        with pytest.raises(ValueError):
+            submit_micro_slurm_job(
+                micro_hdf5, "/bin/micro.exe",
+                staging_root=tmp_path, num_children=-1,
+            )
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_num_children_none_uses_legacy_single_child_path(
+        self, mock_sbatch, micro_hdf5, tmp_path
+    ):
+        """num_children=None (the default) keeps the legacy single-child path."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root,  # no num_children
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        assert (staging_dir / "lysis-micro-child__run-01.sh").exists()
+        assert not (staging_dir / "lysis-micro-array__run-01.sh").exists()
