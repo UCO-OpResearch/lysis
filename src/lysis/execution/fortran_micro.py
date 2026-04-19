@@ -13,6 +13,7 @@ For step-by-step control use :meth:`FortranMicro.exec_in_workdir` followed
 by :meth:`FortranMicro.import_results`.
 """
 
+import shutil
 import subprocess
 
 from dataclasses import dataclass
@@ -33,6 +34,26 @@ __version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
+
+
+#: The eight per-simulation binary datasets in ``microscale_out``.
+#:
+#: These are the only Fortran-output datasets whose raw ``.dat`` files
+#: concatenate meaningfully — every one is shape ``(-1,)`` so
+#: :func:`numpy.fromfile` infers length from file size.  The aggregate
+#: datasets in ``macroscale_in`` (``tPAleave``, ``tsectPA``, ``lysismat``,
+#: ``lenlysisvect``) are histograms / percentile tables produced *per run*
+#: and CANNOT be byte-concatenated.
+MICROSCALE_BINARY_DATASETS: tuple = (
+    "firstPLi",
+    "lasttPA",
+    "lyscomplete",
+    "lysis",
+    "PLi",
+    "tPA_time",
+    "tPAPLiunbd",
+    "tPAunbind",
+)
 
 
 @dataclass
@@ -180,6 +201,91 @@ class FortranMicro(FortranRunner):
             str(data_dir),
             dataspec[MICRO_FORTRAN_DATASPEC_VERSION]["microscale_out"].params,
         )
+
+    # ------------------------------------------------------------------
+    # Slurm-array post-processing
+    # ------------------------------------------------------------------
+
+    def concatenate_child_outputs(
+        self, data_dir: "Path | str", num_children: int
+    ) -> None:
+        """Byte-concatenate per-task Fortran outputs into a single set of files.
+
+        The microscale Fortran binary writes its per-simulation results
+        as flat 1-D arrays (one record per simulation) to files named
+        ``{dataset}{out_file_code}.dat``.  When run as a Slurm array,
+        each task ``N`` writes to ``{dataset}{out_file_code}__NN.dat``;
+        this method concatenates all ``num_children`` per-task files into
+        the unsuffixed filename so :func:`read_data_collection` sees the
+        same layout as a single-process run.
+
+        The :file:`params.json` pre-staged by
+        :meth:`_write_setup_files` (which carries the *aggregate*
+        ``micro_simulations`` count) is left untouched and is the
+        authoritative parameter file for the combined collection; any
+        per-task ``params.json`` files in *data_dir* are ignored.
+
+        For ``num_children == 1`` no concatenation is needed; the single
+        ``__00`` file is renamed to the unsuffixed name and the log file
+        is renamed similarly.
+
+        :param data_dir: Directory containing the per-task ``__NN`` output
+            files (typically ``{work_dir}/data/{run_code}/``).
+        :type data_dir: Path or str
+        :param num_children: Number of array tasks that wrote to *data_dir*.
+            Must be a positive integer.
+        :type num_children: int
+        :raises ValueError: If ``num_children`` is less than 1.
+        :raises FileNotFoundError: If any expected per-task file is missing.
+        """
+        if num_children < 1:
+            raise ValueError(
+                f"num_children must be >= 1, got {num_children}"
+            )
+
+        data_dir = Path(data_dir)
+        log_prefix = self._log_prefix()
+
+        if num_children == 1:
+            # Single-task: just rename rather than concatenate.
+            for dataset in MICROSCALE_BINARY_DATASETS:
+                src = data_dir / f"{dataset}{self.out_file_code}__00.dat"
+                dst = data_dir / f"{dataset}{self.out_file_code}.dat"
+                if not src.exists():
+                    raise FileNotFoundError(
+                        f"Expected per-task file {src} not found "
+                        f"(num_children={num_children})"
+                    )
+                src.rename(dst)
+            log_src = data_dir / f"{log_prefix}{self.out_file_code}__00.txt"
+            log_dst = data_dir / f"{log_prefix}{self.out_file_code}.txt"
+            if log_src.exists():
+                log_src.rename(log_dst)
+            return
+
+        for dataset in MICROSCALE_BINARY_DATASETS:
+            dst = data_dir / f"{dataset}{self.out_file_code}.dat"
+            with open(dst, "wb") as out_fh:
+                for i in range(num_children):
+                    src = data_dir / f"{dataset}{self.out_file_code}__{i:02}.dat"
+                    if not src.exists():
+                        raise FileNotFoundError(
+                            f"Expected per-task file {src} not found "
+                            f"(child index {i} of {num_children})"
+                        )
+                    with open(src, "rb") as in_fh:
+                        shutil.copyfileobj(in_fh, out_fh)
+
+        # read_data_collection also reads the micro log text file; concatenate
+        # the per-task logs so the combined dir is a complete collection.
+        log_dst = data_dir / f"{log_prefix}{self.out_file_code}.txt"
+        with open(log_dst, "wb") as out_fh:
+            for i in range(num_children):
+                log_src = data_dir / f"{log_prefix}{self.out_file_code}__{i:02}.txt"
+                if not log_src.exists():
+                    continue
+                with open(log_src, "rb") as in_fh:
+                    shutil.copyfileobj(in_fh, out_fh)
 
     # ------------------------------------------------------------------
     # Execution
