@@ -281,6 +281,116 @@ class TestRunMicroSlurm:
         call_kwargs = mock_submit.call_args.kwargs
         assert call_kwargs.get("keep_tmpdir") is True
 
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
+    def test_num_children_default_is_10(
+        self, mock_submit, runner, micro_hdf5
+    ):
+        """Without --num-children, the default 10 must be forwarded."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_args.kwargs.get("num_children") == 10
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
+    def test_num_children_zero_is_translated_to_none(
+        self, mock_submit, runner, micro_hdf5
+    ):
+        """``--num-children 0`` selects the legacy single-child path."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+                "--num-children", "0",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_args.kwargs.get("num_children") is None
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
+    def test_num_children_positive_is_forwarded(
+        self, mock_submit, runner, micro_hdf5
+    ):
+        """A positive ``--num-children`` is forwarded as-is."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+                "--num-children", "25",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_args.kwargs.get("num_children") == 25
+
+    def test_num_children_negative_rejected(self, runner, micro_hdf5):
+        """``--num-children -1`` must exit non-zero (click IntRange enforces)."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+                "--num-children", "-1",
+            ],
+        )
+        assert result.exit_code != 0
+
+    @patch(
+        "lysis.tools.slurm.submit_micro_slurm_job",
+        side_effect=ValueError(
+            "num_children (999) exceeds micro_simulations (50) for run 'r'; "
+            "cannot split 50 simulations across 999 tasks."
+        ),
+    )
+    def test_num_children_exceeds_micro_simulations_raises_clickexception(
+        self, mock_submit, runner, micro_hdf5
+    ):
+        """``ValueError`` from ``submit_micro_slurm_job`` becomes a ClickException."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+                "--num-children", "999",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "exceeds micro_simulations" in result.output
+
+    def test_help_mentions_num_children(self, runner):
+        result = runner.invoke(cli, ["run-micro", "--help"])
+        assert result.exit_code == 0
+        assert "--num-children" in result.output
+
+    @patch("lysis.execution.fortran_micro.FortranMicro")
+    def test_num_children_without_slurm_does_not_crash(
+        self, mock_cls, runner, micro_hdf5
+    ):
+        """``--num-children`` without ``--slurm`` is silently ignored."""
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--num-children", "5",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        mock_fm.run_full.assert_called_once()
+
     @patch("lysis.execution.fortran_micro.FortranMicro")
     def test_partition_without_slurm_does_not_crash(self, mock_cls, runner, micro_hdf5):
         """--partition without --slurm should not cause an error (it's ignored)."""

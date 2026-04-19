@@ -93,9 +93,22 @@ from lysis.cli import cli
         "Not supported when PATH is a directory."
     ),
 )
+@click.option(
+    "--num-children",
+    "num_children",
+    type=click.IntRange(min=0),
+    default=10,
+    show_default=True,
+    metavar="N",
+    help=(
+        "Number of Slurm array tasks to split microscale simulations across.  "
+        "Set to 0 to use the legacy single-child path.  "
+        "Only meaningful with --slurm."
+    ),
+)
 @click.pass_context
 def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
-              fast_tmp_root, keep_tmpdir, file_code):
+              fast_tmp_root, keep_tmpdir, file_code, num_children):
     """Execute the Fortran microscale simulation for a Run or Experiment.
 
     PATH may be either:
@@ -138,6 +151,8 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
     if use_slurm:
         from lysis.tools.slurm import submit_micro_slurm_job
 
+        nc_arg = None if num_children == 0 else num_children
+
         submitted = []
         for hdf5_path in hdf5_paths:
             try:
@@ -149,6 +164,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
                     fast_tmp_root=fast_tmp_root,
                     keep_tmpdir=keep_tmpdir,
                     out_code=file_code,
+                    num_children=nc_arg,
                 )
             except ValueError as e:
                 raise click.ClickException(str(e))

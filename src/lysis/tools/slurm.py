@@ -897,7 +897,8 @@ def submit_micro_slurm_job(
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
-    :raises ValueError: If ``num_children`` is set and is less than 1.
+    :raises ValueError: If ``num_children`` is set and is either less than
+        1 or greater than ``micro_simulations``.
     """
     from lysis.execution.fortran_micro import FortranMicro  # noqa: PLC0415
 
@@ -917,6 +918,16 @@ def submit_micro_slurm_job(
         if num_children < 1:
             raise ValueError(
                 f"num_children must be >= 1 when set, got {num_children}"
+            )
+        from lysis.config.run import Run  # noqa: PLC0415
+        run_check = Run(str(hdf5_path.parent), run_code=run_code)
+        run_check.load_params_from_hdf5()
+        total_sims = int(run_check.micro_params.micro_simulations)
+        if num_children > total_sims:
+            raise ValueError(
+                f"num_children ({num_children}) exceeds micro_simulations "
+                f"({total_sims}) for run {run_code!r}; cannot split "
+                f"{total_sims} simulations across {num_children} tasks."
             )
         spec = _micro_spec(num_children, out_code)
         return submit_slurm_job(

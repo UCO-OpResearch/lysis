@@ -1108,6 +1108,17 @@ class TestSubmitMicroSlurmJobArrayPath:
                 staging_root=tmp_path, num_children=-1,
             )
 
+    def test_num_children_exceeds_micro_simulations_raises(
+        self, micro_hdf5, tmp_path
+    ):
+        """Cannot split N simulations across more than N tasks."""
+        # Default MicroParameters().micro_simulations == 50_000.
+        with pytest.raises(ValueError, match="exceeds micro_simulations"):
+            submit_micro_slurm_job(
+                micro_hdf5, "/bin/micro.exe",
+                staging_root=tmp_path, num_children=50_001,
+            )
+
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_num_children_none_uses_legacy_single_child_path(
         self, mock_sbatch, micro_hdf5, tmp_path
