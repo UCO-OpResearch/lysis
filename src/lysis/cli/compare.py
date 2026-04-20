@@ -10,7 +10,7 @@ import os
 
 import click
 
-from lysis.analysis.compare import MEASURE_EXTRACTORS, compare_runs_ks
+from lysis.analysis.compare import MEASURE_EXTRACTORS, compare_runs
 from lysis.cli import cli
 
 
@@ -57,7 +57,7 @@ def _open_run(data_root, run_code, console):
 
 
 def _compare_one(folder1, folder2, run_code, which, console):
-    """Open both Runs for *run_code*, run :func:`compare_runs_ks`, then close.
+    """Open both Runs for *run_code*, run :func:`compare_runs`, then close.
 
     :param folder1: Directory containing the first Run's HDF5 file.
     :type folder1: str
@@ -68,7 +68,7 @@ def _compare_one(folder1, folder2, run_code, which, console):
     :param which: Key into :data:`MEASURE_EXTRACTORS`.
     :type which: str
     :param console: Rich Console for error messages.
-    :return: ``{measure_label: KstestResult}``, or ``None`` on error.
+    :return: Result dict from :func:`compare_runs`, or ``None`` on error.
     :rtype: dict or None
     """
     run1 = _open_run(folder1, run_code, console)
@@ -79,7 +79,7 @@ def _compare_one(folder1, folder2, run_code, which, console):
         if run2 is None:
             return None
         try:
-            return compare_runs_ks(run1, run2, which)
+            return compare_runs(run1, run2, which)
         except Exception as e:
             console.print(f"[red]Error comparing {run_code}:[/red] {e}")
             return None
@@ -145,10 +145,14 @@ def compare(ctx, which, sort_mode, no_progress, markdown_out, folder1, folder2):
     """Compare Runs across two folders using the 2-sample Kolmogorov-Smirnov test.
 
     For every run code whose ``.h5`` file appears in both FOLDER1 and
-    FOLDER2, the per-simulation arrays selected by ``--which`` are compared
-    via :func:`scipy.stats.ks_2samp`.  Results are rendered as a table with
-    one row per Run and two columns per measure (``KS`` statistic and
-    ``p-value``).
+    FOLDER2 the command computes, per measure set selected by ``--which``:
+
+    - a 2-sample :func:`scipy.stats.ks_2samp` test on each per-simulation
+      array pair (``KS`` and ``p-value`` columns);
+    - a symmetric percent difference on each scalar summary stat (``% diff``
+      columns, signed so positive means FOLDER2 > FOLDER1).
+
+    Results are rendered as a table with one row per Run.
 
     \b
     Examples:
@@ -236,14 +240,14 @@ def compare(ctx, which, sort_mode, no_progress, markdown_out, folder1, folder2):
     ordered = {rc: all_results[rc] for rc in common if rc in all_results}
     df = compare_stats_table(ordered)
 
-    # Build Rich short-header abbreviations: split "<label> KS" / "<label> p-value"
-    # onto two lines so wide measure labels don't make the table unreadable.
+    # Build Rich short-header abbreviations: split the suffix onto a second
+    # line so wide measure labels don't make the table unreadable.
     short_headers = {}
     for col in df.columns:
-        if col.endswith(" KS"):
-            short_headers[col] = col[: -len(" KS")] + "\nKS"
-        elif col.endswith(" p-value"):
-            short_headers[col] = col[: -len(" p-value")] + "\np-value"
+        for suffix in (" KS", " p-value", " % diff"):
+            if col.endswith(suffix):
+                short_headers[col] = col[: -len(suffix)] + "\n" + suffix.lstrip()
+                break
 
     if markdown_out is not None:
         emit_markdown(stats_df_to_markdown(df, "Run"), markdown_out, console)

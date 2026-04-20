@@ -258,15 +258,18 @@ def parameters_table(
 
 
 def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
-    """Build a summary DataFrame for 2-sample KS test results across Runs.
+    """Build a summary DataFrame for :func:`compare_runs` results across Runs.
 
-    For each measure produced by
-    :func:`~lysis.analysis.compare.compare_runs_ks`, emits two columns:
-    ``"{measure} KS"`` (test statistic, ``:.4f``) and ``"{measure} p-value"``
-    (``:.3g``).  Measure order follows the first Run's result dict.
+    For each entry in the ``"ks"`` sub-dict, emits two columns:
+    ``"{label} KS"`` (test statistic, ``:.4f``) and ``"{label} p-value"``
+    (``:.3g``).  For each entry in the ``"pct_diff"`` sub-dict, emits one
+    column: ``"{label} % diff"`` (signed, ``:+.2f`` with a ``%`` suffix).
+    KS columns appear first, in measure order; pct-diff columns follow, in
+    stat order.  Both orderings are taken from the first Run's result dict.
 
-    :param results_by_run: Maps run code to ``{measure_label: KstestResult}``
-        as returned by :func:`~lysis.analysis.compare.compare_runs_ks`.
+    :param results_by_run: Maps run code to a compare-runs result dict
+        (see :func:`~lysis.analysis.compare.compare_runs`) or, for
+        backwards compatibility, to a plain ``{label: KstestResult}`` mapping.
     :type results_by_run: dict[str, dict]
     :return: DataFrame with run codes as index and pre-formatted string values.
         Returns an empty DataFrame if *results_by_run* is empty.
@@ -275,18 +278,37 @@ def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
     if not results_by_run:
         return pd.DataFrame()
 
-    measure_labels = list(next(iter(results_by_run.values())).keys())
+    first = next(iter(results_by_run.values()))
+    # Support both the new {"ks": ..., "pct_diff": ...} format and the plain
+    # {label: KstestResult} format.
+    new_format = isinstance(first, dict) and "ks" in first
+
+    if new_format:
+        ks_labels = list(first.get("ks", {}).keys())
+        pct_labels = list(first.get("pct_diff", {}).keys())
+    else:
+        ks_labels = list(first.keys())
+        pct_labels = []
+
     columns = []
-    for label in measure_labels:
+    for label in ks_labels:
         columns.append(f"{label} KS")
         columns.append(f"{label} p-value")
+    for label in pct_labels:
+        columns.append(f"{label} % diff")
 
     rows = {}
-    for rc, results in results_by_run.items():
+    for rc, entry in results_by_run.items():
+        ks_dict = entry["ks"] if new_format else entry
+        pct_dict = entry.get("pct_diff", {}) if new_format else {}
+
         row = {}
-        for label in measure_labels:
-            result = results[label]
+        for label in ks_labels:
+            result = ks_dict[label]
             row[f"{label} KS"] = f"{result.statistic:.4f}"
             row[f"{label} p-value"] = f"{result.pvalue:.3g}"
+        for label in pct_labels:
+            pct = pct_dict[label]
+            row[f"{label} % diff"] = "N/A" if pct != pct else f"{pct:+.2f}%"
         rows[rc] = row
     return pd.DataFrame.from_dict(rows, orient="index", columns=columns)

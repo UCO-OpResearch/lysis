@@ -50,7 +50,14 @@ from .degradation import (
     plot_degradation_percent,
     plot_front_degradation,
 )
-from .compare import MEASURE_EXTRACTORS, compare_runs_ks, extract_measures
+from .compare import (
+    MEASURE_EXTRACTORS,
+    STATS_COMPUTERS,
+    compare_runs,
+    compute_stats,
+    extract_measures,
+    percent_difference,
+)
 from .fiber_replay import FiberReplayCursor
 from .microscale import compute_micro_statistics
 from .summary import (
@@ -65,12 +72,15 @@ from .summary import (
 __all__ = [
     "FiberReplayCursor",
     "MEASURE_EXTRACTORS",
+    "STATS_COMPUTERS",
     "calculate_time_row_exposed",
-    "compare_runs_ks",
+    "compare_runs",
     "compare_stats_table",
+    "compute_stats",
     "deg_rate_table",
     "deg_time_table",
     "extract_measures",
+    "percent_difference",
     "macro_stats_table",
     "micro_stats_table",
     "parameters_table",
