@@ -11,6 +11,7 @@ Available functions:
 - :func:`deg_rate_table` — degradation-rate table for configurable intervals
 - :func:`deg_time_table` — degradation-time table for configurable milestones
 - :func:`parameters_table` — Scenario/Run parameter comparison table
+- :func:`compare_stats_table` — 2-sample KS test statistics across Runs
 """
 
 import pandas as pd
@@ -249,3 +250,43 @@ def parameters_table(
 
     index = pd.MultiIndex.from_tuples(index_tuples, names=["section", "parameter"])
     return pd.DataFrame(data, index=index, columns=present)
+
+
+# ---------------------------------------------------------------------------
+# compare_stats_table
+# ---------------------------------------------------------------------------
+
+
+def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
+    """Build a summary DataFrame for 2-sample KS test results across Runs.
+
+    For each measure produced by
+    :func:`~lysis.analysis.compare.compare_runs_ks`, emits two columns:
+    ``"{measure} KS"`` (test statistic, ``:.4f``) and ``"{measure} p-value"``
+    (``:.3g``).  Measure order follows the first Run's result dict.
+
+    :param results_by_run: Maps run code to ``{measure_label: KstestResult}``
+        as returned by :func:`~lysis.analysis.compare.compare_runs_ks`.
+    :type results_by_run: dict[str, dict]
+    :return: DataFrame with run codes as index and pre-formatted string values.
+        Returns an empty DataFrame if *results_by_run* is empty.
+    :rtype: pandas.DataFrame
+    """
+    if not results_by_run:
+        return pd.DataFrame()
+
+    measure_labels = list(next(iter(results_by_run.values())).keys())
+    columns = []
+    for label in measure_labels:
+        columns.append(f"{label} KS")
+        columns.append(f"{label} p-value")
+
+    rows = {}
+    for rc, results in results_by_run.items():
+        row = {}
+        for label in measure_labels:
+            result = results[label]
+            row[f"{label} KS"] = f"{result.statistic:.4f}"
+            row[f"{label} p-value"] = f"{result.pvalue:.3g}"
+        rows[rc] = row
+    return pd.DataFrame.from_dict(rows, orient="index", columns=columns)

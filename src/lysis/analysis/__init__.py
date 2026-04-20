@@ -54,6 +54,7 @@ from .compare import MEASURE_EXTRACTORS, compare_runs_ks, extract_measures
 from .fiber_replay import FiberReplayCursor
 from .microscale import compute_micro_statistics
 from .summary import (
+    compare_stats_table,
     deg_rate_table,
     deg_time_table,
     macro_stats_table,
@@ -66,6 +67,7 @@ __all__ = [
     "MEASURE_EXTRACTORS",
     "calculate_time_row_exposed",
     "compare_runs_ks",
+    "compare_stats_table",
     "deg_rate_table",
     "deg_time_table",
     "extract_measures",
