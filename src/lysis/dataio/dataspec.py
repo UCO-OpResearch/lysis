@@ -1043,7 +1043,10 @@ CONVERSION_WARNINGS: dict[str, str] = {
     "v1.90.0": (
         "This HDF5 file was converted from v1.90.0 format. "
         "The f_deg_list event log was reconstructed from snapshot differences; "
-        "exact fiber degradation scheduling times are not preserved."
+        "exact fiber degradation scheduling times are not preserved. "
+        "RNG seeds (micro_seed, macro_seed) were stored as signed integers and "
+        "are now reinterpreted as np.uint32 bit patterns — a negative legacy "
+        "seed becomes its unsigned equivalent (same bits, different print)."
     ),
 }
 

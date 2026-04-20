@@ -20,6 +20,13 @@ docstrings. Each parameter can include special tags:
 - ``:Units: <unit_string>`` - Physical units for the parameter (parsed by units())
 - ``:Fortran: <fortran_name>`` - Equivalent Fortran variable name (parsed by fortran_names())
 
+The ``:Fortran:`` tag may include a suffix that describes the Fortran → Python
+transform, i.e. ``python = op(fortran)``:
+
+- ``-1`` (e.g. ``Ffree-1``): ``python = fortran - 1`` (1-based → 0-based)
+- ``*100`` (e.g. ``num_micro*100``): ``python = fortran / 100``
+- ``|uint32`` (e.g. ``seed|uint32``): ``python = np.uint32(fortran_int32_bits)``
+
 These tags are parsed at runtime using regular expressions to build metadata
 dictionaries. **Do not modify the format of these tags** as it will break the
 parsing system.
@@ -233,12 +240,20 @@ class Parameters:
 
             :Fortran: fortran_name\"\"\"
 
-        Special suffixes in Fortran names:
-        - ``-1``: Indicates 0-based to 1-based index conversion needed
+        Special suffixes in Fortran names (describing the Fortran → Python
+        transform, i.e. ``python = op(fortran)``):
+
+        - ``-1``: Python = Fortran − 1 (0-based to 1-based index conversion)
+        - ``*100``: Python = Fortran ÷ 100 (Fortran stores Python × 100)
+        - ``|uint32``: Python = ``np.uint32`` bit-reinterpretation of Fortran
+          ``INTEGER*4`` (so a signed Fortran seed of -559038737 becomes the
+          Python uint32 value 3735928559, matching what the C side sees via
+          the ``integer → uint_least32_t`` pointer cast)
         - Formula after ``=``: Optional Fortran expression for the parameter
 
         :return: Dictionary mapping Python parameter names to Fortran variable
-            names (e.g., {'fiber_radius': 'radius', 'empty_rows': 'Ffree-1'})
+            names (e.g., {'fiber_radius': 'radius', 'empty_rows': 'Ffree-1',
+            'micro_seed': 'seed|uint32'})
         :rtype: dict[str, str]
 
         Warning:
@@ -256,7 +271,7 @@ class Parameters:
             + r".*\"\"\""  # a triple-quote
             + r"(?:(?!\"\"\")[\s\S])*?"  # docstring content (may include quotes)
             + r":Fortran:\s"  # the Fortran tag
-            + r"([\w_]+(-1)?)"  # Second capture group, the fortran name, possibly with a -1
+            + r"([\w_]+(?:-1|\*100|\|uint32)?)"  # Second capture group: fortran name plus optional transform suffix
             + r"(\s=[^\"]*)?"  # Third capture group (optional), a formula for the parameter in Fortran
             + r"\"\"\"",  # A line break
             re.M,
@@ -298,9 +313,10 @@ class Parameters:
 
         Transform labels encode the Fortran-to-Python conversion direction:
 
-        * ``None``      -- identity: ``python = fortran``
-        * ``'minus1'``  -- subtract: ``python = fortran - 1``
-        * ``'times100'``-- divide:   ``python = fortran / 100``
+        * ``None``       -- identity:    ``python = fortran``
+        * ``'minus1'``   -- subtract:    ``python = fortran - 1``
+        * ``'times100'`` -- divide:      ``python = fortran / 100``
+        * ``'uint32'``   -- reinterpret: ``python = np.uint32(fortran_int32_bits)``
 
         :param extra_cls: Optional additional class whose non-conflicting names
             are also included (for cross-class params in macro logs).
@@ -312,7 +328,10 @@ class Parameters:
 
         def _add(c, overwrite):
             for py_name, fortran_spec in c.class_fortran_names().items():
-                if fortran_spec.endswith("-1"):
+                if fortran_spec.endswith("|uint32"):
+                    base_name = fortran_spec[:-7]
+                    transform = "uint32"
+                elif fortran_spec.endswith("-1"):
                     base_name = fortran_spec[:-2]
                     transform = "minus1"
                 elif fortran_spec.endswith("*100"):
@@ -335,15 +354,21 @@ class Parameters:
     def apply_fortran_transform(raw_num, transform):
         """Apply the Fortran-to-Python transform to a numeric value.
 
-        :param raw_num: Float value read directly from the Fortran log.
-        :param transform: ``None``, ``'minus1'``, or ``'times100'``.
-        :return: Transformed numeric value.
-        :rtype: float
+        :param raw_num: Numeric value read directly from the Fortran log.
+        :param transform: ``None``, ``'minus1'``, ``'times100'``, or
+            ``'uint32'``.
+        :return: Transformed value. Numeric for ``minus1`` / ``times100`` /
+            identity; :class:`numpy.uint32` for ``uint32``.
         """
         if transform == "minus1":
             return raw_num - 1
         if transform == "times100":
             return raw_num / 100
+        if transform == "uint32":
+            # Fortran wrote a signed INTEGER*4; reinterpret its bits as an
+            # unsigned 32-bit integer (consistent with the C side, which reads
+            # the same memory as uint_least32_t).
+            return np.uint32(int(raw_num) & 0xFFFFFFFF)
         return raw_num
 
     @staticmethod
@@ -651,11 +676,11 @@ class MicroParameters(Parameters):
     :Units: None
     :Fortran: simulations"""
 
-    micro_seed: int = 0
+    micro_seed: np.uint32 = np.uint32(0)
     """Seed for the random number generator
-    
+
     :Units: None
-    :Fortran: seed"""
+    :Fortran: seed|uint32"""
 
     #####################################
     # Code Parameters
@@ -695,6 +720,14 @@ class MicroParameters(Parameters):
             This method should never be called manually. It runs automatically
             during object construction.
         """
+
+        # Normalise seed to np.uint32 by bit pattern (handles Python int /
+        # np.int32 / float from JSON / signed-negative legacy values).
+        object.__setattr__(
+            self,
+            "micro_seed",
+            np.uint32(int(self.micro_seed) & 0xFFFFFFFF),
+        )
 
         # One protofibril is two fibrinogens
         object.__setattr__(
@@ -1011,13 +1044,13 @@ class MacroParameters(Parameters):
     :Units: None
     :Fortran: num_t"""
 
-    macro_seed: int = 0  # -2137354075
+    macro_seed: np.uint32 = np.uint32(0)
     """Seed for the random number generator
-    
-    :Units: None
-    :Fortran: seed"""
 
-    state: Tuple[int, int, int, int] = field(init=False)
+    :Units: None
+    :Fortran: seed|uint32"""
+
+    state: Tuple[np.uint32, np.uint32, np.uint32, np.uint32] = field(init=False)
     """Initial state for the random number generator.
 
     A 4-tuple of unsigned 32-bit integers where the fourth element is set to
@@ -1116,7 +1149,14 @@ class MacroParameters(Parameters):
             This method should never be called manually. It runs automatically
             during object construction.
         """
-        #
+        # Normalise seed to np.uint32 by bit pattern (handles Python int /
+        # np.int32 / float from JSON / signed-negative legacy values).
+        object.__setattr__(
+            self,
+            "macro_seed",
+            np.uint32(int(self.macro_seed) & 0xFFFFFFFF),
+        )
+
         object.__setattr__(
             self, "average_bound_time", 1.0 / self.micro_params.unbind_rate_tPA_woPLG
         )
@@ -1173,7 +1213,14 @@ class MacroParameters(Parameters):
 
         # Set the state
         object.__setattr__(
-            self, "state", (129281, 362436069, 123456789, self.macro_seed)
+            self,
+            "state",
+            (
+                np.uint32(129281),
+                np.uint32(362436069),
+                np.uint32(123456789),
+                self.macro_seed,
+            ),
         )
 
         # Total saves is one for the start of each 'save_interval' plus one at

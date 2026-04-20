@@ -1007,6 +1007,12 @@ _V190_MACRO_RENAMES = {
 def _convert_params_v190_to_v195(params):
     """Resolve Fortran names, rename v1.90.0 legacy keys, remove noise.
 
+    Seeds (``micro_seed`` / ``macro_seed``) in v1.90.0 were stored as signed
+    integers (Fortran's ``INTEGER*4``). Current convention is uint32 by bit
+    pattern. This converter masks each seed to its uint32-equivalent
+    non-negative Python int so the serialised value is unambiguous; the
+    Parameters dataclass re-wraps to ``np.uint32`` in ``__post_init__``.
+
     :param params: Parameters dict with raw Fortran names.
     :type params: dict
     :return: Parameters dict with Python names (v1.95.0 convention).
@@ -1024,7 +1030,10 @@ def _convert_params_v190_to_v195(params):
         for key, value in section.items():
             if key in removes:
                 continue
-            out[section_key][renames.get(key, key)] = value
+            new_key = renames.get(key, key)
+            if new_key in ("micro_seed", "macro_seed") and value is not None:
+                value = int(value) & 0xFFFFFFFF
+            out[section_key][new_key] = value
     return out
 
 

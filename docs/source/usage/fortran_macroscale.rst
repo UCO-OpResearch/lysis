@@ -258,10 +258,13 @@ Experimental Parameters
 
 :seed:
 
-   :Description: Seed for the random number generator
+   :Description: Seed for the random number generator. Stored Python-side as
+      :class:`numpy.uint32`; cast internally to a signed ``INTEGER*4`` for the
+      Fortran CLI and reinterpreted as ``uint_least32_t`` by the C KISS RNG,
+      so a ``np.uint32`` value round-trips bit-exactly.
 
    :Default Value: 0 (randomly drawn)
-   
+
    :Units: None
 
 :save_interval:

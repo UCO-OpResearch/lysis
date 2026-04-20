@@ -281,3 +281,34 @@ class TestExecCommandTemplate:
         runner = cls(run=r, executable="/bin/stub.exe", index=0, num_children=1)
         cmd = runner.exec_command()
         assert cmd[cmd.index("--simulations") + 1] == "42"
+
+    # ------------------------------------------------------------------
+    # |uint32 seed tag (Python uint32 → signed INTEGER*4 CLI token)
+    # ------------------------------------------------------------------
+
+    def test_high_bit_seed_cli_arg_is_signed_int32(self, tmp_path):
+        """A uint32 seed with the high bit set is emitted as the signed int32 decimal."""
+        high_bit_seed = np.uint32(0x80000001)
+        r = Run(str(tmp_path))
+        r.initialize_micro_param({"micro_seed": high_bit_seed})
+        cls = _make_stub_class()
+        # index=None → no SeedSequence split, seed flows through as-is.
+        runner = cls(run=r, executable="/bin/stub.exe", index=None)
+        cmd = runner.exec_command()
+
+        expected = str(
+            int(np.array(high_bit_seed, dtype=np.uint32).astype(np.int32))
+        )
+        assert expected == "-2147483647"
+        assert "--seed" in cmd
+        assert cmd[cmd.index("--seed") + 1] == expected
+
+    def test_deadbeef_seed_cli_arg_matches_fortran_signed(self, tmp_path):
+        """0xDEADBEEF uint32 emits -559038737 (Fortran's signed int32 view)."""
+        r = Run(str(tmp_path))
+        r.initialize_micro_param({"micro_seed": np.uint32(0xDEADBEEF)})
+        cls = _make_stub_class()
+        runner = cls(run=r, executable="/bin/stub.exe", index=None)
+        cmd = runner.exec_command()
+        assert "--seed" in cmd
+        assert cmd[cmd.index("--seed") + 1] == "-559038737"

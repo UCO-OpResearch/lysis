@@ -1736,6 +1736,24 @@ class TestConvertParamsV190ToV195:
         assert "macro_seed" in result["macro_params"]
         assert "seed" not in result["macro_params"]
 
+    def test_large_unsigned_macro_seed_preserved(self):
+        """A macro seed above 2**31-1 keeps its uint32 bit pattern on upgrade."""
+        params = {"macro_params": {"seed": 3_000_000_000}}
+        result = _convert_params_v190_to_v195(params)
+        assert result["macro_params"]["macro_seed"] == 3_000_000_000
+
+    def test_negative_micro_seed_wraps_to_uint32_bits(self):
+        """A negative (Fortran-signed) micro seed is reinterpreted as its uint32 bits."""
+        params = {"micro_params": {"seed": -1}}
+        result = _convert_params_v190_to_v195(params)
+        assert result["micro_params"]["micro_seed"] == 0xFFFFFFFF
+
+    def test_out_of_range_macro_seed_truncated_to_32_bits(self):
+        """A seed above 2**32 is masked down to the low 32 bits."""
+        params = {"macro_params": {"seed": 0x1_DEADBEEF}}
+        result = _convert_params_v190_to_v195(params)
+        assert result["macro_params"]["macro_seed"] == 0xDEADBEEF
+
     def test_resolves_fortran_names_first(self):
         """Fortran names are resolved before v1.90.0 renames are applied."""
         params = {"micro_params": {"radius": 0.03635, "runs": 500.0}}

@@ -56,6 +56,7 @@ from pathlib import Path
 from typing import Any
 
 from ..dataio.datastore import DataStore
+from ..dataio.fileops import _params_json_default
 from .param_resolver import (
     ParameterConflict,
     UnderdeterminedParameters,
@@ -474,7 +475,9 @@ class Experiment:
 
         json_path = os.path.join(exp_path, "experiment.json")
         with open(json_path, "w", encoding="utf-8") as fh:
-            json.dump(exp.to_dict(), fh, indent=2)
+            json.dump(
+                exp.to_dict(), fh, indent=2, default=_params_json_default
+            )
 
         # ── 6. Create HDF5 files for each Run ───────────────────────────
         # Only the microscale structure is written here. initialize_macroscale()

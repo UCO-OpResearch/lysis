@@ -16,6 +16,7 @@ tighter or looser tolerance is explicitly justified.
 import dataclasses
 import warnings
 
+import numpy as np
 import pytest
 from pint import Quantity
 
@@ -91,6 +92,29 @@ class TestMicroParametersCustomInit:
         """micro_seed can be overridden."""
         micro = _micro(micro_seed=42)
         assert micro.micro_seed == 42
+
+    def test_micro_seed_default_is_uint32(self):
+        """Default micro_seed has dtype np.uint32."""
+        micro = _micro()
+        assert isinstance(micro.micro_seed, np.uint32)
+
+    def test_micro_seed_override_normalised_to_uint32(self):
+        """Plain-int override is normalised to np.uint32."""
+        micro = _micro(micro_seed=42)
+        assert isinstance(micro.micro_seed, np.uint32)
+        assert micro.micro_seed == np.uint32(42)
+
+    def test_micro_seed_negative_wraps_bitwise(self):
+        """Negative int override is reinterpreted as the uint32 bit pattern."""
+        micro = _micro(micro_seed=-1)
+        assert isinstance(micro.micro_seed, np.uint32)
+        assert micro.micro_seed == np.uint32(0xFFFFFFFF)
+
+    def test_micro_seed_high_bit_preserved(self):
+        """High-bit int override is preserved bit-for-bit as uint32."""
+        micro = _micro(micro_seed=0x80000001)
+        assert isinstance(micro.micro_seed, np.uint32)
+        assert micro.micro_seed == np.uint32(0x80000001)
 
     def test_override_diss_const_tPA_woPLG(self):
         """diss_const_tPA_woPLG override propagates into unbind_rate_tPA_woPLG."""
@@ -297,6 +321,26 @@ class TestMicroParametersMetadata:
         fn = MicroParameters.fortran_names()
         assert fn.get("binding_sites") == "bs"
 
+    def test_fortran_names_micro_seed_has_uint32_suffix(self):
+        """micro_seed carries the `|uint32` tag-direction suffix."""
+        fn = MicroParameters.fortran_names()
+        assert fn.get("micro_seed") == "seed|uint32"
+
+    def test_inverse_fortran_map_decodes_uint32_suffix(self):
+        """inverse_fortran_map() strips the suffix and records the transform."""
+        inverse = MicroParameters.inverse_fortran_map()
+        assert "seed" in inverse
+        base_name, transform, cls = inverse["seed"]
+        assert transform == "uint32"
+        assert base_name == "micro_seed"
+
+    def test_apply_fortran_transform_uint32(self):
+        """apply_fortran_transform() reinterprets Fortran int32 as np.uint32 bits."""
+        # Fortran's signed print of 0xDEADBEEF is -559038737.
+        result = Parameters.apply_fortran_transform(-559038737, "uint32")
+        assert isinstance(result, np.uint32)
+        assert result == np.uint32(0xDEADBEEF)
+
 
 class TestMetadataRegexCompleteness:
     """Verify units() and fortran_names() capture every tagged parameter.
@@ -400,6 +444,31 @@ class TestMacroParametersCustomInit:
         """Overriding macro_seed propagates to the RNG state tuple."""
         macro = _macro(macro_seed=12345)
         assert macro.state[3] == 12345
+
+    def test_macro_seed_default_is_uint32(self):
+        """Default macro_seed has dtype np.uint32."""
+        macro = _macro()
+        assert isinstance(macro.macro_seed, np.uint32)
+
+    def test_macro_seed_negative_wraps_bitwise(self):
+        """Negative int override is reinterpreted as the uint32 bit pattern."""
+        macro = _macro(macro_seed=-1)
+        assert isinstance(macro.macro_seed, np.uint32)
+        assert macro.macro_seed == np.uint32(0xFFFFFFFF)
+        # The RNG state tuple mirrors the normalised value.
+        assert macro.state[3] == np.uint32(0xFFFFFFFF)
+
+    def test_macro_seed_high_bit_preserved(self):
+        """High-bit int override is preserved bit-for-bit as uint32."""
+        macro = _macro(macro_seed=0xDEADBEEF)
+        assert isinstance(macro.macro_seed, np.uint32)
+        assert macro.macro_seed == np.uint32(0xDEADBEEF)
+
+    def test_macro_state_tuple_elements_are_uint32(self):
+        """All four RNG state entries are np.uint32."""
+        macro = _macro(macro_seed=0xDEADBEEF)
+        for element in macro.state:
+            assert isinstance(element, np.uint32)
 
     def test_override_total_time(self):
         """Overriding total_time changes total_time_steps and number_of_saves."""
@@ -660,8 +729,8 @@ class TestInverseFortranMap:
         # Verify both have a 'seed' mapping (micro_seed and macro_seed)
         assert "micro_seed" in micro_fn
         assert "macro_seed" in macro_fn
-        assert micro_fn["micro_seed"] == "seed"
-        assert macro_fn["macro_seed"] == "seed"
+        assert micro_fn["micro_seed"] == "seed|uint32"
+        assert macro_fn["macro_seed"] == "seed|uint32"
         # When MacroParameters is primary, macro_seed wins
         result = MacroParameters.inverse_fortran_map(extra_cls=MicroParameters)
         assert result["seed"][0] == "macro_seed"
@@ -672,9 +741,17 @@ class TestInverseFortranMap:
         result = MicroParameters.inverse_fortran_map()
         # cols is a MacroParameters field
         macro_cfn = MacroParameters.class_fortran_names()
+        def _strip_suffix(spec):
+            if spec.endswith("-1"):
+                return spec[:-2]
+            if spec.endswith("*100"):
+                return spec[:-4]
+            if spec.endswith("|uint32"):
+                return spec[:-7]
+            return spec
+
         macro_fortran_lower = {
-            (spec[:-2] if spec.endswith("-1") else spec[:-4] if spec.endswith("*100") else spec).lower()
-            for spec in macro_cfn.values()
+            _strip_suffix(spec).lower() for spec in macro_cfn.values()
         }
         # No macro-only Fortran names should appear
         for key in result:
@@ -688,7 +765,7 @@ class TestInverseFortranMap:
         for key, val in result.items():
             assert len(val) == 3, f"Key {key!r} has {len(val)} elements"
             assert isinstance(val[0], str)
-            assert val[1] in (None, "minus1", "times100")
+            assert val[1] in (None, "minus1", "times100", "uint32")
             assert val[2] is MicroParameters
 
 

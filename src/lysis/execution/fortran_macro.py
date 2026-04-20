@@ -416,10 +416,13 @@ class FortranMacro(FortranRunner):
             sim_dir = data_dir / f"{sim:02}"
             self._link_setup_files(data_dir, sim_dir)
 
-            # Build per-simulation params: 1 sim, this sim's seed
+            # Build per-simulation params: 1 sim, this sim's seed.
+            # ``seeds[sim]`` is a ``np.uint32``; the ``|uint32`` Fortran-tag
+            # branch in :meth:`_params_to_arguments` handles the signed-int32
+            # cast for the Fortran CLI.
             params = asdict(self.run.macro_params)
             params["macro_simulations"] = 1
-            params["macro_seed"] = int(np.array(seeds[sim]).astype(np.int32))
+            params["macro_seed"] = seeds[sim]
 
             # Build command with per-sim runCode
             sim_arguments = [

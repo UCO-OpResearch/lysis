@@ -242,7 +242,8 @@ class FortranRunner(SimulationRunner):
 
         :param params: Parameter dict produced by :func:`dataclasses.asdict`
             from the relevant parameters dataclass.  The seed field should
-            already be cast to ``int32`` before calling this method.
+            be a ``np.uint32``; it is reinterpreted to a signed ``INTEGER*4``
+            literal here via the ``|uint32`` Fortran-name suffix.
         :type params: dict
         :return: Flat list of CLI argument pairs, e.g.
             ``["--rows", "10", "--cols", "20"]``.
@@ -261,7 +262,19 @@ class FortranRunner(SimulationRunner):
                     value = value.m_as(units[key])
 
                 fname = fortran_names[key]
-                if fname.endswith("-1"):
+                if fname.endswith("|uint32"):
+                    # Fortran read(*, *) expects a signed INTEGER*4 literal.
+                    # Reinterpret the Python np.uint32 bits as np.int32
+                    # (.astype is the documented, unambiguous bit-preserving
+                    # cast for same-width dtype changes; constructor coercion
+                    # can raise OverflowError in NumPy 2.x). The C KISS side
+                    # then reads the same bytes back as uint_least32_t, so a
+                    # high-bit-set uint32 round-trips exactly.
+                    signed = int(
+                        np.array(value, dtype=np.uint32).astype(np.int32)
+                    )
+                    arguments += ["--" + fname[:-7], str(signed)]
+                elif fname.endswith("-1"):
                     arguments += ["--" + fname[:-2], str(value + 1)]
                 elif fname.endswith("*100"):
                     arguments += ["--" + fname[:-4], str(value // 100)]
@@ -312,11 +325,6 @@ class FortranRunner(SimulationRunner):
                 params[sim_field] = total // k + (1 if self.index < total % k else 0)
             params[self._seed_field()] = seeds[self.index]
             self.out_file_code = self.out_file_code + f"__{self.index:02}"
-
-        # Cast seed to int32 to match Fortran INTEGER*4
-        params[self._seed_field()] = int(
-            np.array(params[self._seed_field()]).astype(np.int32)
-        )
 
         arguments = self._base_arguments()
         arguments += self._params_to_arguments(params)
