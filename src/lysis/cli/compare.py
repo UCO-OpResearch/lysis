@@ -1,9 +1,10 @@
 """``lysis compare`` — compare Runs across two folders using the 2-sample KS test.
 
-Thin wrapper around :func:`lysis.analysis.compare.compare_runs_ks`.  Takes
+Thin wrapper around :func:`lysis.analysis.compare.compare_runs`.  Takes
 two folders, finds the set of run codes present in both, and reports the
 :func:`scipy.stats.ks_2samp` statistic and p-value for each measure in the
-set selected by ``--which``.
+set selected by ``--which`` plus a symmetric percent-difference on each
+paired scalar summary.
 """
 
 import os
@@ -157,10 +158,11 @@ def compare(ctx, which, sort_mode, no_progress, markdown_out, folder1, folder2):
     \b
     Examples:
         lysis compare --which micro-stats data/runA/ data/runB/
-        lysis compare --which micro-stats data/runA/ data/runB/ --sort alpha
-        lysis compare --which micro-stats data/runA/ data/runB/ --no-progress
-        lysis compare --which micro-stats data/runA/ data/runB/ --markdown -
-        lysis compare --which micro-stats data/runA/ data/runB/ --markdown out.md
+        lysis compare --which macro-stats data/runA/ data/runB/
+        lysis compare --which macro-stats data/runA/ data/runB/ --sort alpha
+        lysis compare --which macro-stats data/runA/ data/runB/ --no-progress
+        lysis compare --which macro-stats data/runA/ data/runB/ --markdown -
+        lysis compare --which macro-stats data/runA/ data/runB/ --markdown out.md
     """
     from contextlib import nullcontext
 

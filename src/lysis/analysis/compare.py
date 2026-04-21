@@ -8,14 +8,14 @@ Provides functions for comparing two Runs using:
   :data:`STATS_COMPUTERS`.
 
 Both dispatch tables are keyed by a short measure-set name (e.g.
-``"micro-stats"``) and are designed to be extended by adding a new key to
-either or both.
+``"micro-stats"``, ``"macro-stats"``) and are designed to be extended by
+adding a new key to either or both.
 
 Typical workflow::
 
     from lysis.analysis.compare import compare_runs
 
-    result = compare_runs(run1, run2, "micro-stats")
+    result = compare_runs(run1, run2, "macro-stats")
     for label, r in result["ks"].items():
         print(label, r.statistic, r.pvalue)
     for label, pct in result["pct_diff"].items():
@@ -79,12 +79,45 @@ def _extract_micro_stats_measures(run: "Run") -> Dict[str, np.ndarray]:
     }
 
 
+def _extract_macro_stats_measures(run: "Run") -> Dict[str, np.ndarray]:
+    """Return per-simulation arrays for the ``macro-stats`` measure set.
+
+    Uses the per-simulation outputs of
+    :func:`lysis.analysis.degradation.mean_degradation_rate`,
+    :func:`lysis.analysis.degradation.find_degradation_marker_times`, and
+    :func:`lysis.analysis.degradation.per_sim_front_velocity`.  The
+    degradation rate is converted from fraction/min to %/min so the K-S
+    column units match the paired ``% diff`` column.
+
+    :param run: Run with open macroscale data.
+    :type run: Run
+    :return: Mapping from human-readable measure label to 1-D array of
+        length ``n_sims``.
+    :rtype: dict[str, numpy.ndarray]
+    """
+    from lysis.analysis.degradation import (
+        find_degradation_marker_times,
+        mean_degradation_rate,
+        per_sim_front_velocity,
+    )
+
+    deg_rate, _offset, _deg_start = mean_degradation_rate(run)
+    marker_times = find_degradation_marker_times(run, [0.0, 0.25, 0.5, 0.75, 1.0])
+    front_mean, _front_std = per_sim_front_velocity(run)
+    return {
+        "Degradation rate (%/min)": deg_rate * 100,
+        "Time to full clot degradation (min)": marker_times[:, -1],
+        "Front Velocity (microns/min)": front_mean,
+    }
+
+
 #: Dispatch table mapping a measure-set name to an extractor function.
 #:
 #: An extractor takes an opened :class:`~lysis.config.run.Run` and returns
 #: a dict ``{measure_label: 1-D array}`` used for KS testing.
 MEASURE_EXTRACTORS: Dict[str, Callable[["Run"], Dict[str, np.ndarray]]] = {
     "micro-stats": _extract_micro_stats_measures,
+    "macro-stats": _extract_macro_stats_measures,
 }
 
 
@@ -117,12 +150,46 @@ def _compute_micro_stats_scalars(run: "Run") -> Dict[str, float]:
     }
 
 
+def _compute_macro_stats_scalars(run: "Run") -> Dict[str, float]:
+    """Return scalar macro-stats for percent-difference comparison.
+
+    Emits the four scalar summaries most commonly tracked for macroscale
+    Runs: mean degradation rate, mean time to full clot degradation, mean
+    first-passage time, and mean front velocity.  Delegates to
+    :func:`lysis.analysis.degradation.compute_run_statistics` and pulls
+    the ``"Mean"`` row of each metric.
+
+    :param run: Run with open macroscale data.
+    :type run: Run
+    :return: Mapping from display label to scalar value.
+    :rtype: dict[str, float]
+    """
+    from lysis.analysis.degradation import compute_run_statistics
+
+    stats = compute_run_statistics(run)
+    return {
+        "Mean Degradation rate (%/min)": float(
+            stats[("Degradation rate (%/min)", "Mean")]
+        ),
+        "Mean Time to full clot degradation (min)": float(
+            stats[("Time to full clot degradation (min)", "Mean")]
+        ),
+        "Mean First passage time (min)": float(
+            stats[("First passage time (min)", "Mean")]
+        ),
+        "Mean Front Velocity (microns/min)": float(
+            stats[("Front Velocity (microns/min)", "Mean")]
+        ),
+    }
+
+
 #: Dispatch table mapping a measure-set name to a scalar-stats computer.
 #:
 #: A computer takes an opened :class:`~lysis.config.run.Run` and returns a
 #: dict ``{stat_label: float}`` used for percent-difference comparison.
 STATS_COMPUTERS: Dict[str, Callable[["Run"], Dict[str, float]]] = {
     "micro-stats": _compute_micro_stats_scalars,
+    "macro-stats": _compute_macro_stats_scalars,
 }
 
 

@@ -9,6 +9,7 @@ Tests cover:
 * mean_degradation_rate           — shape, sign, lag time
 * calculate_time_row_exposed      — shape, row-0 zeroed, units, monotonicity
 * find_degradation_fronts         — structure, y-distances, time ordering
+* per_sim_front_velocity          — per-sim arrays, shape, sign
 * mean_front_velocity             — return type, positive velocity
 * find_row_deg_fraction           — shape, value range, all-degraded case
 * find_front                      — shape, range, all-degraded case
@@ -49,6 +50,7 @@ from lysis.analysis.degradation import (
     get_unbind_amounts,
     mean_degradation_rate,
     mean_front_velocity,
+    per_sim_front_velocity,
     plot_degradation_percent,
     plot_front_degradation,
 )
@@ -360,6 +362,40 @@ class TestFindDegradationFronts:
 
 
 # ===========================================================================
+# per_sim_front_velocity
+# ===========================================================================
+
+
+class TestPerSimFrontVelocity:
+    """Tests for :func:`per_sim_front_velocity`."""
+
+    def test_returns_tuple_of_two_arrays(self, stub_run):
+        """Return value is a 2-tuple of 1-D ndarrays."""
+        result = per_sim_front_velocity(stub_run)
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert isinstance(result[0], np.ndarray)
+        assert isinstance(result[1], np.ndarray)
+
+    def test_arrays_length_matches_n_sims(self, stub_run):
+        """Each returned array has length ``macro_simulations``."""
+        run_mean, run_std = per_sim_front_velocity(stub_run)
+        n_sims = stub_run.macro_params.macro_simulations
+        assert run_mean.shape == (n_sims,)
+        assert run_std.shape == (n_sims,)
+
+    def test_per_sim_mean_is_positive(self, stub_run):
+        """Each per-simulation mean velocity must be positive."""
+        run_mean, _ = per_sim_front_velocity(stub_run)
+        assert np.all(run_mean > 0.0)
+
+    def test_per_sim_std_is_non_negative(self, stub_run):
+        """Each per-simulation std velocity must be non-negative."""
+        _, run_std = per_sim_front_velocity(stub_run)
+        assert np.all(run_std >= 0.0)
+
+
+# ===========================================================================
 # mean_front_velocity
 # ===========================================================================
 
@@ -384,6 +420,13 @@ class TestMeanFrontVelocity:
         """Std of front velocity must be non-negative."""
         _, std_v = mean_front_velocity(stub_run)
         assert std_v >= 0.0
+
+    def test_matches_per_sim_reduction(self, stub_run):
+        """``mean_front_velocity`` equals the element-wise mean of per-sim arrays."""
+        mean_v, std_v = mean_front_velocity(stub_run)
+        run_mean, run_std = per_sim_front_velocity(stub_run)
+        assert mean_v == pytest.approx(float(np.mean(run_mean)))
+        assert std_v == pytest.approx(float(np.mean(run_std)))
 
 
 # ===========================================================================

@@ -61,6 +61,7 @@ __all__ = [
     "mean_degradation_rate",
     "calculate_time_row_exposed",
     "find_degradation_fronts",
+    "per_sim_front_velocity",
     "mean_front_velocity",
     "find_row_deg_fraction",
     "find_front",
@@ -86,6 +87,7 @@ _KEY_ROW_DEG = "row_deg"
 _KEY_DEG_FRONTS = "deg_fronts"
 _KEY_MEAN_DEG_RATE = "mean_deg_rate"
 _KEY_MEAN_FRONT_VEL = "mean_front_vel"
+_KEY_FRONT_VEL_PER_SIM = "front_vel_per_sim"
 _KEY_FIBER_EXTRAP = "fiber_extrap"
 _KEY_RUN_STATS = "run_stats"
 
@@ -397,27 +399,24 @@ def find_degradation_fronts(
     return run._cache[_KEY_DEG_FRONTS]
 
 
-def mean_front_velocity(
+def per_sim_front_velocity(
     run: "Run",
-) -> tuple[float, float]:
-    """Compute the mean and standard deviation of lysis-front velocity (µm/min).
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute per-simulation lysis-front velocity summaries (µm/min).
 
-    For each column in each simulation, fits a line to the ``(time, y-distance)``
-    data and takes the slope as the column's front velocity.  Returns the grand
-    mean and the mean standard deviation across all simulations.  Calls
-    :func:`find_degradation_fronts` internally.
-
-    .. todo::
-
-        Change to compute a single mean and std over all columns across all
-        simulations rather than averaging per-simulation statistics.
+    For each simulation, fits a line to the ``(time, y-distance)`` data of
+    every column and takes the slope as that column's front velocity.
+    Returns the per-simulation mean and standard deviation across columns
+    as two length-``n_sims`` arrays.  Calls :func:`find_degradation_fronts`
+    internally.
 
     :param run: Run object supplying ``macro_simulations`` and ``cols`` counts.
     :type run: Run
-    :return: Tuple ``(mean_velocity, std_velocity)`` in µm/min.
-    :rtype: tuple[float, float]
+    :return: Tuple ``(run_mean, run_std)`` of 1-D arrays of length
+        ``n_sims``, each in µm/min.
+    :rtype: tuple[numpy.ndarray, numpy.ndarray]
     """
-    if _KEY_MEAN_FRONT_VEL not in run._cache:
+    if _KEY_FRONT_VEL_PER_SIM not in run._cache:
         deg_fronts = find_degradation_fronts(run)
         n_sims = run.macro_params.macro_simulations
         cols = run.macro_params.cols
@@ -433,6 +432,32 @@ def mean_front_velocity(
                 front_velocity[j] = m
             run_mean[sim] = np.mean(front_velocity)
             run_std[sim] = np.std(front_velocity)
+        run._cache[_KEY_FRONT_VEL_PER_SIM] = (run_mean, run_std)
+    return run._cache[_KEY_FRONT_VEL_PER_SIM]
+
+
+def mean_front_velocity(
+    run: "Run",
+) -> tuple[float, float]:
+    """Compute the mean and standard deviation of lysis-front velocity (µm/min).
+
+    For each column in each simulation, fits a line to the ``(time, y-distance)``
+    data and takes the slope as the column's front velocity.  Returns the grand
+    mean and the mean standard deviation across all simulations.  Delegates to
+    :func:`per_sim_front_velocity` for the per-simulation arrays.
+
+    .. todo::
+
+        Change to compute a single mean and std over all columns across all
+        simulations rather than averaging per-simulation statistics.
+
+    :param run: Run object supplying ``macro_simulations`` and ``cols`` counts.
+    :type run: Run
+    :return: Tuple ``(mean_velocity, std_velocity)`` in µm/min.
+    :rtype: tuple[float, float]
+    """
+    if _KEY_MEAN_FRONT_VEL not in run._cache:
+        run_mean, run_std = per_sim_front_velocity(run)
         run._cache[_KEY_MEAN_FRONT_VEL] = (
             float(np.mean(run_mean)), float(np.mean(run_std))
         )
