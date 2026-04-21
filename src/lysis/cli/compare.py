@@ -51,6 +51,9 @@ def _open_run(data_root, run_code, console):
     try:
         run = Run(data_root, run_code)
         run.open_data()
+        run.micro_params = run.data.micro_params
+        if run.data.macro_params is not None:
+            run.macro_params = run.data.macro_params
     except Exception as e:
         console.print(f"[red]Error loading {run_code}:[/red] {e}")
         return None
