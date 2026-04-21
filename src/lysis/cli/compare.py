@@ -1,10 +1,10 @@
 """``lysis compare`` — compare Runs across two folders using the 2-sample KS test.
 
 Thin wrapper around :func:`lysis.analysis.compare.compare_runs`.  Takes
-two folders, finds the set of run codes present in both, and reports the
-:func:`scipy.stats.ks_2samp` statistic and p-value for each measure in the
-set selected by ``--which`` plus a symmetric percent-difference on each
-paired scalar summary.
+a measure-set name and two folders, finds the set of run codes present
+in both, and reports the :func:`scipy.stats.ks_2samp` statistic and
+p-value for each measure in the selected set plus a symmetric
+percent-difference on each paired scalar summary.
 """
 
 import os
@@ -100,12 +100,6 @@ def _compare_one(folder1, folder2, run_code, which, console):
 
 @cli.command(name="compare")
 @click.option(
-    "--which",
-    type=click.Choice(list(MEASURE_EXTRACTORS.keys()), case_sensitive=False),
-    required=True,
-    help="Which set of measures to compare.",
-)
-@click.option(
     "--sort",
     "sort_mode",
     type=click.Choice(["smart", "alpha"], case_sensitive=False),
@@ -137,6 +131,10 @@ def _compare_one(folder1, folder2, run_code, which, console):
     ),
 )
 @click.argument(
+    "which",
+    type=click.Choice(list(MEASURE_EXTRACTORS.keys()), case_sensitive=False),
+)
+@click.argument(
     "folder1",
     type=click.Path(exists=True, file_okay=False, dir_okay=True),
 )
@@ -145,11 +143,11 @@ def _compare_one(folder1, folder2, run_code, which, console):
     type=click.Path(exists=True, file_okay=False, dir_okay=True),
 )
 @click.pass_context
-def compare(ctx, which, sort_mode, no_progress, markdown_out, folder1, folder2):
+def compare(ctx, sort_mode, no_progress, markdown_out, which, folder1, folder2):
     """Compare Runs across two folders using the 2-sample Kolmogorov-Smirnov test.
 
     For every run code whose ``.h5`` file appears in both FOLDER1 and
-    FOLDER2 the command computes, per measure set selected by ``--which``:
+    FOLDER2 the command computes, per measure set selected by WHICH:
 
     - a 2-sample :func:`scipy.stats.ks_2samp` test on each per-simulation
       array pair (``KS`` and ``p-value`` columns);
@@ -160,12 +158,12 @@ def compare(ctx, which, sort_mode, no_progress, markdown_out, folder1, folder2):
 
     \b
     Examples:
-        lysis compare --which micro-stats data/runA/ data/runB/
-        lysis compare --which macro-stats data/runA/ data/runB/
-        lysis compare --which macro-stats data/runA/ data/runB/ --sort alpha
-        lysis compare --which macro-stats data/runA/ data/runB/ --no-progress
-        lysis compare --which macro-stats data/runA/ data/runB/ --markdown -
-        lysis compare --which macro-stats data/runA/ data/runB/ --markdown out.md
+        lysis compare micro-stats data/runA/ data/runB/
+        lysis compare macro-stats data/runA/ data/runB/
+        lysis compare macro-stats data/runA/ data/runB/ --sort alpha
+        lysis compare macro-stats data/runA/ data/runB/ --no-progress
+        lysis compare macro-stats data/runA/ data/runB/ --markdown -
+        lysis compare macro-stats data/runA/ data/runB/ --markdown out.md
     """
     from contextlib import nullcontext
 
