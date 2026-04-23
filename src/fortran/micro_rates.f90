@@ -8,6 +8,7 @@ program micromodel
     !!                  - Data folder is relative to git repository root
     !!                  - Data is stored in subfolders based on runCode
     !!                  - Data file codes are now set globally from the (in/out)FileCode variables
+	!! BRAD 2026-04-22: - Fix Lat allocation bug
 
     implicit none
     character(40) :: runCode = 'variant0p36'
@@ -499,6 +500,8 @@ program micromodel
     kaoff10 = ktPAon*KdtPAnoplg     !units 1/s, off rate in absense of PLG
 
     !! BRAD 2024-01-13:
+
+	Lat = 0
     do i = 1, nodes
         do j = 1, nodes
             Lat((i - 1)*nodes + j, (i - 1)*nodes + j) = 1 ! Put a 1 along the diagonal for (i, j) to itself
