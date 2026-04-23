@@ -6,6 +6,7 @@ program micromodel
     !!                  - Data file codes are now set globally from the (in/out)FileCode variables
 	!! BRAD 2026-04-22: - Fix Lat allocation bug
 
+    use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_signaling_nan
     implicit none
     character(40) :: runCode = '2024-01-13-0710'
     ! File codes should include any leading underscores, but NOT a file extension.

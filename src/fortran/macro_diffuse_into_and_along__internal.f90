@@ -32,6 +32,7 @@ program macrolysis
     ! CHANGE LINE 16 (nummicro=) to 500 or 100 depending on if 50,000 or 10,000 micro simulations were completed. 
     ! This code also computes mean first passage time
 
+    use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_signaling_nan
     implicit none
     character(:), allocatable   :: runCode
     ! File codes should include any leading underscores, but NOT a file extension.
