@@ -507,6 +507,26 @@ program micromodel
 
     !! END BRAD
 
+    !! BRAD 2026-04-23: Lat-allocation debug dump.
+    !! Lat is allocated but never explicitly zeroed before the neighbour-pattern
+    !! loop above; cells that are not diagonal or nearest-neighbour hold whatever
+    !! garbage was in memory at allocate-time. Lat is read-only after this block,
+    !! so dumping it here captures the exact matrix every subroutine sees. The
+    !! subsequent stop skips the (otherwise multi-hour) simulation loop.
+    write (*, '(a)') '===BEGIN_LAT==='
+    write (*, '(a,a)') 'runCode=', trim(runCode)
+    write (*, '(a,a)') 'outFileCode=', trim(outFileCode)
+    write (*, '(a,i0)') 'nodes=', nodes
+    write (*, '(a,i0,a,i0)') 'Lat_shape=', nodes**2, 'x', nodes**2
+    do i = 1, nodes**2
+        do j = 1, nodes**2
+            write (*, '(i0,1x)', advance='no') Lat(i, j)
+        end do
+        write (*, '(a)') ''
+    end do
+    write (*, '(a)') '===END_LAT==='
+    stop
+
     if (isBinary) then
         !filetype = 'unformatted' !if you compile with gfortran or f95
         filetype = 'binary'      !if you compile with ifort

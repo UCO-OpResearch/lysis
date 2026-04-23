@@ -52,7 +52,7 @@ CP=cp
 CCADMIN=CCadmin
 
 GFORT = gfortran -mcmodel=medium -fbacktrace
-IFORT = ifort -r8 -mcmodel medium -traceback -diag-disable=10448
+IFORT = ifort -r8 -mcmodel medium -traceback -diag-disable=10448 -init=snan -init=arrays
 FORT = $(IFORT)
 C = gcc -std=c99
 CPP = g++
