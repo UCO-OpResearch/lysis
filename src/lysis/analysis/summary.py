@@ -470,3 +470,101 @@ def compare_data_diff_summary_table(results_by_run: dict) -> pd.DataFrame:
     return pd.DataFrame.from_dict(
         rows, orient="index", columns=DATA_DIFF_SUMMARY_COLUMNS
     )
+
+
+# ---------------------------------------------------------------------------
+# compare_data_diff_detail_table
+# ---------------------------------------------------------------------------
+
+
+#: Column names for :func:`compare_data_diff_detail_table`.
+DATA_DIFF_DETAIL_COLUMNS = ["Status", "Mismatches", "Max % Diff", "Location"]
+
+
+def compare_data_diff_detail_table(data_diff: dict) -> pd.DataFrame:
+    """Build a per-table detail DataFrame for a single pair comparison.
+
+    Takes the ``data_diff`` sub-dict returned by
+    :func:`~lysis.analysis.compare.compare_data_tables` for one pair of
+    Runs and produces a DataFrame with one row per dataset label.
+
+    Columns (:data:`DATA_DIFF_DETAIL_COLUMNS`):
+
+    - ``"Status"`` — ``"OK"`` on exact match, ``"DIFF"`` when elements
+      differ, ``"SHAPE"`` when the arrays have different shapes, or
+      ``"MISSING"`` when the dataset is absent from one Run.
+    - ``"Mismatches"`` — ``"<n> of <total>"`` for element-wise diffs;
+      shape/missing detail for structural issues; ``"0"`` on match.
+    - ``"Max % Diff"`` — signed ``:+.2f`` percent of the worst element
+      (or ``"NaN"`` for opposite-sign cancellation) for ``DIFF`` rows;
+      ``"—"`` for match and structural rows.
+    - ``"Location"`` — index tuple of the worst element for ``DIFF``
+      rows; ``"—"`` otherwise.  For structured-array diffs the first
+      entry is the field name.
+
+    :param data_diff: ``data_diff`` sub-dict from
+        :func:`~lysis.analysis.compare.compare_data_tables` (i.e.
+        ``{label: entry}``).
+    :type data_diff: dict
+    :return: DataFrame indexed by dataset label.  Empty DataFrame if
+        *data_diff* is empty.
+    :rtype: pandas.DataFrame
+    """
+    if not data_diff:
+        return pd.DataFrame()
+
+    rows = {}
+    for label, entry in data_diff.items():
+        status = entry.get("status")
+        if status == "match":
+            total = entry.get("total")
+            rows[label] = {
+                "Status": "OK",
+                "Mismatches": "0" if total is None else f"0 of {total}",
+                "Max % Diff": "—",
+                "Location": "—",
+            }
+        elif status == "diff":
+            mismatches = entry.get("mismatches")
+            total = entry.get("total")
+            if mismatches is None or total is None:
+                count_str = "—"
+            else:
+                count_str = f"{mismatches} of {total}"
+            pct = entry.get("max_pct_diff")
+            loc = entry.get("location")
+            if pct is None or pct != pct:
+                pct_str = "NaN"
+            else:
+                pct_str = f"{pct:+.2f}%"
+            rows[label] = {
+                "Status": "DIFF",
+                "Mismatches": count_str,
+                "Max % Diff": pct_str,
+                "Location": str(loc) if loc is not None else "—",
+            }
+        elif status == "shape_mismatch":
+            rows[label] = {
+                "Status": "SHAPE",
+                "Mismatches": entry.get("detail", ""),
+                "Max % Diff": "—",
+                "Location": "—",
+            }
+        elif status == "missing":
+            rows[label] = {
+                "Status": "MISSING",
+                "Mismatches": entry.get("detail", ""),
+                "Max % Diff": "—",
+                "Location": "—",
+            }
+        else:
+            rows[label] = {
+                "Status": str(status),
+                "Mismatches": "—",
+                "Max % Diff": "—",
+                "Location": "—",
+            }
+
+    return pd.DataFrame.from_dict(
+        rows, orient="index", columns=DATA_DIFF_DETAIL_COLUMNS
+    )

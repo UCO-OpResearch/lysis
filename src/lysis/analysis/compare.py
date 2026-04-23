@@ -306,6 +306,27 @@ def _arraywise_max_pct(a: np.ndarray, b: np.ndarray):
     return float(pct.flat[idx_flat]), tuple(int(i) for i in location)
 
 
+def _count_element_mismatches(a: np.ndarray, b: np.ndarray) -> int:
+    """Count positions where *a* and *b* differ element-wise.
+
+    For structured arrays, an element counts as a mismatch if *any* of
+    its fields differs (so the count is the number of differing records,
+    not the sum across fields).
+
+    :param a: First array.
+    :type a: numpy.ndarray
+    :param b: Second array (same shape as *a*).
+    :type b: numpy.ndarray
+    :rtype: int
+    """
+    if a.dtype.names is not None:
+        any_diff = np.zeros(a.shape, dtype=bool)
+        for field in a.dtype.names:
+            any_diff |= a[field] != b[field]
+        return int(np.sum(any_diff))
+    return int(np.sum(a != b))
+
+
 def _compare_arrays(a: np.ndarray, b: np.ndarray) -> dict:
     """Compare two arrays for exact equality, reporting max percent diff.
 
@@ -317,6 +338,11 @@ def _compare_arrays(a: np.ndarray, b: np.ndarray) -> dict:
     - ``"location"`` — tuple of indices identifying the worst element
       (``None`` on match or shape mismatch).  For structured arrays the
       first entry is the field name.
+    - ``"mismatches"`` — count of elements that differ.  ``0`` on match,
+      ``None`` on shape mismatch.  For structured arrays this counts
+      records where any field differs, not the sum across fields.
+    - ``"total"`` — total element count of the (shape-matched) arrays.
+      ``None`` on shape mismatch.
     - ``"detail"`` — present only on ``"shape_mismatch"`` with a
       human-readable ``shape1 vs shape2`` string.
 
@@ -331,10 +357,21 @@ def _compare_arrays(a: np.ndarray, b: np.ndarray) -> dict:
             "status": "shape_mismatch",
             "max_pct_diff": None,
             "location": None,
+            "mismatches": None,
+            "total": None,
             "detail": f"{a.shape} vs {b.shape}",
         }
+    total = int(a.size)
     if np.array_equal(a, b):
-        return {"status": "match", "max_pct_diff": 0.0, "location": None}
+        return {
+            "status": "match",
+            "max_pct_diff": 0.0,
+            "location": None,
+            "mismatches": 0,
+            "total": total,
+        }
+
+    mismatches = _count_element_mismatches(a, b)
 
     if a.dtype.names is not None:
         # Structured array: scan each field, keep the worst.
@@ -354,15 +391,29 @@ def _compare_arrays(a: np.ndarray, b: np.ndarray) -> dict:
                 best_loc = (field,) + loc
         if best_loc is None:
             # Should not happen: array_equal was False but no field differs.
-            return {"status": "match", "max_pct_diff": 0.0, "location": None}
+            return {
+                "status": "match",
+                "max_pct_diff": 0.0,
+                "location": None,
+                "mismatches": 0,
+                "total": total,
+            }
         return {
             "status": "diff",
             "max_pct_diff": best_pct,
             "location": best_loc,
+            "mismatches": mismatches,
+            "total": total,
         }
 
     pct, loc = _arraywise_max_pct(a, b)
-    return {"status": "diff", "max_pct_diff": pct, "location": loc}
+    return {
+        "status": "diff",
+        "max_pct_diff": pct,
+        "location": loc,
+        "mismatches": mismatches,
+        "total": total,
+    }
 
 
 def compare_data_tables(run1: "Run", run2: "Run", which: str) -> dict:

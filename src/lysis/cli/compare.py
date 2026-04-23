@@ -97,6 +97,52 @@ def _compare_one(folder1, folder2, run_code, which, console):
         run1.data.close()
 
 
+def _split_h5_path(path):
+    """Split an ``.h5`` file path into ``(data_root, run_code)`` for Run().
+
+    :param path: Path to a ``.h5`` file.
+    :type path: str
+    :return: Directory and run code (filename without extension).
+    :rtype: tuple[str, str]
+    """
+    data_root, basename = os.path.split(path)
+    run_code = os.path.splitext(basename)[0]
+    return data_root, run_code
+
+
+def _compare_file_pair(path1, path2, which, console):
+    """Open two ``.h5`` files and run :func:`compare_runs` on them.
+
+    :param path1: Path to the first HDF5 file.
+    :type path1: str
+    :param path2: Path to the second HDF5 file.
+    :type path2: str
+    :param which: Measure-set key.
+    :type which: str
+    :param console: Rich Console for error messages.
+    :return: Result dict from :func:`compare_runs`, or ``None`` on error.
+    :rtype: dict or None
+    """
+    root1, code1 = _split_h5_path(path1)
+    root2, code2 = _split_h5_path(path2)
+    run1 = _open_run(root1, code1, console)
+    if run1 is None:
+        return None
+    try:
+        run2 = _open_run(root2, code2, console)
+        if run2 is None:
+            return None
+        try:
+            return compare_runs(run1, run2, which)
+        except Exception as e:
+            console.print(f"[red]Error comparing files:[/red] {e}")
+            return None
+        finally:
+            run2.data.close()
+    finally:
+        run1.data.close()
+
+
 # ---------------------------------------------------------------------------
 # Click command
 # ---------------------------------------------------------------------------
@@ -151,36 +197,49 @@ def _compare_one(folder1, folder2, run_code, which, console):
 )
 @click.argument(
     "folder1",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    metavar="PATH1",
+    type=click.Path(exists=True, file_okay=True, dir_okay=True),
 )
 @click.argument(
     "folder2",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    metavar="PATH2",
+    type=click.Path(exists=True, file_okay=True, dir_okay=True),
 )
 @click.pass_context
 def compare(
     ctx, sort_mode, no_progress, markdown_out, verbose, which, folder1, folder2
 ):
-    """Compare Runs across two folders.
+    """Compare Runs across two folders or two ``.h5`` files.
 
-    For every run code whose ``.h5`` file appears in both FOLDER1 and
-    FOLDER2 the command compares the two Runs.  The comparison performed
-    depends on WHICH:
+    PATH1 and PATH2 may both be directories (folder-pair mode) or both
+    be ``.h5`` files (file-pair mode); mixed input is rejected.
+
+    \b
+    Folder-pair mode (the default use case):
+        For every run code whose ``.h5`` file appears in both PATH1 and
+        PATH2 the command compares the two Runs, rendering one row per
+        common run code.
+
+    \b
+    File-pair mode:
+        PATH1 and PATH2 are each compared as a single Run.  For
+        ``micro-data`` / ``data`` a detailed per-table breakdown is
+        emitted (one row per dataset with Status, Mismatches,
+        Max % Diff, and Location columns).  For ``micro-stats`` /
+        ``macro-stats`` the usual single-pair stats are shown.
+
+    \b
+    WHICH selects the comparison:
 
     \b
     - ``micro-stats`` / ``macro-stats`` — 2-sample Kolmogorov-Smirnov
       tests on per-simulation arrays plus symmetric percent differences
-      on scalar summary stats (signed so positive means FOLDER2 > FOLDER1).
+      on scalar summary stats (signed so positive means PATH2 > PATH1).
     - ``micro-data`` / ``data`` — element-wise exact-match check on every
       non-log data table in the paired HDF5 files.  HDF5 attributes and
       log tables (``micro_log`` / ``macro_log``) are never examined.
-      By default emits a compact summary per Run: ``Exact Match`` if
-      every table matched, or the count of differing tables plus the
-      maximum symmetric percent difference and the dataset label of
-      the worst mismatch.  Use ``--verbose`` to emit a column per
-      dataset instead.
-
-    Results are rendered as a table with one row per Run.
+      In folder-pair mode emits a compact summary per Run by default;
+      ``--verbose`` switches to the full per-table matrix.
 
     \b
     Examples:
@@ -189,6 +248,8 @@ def compare(
         lysis compare micro-data data/runA/ data/runB/
         lysis compare data data/runA/ data/runB/
         lysis compare data data/runA/ data/runB/ --verbose --markdown out.md
+        lysis compare data runA.h5 runB.h5
+        lysis compare micro-data runA.h5 runB.h5 --markdown out.md
         lysis compare macro-stats data/runA/ data/runB/ --sort alpha
         lysis compare macro-stats data/runA/ data/runB/ --no-progress
         lysis compare macro-stats data/runA/ data/runB/ --markdown -
@@ -197,6 +258,7 @@ def compare(
     from contextlib import nullcontext
 
     from lysis.analysis.summary import (
+        compare_data_diff_detail_table,
         compare_data_diff_summary_table,
         compare_stats_table,
     )
@@ -221,6 +283,57 @@ def compare(
     # Suppress progress when producing structured markdown output
     if markdown_out is not None:
         no_progress = True
+
+    is_data_diff = which in DATA_TABLE_EXTRACTORS
+    path1_is_file = os.path.isfile(folder1)
+    path2_is_file = os.path.isfile(folder2)
+    if path1_is_file != path2_is_file:
+        console.print(
+            "[red]Error:[/red] PATH1 and PATH2 must both be directories or "
+            "both be .h5 files."
+        )
+        ctx.exit(1)
+        return
+
+    if path1_is_file and path2_is_file:
+        if not (folder1.lower().endswith(".h5") and folder2.lower().endswith(".h5")):
+            console.print(
+                "[red]Error:[/red] file-pair inputs must have .h5 extensions."
+            )
+            ctx.exit(1)
+            return
+
+        result = _compare_file_pair(folder1, folder2, which, console)
+        if result is None:
+            ctx.exit(1)
+            return
+
+        if is_data_diff:
+            df = compare_data_diff_detail_table(result["data_diff"])
+            if markdown_out is not None:
+                emit_markdown(stats_df_to_markdown(df, "Table"), markdown_out, console)
+            else:
+                console.print(stats_df_to_rich(df, "Table"))
+            return
+
+        # KS / pct-diff: render a single-row stats table keyed by the pair.
+        pair_key = f"{os.path.basename(folder1)} vs {os.path.basename(folder2)}"
+        df = compare_stats_table({pair_key: result})
+        short_headers = {}
+        for col in df.columns:
+            for suffix in (" KS", " p-value", " % diff"):
+                if col.endswith(suffix):
+                    short_headers[col] = col[: -len(suffix)] + "\n" + suffix.lstrip()
+                    break
+        if markdown_out is not None:
+            emit_markdown(
+                stats_df_to_markdown(df, "Run", single_code=pair_key),
+                markdown_out,
+                console,
+            )
+        else:
+            console.print(stats_df_to_rich(df, "Run", short_headers))
+        return
 
     codes1 = set(_list_h5_run_codes(folder1))
     codes2 = set(_list_h5_run_codes(folder2))
@@ -273,7 +386,6 @@ def compare(
 
     # Preserve sort order, skipping any failed runs
     ordered = {rc: all_results[rc] for rc in common if rc in all_results}
-    is_data_diff = which in DATA_TABLE_EXTRACTORS
     if is_data_diff and not verbose:
         df = compare_data_diff_summary_table(ordered)
     else:

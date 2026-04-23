@@ -319,6 +319,8 @@ class TestCompareArrays:
         assert result["status"] == "match"
         assert result["max_pct_diff"] == 0.0
         assert result["location"] is None
+        assert result["mismatches"] == 0
+        assert result["total"] == 3
 
     def test_shape_mismatch_reports_shapes(self):
         a = np.zeros((3,))
@@ -328,6 +330,8 @@ class TestCompareArrays:
         assert result["detail"] == "(3,) vs (4,)"
         assert result["max_pct_diff"] is None
         assert result["location"] is None
+        assert result["mismatches"] is None
+        assert result["total"] is None
 
     def test_diff_reports_max_location(self):
         a = np.array([10.0, 10.0, 10.0])
@@ -337,6 +341,33 @@ class TestCompareArrays:
         assert result["location"] == (2,)
         # symmetric pct diff of 10 vs 12: 200*(2)/22 ≈ 18.18
         assert result["max_pct_diff"] == pytest.approx(200 * 2 / 22)
+        assert result["mismatches"] == 1
+        assert result["total"] == 3
+
+    def test_diff_counts_multiple_mismatches(self):
+        a = np.array([1.0, 1.0, 1.0, 1.0])
+        b = np.array([1.0, 2.0, 3.0, 1.0])
+        result = _compare_arrays(a, b)
+        assert result["mismatches"] == 2
+        assert result["total"] == 4
+
+    def test_structured_mismatch_count_is_records_not_fields(self):
+        dtype = np.dtype([("t", np.float64), ("loc", np.int32)])
+        a = np.array([(1.0, 5), (2.0, 7), (3.0, 9)], dtype=dtype)
+        b = np.array([(1.0, 5), (2.5, 7), (3.0, 99)], dtype=dtype)
+        result = _compare_arrays(a, b)
+        # record 1 differs in 't', record 2 differs in 'loc' → 2 records
+        assert result["mismatches"] == 2
+        assert result["total"] == 3
+
+    def test_2d_mismatch_count(self):
+        a = np.ones((3, 4))
+        b = a.copy()
+        b[0, 0] = 2.0
+        b[2, 3] = 2.0
+        result = _compare_arrays(a, b)
+        assert result["mismatches"] == 2
+        assert result["total"] == 12
 
     def test_diff_sign_positive_when_b_larger(self):
         a = np.array([1.0])

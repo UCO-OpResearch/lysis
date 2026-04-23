@@ -4,9 +4,11 @@ import pandas as pd
 import pytest
 
 from lysis.analysis.summary import (
+    DATA_DIFF_DETAIL_COLUMNS,
     DATA_DIFF_SUMMARY_COLUMNS,
     MICRO_STATS_COLUMNS,
     _fmt_micro,
+    compare_data_diff_detail_table,
     compare_data_diff_summary_table,
     compare_stats_table,
     deg_rate_table,
@@ -639,3 +641,107 @@ class TestCompareDataDiffSummaryTable:
         results = {"run_A": {"ks": {}, "pct_diff": {}}}
         df = compare_data_diff_summary_table(results)
         assert df.loc["run_A", "Result"] == "Exact Match"
+
+
+# ---------------------------------------------------------------------------
+# compare_data_diff_detail_table
+# ---------------------------------------------------------------------------
+
+
+class TestCompareDataDiffDetailTable:
+    def test_empty_input_returns_empty_dataframe(self):
+        df = compare_data_diff_detail_table({})
+        assert df.empty
+
+    def test_columns_match_constant(self):
+        data_diff = {
+            "micro/x": {
+                "status": "match",
+                "max_pct_diff": 0.0,
+                "location": None,
+                "mismatches": 0,
+                "total": 10,
+            }
+        }
+        df = compare_data_diff_detail_table(data_diff)
+        assert list(df.columns) == DATA_DIFF_DETAIL_COLUMNS
+
+    def test_match_row_renders_ok(self):
+        data_diff = {
+            "micro/x": {
+                "status": "match",
+                "max_pct_diff": 0.0,
+                "location": None,
+                "mismatches": 0,
+                "total": 100,
+            }
+        }
+        df = compare_data_diff_detail_table(data_diff)
+        row = df.loc["micro/x"]
+        assert row["Status"] == "OK"
+        assert row["Mismatches"] == "0 of 100"
+        assert row["Max % Diff"] == "—"
+        assert row["Location"] == "—"
+
+    def test_diff_row_renders_count_and_pct_and_location(self):
+        data_diff = {
+            "micro/x": {
+                "status": "diff",
+                "max_pct_diff": 2.5,
+                "location": (3, 7),
+                "mismatches": 4,
+                "total": 100,
+            }
+        }
+        df = compare_data_diff_detail_table(data_diff)
+        row = df.loc["micro/x"]
+        assert row["Status"] == "DIFF"
+        assert row["Mismatches"] == "4 of 100"
+        assert row["Max % Diff"] == "+2.50%"
+        assert row["Location"] == "(3, 7)"
+
+    def test_shape_mismatch_row(self):
+        data_diff = {
+            "micro/x": {
+                "status": "shape_mismatch",
+                "max_pct_diff": None,
+                "location": None,
+                "mismatches": None,
+                "total": None,
+                "detail": "(100,) vs (101,)",
+            }
+        }
+        df = compare_data_diff_detail_table(data_diff)
+        row = df.loc["micro/x"]
+        assert row["Status"] == "SHAPE"
+        assert "(100,) vs (101,)" in row["Mismatches"]
+        assert row["Max % Diff"] == "—"
+        assert row["Location"] == "—"
+
+    def test_missing_row(self):
+        data_diff = {
+            "micro/x": {
+                "status": "missing",
+                "max_pct_diff": None,
+                "location": None,
+                "mismatches": None,
+                "total": None,
+                "detail": "not in run2",
+            }
+        }
+        df = compare_data_diff_detail_table(data_diff)
+        row = df.loc["micro/x"]
+        assert row["Status"] == "MISSING"
+        assert "not in run2" in row["Mismatches"]
+
+    def test_preserves_insertion_order(self):
+        data_diff = {
+            "micro/c": {"status": "match", "max_pct_diff": 0.0, "location": None,
+                        "mismatches": 0, "total": 1},
+            "micro/a": {"status": "match", "max_pct_diff": 0.0, "location": None,
+                        "mismatches": 0, "total": 1},
+            "micro/b": {"status": "match", "max_pct_diff": 0.0, "location": None,
+                        "mismatches": 0, "total": 1},
+        }
+        df = compare_data_diff_detail_table(data_diff)
+        assert list(df.index) == ["micro/c", "micro/a", "micro/b"]
