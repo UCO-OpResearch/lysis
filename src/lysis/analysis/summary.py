@@ -14,6 +14,8 @@ Available functions:
 - :func:`compare_stats_table` — 2-sample KS test statistics across Runs
 """
 
+import math
+
 import pandas as pd
 
 
@@ -354,3 +356,117 @@ def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
             row[label] = _fmt_data_diff_cell(data_dict[label])
         rows[rc] = row
     return pd.DataFrame.from_dict(rows, orient="index", columns=columns)
+
+
+# ---------------------------------------------------------------------------
+# compare_data_diff_summary_table
+# ---------------------------------------------------------------------------
+
+
+#: Column names for :func:`compare_data_diff_summary_table`.
+DATA_DIFF_SUMMARY_COLUMNS = ["Result", "Max % Diff", "Worst Table"]
+
+
+def _worst_mismatch(mismatches: dict):
+    """Pick the mismatch entry with the largest absolute percent difference.
+
+    Non-finite percent differences (NaN / Inf from symmetric-formula
+    cancellation) rank highest.  If no entry has a numeric percent
+    difference (e.g. all mismatches are ``shape_mismatch`` or
+    ``missing``), returns the first entry unchanged.
+
+    :param mismatches: Mapping ``{label: entry}`` of non-match entries.
+    :type mismatches: dict
+    :return: ``(label, entry)`` of the worst mismatch.
+    :rtype: tuple[str, dict]
+    """
+    def _key(item):
+        pct = item[1].get("max_pct_diff")
+        if pct is None:
+            return -1.0  # rank structural issues below numeric diffs
+        if not math.isfinite(pct):
+            return math.inf
+        return abs(pct)
+
+    return max(mismatches.items(), key=_key)
+
+
+def compare_data_diff_summary_table(results_by_run: dict) -> pd.DataFrame:
+    """Build a compact summary of :func:`compare_data_tables` results.
+
+    For each Run, reports whether every data table matched exactly or —
+    if not — how many tables differ and which one has the largest
+    symmetric percent difference.  Designed for console display where
+    the full per-table breakdown from :func:`compare_stats_table` is
+    too wide.
+
+    Columns (:data:`DATA_DIFF_SUMMARY_COLUMNS`):
+
+    - ``"Result"`` — ``"Exact Match"`` when every table matched, or
+      ``"<n> of <total> differ"`` when some did not.
+    - ``"Max % Diff"`` — signed ``:+.2f`` percent of the worst numeric
+      mismatch, or ``"—"`` when no numeric difference exists.
+    - ``"Worst Table"`` — dataset label (plus index tuple for numeric
+      diffs, or structural detail for shape/missing issues) pointing
+      at the mismatch most worth investigating.  ``"—"`` on exact
+      match.
+
+    :param results_by_run: Maps run code to a ``compare_runs`` result
+        dict with a ``"data_diff"`` sub-dict.  Entries without
+        ``"data_diff"`` are treated as exact matches over zero tables.
+    :type results_by_run: dict[str, dict]
+    :return: DataFrame with run codes as index and three string columns.
+        Returns an empty DataFrame if *results_by_run* is empty.
+    :rtype: pandas.DataFrame
+    """
+    if not results_by_run:
+        return pd.DataFrame()
+
+    rows = {}
+    for rc, entry in results_by_run.items():
+        data_diff = (
+            entry.get("data_diff", {}) if isinstance(entry, dict) else {}
+        )
+        total = len(data_diff)
+        mismatches = {
+            label: info
+            for label, info in data_diff.items()
+            if info.get("status") != "match"
+        }
+
+        if not mismatches:
+            rows[rc] = {
+                "Result": "Exact Match",
+                "Max % Diff": "—",
+                "Worst Table": "—",
+            }
+            continue
+
+        worst_label, worst_entry = _worst_mismatch(mismatches)
+        status = worst_entry.get("status")
+        if status == "diff":
+            pct = worst_entry.get("max_pct_diff")
+            loc = worst_entry.get("location")
+            pct_str = (
+                "NaN" if pct is None or pct != pct else f"{pct:+.2f}%"
+            )
+            worst_str = f"{worst_label} @ {loc}" if loc is not None else worst_label
+        elif status == "shape_mismatch":
+            pct_str = "—"
+            worst_str = f"{worst_label} (shapes {worst_entry.get('detail', '')})"
+        elif status == "missing":
+            pct_str = "—"
+            worst_str = f"{worst_label} (missing: {worst_entry.get('detail', '')})"
+        else:
+            pct_str = "—"
+            worst_str = worst_label
+
+        rows[rc] = {
+            "Result": f"{len(mismatches)} of {total} differ",
+            "Max % Diff": pct_str,
+            "Worst Table": worst_str,
+        }
+
+    return pd.DataFrame.from_dict(
+        rows, orient="index", columns=DATA_DIFF_SUMMARY_COLUMNS
+    )

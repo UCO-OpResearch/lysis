@@ -11,7 +11,11 @@ import os
 
 import click
 
-from lysis.analysis.compare import available_measure_sets, compare_runs
+from lysis.analysis.compare import (
+    DATA_TABLE_EXTRACTORS,
+    available_measure_sets,
+    compare_runs,
+)
 from lysis.cli import cli
 
 
@@ -130,6 +134,17 @@ def _compare_one(folder1, folder2, run_code, which, console):
         "Example: --markdown -, --markdown compare.md"
     ),
 )
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    default=False,
+    help=(
+        "For 'micro-data' and 'data' comparisons, emit the full per-table "
+        "result matrix instead of the compact summary (one row per Run).  "
+        "No effect on 'micro-stats' / 'macro-stats' modes."
+    ),
+)
 @click.argument(
     "which",
     type=click.Choice(available_measure_sets(), case_sensitive=False),
@@ -143,7 +158,9 @@ def _compare_one(folder1, folder2, run_code, which, console):
     type=click.Path(exists=True, file_okay=False, dir_okay=True),
 )
 @click.pass_context
-def compare(ctx, sort_mode, no_progress, markdown_out, which, folder1, folder2):
+def compare(
+    ctx, sort_mode, no_progress, markdown_out, verbose, which, folder1, folder2
+):
     """Compare Runs across two folders.
 
     For every run code whose ``.h5`` file appears in both FOLDER1 and
@@ -155,11 +172,13 @@ def compare(ctx, sort_mode, no_progress, markdown_out, which, folder1, folder2):
       tests on per-simulation arrays plus symmetric percent differences
       on scalar summary stats (signed so positive means FOLDER2 > FOLDER1).
     - ``micro-data`` / ``data`` — element-wise exact-match check on every
-      non-log data table in the paired HDF5 files.  Each dataset cell
-      reports ``OK`` when the arrays are exactly equal, or the maximum
-      symmetric percent difference and the location of that worst
-      element when they differ.  HDF5 attributes and log tables
-      (``micro_log`` / ``macro_log``) are never examined.
+      non-log data table in the paired HDF5 files.  HDF5 attributes and
+      log tables (``micro_log`` / ``macro_log``) are never examined.
+      By default emits a compact summary per Run: ``Exact Match`` if
+      every table matched, or the count of differing tables plus the
+      maximum symmetric percent difference and the dataset label of
+      the worst mismatch.  Use ``--verbose`` to emit a column per
+      dataset instead.
 
     Results are rendered as a table with one row per Run.
 
@@ -169,6 +188,7 @@ def compare(ctx, sort_mode, no_progress, markdown_out, which, folder1, folder2):
         lysis compare macro-stats data/runA/ data/runB/
         lysis compare micro-data data/runA/ data/runB/
         lysis compare data data/runA/ data/runB/
+        lysis compare data data/runA/ data/runB/ --verbose --markdown out.md
         lysis compare macro-stats data/runA/ data/runB/ --sort alpha
         lysis compare macro-stats data/runA/ data/runB/ --no-progress
         lysis compare macro-stats data/runA/ data/runB/ --markdown -
@@ -176,7 +196,10 @@ def compare(ctx, sort_mode, no_progress, markdown_out, which, folder1, folder2):
     """
     from contextlib import nullcontext
 
-    from lysis.analysis.summary import compare_stats_table
+    from lysis.analysis.summary import (
+        compare_data_diff_summary_table,
+        compare_stats_table,
+    )
     from lysis.tools.display import (
         emit_markdown,
         stats_df_to_markdown,
@@ -250,7 +273,11 @@ def compare(ctx, sort_mode, no_progress, markdown_out, which, folder1, folder2):
 
     # Preserve sort order, skipping any failed runs
     ordered = {rc: all_results[rc] for rc in common if rc in all_results}
-    df = compare_stats_table(ordered)
+    is_data_diff = which in DATA_TABLE_EXTRACTORS
+    if is_data_diff and not verbose:
+        df = compare_data_diff_summary_table(ordered)
+    else:
+        df = compare_stats_table(ordered)
 
     # Build Rich short-header abbreviations: split the suffix onto a second
     # line so wide measure labels don't make the table unreadable.

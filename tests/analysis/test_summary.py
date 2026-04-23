@@ -4,8 +4,10 @@ import pandas as pd
 import pytest
 
 from lysis.analysis.summary import (
+    DATA_DIFF_SUMMARY_COLUMNS,
     MICRO_STATS_COLUMNS,
     _fmt_micro,
+    compare_data_diff_summary_table,
     compare_stats_table,
     deg_rate_table,
     deg_time_table,
@@ -526,3 +528,114 @@ class TestCompareStatsTableDataDiff:
         }
         df = compare_stats_table(results)
         assert list(df.columns) == ["microscale_out/x"]
+
+
+# ---------------------------------------------------------------------------
+# compare_data_diff_summary_table
+# ---------------------------------------------------------------------------
+
+
+class TestCompareDataDiffSummaryTable:
+    def test_empty_input_returns_empty_dataframe(self):
+        df = compare_data_diff_summary_table({})
+        assert df.empty
+
+    def test_columns_match_constant(self):
+        results = {
+            "run_A": {
+                "data_diff": {
+                    "micro/x": {"status": "match", "max_pct_diff": 0.0, "location": None},
+                }
+            }
+        }
+        df = compare_data_diff_summary_table(results)
+        assert list(df.columns) == DATA_DIFF_SUMMARY_COLUMNS
+
+    def test_all_match_reports_exact_match(self):
+        results = {
+            "run_A": {
+                "data_diff": {
+                    "micro/a": {"status": "match", "max_pct_diff": 0.0, "location": None},
+                    "micro/b": {"status": "match", "max_pct_diff": 0.0, "location": None},
+                }
+            }
+        }
+        df = compare_data_diff_summary_table(results)
+        assert df.loc["run_A", "Result"] == "Exact Match"
+        assert df.loc["run_A", "Max % Diff"] == "—"
+        assert df.loc["run_A", "Worst Table"] == "—"
+
+    def test_picks_largest_pct_diff(self):
+        results = {
+            "run_A": {
+                "data_diff": {
+                    "micro/small": {
+                        "status": "diff",
+                        "max_pct_diff": 0.5,
+                        "location": (1,),
+                    },
+                    "micro/big": {
+                        "status": "diff",
+                        "max_pct_diff": 3.0,
+                        "location": (4,),
+                    },
+                    "micro/ok": {
+                        "status": "match",
+                        "max_pct_diff": 0.0,
+                        "location": None,
+                    },
+                }
+            }
+        }
+        df = compare_data_diff_summary_table(results)
+        assert df.loc["run_A", "Result"] == "2 of 3 differ"
+        assert df.loc["run_A", "Max % Diff"] == "+3.00%"
+        assert "micro/big" in df.loc["run_A", "Worst Table"]
+        assert "(4,)" in df.loc["run_A", "Worst Table"]
+
+    def test_shape_mismatch_when_no_numeric_diff(self):
+        results = {
+            "run_A": {
+                "data_diff": {
+                    "micro/x": {
+                        "status": "shape_mismatch",
+                        "max_pct_diff": None,
+                        "location": None,
+                        "detail": "(100,) vs (101,)",
+                    }
+                }
+            }
+        }
+        df = compare_data_diff_summary_table(results)
+        assert df.loc["run_A", "Result"] == "1 of 1 differ"
+        assert df.loc["run_A", "Max % Diff"] == "—"
+        assert "shapes" in df.loc["run_A", "Worst Table"]
+        assert "(100,) vs (101,)" in df.loc["run_A", "Worst Table"]
+
+    def test_numeric_diff_beats_structural_when_mixed(self):
+        """A concrete numeric diff is more useful to surface than a missing/shape-only entry."""
+        results = {
+            "run_A": {
+                "data_diff": {
+                    "micro/a": {
+                        "status": "missing",
+                        "max_pct_diff": None,
+                        "location": None,
+                        "detail": "not in run2",
+                    },
+                    "micro/b": {
+                        "status": "diff",
+                        "max_pct_diff": 0.1,
+                        "location": (0,),
+                    },
+                }
+            }
+        }
+        df = compare_data_diff_summary_table(results)
+        assert "micro/b" in df.loc["run_A", "Worst Table"]
+        assert df.loc["run_A", "Max % Diff"] == "+0.10%"
+
+    def test_missing_data_diff_treated_as_exact_match(self):
+        results = {"run_A": {"ks": {}, "pct_diff": {}}}
+        df = compare_data_diff_summary_table(results)
+        assert df.loc["run_A", "Result"] == "Exact Match"

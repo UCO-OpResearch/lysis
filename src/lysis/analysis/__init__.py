@@ -64,6 +64,7 @@ from .compare import (
 from .fiber_replay import FiberReplayCursor
 from .microscale import compute_micro_statistics
 from .summary import (
+    compare_data_diff_summary_table,
     compare_stats_table,
     deg_rate_table,
     deg_time_table,
@@ -79,6 +80,7 @@ __all__ = [
     "STATS_COMPUTERS",
     "available_measure_sets",
     "calculate_time_row_exposed",
+    "compare_data_diff_summary_table",
     "compare_data_tables",
     "compare_runs",
     "compare_stats_table",
