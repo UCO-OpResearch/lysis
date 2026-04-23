@@ -20,8 +20,12 @@ import pandas as pd
 import pytest
 
 from lysis.analysis.compare import (
+    DATA_TABLE_EXTRACTORS,
     MEASURE_EXTRACTORS,
     STATS_COMPUTERS,
+    _compare_arrays,
+    available_measure_sets,
+    compare_data_tables,
     compare_runs,
     compute_stats,
     extract_measures,
@@ -198,3 +202,264 @@ class TestPercentDifference:
     def test_sign_follows_v2_greater_than_v1(self):
         assert percent_difference(1.0, 2.0) > 0
         assert percent_difference(2.0, 1.0) < 0
+
+
+# ---------------------------------------------------------------------------
+# Data-table comparison
+# ---------------------------------------------------------------------------
+
+
+class _StubDataset:
+    """Wrap a numpy array for h5py-style slice access."""
+
+    def __init__(self, data):
+        self._data = np.asarray(data)
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+
+class _StubCollection:
+    """Minimal stand-in for ``DataCollection`` (simulations_combined=True)."""
+
+    def __init__(self, tables):
+        self._tables = {k: _StubDataset(v) for k, v in tables.items()}
+
+    @property
+    def datasets(self):
+        return list(self._tables.keys())
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name in self._tables:
+            return self._tables[name]
+        raise AttributeError(name)
+
+
+class _StubSimView:
+    """Minimal stand-in for ``SimulationView``."""
+
+    def __init__(self, tables):
+        self._tables = {k: _StubDataset(v) for k, v in tables.items()}
+
+    @property
+    def datasets(self):
+        return list(self._tables.keys())
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name in self._tables:
+            return self._tables[name]
+        raise AttributeError(name)
+
+
+class _StubMacroCollection:
+    """Per-simulation collection indexed by integer simulation id."""
+
+    def __init__(self, per_sim_tables):
+        self._views = [_StubSimView(t) for t in per_sim_tables]
+
+    def __getitem__(self, idx):
+        return self._views[idx]
+
+
+class _StubDataStore:
+    """Minimal DataStore-like object exposing ``collections`` and dot-access."""
+
+    def __init__(self, micro_tables=None, macro_per_sim=None):
+        self._colls = {}
+        if micro_tables is not None:
+            self._colls["microscale_out"] = _StubCollection(micro_tables)
+        if macro_per_sim is not None:
+            self._colls["macroscale_out"] = _StubMacroCollection(macro_per_sim)
+
+    @property
+    def collections(self):
+        return dict(self._colls)
+
+    @property
+    def microscale_out(self):
+        return self._colls["microscale_out"]
+
+    @property
+    def macroscale_out(self):
+        return self._colls["macroscale_out"]
+
+
+class _StubParams:
+    def __init__(self, macro_simulations):
+        self.macro_simulations = macro_simulations
+
+
+class _StubRunForData:
+    def __init__(self, data, macro_simulations=0):
+        self.data = data
+        self.macro_params = _StubParams(macro_simulations)
+
+
+def _make_run(micro_tables=None, macro_per_sim=None):
+    macro_sims = 0 if macro_per_sim is None else len(macro_per_sim)
+    return _StubRunForData(
+        _StubDataStore(micro_tables=micro_tables, macro_per_sim=macro_per_sim),
+        macro_simulations=macro_sims,
+    )
+
+
+# ---------------------------------------------------------------------------
+# _compare_arrays
+# ---------------------------------------------------------------------------
+
+
+class TestCompareArrays:
+    def test_match_reports_zero(self):
+        a = np.array([1.0, 2.0, 3.0])
+        result = _compare_arrays(a, a.copy())
+        assert result["status"] == "match"
+        assert result["max_pct_diff"] == 0.0
+        assert result["location"] is None
+
+    def test_shape_mismatch_reports_shapes(self):
+        a = np.zeros((3,))
+        b = np.zeros((4,))
+        result = _compare_arrays(a, b)
+        assert result["status"] == "shape_mismatch"
+        assert result["detail"] == "(3,) vs (4,)"
+        assert result["max_pct_diff"] is None
+        assert result["location"] is None
+
+    def test_diff_reports_max_location(self):
+        a = np.array([10.0, 10.0, 10.0])
+        b = np.array([10.0, 10.0, 12.0])
+        result = _compare_arrays(a, b)
+        assert result["status"] == "diff"
+        assert result["location"] == (2,)
+        # symmetric pct diff of 10 vs 12: 200*(2)/22 ≈ 18.18
+        assert result["max_pct_diff"] == pytest.approx(200 * 2 / 22)
+
+    def test_diff_sign_positive_when_b_larger(self):
+        a = np.array([1.0])
+        b = np.array([2.0])
+        result = _compare_arrays(a, b)
+        assert result["max_pct_diff"] > 0
+
+    def test_diff_sign_negative_when_b_smaller(self):
+        a = np.array([2.0])
+        b = np.array([1.0])
+        result = _compare_arrays(a, b)
+        assert result["max_pct_diff"] < 0
+
+    def test_structured_array_reports_field_in_location(self):
+        dtype = np.dtype([("t", np.float64), ("loc", np.int32)])
+        a = np.array([(1.0, 5), (2.0, 7), (3.0, 9)], dtype=dtype)
+        b = np.array([(1.0, 5), (2.0, 7), (3.0, 99)], dtype=dtype)
+        result = _compare_arrays(a, b)
+        assert result["status"] == "diff"
+        assert result["location"][0] == "loc"
+        assert result["location"][1] == 2
+
+    def test_2d_array_reports_multi_index_location(self):
+        a = np.ones((3, 4))
+        b = a.copy()
+        b[1, 2] = 2.0
+        result = _compare_arrays(a, b)
+        assert result["status"] == "diff"
+        assert result["location"] == (1, 2)
+
+
+# ---------------------------------------------------------------------------
+# DATA_TABLE_EXTRACTORS & compare_data_tables
+# ---------------------------------------------------------------------------
+
+
+class TestDataTableDispatch:
+    def test_both_keys_registered(self):
+        assert "micro-data" in DATA_TABLE_EXTRACTORS
+        assert "data" in DATA_TABLE_EXTRACTORS
+
+    def test_available_measure_sets_includes_all(self):
+        names = available_measure_sets()
+        assert set(names) == {"micro-stats", "macro-stats", "micro-data", "data"}
+
+    def test_micro_data_extractor_skips_log(self):
+        run = _make_run(
+            micro_tables={
+                "fiber_degraded": np.array([True, False]),
+                "micro_log": np.array(["skip", "me"]),
+            }
+        )
+        tables = DATA_TABLE_EXTRACTORS["micro-data"](run)
+        assert "microscale_out/fiber_degraded" in tables
+        assert "microscale_out/micro_log" not in tables
+
+    def test_data_extractor_includes_macro(self):
+        run = _make_run(
+            micro_tables={"fiber_degraded": np.array([True])},
+            macro_per_sim=[
+                {"snapshot_time": np.array([0.0, 1.0]), "macro_log": np.array(["x"])},
+                {"snapshot_time": np.array([0.0, 1.0]), "macro_log": np.array(["y"])},
+            ],
+        )
+        tables = DATA_TABLE_EXTRACTORS["data"](run)
+        assert "microscale_out/fiber_degraded" in tables
+        assert "macroscale_out[00]/snapshot_time" in tables
+        assert "macroscale_out[01]/snapshot_time" in tables
+        for label in tables:
+            assert not label.endswith("macro_log")
+
+
+class TestCompareDataTables:
+    def test_identical_runs_all_match(self):
+        run1 = _make_run(
+            micro_tables={
+                "fiber_degraded": np.array([True, False, True]),
+                "tpa_leaving_time": np.array([1.0, 2.0, 3.0]),
+            }
+        )
+        run2 = _make_run(
+            micro_tables={
+                "fiber_degraded": np.array([True, False, True]),
+                "tpa_leaving_time": np.array([1.0, 2.0, 3.0]),
+            }
+        )
+        result = compare_data_tables(run1, run2, "micro-data")
+        assert set(result.keys()) == {"data_diff"}
+        for entry in result["data_diff"].values():
+            assert entry["status"] == "match"
+
+    def test_reports_diff_with_location(self):
+        run1 = _make_run(
+            micro_tables={"tpa_leaving_time": np.array([1.0, 2.0, 3.0])}
+        )
+        run2 = _make_run(
+            micro_tables={"tpa_leaving_time": np.array([1.0, 2.0, 4.0])}
+        )
+        result = compare_data_tables(run1, run2, "micro-data")
+        entry = result["data_diff"]["microscale_out/tpa_leaving_time"]
+        assert entry["status"] == "diff"
+        assert entry["location"] == (2,)
+        assert entry["max_pct_diff"] > 0
+
+    def test_missing_in_run2(self):
+        run1 = _make_run(micro_tables={"only_in_1": np.array([1.0])})
+        run2 = _make_run(micro_tables={"shared": np.array([1.0])})
+        # Make run2 have an additional table that run1 doesn't
+        run2.data.collections["microscale_out"]._tables["extra"] = _StubDataset(
+            np.array([9.0])
+        )
+        result = compare_data_tables(run1, run2, "micro-data")["data_diff"]
+        assert result["microscale_out/only_in_1"]["status"] == "missing"
+        assert "run2" in result["microscale_out/only_in_1"]["detail"]
+
+    def test_compare_runs_routes_to_data_tables(self):
+        run1 = _make_run(micro_tables={"x": np.array([1.0, 2.0])})
+        run2 = _make_run(micro_tables={"x": np.array([1.0, 2.0])})
+        result = compare_runs(run1, run2, "micro-data")
+        assert "data_diff" in result
+        assert "ks" not in result
+
+    def test_unknown_key_raises(self):
+        run = _make_run(micro_tables={"x": np.array([1.0])})
+        with pytest.raises(KeyError):
+            compare_data_tables(run, run, "not-a-real-key")

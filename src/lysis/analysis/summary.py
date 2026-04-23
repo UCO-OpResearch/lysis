@@ -257,6 +257,31 @@ def parameters_table(
 # ---------------------------------------------------------------------------
 
 
+def _fmt_data_diff_cell(entry: dict) -> str:
+    """Format one :func:`~lysis.analysis.compare.compare_data_tables` cell.
+
+    :param entry: Result dict with ``"status"`` plus optional
+        ``"max_pct_diff"``, ``"location"``, ``"detail"`` keys.
+    :type entry: dict
+    :return: Display string (e.g. ``"OK"``, ``"+1.50% @ (3, 7)"``).
+    :rtype: str
+    """
+    status = entry.get("status")
+    if status == "match":
+        return "OK"
+    if status == "diff":
+        pct = entry.get("max_pct_diff")
+        loc = entry.get("location")
+        if pct is None or pct != pct:
+            return f"NaN @ {loc}"
+        return f"{pct:+.2f}% @ {loc}"
+    if status == "shape_mismatch":
+        return f"shapes {entry.get('detail', '')}"
+    if status == "missing":
+        return f"missing ({entry.get('detail', '')})"
+    return str(entry)
+
+
 def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
     """Build a summary DataFrame for :func:`compare_runs` results across Runs.
 
@@ -264,8 +289,11 @@ def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
     ``"{label} KS"`` (test statistic, ``:.4f``) and ``"{label} p-value"``
     (``:.3g``).  For each entry in the ``"pct_diff"`` sub-dict, emits one
     column: ``"{label} % diff"`` (signed, ``:+.2f`` with a ``%`` suffix).
-    KS columns appear first, in measure order; pct-diff columns follow, in
-    stat order.  Both orderings are taken from the first Run's result dict.
+    For each entry in the ``"data_diff"`` sub-dict, emits one column using
+    the dataset label as the header and a formatted cell (``OK`` / percent
+    + location / shape-mismatch / missing).  Column groups appear in the
+    order KS → pct-diff → data-diff; orderings within each group are
+    taken from the first Run's result dict.
 
     :param results_by_run: Maps run code to a compare-runs result dict
         (see :func:`~lysis.analysis.compare.compare_runs`) or, for
@@ -279,16 +307,20 @@ def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
         return pd.DataFrame()
 
     first = next(iter(results_by_run.values()))
-    # Support both the new {"ks": ..., "pct_diff": ...} format and the plain
-    # {label: KstestResult} format.
-    new_format = isinstance(first, dict) and "ks" in first
+    # Support both the new {"ks": ..., "pct_diff": ..., "data_diff": ...}
+    # format and the plain {label: KstestResult} format.
+    new_format = isinstance(first, dict) and (
+        "ks" in first or "pct_diff" in first or "data_diff" in first
+    )
 
     if new_format:
         ks_labels = list(first.get("ks", {}).keys())
         pct_labels = list(first.get("pct_diff", {}).keys())
+        data_labels = list(first.get("data_diff", {}).keys())
     else:
         ks_labels = list(first.keys())
         pct_labels = []
+        data_labels = []
 
     columns = []
     for label in ks_labels:
@@ -296,11 +328,19 @@ def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
         columns.append(f"{label} p-value")
     for label in pct_labels:
         columns.append(f"{label} % diff")
+    for label in data_labels:
+        columns.append(label)
 
     rows = {}
     for rc, entry in results_by_run.items():
-        ks_dict = entry["ks"] if new_format else entry
-        pct_dict = entry.get("pct_diff", {}) if new_format else {}
+        if new_format:
+            ks_dict = entry.get("ks", {})
+            pct_dict = entry.get("pct_diff", {})
+            data_dict = entry.get("data_diff", {})
+        else:
+            ks_dict = entry
+            pct_dict = {}
+            data_dict = {}
 
         row = {}
         for label in ks_labels:
@@ -310,5 +350,7 @@ def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
         for label in pct_labels:
             pct = pct_dict[label]
             row[f"{label} % diff"] = "N/A" if pct != pct else f"{pct:+.2f}%"
+        for label in data_labels:
+            row[label] = _fmt_data_diff_cell(data_dict[label])
         rows[rc] = row
     return pd.DataFrame.from_dict(rows, orient="index", columns=columns)

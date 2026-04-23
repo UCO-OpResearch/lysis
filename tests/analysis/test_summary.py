@@ -6,6 +6,7 @@ import pytest
 from lysis.analysis.summary import (
     MICRO_STATS_COLUMNS,
     _fmt_micro,
+    compare_stats_table,
     deg_rate_table,
     deg_time_table,
     macro_stats_table,
@@ -438,3 +439,90 @@ class TestParametersTable:
             self._NATURAL_UNITS, ["run_A"],
         )
         assert df.loc[("Macroscale", "cols"), "run_A"] == "N/A"
+
+
+# ---------------------------------------------------------------------------
+# compare_stats_table — data_diff rendering
+# ---------------------------------------------------------------------------
+
+
+class TestCompareStatsTableDataDiff:
+    def test_match_renders_ok(self):
+        results = {
+            "run_A": {
+                "data_diff": {
+                    "microscale_out/fiber_degraded": {
+                        "status": "match",
+                        "max_pct_diff": 0.0,
+                        "location": None,
+                    }
+                }
+            }
+        }
+        df = compare_stats_table(results)
+        assert df.loc["run_A", "microscale_out/fiber_degraded"] == "OK"
+
+    def test_diff_renders_pct_and_location(self):
+        results = {
+            "run_A": {
+                "data_diff": {
+                    "microscale_out/tpa_leaving_time": {
+                        "status": "diff",
+                        "max_pct_diff": 1.5,
+                        "location": (3, 7),
+                    }
+                }
+            }
+        }
+        df = compare_stats_table(results)
+        cell = df.loc["run_A", "microscale_out/tpa_leaving_time"]
+        assert "+1.50%" in cell
+        assert "(3, 7)" in cell
+
+    def test_shape_mismatch_renders_detail(self):
+        results = {
+            "run_A": {
+                "data_diff": {
+                    "microscale_out/snapshot_time": {
+                        "status": "shape_mismatch",
+                        "max_pct_diff": None,
+                        "location": None,
+                        "detail": "(100,) vs (101,)",
+                    }
+                }
+            }
+        }
+        df = compare_stats_table(results)
+        cell = df.loc["run_A", "microscale_out/snapshot_time"]
+        assert "shapes" in cell
+        assert "(100,) vs (101,)" in cell
+
+    def test_missing_renders_side(self):
+        results = {
+            "run_A": {
+                "data_diff": {
+                    "microscale_out/extra": {
+                        "status": "missing",
+                        "max_pct_diff": None,
+                        "location": None,
+                        "detail": "not in run2",
+                    }
+                }
+            }
+        }
+        df = compare_stats_table(results)
+        cell = df.loc["run_A", "microscale_out/extra"]
+        assert "missing" in cell
+        assert "not in run2" in cell
+
+    def test_mixed_format_still_works(self):
+        """Result dict with only data_diff (no ks/pct_diff) should still render."""
+        results = {
+            "run_A": {
+                "data_diff": {
+                    "microscale_out/x": {"status": "match", "max_pct_diff": 0.0, "location": None},
+                }
+            }
+        }
+        df = compare_stats_table(results)
+        assert list(df.columns) == ["microscale_out/x"]

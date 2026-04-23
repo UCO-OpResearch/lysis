@@ -51,8 +51,11 @@ from .degradation import (
     plot_front_degradation,
 )
 from .compare import (
+    DATA_TABLE_EXTRACTORS,
     MEASURE_EXTRACTORS,
     STATS_COMPUTERS,
+    available_measure_sets,
+    compare_data_tables,
     compare_runs,
     compute_stats,
     extract_measures,
@@ -70,10 +73,13 @@ from .summary import (
 )
 
 __all__ = [
+    "DATA_TABLE_EXTRACTORS",
     "FiberReplayCursor",
     "MEASURE_EXTRACTORS",
     "STATS_COMPUTERS",
+    "available_measure_sets",
     "calculate_time_row_exposed",
+    "compare_data_tables",
     "compare_runs",
     "compare_stats_table",
     "compute_stats",

@@ -40,13 +40,19 @@ if TYPE_CHECKING:
     from lysis.config.run import Run
 
 __all__ = [
+    "DATA_TABLE_EXTRACTORS",
     "MEASURE_EXTRACTORS",
     "STATS_COMPUTERS",
+    "available_measure_sets",
+    "compare_data_tables",
     "compare_runs",
     "compute_stats",
     "extract_measures",
     "percent_difference",
 ]
+
+#: Dataset names (log tables) that must never be compared.
+_LOG_DATASETS = frozenset({"micro_log", "macro_log"})
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +200,233 @@ STATS_COMPUTERS: Dict[str, Callable[["Run"], Dict[str, float]]] = {
 
 
 # ---------------------------------------------------------------------------
+# Data-table extractors (for exact-match comparison)
+# ---------------------------------------------------------------------------
+
+
+def _extract_data_arrays(run: "Run", include_macro: bool) -> Dict[str, np.ndarray]:
+    """Extract every on-disk (non-log) data table from a Run's DataStore.
+
+    Dataset contents are read into numpy arrays keyed by a display label of
+    the form ``microscale_out/<name>`` or ``macroscale_out[<sim>]/<name>``.
+    Log tables (:data:`_LOG_DATASETS`) are skipped.  Derived datasets with
+    ``data_location=None`` are already excluded by the :attr:`datasets`
+    property on :class:`DataCollection` / :class:`SimulationView`.
+
+    :param run: Run with data open.
+    :type run: Run
+    :param include_macro: If ``True``, also include per-simulation
+        ``macroscale_out`` datasets.
+    :type include_macro: bool
+    :return: Mapping from label to numpy array copy.
+    :rtype: dict[str, numpy.ndarray]
+    """
+    tables: Dict[str, np.ndarray] = {}
+    data = run.data
+
+    collections = data.collections
+    if "microscale_out" in collections:
+        micro = data.microscale_out
+        for name in micro.datasets:
+            if name in _LOG_DATASETS:
+                continue
+            tables[f"microscale_out/{name}"] = getattr(micro, name)[:]
+
+    if include_macro and "macroscale_out" in collections:
+        macro = data.macroscale_out
+        n_sims = run.macro_params.macro_simulations
+        for sim in range(n_sims):
+            view = macro[sim]
+            for name in view.datasets:
+                if name in _LOG_DATASETS:
+                    continue
+                tables[f"macroscale_out[{sim:02}]/{name}"] = getattr(view, name)[:]
+
+    return tables
+
+
+#: Dispatch table mapping a data-comparison name to a table extractor.
+#:
+#: An extractor takes an opened :class:`~lysis.config.run.Run` and returns
+#: a dict ``{label: ndarray}`` of on-disk data tables (log tables and
+#: HDF5 attributes are always excluded).
+DATA_TABLE_EXTRACTORS: Dict[str, Callable[["Run"], Dict[str, np.ndarray]]] = {
+    "micro-data": lambda run: _extract_data_arrays(run, include_macro=False),
+    "data": lambda run: _extract_data_arrays(run, include_macro=True),
+}
+
+
+def available_measure_sets() -> list:
+    """Return the full list of measure-set names accepted by :func:`compare_runs`.
+
+    Combines :data:`MEASURE_EXTRACTORS` (KS + scalar pct-diff comparisons)
+    and :data:`DATA_TABLE_EXTRACTORS` (exact data-table comparisons).
+
+    :return: Sorted list of measure-set keys.
+    :rtype: list[str]
+    """
+    return sorted(set(MEASURE_EXTRACTORS) | set(DATA_TABLE_EXTRACTORS))
+
+
+# ---------------------------------------------------------------------------
+# Data-table comparison helpers
+# ---------------------------------------------------------------------------
+
+
+def _arraywise_max_pct(a: np.ndarray, b: np.ndarray):
+    """Find the element with the largest absolute percent difference.
+
+    Uses the same symmetric formula as :func:`percent_difference`
+    (``200 * (b - a) / (a + b)``) element-wise.  Positions where both
+    inputs are zero contribute 0.  Positions that produce NaN or Inf
+    (e.g. opposite-sign cancellation) are ranked highest so true
+    mismatches are surfaced even when the symmetric denominator breaks
+    down.
+
+    :param a: First array.
+    :type a: numpy.ndarray
+    :param b: Second array (same shape as *a*).
+    :type b: numpy.ndarray
+    :return: ``(signed_pct, location)`` where *location* is a tuple of
+        ``int`` indices into the original array shape.
+    :rtype: tuple[float, tuple[int, ...]]
+    """
+    a_float = np.asarray(a, dtype=np.float64)
+    b_float = np.asarray(b, dtype=np.float64)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        denom = (a_float + b_float) / 2.0
+        pct = 100.0 * (b_float - a_float) / denom
+    both_zero = (a_float == 0) & (b_float == 0)
+    pct = np.where(both_zero, 0.0, pct)
+    abs_pct = np.abs(pct)
+    # Rank non-finite (NaN from 0/0 cancellation, Inf from a+b=0) highest
+    abs_pct_ranked = np.where(np.isfinite(abs_pct), abs_pct, np.inf)
+    idx_flat = int(np.argmax(abs_pct_ranked))
+    location = np.unravel_index(idx_flat, pct.shape)
+    return float(pct.flat[idx_flat]), tuple(int(i) for i in location)
+
+
+def _compare_arrays(a: np.ndarray, b: np.ndarray) -> dict:
+    """Compare two arrays for exact equality, reporting max percent diff.
+
+    Returns a dict with these keys:
+
+    - ``"status"`` — one of ``"match"``, ``"diff"``, ``"shape_mismatch"``.
+    - ``"max_pct_diff"`` — signed percent difference at the worst
+      element (``0.0`` on match, ``None`` on shape mismatch).
+    - ``"location"`` — tuple of indices identifying the worst element
+      (``None`` on match or shape mismatch).  For structured arrays the
+      first entry is the field name.
+    - ``"detail"`` — present only on ``"shape_mismatch"`` with a
+      human-readable ``shape1 vs shape2`` string.
+
+    :param a: First array (from ``run1``).
+    :type a: numpy.ndarray
+    :param b: Second array (from ``run2``).
+    :type b: numpy.ndarray
+    :rtype: dict
+    """
+    if a.shape != b.shape:
+        return {
+            "status": "shape_mismatch",
+            "max_pct_diff": None,
+            "location": None,
+            "detail": f"{a.shape} vs {b.shape}",
+        }
+    if np.array_equal(a, b):
+        return {"status": "match", "max_pct_diff": 0.0, "location": None}
+
+    if a.dtype.names is not None:
+        # Structured array: scan each field, keep the worst.
+        best_pct = 0.0
+        best_loc = None
+        for field in a.dtype.names:
+            field_a = a[field]
+            field_b = b[field]
+            if np.array_equal(field_a, field_b):
+                continue
+            pct, loc = _arraywise_max_pct(field_a, field_b)
+            worse = best_loc is None or (
+                not np.isfinite(best_pct) or abs(pct) > abs(best_pct)
+            )
+            if worse:
+                best_pct = pct
+                best_loc = (field,) + loc
+        if best_loc is None:
+            # Should not happen: array_equal was False but no field differs.
+            return {"status": "match", "max_pct_diff": 0.0, "location": None}
+        return {
+            "status": "diff",
+            "max_pct_diff": best_pct,
+            "location": best_loc,
+        }
+
+    pct, loc = _arraywise_max_pct(a, b)
+    return {"status": "diff", "max_pct_diff": pct, "location": loc}
+
+
+def compare_data_tables(run1: "Run", run2: "Run", which: str) -> dict:
+    """Compare on-disk data tables between two Runs for exact equality.
+
+    For the data-table set selected by ``which`` (see
+    :data:`DATA_TABLE_EXTRACTORS`), reads every non-log dataset from
+    each Run's HDF5 file and compares the two arrays element-wise.  If
+    the arrays are not exactly equal, reports the maximum symmetric
+    percent difference (:func:`percent_difference`) across the dataset
+    and the location of that worst element.
+
+    HDF5 attributes and log tables (``micro_log``, ``macro_log``) are
+    never compared.  Datasets that exist in one Run but not the other
+    are reported with ``status="missing"``.
+
+    :param run1: First Run with data open.
+    :type run1: Run
+    :param run2: Second Run with data open.
+    :type run2: Run
+    :param which: Key into :data:`DATA_TABLE_EXTRACTORS`.
+    :type which: str
+    :return: Dict with a single ``"data_diff"`` sub-dict mapping each
+        dataset label to a result dict.  The result dict always has
+        ``"status"``; ``"match"`` results additionally carry
+        ``max_pct_diff=0.0`` and ``location=None``; ``"diff"`` results
+        carry a signed ``"max_pct_diff"`` and index tuple
+        ``"location"``; ``"shape_mismatch"`` results carry a
+        ``"detail"`` string; ``"missing"`` results carry a
+        ``"detail"`` describing which Run is missing the dataset.
+    :rtype: dict
+    :raises KeyError: If ``which`` is not a known data-table set.
+    """
+    if which not in DATA_TABLE_EXTRACTORS:
+        raise KeyError(
+            f"Unknown data-table set {which!r}. "
+            f"Available: {sorted(DATA_TABLE_EXTRACTORS.keys())}"
+        )
+    tables1 = DATA_TABLE_EXTRACTORS[which](run1)
+    tables2 = DATA_TABLE_EXTRACTORS[which](run2)
+
+    all_labels = sorted(set(tables1) | set(tables2))
+    results: Dict[str, dict] = {}
+    for label in all_labels:
+        if label not in tables1:
+            results[label] = {
+                "status": "missing",
+                "max_pct_diff": None,
+                "location": None,
+                "detail": "not in run1",
+            }
+        elif label not in tables2:
+            results[label] = {
+                "status": "missing",
+                "max_pct_diff": None,
+                "location": None,
+                "detail": "not in run2",
+            }
+        else:
+            results[label] = _compare_arrays(tables1[label], tables2[label])
+    return {"data_diff": results}
+
+
+# ---------------------------------------------------------------------------
 # Percent difference
 # ---------------------------------------------------------------------------
 
@@ -292,10 +525,18 @@ def compare_runs(run1: "Run", run2: "Run", which: str) -> dict:
 
         Either sub-dict may be empty if no entries are registered for
         ``which``.
+
+        When ``which`` selects a data-table comparison (see
+        :data:`DATA_TABLE_EXTRACTORS`) the call is routed to
+        :func:`compare_data_tables`, which returns a single ``"data_diff"``
+        sub-dict instead.
     :rtype: dict
     :raises KeyError: If ``which`` is not a known measure set, or if the
         two extractors disagree on labels.
     """
+    if which in DATA_TABLE_EXTRACTORS:
+        return compare_data_tables(run1, run2, which)
+
     measures_1 = extract_measures(run1, which)
     measures_2 = extract_measures(run2, which)
     ks_results = {}

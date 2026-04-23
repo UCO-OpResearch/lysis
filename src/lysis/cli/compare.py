@@ -11,7 +11,7 @@ import os
 
 import click
 
-from lysis.analysis.compare import MEASURE_EXTRACTORS, compare_runs
+from lysis.analysis.compare import available_measure_sets, compare_runs
 from lysis.cli import cli
 
 
@@ -69,7 +69,7 @@ def _compare_one(folder1, folder2, run_code, which, console):
     :type folder2: str
     :param run_code: Run code shared by both folders.
     :type run_code: str
-    :param which: Key into :data:`MEASURE_EXTRACTORS`.
+    :param which: Measure-set key (see :func:`available_measure_sets`).
     :type which: str
     :param console: Rich Console for error messages.
     :return: Result dict from :func:`compare_runs`, or ``None`` on error.
@@ -132,7 +132,7 @@ def _compare_one(folder1, folder2, run_code, which, console):
 )
 @click.argument(
     "which",
-    type=click.Choice(list(MEASURE_EXTRACTORS.keys()), case_sensitive=False),
+    type=click.Choice(available_measure_sets(), case_sensitive=False),
 )
 @click.argument(
     "folder1",
@@ -144,15 +144,22 @@ def _compare_one(folder1, folder2, run_code, which, console):
 )
 @click.pass_context
 def compare(ctx, sort_mode, no_progress, markdown_out, which, folder1, folder2):
-    """Compare Runs across two folders using the 2-sample Kolmogorov-Smirnov test.
+    """Compare Runs across two folders.
 
     For every run code whose ``.h5`` file appears in both FOLDER1 and
-    FOLDER2 the command computes, per measure set selected by WHICH:
+    FOLDER2 the command compares the two Runs.  The comparison performed
+    depends on WHICH:
 
-    - a 2-sample :func:`scipy.stats.ks_2samp` test on each per-simulation
-      array pair (``KS`` and ``p-value`` columns);
-    - a symmetric percent difference on each scalar summary stat (``% diff``
-      columns, signed so positive means FOLDER2 > FOLDER1).
+    \b
+    - ``micro-stats`` / ``macro-stats`` — 2-sample Kolmogorov-Smirnov
+      tests on per-simulation arrays plus symmetric percent differences
+      on scalar summary stats (signed so positive means FOLDER2 > FOLDER1).
+    - ``micro-data`` / ``data`` — element-wise exact-match check on every
+      non-log data table in the paired HDF5 files.  Each dataset cell
+      reports ``OK`` when the arrays are exactly equal, or the maximum
+      symmetric percent difference and the location of that worst
+      element when they differ.  HDF5 attributes and log tables
+      (``micro_log`` / ``macro_log``) are never examined.
 
     Results are rendered as a table with one row per Run.
 
@@ -160,6 +167,8 @@ def compare(ctx, sort_mode, no_progress, markdown_out, which, folder1, folder2):
     Examples:
         lysis compare micro-stats data/runA/ data/runB/
         lysis compare macro-stats data/runA/ data/runB/
+        lysis compare micro-data data/runA/ data/runB/
+        lysis compare data data/runA/ data/runB/
         lysis compare macro-stats data/runA/ data/runB/ --sort alpha
         lysis compare macro-stats data/runA/ data/runB/ --no-progress
         lysis compare macro-stats data/runA/ data/runB/ --markdown -
