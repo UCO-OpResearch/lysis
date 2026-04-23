@@ -130,6 +130,92 @@ class TestCompareFilePairDivergent:
         assert "(2,)" in result.output
 
 
+class TestCompareDiffFlag:
+    def test_diff_rejects_folder_mode(self, runner, tmp_path):
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b").mkdir()
+        result = runner.invoke(
+            cli,
+            [
+                "compare",
+                "micro-data",
+                str(tmp_path / "a"),
+                str(tmp_path / "b"),
+                "--diff",
+                "microscale_out/tpa_leaving_time",
+                "--no-progress",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "file-pair mode" in result.output
+
+    def test_diff_unknown_table_errors_with_available(
+        self, runner, two_identical_files
+    ):
+        path1, path2 = two_identical_files
+        result = runner.invoke(
+            cli,
+            [
+                "compare",
+                "data",
+                str(path1),
+                str(path2),
+                "--diff",
+                "microscale_out/does_not_exist",
+                "--no-progress",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output
+        assert "Available tables" in result.output
+        assert "microscale_out/tpa_leaving_time" in result.output
+
+    def test_diff_renders_side_by_side(self, runner, two_divergent_files):
+        path1, path2 = two_divergent_files
+        result = runner.invoke(
+            cli,
+            [
+                "compare",
+                "data",
+                str(path1),
+                str(path2),
+                "--diff",
+                "microscale_out/tpa_leaving_time",
+                "--no-progress",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        # Title is the dataset label.
+        assert "microscale_out/tpa_leaving_time" in result.output
+        # Columns: Index, file names, % Diff.
+        assert "Index" in result.output
+        assert "% Diff" in result.output
+        # Element [2] was mutated; some pct-diff should appear.
+        assert "%" in result.output
+
+    def test_diff_matches_leave_no_pct(self, runner, two_identical_files):
+        path1, path2 = two_identical_files
+        result = runner.invoke(
+            cli,
+            [
+                "compare",
+                "data",
+                str(path1),
+                str(path2),
+                "--diff",
+                "microscale_out/tpa_leaving_time",
+                "--no-progress",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        # Matching rows render an em-dash in the % Diff column; no
+        # signed percent value (e.g. "+1.23%") should appear anywhere.
+        assert "—" in result.output
+        import re
+
+        assert re.search(r"[+-]\d+\.\d+%", result.output) is None
+
+
 class TestCompareFilePairMarkdown:
     def test_markdown_output_contains_all_columns(
         self, runner, two_divergent_files, tmp_path

@@ -8,6 +8,7 @@ Provides shared helpers used by all table-producing CLI commands:
 - :func:`stats_df_to_markdown` — render a runs-as-rows DataFrame as Markdown
 - :func:`params_df_to_rich` — render a parameters DataFrame as a Rich Table
 - :func:`params_df_to_markdown` — render a parameters DataFrame as Markdown
+- :func:`render_dataset_side_by_side` — page-through side-by-side diff of two arrays
 """
 
 from __future__ import annotations
@@ -207,3 +208,146 @@ def params_df_to_markdown(
         lines.append("")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Side-by-side dataset diff
+# ---------------------------------------------------------------------------
+
+
+def _fmt_scalar(v) -> str:
+    """Format a numpy scalar / Python value for a single-cell diff view.
+
+    Floats use ``:.6g`` (with ``NaN`` for non-numeric); booleans render
+    as ``True`` / ``False``; everything else falls back to ``str``.
+
+    :param v: Scalar value.
+    :return: Display string.
+    :rtype: str
+    """
+    import numpy as np
+
+    if isinstance(v, (np.bool_, bool)):
+        return str(bool(v))
+    if isinstance(v, (np.floating, float)):
+        if np.isnan(v):
+            return "NaN"
+        return f"{v:.6g}"
+    return str(v)
+
+
+def render_dataset_side_by_side(
+    arr1,
+    arr2,
+    label: str,
+    console,
+    file1_name: str = "File 1",
+    file2_name: str = "File 2",
+) -> None:
+    """Render two arrays side-by-side in a Rich Table with differences highlighted.
+
+    Differing rows get a red foreground; identical rows render in the
+    default style.  For plain numeric/boolean arrays the table gets an
+    additional ``% Diff`` column showing the symmetric percent
+    difference.  For structured arrays (e.g. event logs) each struct
+    field becomes a pair of columns ``<field> (1)`` / ``<field> (2)``,
+    and diffs are highlighted per field.
+
+    Shape mismatch is non-fatal: a warning is printed and only the
+    first ``min(len1, len2)`` rows of the common leading dimension are
+    shown.
+
+    Output is piped through the Rich pager (``console.pager``); when
+    *console* is a TTY this uses the system pager (typically ``less``),
+    otherwise it prints directly.
+
+    :param arr1: First array.
+    :type arr1: numpy.ndarray
+    :param arr2: Second array.
+    :type arr2: numpy.ndarray
+    :param label: Dataset label used as the table title.
+    :type label: str
+    :param console: Rich Console.
+    :param file1_name: Column header suffix for *arr1*.
+    :type file1_name: str
+    :param file2_name: Column header suffix for *arr2*.
+    :type file2_name: str
+    """
+    import numpy as np
+
+    from rich.table import Table
+
+    from lysis.analysis.compare import percent_difference
+
+    shape1 = arr1.shape
+    shape2 = arr2.shape
+    if shape1 != shape2:
+        console.print(
+            f"[yellow]Note:[/yellow] shape mismatch {shape1} vs {shape2}; "
+            f"showing min(len1, len2) leading-axis rows."
+        )
+
+    is_struct = arr1.dtype.names is not None
+
+    if is_struct:
+        fields = arr1.dtype.names
+        table = Table(title=label, show_header=True, header_style="bold")
+        table.add_column("Index", style="dim", no_wrap=True)
+        for field in fields:
+            table.add_column(f"{field}\n({file1_name})", justify="right")
+            table.add_column(f"{field}\n({file2_name})", justify="right")
+
+        n = min(len(arr1), len(arr2))
+        for i in range(n):
+            cells = [str(i)]
+            for field in fields:
+                v1 = arr1[field][i]
+                v2 = arr2[field][i]
+                s1 = _fmt_scalar(v1)
+                s2 = _fmt_scalar(v2)
+                if v1 == v2:
+                    cells.extend([s1, s2])
+                else:
+                    cells.extend([f"[bold red]{s1}[/]", f"[bold red]{s2}[/]"])
+            table.add_row(*cells)
+    else:
+        flat1 = arr1.ravel()
+        flat2 = arr2.ravel()
+        # Use arr1's shape for index rendering; if shapes differ, callers
+        # were already warned above.
+        shape = shape1
+        multi_dim = len(shape) > 1
+
+        table = Table(title=label, show_header=True, header_style="bold")
+        table.add_column("Index", style="dim", no_wrap=True)
+        table.add_column(file1_name, justify="right")
+        table.add_column(file2_name, justify="right")
+        table.add_column("% Diff", justify="right")
+
+        n = min(flat1.size, flat2.size)
+        for i in range(n):
+            if multi_dim:
+                idx_str = str(np.unravel_index(i, shape))
+            else:
+                idx_str = str(i)
+            v1 = flat1[i]
+            v2 = flat2[i]
+            s1 = _fmt_scalar(v1)
+            s2 = _fmt_scalar(v2)
+            if v1 == v2:
+                table.add_row(idx_str, s1, s2, "—")
+            else:
+                try:
+                    pct = percent_difference(float(v1), float(v2))
+                except (TypeError, ValueError):
+                    pct = float("nan")
+                pct_str = "NaN" if pct != pct else f"{pct:+.2f}%"
+                table.add_row(
+                    f"[yellow]{idx_str}[/]",
+                    f"[bold red]{s1}[/]",
+                    f"[bold red]{s2}[/]",
+                    f"[bold red]{pct_str}[/]",
+                )
+
+    with console.pager(styles=True):
+        console.print(table)

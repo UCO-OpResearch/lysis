@@ -16,6 +16,7 @@ from lysis.analysis.compare import (
     available_measure_sets,
     compare_runs,
 )
+from lysis.tools.display import render_dataset_side_by_side
 from lysis.cli import cli
 
 
@@ -110,6 +111,72 @@ def _split_h5_path(path):
     return data_root, run_code
 
 
+def _render_side_by_side_from_files(path1, path2, diff_table, console, ctx):
+    """Open two ``.h5`` files and render the named dataset side-by-side.
+
+    Uses the ``data`` extractor (all non-log tables from both
+    microscale_out and macroscale_out) and looks up *diff_table* in
+    each Run.  Errors out if the label is not present in either Run
+    or if the two runs cannot be opened.
+
+    :param path1: Path to the first HDF5 file.
+    :type path1: str
+    :param path2: Path to the second HDF5 file.
+    :type path2: str
+    :param diff_table: Dataset label to render.
+    :type diff_table: str
+    :param console: Rich Console.
+    :param ctx: Click context (used for ``ctx.exit`` on failure).
+    """
+    from lysis.analysis.compare import DATA_TABLE_EXTRACTORS
+
+    root1, code1 = _split_h5_path(path1)
+    root2, code2 = _split_h5_path(path2)
+    run1 = _open_run(root1, code1, console)
+    if run1 is None:
+        ctx.exit(1)
+        return
+    try:
+        run2 = _open_run(root2, code2, console)
+        if run2 is None:
+            ctx.exit(1)
+            return
+        try:
+            extractor = DATA_TABLE_EXTRACTORS["data"]
+            tables1 = extractor(run1)
+            tables2 = extractor(run2)
+
+            if diff_table not in tables1 or diff_table not in tables2:
+                available = sorted(set(tables1) | set(tables2))
+                missing_from = []
+                if diff_table not in tables1:
+                    missing_from.append(os.path.basename(path1))
+                if diff_table not in tables2:
+                    missing_from.append(os.path.basename(path2))
+                console.print(
+                    f"[red]Error:[/red] table {diff_table!r} not found in "
+                    f"{', '.join(missing_from)}."
+                )
+                console.print(
+                    "Available tables:\n  " + "\n  ".join(available)
+                )
+                ctx.exit(1)
+                return
+
+            render_dataset_side_by_side(
+                tables1[diff_table],
+                tables2[diff_table],
+                diff_table,
+                console,
+                file1_name=os.path.basename(path1),
+                file2_name=os.path.basename(path2),
+            )
+        finally:
+            run2.data.close()
+    finally:
+        run1.data.close()
+
+
 def _compare_file_pair(path1, path2, which, console):
     """Open two ``.h5`` files and run :func:`compare_runs` on them.
 
@@ -191,6 +258,20 @@ def _compare_file_pair(path1, path2, which, console):
         "No effect on 'micro-stats' / 'macro-stats' modes."
     ),
 )
+@click.option(
+    "--diff",
+    "diff_table",
+    type=str,
+    default=None,
+    metavar="TABLE",
+    help=(
+        "File-pair mode only: render TABLE from both files side-by-side "
+        "in a pager, with differing rows highlighted.  TABLE is a "
+        "dataset label such as 'microscale_out/tpa_leaving_time' or "
+        "'macroscale_out[00]/snapshot_time'.  The WHICH argument is "
+        "ignored when --diff is set."
+    ),
+)
 @click.argument(
     "which",
     type=click.Choice(available_measure_sets(), case_sensitive=False),
@@ -207,7 +288,15 @@ def _compare_file_pair(path1, path2, which, console):
 )
 @click.pass_context
 def compare(
-    ctx, sort_mode, no_progress, markdown_out, verbose, which, folder1, folder2
+    ctx,
+    sort_mode,
+    no_progress,
+    markdown_out,
+    verbose,
+    diff_table,
+    which,
+    folder1,
+    folder2,
 ):
     """Compare Runs across two folders or two ``.h5`` files.
 
@@ -227,6 +316,8 @@ def compare(
         emitted (one row per dataset with Status, Mismatches,
         Max % Diff, and Location columns).  For ``micro-stats`` /
         ``macro-stats`` the usual single-pair stats are shown.
+        ``--diff TABLE`` switches to a side-by-side page-through view
+        of a single dataset (differing rows highlighted).
 
     \b
     WHICH selects the comparison:
@@ -250,6 +341,8 @@ def compare(
         lysis compare data data/runA/ data/runB/ --verbose --markdown out.md
         lysis compare data runA.h5 runB.h5
         lysis compare micro-data runA.h5 runB.h5 --markdown out.md
+        lysis compare data runA.h5 runB.h5 --diff microscale_out/tpa_leaving_time
+        lysis compare data runA.h5 runB.h5 --diff "macroscale_out[00]/snapshot_time"
         lysis compare macro-stats data/runA/ data/runB/ --sort alpha
         lysis compare macro-stats data/runA/ data/runB/ --no-progress
         lysis compare macro-stats data/runA/ data/runB/ --markdown -
@@ -295,12 +388,26 @@ def compare(
         ctx.exit(1)
         return
 
+    if diff_table is not None and not (path1_is_file and path2_is_file):
+        console.print(
+            "[red]Error:[/red] --diff is only supported in file-pair mode "
+            "(pass two .h5 files, not directories)."
+        )
+        ctx.exit(1)
+        return
+
     if path1_is_file and path2_is_file:
         if not (folder1.lower().endswith(".h5") and folder2.lower().endswith(".h5")):
             console.print(
                 "[red]Error:[/red] file-pair inputs must have .h5 extensions."
             )
             ctx.exit(1)
+            return
+
+        if diff_table is not None:
+            _render_side_by_side_from_files(
+                folder1, folder2, diff_table, console, ctx
+            )
             return
 
         result = _compare_file_pair(folder1, folder2, which, console)
