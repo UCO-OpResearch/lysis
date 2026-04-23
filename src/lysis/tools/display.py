@@ -218,8 +218,10 @@ def params_df_to_markdown(
 def _fmt_scalar(v) -> str:
     """Format a numpy scalar / Python value for a single-cell diff view.
 
-    Floats use ``:.6g`` (with ``NaN`` for non-numeric); booleans render
-    as ``True`` / ``False``; everything else falls back to ``str``.
+    Floats render at full round-trippable precision via ``str(v)``
+    (e.g. ``0.1 + 0.2`` → ``"0.30000000000000004"``), with ``"NaN"``
+    substituted for non-numerics; booleans render as ``"True"`` /
+    ``"False"``; everything else falls back to ``str``.
 
     :param v: Scalar value.
     :return: Display string.
@@ -232,7 +234,7 @@ def _fmt_scalar(v) -> str:
     if isinstance(v, (np.floating, float)):
         if np.isnan(v):
             return "NaN"
-        return f"{v:.6g}"
+        return str(v)
     return str(v)
 
 

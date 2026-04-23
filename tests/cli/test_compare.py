@@ -69,6 +69,20 @@ def two_divergent_files(two_identical_files):
     return two_identical_files
 
 
+@pytest.fixture
+def high_precision_files(two_identical_files):
+    """Start from two identical files, then mutate with a value whose
+    full-precision float64 string differs from its :.6g truncation."""
+    _, path2 = two_identical_files
+    with h5py.File(str(path2), "a") as f:
+        arr = f["micro_data/tpa_leaving_time"][:]
+        # 0.1 + 0.2 round-trips to "0.30000000000000004" (18 sig figs),
+        # but :.6g truncates it to "0.3".
+        arr[0] = 0.1 + 0.2
+        f["micro_data/tpa_leaving_time"][:] = arr
+    return two_identical_files
+
+
 class TestComparePathTypes:
     def test_mixed_file_and_dir_rejected(self, runner, tmp_path, two_identical_files):
         path1, _ = two_identical_files
@@ -214,6 +228,24 @@ class TestCompareDiffFlag:
         import re
 
         assert re.search(r"[+-]\d+\.\d+%", result.output) is None
+
+    def test_diff_renders_full_precision(self, runner, high_precision_files):
+        path1, path2 = high_precision_files
+        result = runner.invoke(
+            cli,
+            [
+                "compare",
+                "data",
+                str(path1),
+                str(path2),
+                "--diff",
+                "microscale_out/tpa_leaving_time",
+                "--no-progress",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        # Full round-trippable float64 representation of 0.1 + 0.2.
+        assert "0.30000000000000004" in result.output
 
     def test_diff_skips_matching_rows(self, runner, two_divergent_files):
         path1, path2 = two_divergent_files
