@@ -193,7 +193,7 @@ class TestCompareDiffFlag:
         # Element [2] was mutated; some pct-diff should appear.
         assert "%" in result.output
 
-    def test_diff_matches_leave_no_pct(self, runner, two_identical_files):
+    def test_diff_identical_reports_no_differences(self, runner, two_identical_files):
         path1, path2 = two_identical_files
         result = runner.invoke(
             cli,
@@ -208,12 +208,34 @@ class TestCompareDiffFlag:
             ],
         )
         assert result.exit_code == 0, result.output
-        # Matching rows render an em-dash in the % Diff column; no
-        # signed percent value (e.g. "+1.23%") should appear anywhere.
-        assert "—" in result.output
+        # Matching rows are skipped entirely; a short message is printed.
+        assert "No differences found in microscale_out/tpa_leaving_time" in result.output
+        # No signed percent value should appear anywhere.
         import re
 
         assert re.search(r"[+-]\d+\.\d+%", result.output) is None
+
+    def test_diff_skips_matching_rows(self, runner, two_divergent_files):
+        path1, path2 = two_divergent_files
+        result = runner.invoke(
+            cli,
+            [
+                "compare",
+                "data",
+                str(path1),
+                str(path2),
+                "--diff",
+                "microscale_out/tpa_leaving_time",
+                "--no-progress",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        # Diff row (index 2: 3 vs 4) shows up with its signed pct-diff.
+        assert "+28.57%" in result.output
+        # Matching values 1.5 (index 1) and 4.5 (index 3) are unique to
+        # their rows — if either appears, a matching row leaked through.
+        assert "1.5" not in result.output
+        assert "4.5" not in result.output
 
 
 class TestCompareFilePairMarkdown:

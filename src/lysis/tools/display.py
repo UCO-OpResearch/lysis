@@ -244,28 +244,30 @@ def render_dataset_side_by_side(
     file1_name: str = "File 1",
     file2_name: str = "File 2",
 ) -> None:
-    """Render two arrays side-by-side in a Rich Table with differences highlighted.
+    """Render only differing rows of two arrays side-by-side in a Rich Table.
 
-    Differing rows get a red foreground; identical rows render in the
-    default style.  For plain numeric/boolean arrays the table gets an
-    additional ``% Diff`` column showing the symmetric percent
-    difference.  For structured arrays (e.g. event logs) each struct
-    field becomes a pair of columns ``<field> (1)`` / ``<field> (2)``,
-    and diffs are highlighted per field.
+    Rows where the two values are equal are skipped entirely so the
+    output fits in a typical pager buffer.  For plain numeric / boolean
+    arrays the table gets an additional ``% Diff`` column showing the
+    symmetric percent difference.  For structured arrays (event logs),
+    each struct field becomes a pair of columns
+    ``<field>\\n(<file1>)`` / ``<field>\\n(<file2>)``; a record is
+    included if any field differs.
 
-    Shape mismatch is non-fatal: a warning is printed and only the
-    first ``min(len1, len2)`` rows of the common leading dimension are
-    shown.
+    Shape mismatch is non-fatal: a note is printed and only the first
+    ``min(len1, len2)`` rows of the common leading dimension are scanned.
 
-    Output is piped through the Rich pager (``console.pager``); when
-    *console* is a TTY this uses the system pager (typically ``less``),
-    otherwise it prints directly.
+    The output is piped through the Rich pager; when *console* is a TTY
+    this uses the system pager (typically ``less``), otherwise it prints
+    directly.  No colour styling is applied so the result renders
+    correctly through pagers that strip ANSI escapes.
 
     :param arr1: First array.
     :type arr1: numpy.ndarray
     :param arr2: Second array.
     :type arr2: numpy.ndarray
-    :param label: Dataset label used as the table title.
+    :param label: Dataset label used as the table title and in the
+        "no differences" message.
     :type label: str
     :param console: Rich Console.
     :param file1_name: Column header suffix for *arr1*.
@@ -283,71 +285,60 @@ def render_dataset_side_by_side(
     shape2 = arr2.shape
     if shape1 != shape2:
         console.print(
-            f"[yellow]Note:[/yellow] shape mismatch {shape1} vs {shape2}; "
+            f"Note: shape mismatch {shape1} vs {shape2}; "
             f"showing min(len1, len2) leading-axis rows."
         )
 
     is_struct = arr1.dtype.names is not None
+    diff_count = 0
 
     if is_struct:
         fields = arr1.dtype.names
-        table = Table(title=label, show_header=True, header_style="bold")
-        table.add_column("Index", style="dim", no_wrap=True)
+        table = Table(title=label, show_header=True)
+        table.add_column("Index", no_wrap=True)
         for field in fields:
             table.add_column(f"{field}\n({file1_name})", justify="right")
             table.add_column(f"{field}\n({file2_name})", justify="right")
 
         n = min(len(arr1), len(arr2))
         for i in range(n):
+            if not any(arr1[field][i] != arr2[field][i] for field in fields):
+                continue
+            diff_count += 1
             cells = [str(i)]
             for field in fields:
-                v1 = arr1[field][i]
-                v2 = arr2[field][i]
-                s1 = _fmt_scalar(v1)
-                s2 = _fmt_scalar(v2)
-                if v1 == v2:
-                    cells.extend([s1, s2])
-                else:
-                    cells.extend([f"[bold red]{s1}[/]", f"[bold red]{s2}[/]"])
+                cells.append(_fmt_scalar(arr1[field][i]))
+                cells.append(_fmt_scalar(arr2[field][i]))
             table.add_row(*cells)
     else:
         flat1 = arr1.ravel()
         flat2 = arr2.ravel()
-        # Use arr1's shape for index rendering; if shapes differ, callers
-        # were already warned above.
         shape = shape1
         multi_dim = len(shape) > 1
 
-        table = Table(title=label, show_header=True, header_style="bold")
-        table.add_column("Index", style="dim", no_wrap=True)
+        table = Table(title=label, show_header=True)
+        table.add_column("Index", no_wrap=True)
         table.add_column(file1_name, justify="right")
         table.add_column(file2_name, justify="right")
         table.add_column("% Diff", justify="right")
 
         n = min(flat1.size, flat2.size)
         for i in range(n):
-            if multi_dim:
-                idx_str = str(np.unravel_index(i, shape))
-            else:
-                idx_str = str(i)
             v1 = flat1[i]
             v2 = flat2[i]
-            s1 = _fmt_scalar(v1)
-            s2 = _fmt_scalar(v2)
             if v1 == v2:
-                table.add_row(idx_str, s1, s2, "—")
-            else:
-                try:
-                    pct = percent_difference(float(v1), float(v2))
-                except (TypeError, ValueError):
-                    pct = float("nan")
-                pct_str = "NaN" if pct != pct else f"{pct:+.2f}%"
-                table.add_row(
-                    f"[yellow]{idx_str}[/]",
-                    f"[bold red]{s1}[/]",
-                    f"[bold red]{s2}[/]",
-                    f"[bold red]{pct_str}[/]",
-                )
+                continue
+            diff_count += 1
+            idx_str = str(np.unravel_index(i, shape)) if multi_dim else str(i)
+            try:
+                pct = percent_difference(float(v1), float(v2))
+            except (TypeError, ValueError):
+                pct = float("nan")
+            pct_str = "NaN" if pct != pct else f"{pct:+.2f}%"
+            table.add_row(idx_str, _fmt_scalar(v1), _fmt_scalar(v2), pct_str)
 
-    with console.pager(styles=True):
-        console.print(table)
+    with console.pager():
+        if diff_count == 0:
+            console.print(f"No differences found in {label}.")
+        else:
+            console.print(table)
