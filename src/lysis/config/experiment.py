@@ -225,6 +225,10 @@ class Experiment:
         self._description = description
         self._runs: list[Run] = []
         self._created: str = datetime.now().isoformat(timespec="seconds")
+        # Populated by ``Experiment.load``; ``None`` for Experiments created
+        # via :meth:`from_csv` (where ``_name`` and the folder name are
+        # guaranteed to match by construction).
+        self._source_path: str | None = None
 
     # ─── Properties ────────────────────────────────────────────────────────
 
@@ -505,12 +509,20 @@ class Experiment:
         ``os_path`` of every contained :class:`~lysis.config.run.Run`, and
         rewrites ``experiment.json`` with the new name.
 
+        If the Experiment was loaded from disk via :meth:`load` and the
+        folder basename no longer matches ``experiment.json``'s ``name``
+        field, this method refuses to rename rather than silently
+        widening the divergence.  Fix either the folder name or the
+        ``name`` field manually before retrying.
+
         :param new_name: The new experiment name (becomes the new folder
             name under ``data_root``).
         :type new_name: str
         :return: The previous experiment name.
         :rtype: str
-        :raises ValueError: If ``new_name`` equals the current name.
+        :raises ValueError: If ``new_name`` equals the current name, or
+            if the loaded folder basename does not match
+            ``experiment.json``'s ``name`` field.
         :raises FileNotFoundError: If the current experiment folder does
             not exist.
         :raises FileExistsError: If a folder already exists at the
@@ -520,6 +532,16 @@ class Experiment:
             raise ValueError(
                 f"new_name is identical to current name: {new_name!r}"
             )
+
+        if self._source_path is not None:
+            loaded_name = os.path.basename(self._source_path)
+            if loaded_name != self._name:
+                raise ValueError(
+                    f"Folder name ({loaded_name!r}) and experiment.json "
+                    f"name ({self._name!r}) disagree. Refusing to rename; "
+                    f"fix the folder name or the 'name' field in "
+                    f"experiment.json before retrying."
+                )
 
         old_name = self._name
         old_path = self.path
@@ -533,6 +555,7 @@ class Experiment:
         os.rename(old_path, new_path)
 
         self._name = new_name
+        self._source_path = new_path
         for run in self._runs:
             run.os_path = new_path
 
@@ -543,10 +566,17 @@ class Experiment:
         """Rename a Run belonging to this Experiment.
 
         Locates the :class:`~lysis.config.run.Run` with ``run_code ==
-        old_run_code``, calls :meth:`~lysis.config.run.Run.rename` on it
-        (which renames the HDF5 file and records the history in the
-        ``renamed_from`` attribute), then updates the matching entry in
+        old_run_code``, validates that neither the experiment manifest
+        nor the on-disk HDF5 files already use ``new_run_code``, calls
+        :meth:`~lysis.config.run.Run.rename` on the target (which renames
+        the HDF5 file and records the history in the ``renamed_from``
+        attribute), verifies the rename completed, then rewrites
         ``experiment.json``.
+
+        The json rewrite is deliberately the *second* step and it
+        confirms the HDF5 rename actually landed on disk before touching
+        the manifest, so a failure between the two steps surfaces as an
+        error rather than a silently inconsistent experiment.
 
         :param old_run_code: The current ``run_code`` of the Run.
         :type old_run_code: str
@@ -554,9 +584,20 @@ class Experiment:
         :type new_run_code: str
         :raises KeyError: If no Run in this Experiment has
             ``run_code == old_run_code``.
-        :raises ValueError: If another Run in this Experiment already uses
+        :raises ValueError: If ``new_run_code`` equals ``old_run_code``,
+            or if another Run in this Experiment already uses
             ``new_run_code``.
+        :raises FileNotFoundError: If the source HDF5 file does not exist.
+        :raises FileExistsError: If an HDF5 file already exists at the
+            destination path.
+        :raises RuntimeError: If :meth:`Run.rename` returned but the
+            HDF5 file is not at its expected new location.
         """
+        if new_run_code == old_run_code:
+            raise ValueError(
+                f"new_run_code is identical to old_run_code: {new_run_code!r}"
+            )
+
         target = None
         for run in self._runs:
             if run.run_code == old_run_code:
@@ -572,7 +613,24 @@ class Experiment:
                 f"{self._name!r}"
             )
 
+        old_h5 = os.path.join(target.os_path, f"{old_run_code}.h5")
+        new_h5 = os.path.join(target.os_path, f"{new_run_code}.h5")
+        if not os.path.isfile(old_h5):
+            raise FileNotFoundError(f"HDF5 file not found: {old_h5}")
+        if os.path.exists(new_h5):
+            raise FileExistsError(f"HDF5 file already exists: {new_h5}")
+
+        # Step 1: rename the HDF5 file (Run.rename re-checks file state).
         target.rename(new_run_code)
+
+        # Step 2 verifies Step 1 landed before we touch experiment.json.
+        if not os.path.isfile(new_h5) or os.path.exists(old_h5):
+            raise RuntimeError(
+                f"Run.rename reported success but the HDF5 file is not "
+                f"where expected (missing: {new_h5}, lingering: {old_h5}). "
+                f"experiment.json was not updated."
+            )
+
         self._write_json()
 
     @classmethod
@@ -610,6 +668,7 @@ class Experiment:
         description = meta.get("description", "")
         exp = cls(name, str(experiment_path.parent), description)
         exp._created = meta.get("created", exp._created)
+        exp._source_path = str(experiment_path)
 
         for run_meta in meta["runs"]:
             run_code = run_meta["run_code"]

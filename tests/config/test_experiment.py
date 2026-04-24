@@ -508,6 +508,37 @@ class TestExperimentRename:
         with pytest.raises(FileExistsError):
             exp.rename("taken")
 
+    def test_rename_folder_json_mismatch_raises(self, tmp_path):
+        """Folder renamed externally out-of-band with experiment.json: refuse."""
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="orig")
+
+        # Simulate an externally renamed folder (folder name no longer
+        # matches the 'name' field inside experiment.json).
+        new_folder = data_root / "stale-folder"
+        os.rename(exp.path, new_folder)
+
+        loaded = Experiment.load(new_folder)
+        assert loaded.name == "orig"  # from json
+        with pytest.raises(ValueError, match="disagree"):
+            loaded.rename("anything")
+
+    def test_rename_then_rename_again(self, tmp_path):
+        """After one rename, a second rename should still work (source_path
+        is kept in sync)."""
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="first")
+        exp._source_path = exp.path  # mimic a loaded experiment
+
+        exp.rename("second")
+        exp.rename("third")
+        assert exp.name == "third"
+        assert os.path.isdir(exp.path)
+
 
 class TestExperimentRenameRun:
     def test_rename_run_updates_json_and_file(self, tmp_path):
@@ -550,3 +581,52 @@ class TestExperimentRenameRun:
         existing = exp.runs[1].run_code
         with pytest.raises(ValueError):
             exp.rename_run(exp.runs[0].run_code, existing)
+
+    def test_rename_run_same_code_raises(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+
+        code = exp.runs[0].run_code
+        with pytest.raises(ValueError):
+            exp.rename_run(code, code)
+
+    def test_rename_run_orphan_h5_collision_raises(self, tmp_path):
+        """An h5 file at the target path (not tracked in json) blocks rename."""
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+
+        # Drop an orphan h5 file at the destination path; it's not in
+        # experiment.json, but we should still refuse to overwrite it.
+        orphan_path = os.path.join(exp.path, "orphan.h5")
+        with h5py.File(orphan_path, "w"):
+            pass
+
+        old_code = exp.runs[0].run_code
+        with pytest.raises(FileExistsError):
+            exp.rename_run(old_code, "orphan")
+
+        # And the original run is untouched.
+        assert exp.runs[0].run_code == old_code
+        assert os.path.isfile(os.path.join(exp.path, f"{old_code}.h5"))
+
+    def test_rename_run_missing_h5_raises(self, tmp_path):
+        """If the source h5 has vanished, refuse before touching json."""
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+
+        old_code = exp.runs[0].run_code
+        os.remove(os.path.join(exp.path, f"{old_code}.h5"))
+
+        with pytest.raises(FileNotFoundError):
+            exp.rename_run(old_code, "anything")
+
+        # experiment.json should be unchanged.
+        with open(os.path.join(exp.path, "experiment.json")) as fh:
+            meta = json.load(fh)
+        assert old_code in [r["run_code"] for r in meta["runs"]]
