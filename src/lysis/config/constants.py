@@ -77,6 +77,10 @@ class Const:
         self.DATASPEC_VERSION_ATTR = "dataspec_version"
         self.CONVERTED_FROM_ATTR = "converted_from"
         self.RENAMED_FROM_ATTR = "renamed_from"
+        self.EXECUTION_VERSION_ATTR = "execution_version"
+        self.EXECUTION_DIRTY_ATTR = "execution_dirty"
+        self.EXECUTION_TIMESTAMP_ATTR = "execution_timestamp"
+        self.EXECUTION_HOSTNAME_ATTR = "execution_hostname"
         self.NUMPY_SAVETXT_FORMATS = {
             # Boolean types - save as 0 or 1
             np.dtype("bool"): "%d",

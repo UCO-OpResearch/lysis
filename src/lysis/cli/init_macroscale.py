@@ -168,10 +168,8 @@ def _init_experiment_folder(ctx, console, folder_path, param_overrides, dry_run,
                     _check_microscale_ready(ds, run.run_code)
                 results.append((run.run_code, "dry-run OK"))
             else:
-                if force:
-                    _delete_macroscale_data(h5_path)
                 with DataStore(run.run_code, exp.path, mode="a") as ds:
-                    ds.initialize_macroscale(run.macro_params)
+                    ds.initialize_macroscale(run.macro_params, force=force)
                 results.append((run.run_code, "initialized"))
         except Exception as exc:
             errors.append((run.run_code, str(exc)))
@@ -226,14 +224,10 @@ def _init_single_h5(ctx, console, h5_path, param_overrides, dry_run, no_progress
         )
         return
 
-    # If --force, wipe any existing macroscale data before reinitializing.
-    if force:
-        _delete_macroscale_data(str(h5_path))
-
     # Initialize macroscale
     try:
         with DataStore(run_code, run_dir, mode="a") as ds:
-            ds.initialize_macroscale(macro_params)
+            ds.initialize_macroscale(macro_params, force=force)
     except Exception as exc:
         console.print(f"[bold red]Error initializing {h5_path.name}:[/bold red] {exc}")
         ctx.exit(1)
@@ -246,24 +240,6 @@ def _init_single_h5(ctx, console, h5_path, param_overrides, dry_run, no_progress
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
-
-
-def _delete_macroscale_data(hdf5_path: str):
-    """Remove all macroscale datasets and parameter groups from an HDF5 file.
-
-    Deletes the ``macro_data`` group (which holds macroscale parameters as
-    attributes and all per-simulation datasets) and any
-    ``log_files/macro_log__sim_*`` entries.  Microscale data is untouched.
-    """
-    import h5py
-
-    with h5py.File(hdf5_path, "a") as f:
-        if "macro_data" in f:
-            del f["macro_data"]
-        if "log_files" in f:
-            macro_keys = [k for k in f["log_files"] if k.startswith("macro_log__sim_")]
-            for key in macro_keys:
-                del f[f"log_files/{key}"]
 
 
 def _check_microscale_ready(ds, run_code):

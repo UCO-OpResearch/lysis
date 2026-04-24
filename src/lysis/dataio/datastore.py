@@ -763,7 +763,7 @@ class DataStore:
                         )
 
     @classmethod
-    def create(cls, run_code, path, micro_params):
+    def create(cls, run_code, path, micro_params, force=False):
         """Create a new DataStore with microscale parameters and empty datasets.
 
         Creates a new HDF5 file, writes the dataspec version attribute,
@@ -778,10 +778,15 @@ class DataStore:
         :type path: str
         :param micro_params: The microscale parameters to store.
         :type micro_params: MicroParameters
+        :param force: If ``True`` and the target HDF5 file already exists,
+            delete it and recreate from scratch.  Any previous execution
+            provenance attributes on the file are lost along with the file.
+        :type force: bool
         :return: A new DataStore opened in ``"a"`` (read/write) mode with
             microscale_out collection.
         :rtype: DataStore
-        :raises FileExistsError: If the HDF5 file already exists.
+        :raises FileExistsError: If the HDF5 file already exists and
+            ``force`` is ``False``.
         :raises TypeError: If ``micro_params`` is not a
             :class:`~lysis.config.parameters.MicroParameters` instance.
         """
@@ -792,7 +797,9 @@ class DataStore:
 
         hdf5_path = os.path.join(path, f"{run_code}.h5")
         if os.path.exists(hdf5_path):
-            raise FileExistsError(f"HDF5 file already exists: {hdf5_path}")
+            if not force:
+                raise FileExistsError(f"HDF5 file already exists: {hdf5_path}")
+            os.remove(hdf5_path)
 
         spec = dataspec[COMPATIBLE_DATASPEC_VERSION]
         micro_spec = spec["microscale_out"]
@@ -860,7 +867,7 @@ class DataStore:
                 history = f"{existing} -> {old_run_code}"
             f.attrs[attr] = history
 
-    def initialize_macroscale(self, macro_params):
+    def initialize_macroscale(self, macro_params, force=False):
         """Add macroscale parameters and empty datasets to this DataStore.
 
         Reads the completed microscale output to compute
@@ -889,12 +896,18 @@ class DataStore:
         :param macro_params: The macroscale parameters to store.  All
             fields except ``forced_unbind`` are used as provided.
         :type macro_params: MacroParameters
+        :param force: If ``True`` and ``macroscale_out`` already exists,
+            wipe the ``macro_data`` group and any ``log_files/macro_log__sim_*``
+            datasets before re-initialising.  Any previously stored
+            execution provenance attributes are lost along with the group.
+        :type force: bool
         :raises IOError: If the DataStore is opened in read-only mode.
         :raises TypeError: If ``macro_params`` is not a
             :class:`~lysis.config.parameters.MacroParameters` instance.
         :raises ValueError: If microscale_out is not present, if
-            macroscale_out is already present, or if the microscale
-            datasets are empty (i.e. no Simulations have been written).
+            macroscale_out is already present and ``force`` is ``False``,
+            or if the microscale datasets are empty (i.e. no Simulations
+            have been written).
         """
         if self._mode == "r":
             raise IOError(
@@ -911,9 +924,23 @@ class DataStore:
                 "Use DataStore.create() first."
             )
         if "macroscale_out" in self._collections:
-            raise ValueError(
-                "macroscale_out is already present in this DataStore."
-            )
+            if not force:
+                raise ValueError(
+                    "macroscale_out is already present in this DataStore."
+                )
+            # Wipe the existing macro_data group and per-sim macro log
+            # datasets. Execution provenance attrs live on macro_data and
+            # are cleared automatically when the group is deleted.
+            if "macro_data" in self._file:
+                del self._file["macro_data"]
+            if "log_files" in self._file:
+                macro_log_keys = [
+                    k for k in self._file["log_files"]
+                    if k.startswith("macro_log__sim_")
+                ]
+                for key in macro_log_keys:
+                    del self._file[f"log_files/{key}"]
+            self._file.flush()
 
         # Read microscale unbinding arrays and compute forced_unbind from data.
         # This must happen before self._file is closed.
@@ -1189,6 +1216,12 @@ class DataStore:
             self._file.attrs[CONST.CONVERTED_FROM_ATTR] = (
                 converted["params"][CONST.CONVERTED_FROM_ATTR]
             )
+
+        # Stamp execution provenance on the per-scale params group.
+        from ..tools.provenance import gather_execution_provenance  # noqa: PLC0415
+        provenance_group = self._file[target_spec.params.data_location]
+        for attr_name, attr_value in gather_execution_provenance().items():
+            provenance_group.attrs[attr_name] = attr_value
 
         # Re-initialize in place (reloads all collections, params, etc.)
         self._file.flush()
