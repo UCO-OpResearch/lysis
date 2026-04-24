@@ -1,4 +1,4 @@
-"""Two-sample comparison of simulation Runs.
+"""Two-sample statistical comparison of simulation Runs.
 
 Provides functions for comparing two Runs using:
 
@@ -11,14 +11,16 @@ Both dispatch tables are keyed by a short measure-set name (e.g.
 ``"micro-stats"``, ``"macro-stats"``) and are designed to be extended by
 adding a new key to either or both.
 
-Element-wise data-table comparisons (:func:`compare_data_tables`) apply a
-:data:`_MAX_ULPS`-ULP tolerance on floating-point dtypes: two float
-values are treated as equivalent when they are within that many units
-in the last place of their IEEE-754 representation.  This suppresses
-not just the single-bit rounding drift between different Fortran
-compilations but also the small multi-ULP accumulation that shows up
-downstream (``count*tstep`` compounding across time steps).  Integer,
-boolean, and string dtypes still use exact equality.
+Element-wise data-table comparisons live in :mod:`lysis.analysis.diff`
+(see :func:`~lysis.analysis.diff.diff_runs`); that module reuses the
+float-tolerant primitives defined here (:func:`_values_match`,
+:func:`_compare_arrays`, :data:`_MAX_ULPS`).  A floating-point position
+is treated as equivalent when the two values differ by at most
+:data:`_MAX_ULPS` units in the last place of their IEEE-754
+representation, which suppresses the last-bit rounding drift produced
+by different Fortran compilations (operation reordering, FMA) plus the
+small multi-ULP accumulation that shows up downstream.  Integer,
+boolean, and string dtypes use exact equality.
 
 Typical workflow::
 
@@ -50,28 +52,23 @@ if TYPE_CHECKING:
     from lysis.config.run import Run
 
 __all__ = [
-    "DATA_TABLE_EXTRACTORS",
     "MEASURE_EXTRACTORS",
     "STATS_COMPUTERS",
     "available_measure_sets",
-    "compare_data_tables",
     "compare_runs",
     "compute_stats",
     "extract_measures",
     "percent_difference",
 ]
 
-#: Dataset names (log tables) that must never be compared.
-_LOG_DATASETS = frozenset({"micro_log", "macro_log"})
-
 #: Floating-point equality tolerance, in units in the last place.
 #:
 #: Two float values are treated as equivalent by :func:`_values_match`
-#: (and therefore by :func:`compare_data_tables` and every display path
-#: that routes through it) when they differ by at most this many ULPs in
-#: their IEEE-754 representation.  Raise this number to suppress more
-#: compiler-rounding noise at the cost of masking small real drifts;
-#: lower it to surface more bit-level disagreement.
+#: (and every display or diff path that routes through it) when they
+#: differ by at most this many ULPs in their IEEE-754 representation.
+#: Raise this number to suppress more compiler-rounding noise at the
+#: cost of masking small real drifts; lower it to surface more
+#: bit-level disagreement.
 _MAX_ULPS = 2
 
 
@@ -219,77 +216,17 @@ STATS_COMPUTERS: Dict[str, Callable[["Run"], Dict[str, float]]] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Data-table extractors (for exact-match comparison)
-# ---------------------------------------------------------------------------
-
-
-def _extract_data_arrays(run: "Run", include_macro: bool) -> Dict[str, np.ndarray]:
-    """Extract every on-disk (non-log) data table from a Run's DataStore.
-
-    Dataset contents are read into numpy arrays keyed by a display label of
-    the form ``microscale_out/<name>`` or ``macroscale_out[<sim>]/<name>``.
-    Log tables (:data:`_LOG_DATASETS`) are skipped.  Derived datasets with
-    ``data_location=None`` are already excluded by the :attr:`datasets`
-    property on :class:`DataCollection` / :class:`SimulationView`.
-
-    :param run: Run with data open.
-    :type run: Run
-    :param include_macro: If ``True``, also include per-simulation
-        ``macroscale_out`` datasets.
-    :type include_macro: bool
-    :return: Mapping from label to numpy array copy.
-    :rtype: dict[str, numpy.ndarray]
-    """
-    tables: Dict[str, np.ndarray] = {}
-    data = run.data
-
-    collections = data.collections
-    if "microscale_out" in collections:
-        micro = data.microscale_out
-        for name in micro.datasets:
-            if name in _LOG_DATASETS:
-                continue
-            tables[f"microscale_out/{name}"] = getattr(micro, name)[:]
-
-    if include_macro and "macroscale_out" in collections:
-        macro = data.macroscale_out
-        n_sims = run.macro_params.macro_simulations
-        for sim in range(n_sims):
-            view = macro[sim]
-            for name in view.datasets:
-                if name in _LOG_DATASETS:
-                    continue
-                tables[f"macroscale_out[{sim:02}]/{name}"] = getattr(view, name)[:]
-
-    return tables
-
-
-#: Dispatch table mapping a data-comparison name to a table extractor.
-#:
-#: An extractor takes an opened :class:`~lysis.config.run.Run` and returns
-#: a dict ``{label: ndarray}`` of on-disk data tables (log tables and
-#: HDF5 attributes are always excluded).
-DATA_TABLE_EXTRACTORS: Dict[str, Callable[["Run"], Dict[str, np.ndarray]]] = {
-    "micro-data": lambda run: _extract_data_arrays(run, include_macro=False),
-    "data": lambda run: _extract_data_arrays(run, include_macro=True),
-}
-
-
 def available_measure_sets() -> list:
-    """Return the full list of measure-set names accepted by :func:`compare_runs`.
+    """Return the list of measure-set names accepted by :func:`compare_runs`.
 
-    Combines :data:`MEASURE_EXTRACTORS` (KS + scalar pct-diff comparisons)
-    and :data:`DATA_TABLE_EXTRACTORS` (exact data-table comparisons).
-
-    :return: Sorted list of measure-set keys.
+    :return: Sorted list of keys from :data:`MEASURE_EXTRACTORS`.
     :rtype: list[str]
     """
-    return sorted(set(MEASURE_EXTRACTORS) | set(DATA_TABLE_EXTRACTORS))
+    return sorted(MEASURE_EXTRACTORS)
 
 
 # ---------------------------------------------------------------------------
-# Data-table comparison helpers
+# Array comparison primitives (used by diff_runs and the side-by-side view)
 # ---------------------------------------------------------------------------
 
 
@@ -490,70 +427,6 @@ def _compare_arrays(a: np.ndarray, b: np.ndarray) -> dict:
     }
 
 
-def compare_data_tables(run1: "Run", run2: "Run", which: str) -> dict:
-    """Compare on-disk data tables between two Runs element-wise.
-
-    For the data-table set selected by ``which`` (see
-    :data:`DATA_TABLE_EXTRACTORS`), reads every non-log dataset from
-    each Run's HDF5 file and compares the two arrays element-wise.
-    Floating-point positions that differ by at most :data:`_MAX_ULPS`
-    ULPs are treated as equivalent (see :func:`_values_match`); every
-    other dtype uses exact equality.  When any position still differs,
-    reports the maximum symmetric percent difference
-    (:func:`percent_difference`) across the dataset and the location of
-    that worst element.
-
-    HDF5 attributes and log tables (``micro_log``, ``macro_log``) are
-    never compared.  Datasets that exist in one Run but not the other
-    are reported with ``status="missing"``.
-
-    :param run1: First Run with data open.
-    :type run1: Run
-    :param run2: Second Run with data open.
-    :type run2: Run
-    :param which: Key into :data:`DATA_TABLE_EXTRACTORS`.
-    :type which: str
-    :return: Dict with a single ``"data_diff"`` sub-dict mapping each
-        dataset label to a result dict.  The result dict always has
-        ``"status"``; ``"match"`` results additionally carry
-        ``max_pct_diff=0.0`` and ``location=None``; ``"diff"`` results
-        carry a signed ``"max_pct_diff"`` and index tuple
-        ``"location"``; ``"shape_mismatch"`` results carry a
-        ``"detail"`` string; ``"missing"`` results carry a
-        ``"detail"`` describing which Run is missing the dataset.
-    :rtype: dict
-    :raises KeyError: If ``which`` is not a known data-table set.
-    """
-    if which not in DATA_TABLE_EXTRACTORS:
-        raise KeyError(
-            f"Unknown data-table set {which!r}. "
-            f"Available: {sorted(DATA_TABLE_EXTRACTORS.keys())}"
-        )
-    tables1 = DATA_TABLE_EXTRACTORS[which](run1)
-    tables2 = DATA_TABLE_EXTRACTORS[which](run2)
-
-    all_labels = sorted(set(tables1) | set(tables2))
-    results: Dict[str, dict] = {}
-    for label in all_labels:
-        if label not in tables1:
-            results[label] = {
-                "status": "missing",
-                "max_pct_diff": None,
-                "location": None,
-                "detail": "not in run1",
-            }
-        elif label not in tables2:
-            results[label] = {
-                "status": "missing",
-                "max_pct_diff": None,
-                "location": None,
-                "detail": "not in run2",
-            }
-        else:
-            results[label] = _compare_arrays(tables1[label], tables2[label])
-    return {"data_diff": results}
-
-
 # ---------------------------------------------------------------------------
 # Percent difference
 # ---------------------------------------------------------------------------
@@ -653,18 +526,10 @@ def compare_runs(run1: "Run", run2: "Run", which: str) -> dict:
 
         Either sub-dict may be empty if no entries are registered for
         ``which``.
-
-        When ``which`` selects a data-table comparison (see
-        :data:`DATA_TABLE_EXTRACTORS`) the call is routed to
-        :func:`compare_data_tables`, which returns a single ``"data_diff"``
-        sub-dict instead.
     :rtype: dict
     :raises KeyError: If ``which`` is not a known measure set, or if the
         two extractors disagree on labels.
     """
-    if which in DATA_TABLE_EXTRACTORS:
-        return compare_data_tables(run1, run2, which)
-
     measures_1 = extract_measures(run1, which)
     measures_2 = extract_measures(run2, which)
     ks_results = {}

@@ -8,11 +8,11 @@ from lysis.analysis.summary import (
     DATA_DIFF_SUMMARY_COLUMNS,
     MICRO_STATS_COLUMNS,
     _fmt_micro,
-    compare_data_diff_detail_table,
-    compare_data_diff_summary_table,
     compare_stats_table,
     deg_rate_table,
     deg_time_table,
+    diff_detail_table,
+    diff_summary_table,
     macro_stats_table,
     micro_stats_table,
     parameters_table,
@@ -534,13 +534,13 @@ class TestCompareStatsTableDataDiff:
 
 
 # ---------------------------------------------------------------------------
-# compare_data_diff_summary_table
+# diff_summary_table
 # ---------------------------------------------------------------------------
 
 
 class TestCompareDataDiffSummaryTable:
     def test_empty_input_returns_empty_dataframe(self):
-        df = compare_data_diff_summary_table({})
+        df = diff_summary_table({})
         assert df.empty
 
     def test_columns_match_constant(self):
@@ -551,7 +551,7 @@ class TestCompareDataDiffSummaryTable:
                 }
             }
         }
-        df = compare_data_diff_summary_table(results)
+        df = diff_summary_table(results)
         assert list(df.columns) == DATA_DIFF_SUMMARY_COLUMNS
 
     def test_all_match_reports_exact_match(self):
@@ -563,7 +563,7 @@ class TestCompareDataDiffSummaryTable:
                 }
             }
         }
-        df = compare_data_diff_summary_table(results)
+        df = diff_summary_table(results)
         assert df.loc["run_A", "Result"] == "Exact Match"
         assert df.loc["run_A", "Max % Diff"] == "—"
         assert df.loc["run_A", "Worst Table"] == "—"
@@ -590,7 +590,7 @@ class TestCompareDataDiffSummaryTable:
                 }
             }
         }
-        df = compare_data_diff_summary_table(results)
+        df = diff_summary_table(results)
         assert df.loc["run_A", "Result"] == "2 of 3 differ"
         assert df.loc["run_A", "Max % Diff"].strip() == "3.00"
         assert "micro/big" in df.loc["run_A", "Worst Table"]
@@ -609,7 +609,7 @@ class TestCompareDataDiffSummaryTable:
                 }
             }
         }
-        df = compare_data_diff_summary_table(results)
+        df = diff_summary_table(results)
         assert df.loc["run_A", "Result"] == "1 of 1 differ"
         # Structural-only rows render "—" in the numeric pct column.
         assert df.loc["run_A", "Max % Diff"].strip() == "—"
@@ -635,24 +635,24 @@ class TestCompareDataDiffSummaryTable:
                 }
             }
         }
-        df = compare_data_diff_summary_table(results)
+        df = diff_summary_table(results)
         assert "micro/b" in df.loc["run_A", "Worst Table"]
         assert df.loc["run_A", "Max % Diff"].strip() == "0.10"
 
     def test_missing_data_diff_treated_as_exact_match(self):
         results = {"run_A": {"ks": {}, "pct_diff": {}}}
-        df = compare_data_diff_summary_table(results)
+        df = diff_summary_table(results)
         assert df.loc["run_A", "Result"] == "Exact Match"
 
 
 # ---------------------------------------------------------------------------
-# compare_data_diff_detail_table
+# diff_detail_table
 # ---------------------------------------------------------------------------
 
 
 class TestCompareDataDiffDetailTable:
     def test_empty_input_returns_empty_dataframe(self):
-        df = compare_data_diff_detail_table({})
+        df = diff_detail_table({})
         assert df.empty
 
     def test_columns_match_constant(self):
@@ -665,7 +665,7 @@ class TestCompareDataDiffDetailTable:
                 "total": 10,
             }
         }
-        df = compare_data_diff_detail_table(data_diff)
+        df = diff_detail_table(data_diff)
         assert list(df.columns) == DATA_DIFF_DETAIL_COLUMNS
 
     def test_match_row_renders_ok(self):
@@ -678,7 +678,7 @@ class TestCompareDataDiffDetailTable:
                 "total": 100,
             }
         }
-        df = compare_data_diff_detail_table(data_diff)
+        df = diff_detail_table(data_diff)
         row = df.loc["micro/x"]
         assert row["Status"] == "OK"
         assert row["Mismatches"] == "0 of 100"
@@ -695,7 +695,7 @@ class TestCompareDataDiffDetailTable:
                 "total": 100,
             }
         }
-        df = compare_data_diff_detail_table(data_diff)
+        df = diff_detail_table(data_diff)
         row = df.loc["micro/x"]
         assert row["Status"] == "DIFF"
         assert row["Mismatches"] == "4 of 100"
@@ -713,7 +713,7 @@ class TestCompareDataDiffDetailTable:
                 "detail": "(100,) vs (101,)",
             }
         }
-        df = compare_data_diff_detail_table(data_diff)
+        df = diff_detail_table(data_diff)
         row = df.loc["micro/x"]
         assert row["Status"] == "SHAPE"
         assert "(100,) vs (101,)" in row["Mismatches"]
@@ -731,7 +731,7 @@ class TestCompareDataDiffDetailTable:
                 "detail": "not in run2",
             }
         }
-        df = compare_data_diff_detail_table(data_diff)
+        df = diff_detail_table(data_diff)
         row = df.loc["micro/x"]
         assert row["Status"] == "MISSING"
         assert "not in run2" in row["Mismatches"]
@@ -745,5 +745,5 @@ class TestCompareDataDiffDetailTable:
             "micro/b": {"status": "match", "max_pct_diff": 0.0, "location": None,
                         "mismatches": 0, "total": 1},
         }
-        df = compare_data_diff_detail_table(data_diff)
+        df = diff_detail_table(data_diff)
         assert list(df.index) == ["micro/c", "micro/a", "micro/b"]

@@ -373,7 +373,7 @@ def render_dataset_side_by_side(
 
     Rows where the two values match are skipped entirely so the output
     fits in a typical pager buffer.  A match uses the same ULP
-    tolerance as :func:`~lysis.analysis.compare.compare_data_tables`
+    tolerance as :func:`~lysis.analysis.diff.diff_runs`
     for floating-point dtypes (see
     :data:`~lysis.analysis.compare._MAX_ULPS`); other dtypes use exact
     equality.  For plain numeric / boolean arrays the table gets an

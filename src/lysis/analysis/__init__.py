@@ -51,45 +51,49 @@ from .degradation import (
     plot_front_degradation,
 )
 from .compare import (
-    DATA_TABLE_EXTRACTORS,
     MEASURE_EXTRACTORS,
     STATS_COMPUTERS,
     available_measure_sets,
-    compare_data_tables,
     compare_runs,
     compute_stats,
     extract_measures,
     percent_difference,
 )
+from .diff import (
+    available_scales,
+    diff_runs,
+    list_tables,
+)
 from .fiber_replay import FiberReplayCursor
 from .microscale import compute_micro_statistics
 from .summary import (
-    compare_data_diff_detail_table,
-    compare_data_diff_summary_table,
     compare_stats_table,
     deg_rate_table,
     deg_time_table,
+    diff_detail_table,
+    diff_summary_table,
     macro_stats_table,
     micro_stats_table,
     parameters_table,
 )
 
 __all__ = [
-    "DATA_TABLE_EXTRACTORS",
     "FiberReplayCursor",
     "MEASURE_EXTRACTORS",
     "STATS_COMPUTERS",
     "available_measure_sets",
+    "available_scales",
     "calculate_time_row_exposed",
-    "compare_data_diff_detail_table",
-    "compare_data_diff_summary_table",
-    "compare_data_tables",
     "compare_runs",
     "compare_stats_table",
     "compute_stats",
     "deg_rate_table",
     "deg_time_table",
+    "diff_detail_table",
+    "diff_runs",
+    "diff_summary_table",
     "extract_measures",
+    "list_tables",
     "percent_difference",
     "macro_stats_table",
     "micro_stats_table",

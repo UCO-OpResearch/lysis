@@ -1,22 +1,21 @@
-"""``lysis compare`` — compare Runs across two folders using the 2-sample KS test.
+"""``lysis compare`` — 2-sample statistical comparison of Runs.
 
 Thin wrapper around :func:`lysis.analysis.compare.compare_runs`.  Takes
-a measure-set name and two folders, finds the set of run codes present
-in both, and reports the :func:`scipy.stats.ks_2samp` statistic and
-p-value for each measure in the selected set plus a symmetric
-percent-difference on each paired scalar summary.
+a measure-set name and two paths (folders or ``.h5`` files), runs the
+:func:`scipy.stats.ks_2samp` statistic + p-value for each per-simulation
+measure in the selected set plus a symmetric percent-difference on each
+paired scalar summary, and displays the result as a Rich or Markdown
+table.
+
+Element-wise HDF5 table diffs live under :doc:`lysis diff <diff>` (see
+:mod:`lysis.cli.diff`), not this command.
 """
 
 import os
 
 import click
 
-from lysis.analysis.compare import (
-    DATA_TABLE_EXTRACTORS,
-    available_measure_sets,
-    compare_runs,
-)
-from lysis.tools.display import render_dataset_side_by_side
+from lysis.analysis.compare import available_measure_sets, compare_runs
 from lysis.cli import cli
 
 
@@ -65,6 +64,19 @@ def _open_run(data_root, run_code, console):
     return run
 
 
+def _split_h5_path(path):
+    """Split an ``.h5`` file path into ``(data_root, run_code)`` for Run().
+
+    :param path: Path to a ``.h5`` file.
+    :type path: str
+    :return: Directory and run code (filename without extension).
+    :rtype: tuple[str, str]
+    """
+    data_root, basename = os.path.split(path)
+    run_code = os.path.splitext(basename)[0]
+    return data_root, run_code
+
+
 def _compare_one(folder1, folder2, run_code, which, console):
     """Open both Runs for *run_code*, run :func:`compare_runs`, then close.
 
@@ -92,85 +104,6 @@ def _compare_one(folder1, folder2, run_code, which, console):
         except Exception as e:
             console.print(f"[red]Error comparing {run_code}:[/red] {e}")
             return None
-        finally:
-            run2.data.close()
-    finally:
-        run1.data.close()
-
-
-def _split_h5_path(path):
-    """Split an ``.h5`` file path into ``(data_root, run_code)`` for Run().
-
-    :param path: Path to a ``.h5`` file.
-    :type path: str
-    :return: Directory and run code (filename without extension).
-    :rtype: tuple[str, str]
-    """
-    data_root, basename = os.path.split(path)
-    run_code = os.path.splitext(basename)[0]
-    return data_root, run_code
-
-
-def _render_side_by_side_from_files(path1, path2, diff_table, console, ctx):
-    """Open two ``.h5`` files and render the named dataset side-by-side.
-
-    Uses the ``data`` extractor (all non-log tables from both
-    microscale_out and macroscale_out) and looks up *diff_table* in
-    each Run.  Errors out if the label is not present in either Run
-    or if the two runs cannot be opened.
-
-    :param path1: Path to the first HDF5 file.
-    :type path1: str
-    :param path2: Path to the second HDF5 file.
-    :type path2: str
-    :param diff_table: Dataset label to render.
-    :type diff_table: str
-    :param console: Rich Console.
-    :param ctx: Click context (used for ``ctx.exit`` on failure).
-    """
-    from lysis.analysis.compare import DATA_TABLE_EXTRACTORS
-
-    root1, code1 = _split_h5_path(path1)
-    root2, code2 = _split_h5_path(path2)
-    run1 = _open_run(root1, code1, console)
-    if run1 is None:
-        ctx.exit(1)
-        return
-    try:
-        run2 = _open_run(root2, code2, console)
-        if run2 is None:
-            ctx.exit(1)
-            return
-        try:
-            extractor = DATA_TABLE_EXTRACTORS["data"]
-            tables1 = extractor(run1)
-            tables2 = extractor(run2)
-
-            if diff_table not in tables1 or diff_table not in tables2:
-                available = sorted(set(tables1) | set(tables2))
-                missing_from = []
-                if diff_table not in tables1:
-                    missing_from.append(os.path.basename(path1))
-                if diff_table not in tables2:
-                    missing_from.append(os.path.basename(path2))
-                console.print(
-                    f"[red]Error:[/red] table {diff_table!r} not found in "
-                    f"{', '.join(missing_from)}."
-                )
-                console.print(
-                    "Available tables:\n  " + "\n  ".join(available)
-                )
-                ctx.exit(1)
-                return
-
-            render_dataset_side_by_side(
-                tables1[diff_table],
-                tables2[diff_table],
-                diff_table,
-                console,
-                file1_name=os.path.basename(path1),
-                file2_name=os.path.basename(path2),
-            )
         finally:
             run2.data.close()
     finally:
@@ -247,31 +180,6 @@ def _compare_file_pair(path1, path2, which, console):
         "Example: --markdown -, --markdown compare.md"
     ),
 )
-@click.option(
-    "--verbose",
-    "-v",
-    is_flag=True,
-    default=False,
-    help=(
-        "For 'micro-data' and 'data' comparisons, emit the full per-table "
-        "result matrix instead of the compact summary (one row per Run).  "
-        "No effect on 'micro-stats' / 'macro-stats' modes."
-    ),
-)
-@click.option(
-    "--diff",
-    "diff_table",
-    type=str,
-    default=None,
-    metavar="TABLE",
-    help=(
-        "File-pair mode only: render TABLE from both files side-by-side "
-        "in a pager, with differing rows highlighted.  TABLE is a "
-        "dataset label such as 'microscale_out/tpa_leaving_time' or "
-        "'macroscale_out[00]/snapshot_time'.  The WHICH argument is "
-        "ignored when --diff is set."
-    ),
-)
 @click.argument(
     "which",
     type=click.Choice(available_measure_sets(), case_sensitive=False),
@@ -292,8 +200,6 @@ def compare(
     sort_mode,
     no_progress,
     markdown_out,
-    verbose,
-    diff_table,
     which,
     folder1,
     folder2,
@@ -311,38 +217,27 @@ def compare(
 
     \b
     File-pair mode:
-        PATH1 and PATH2 are each compared as a single Run.  For
-        ``micro-data`` / ``data`` a detailed per-table breakdown is
-        emitted (one row per dataset with Status, Mismatches,
-        Max % Diff, and Location columns).  For ``micro-stats`` /
-        ``macro-stats`` the usual single-pair stats are shown.
-        ``--diff TABLE`` switches to a side-by-side page-through view
-        of a single dataset (differing rows highlighted).
+        PATH1 and PATH2 are each compared as a single Run and a
+        single-row stats table is rendered.
 
     \b
-    WHICH selects the comparison:
+    WHICH selects the measure set:
 
     \b
     - ``micro-stats`` / ``macro-stats`` — 2-sample Kolmogorov-Smirnov
       tests on per-simulation arrays plus symmetric percent differences
       on scalar summary stats (signed so positive means PATH2 > PATH1).
-    - ``micro-data`` / ``data`` — element-wise exact-match check on every
-      non-log data table in the paired HDF5 files.  HDF5 attributes and
-      log tables (``micro_log`` / ``macro_log``) are never examined.
-      In folder-pair mode emits a compact summary per Run by default;
-      ``--verbose`` switches to the full per-table matrix.
+
+    \b
+    Element-wise HDF5 table diffs are handled by ``lysis diff``
+    (see ``lysis diff --help``); this command covers statistical
+    comparisons only.
 
     \b
     Examples:
         lysis compare micro-stats data/runA/ data/runB/
         lysis compare macro-stats data/runA/ data/runB/
-        lysis compare micro-data data/runA/ data/runB/
-        lysis compare data data/runA/ data/runB/
-        lysis compare data data/runA/ data/runB/ --verbose --markdown out.md
-        lysis compare data runA.h5 runB.h5
-        lysis compare micro-data runA.h5 runB.h5 --markdown out.md
-        lysis compare data runA.h5 runB.h5 --diff microscale_out/tpa_leaving_time
-        lysis compare data runA.h5 runB.h5 --diff "macroscale_out[00]/snapshot_time"
+        lysis compare micro-stats runA.h5 runB.h5
         lysis compare macro-stats data/runA/ data/runB/ --sort alpha
         lysis compare macro-stats data/runA/ data/runB/ --no-progress
         lysis compare macro-stats data/runA/ data/runB/ --markdown -
@@ -350,11 +245,7 @@ def compare(
     """
     from contextlib import nullcontext
 
-    from lysis.analysis.summary import (
-        compare_data_diff_detail_table,
-        compare_data_diff_summary_table,
-        compare_stats_table,
-    )
+    from lysis.analysis.summary import compare_stats_table
     from lysis.tools.display import (
         emit_markdown,
         stats_df_to_markdown,
@@ -377,21 +268,12 @@ def compare(
     if markdown_out is not None:
         no_progress = True
 
-    is_data_diff = which in DATA_TABLE_EXTRACTORS
     path1_is_file = os.path.isfile(folder1)
     path2_is_file = os.path.isfile(folder2)
     if path1_is_file != path2_is_file:
         console.print(
             "[red]Error:[/red] PATH1 and PATH2 must both be directories or "
             "both be .h5 files."
-        )
-        ctx.exit(1)
-        return
-
-    if diff_table is not None and not (path1_is_file and path2_is_file):
-        console.print(
-            "[red]Error:[/red] --diff is only supported in file-pair mode "
-            "(pass two .h5 files, not directories)."
         )
         ctx.exit(1)
         return
@@ -404,26 +286,11 @@ def compare(
             ctx.exit(1)
             return
 
-        if diff_table is not None:
-            _render_side_by_side_from_files(
-                folder1, folder2, diff_table, console, ctx
-            )
-            return
-
         result = _compare_file_pair(folder1, folder2, which, console)
         if result is None:
             ctx.exit(1)
             return
 
-        if is_data_diff:
-            df = compare_data_diff_detail_table(result["data_diff"])
-            if markdown_out is not None:
-                emit_markdown(stats_df_to_markdown(df, "Table"), markdown_out, console)
-            else:
-                console.print(stats_df_to_rich(df, "Table"))
-            return
-
-        # KS / pct-diff: render a single-row stats table keyed by the pair.
         pair_key = f"{os.path.basename(folder1)} vs {os.path.basename(folder2)}"
         df = compare_stats_table({pair_key: result})
         short_headers = {}
@@ -493,10 +360,7 @@ def compare(
 
     # Preserve sort order, skipping any failed runs
     ordered = {rc: all_results[rc] for rc in common if rc in all_results}
-    if is_data_diff and not verbose:
-        df = compare_data_diff_summary_table(ordered)
-    else:
-        df = compare_stats_table(ordered)
+    df = compare_stats_table(ordered)
 
     # Build Rich short-header abbreviations: split the suffix onto a second
     # line so wide measure labels don't make the table unreadable.

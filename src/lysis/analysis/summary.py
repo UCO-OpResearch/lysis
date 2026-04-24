@@ -262,7 +262,7 @@ def parameters_table(
 
 
 def _fmt_data_diff_cell(entry: dict) -> str:
-    """Format one :func:`~lysis.analysis.compare.compare_data_tables` cell.
+    """Format one :func:`~lysis.analysis.diff.diff_runs` data-diff cell.
 
     Percent values use :func:`~lysis.tools.display._format_pct_base`
     (no trailing ``%``, no leading ``+``, hybrid fixed-point /
@@ -387,11 +387,11 @@ def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# compare_data_diff_summary_table
+# diff_summary_table
 # ---------------------------------------------------------------------------
 
 
-#: Column names for :func:`compare_data_diff_summary_table`.
+#: Column names for :func:`diff_summary_table`.
 DATA_DIFF_SUMMARY_COLUMNS = ["Result", "Max % Diff", "Worst Table"]
 
 
@@ -419,8 +419,8 @@ def _worst_mismatch(mismatches: dict):
     return max(mismatches.items(), key=_key)
 
 
-def compare_data_diff_summary_table(results_by_run: dict) -> pd.DataFrame:
-    """Build a compact summary of :func:`compare_data_tables` results.
+def diff_summary_table(results_by_run: dict) -> pd.DataFrame:
+    """Build a compact summary of :func:`~lysis.analysis.diff.diff_runs` results.
 
     For each Run, reports whether every data table matched exactly or —
     if not — how many tables differ and which one has the largest
@@ -441,7 +441,7 @@ def compare_data_diff_summary_table(results_by_run: dict) -> pd.DataFrame:
       at the mismatch most worth investigating.  ``"—"`` on exact
       match.
 
-    :param results_by_run: Maps run code to a ``compare_runs`` result
+    :param results_by_run: Maps run code to a ``diff_runs`` result
         dict with a ``"data_diff"`` sub-dict.  Entries without
         ``"data_diff"`` are treated as exact matches over zero tables.
     :type results_by_run: dict[str, dict]
@@ -519,20 +519,20 @@ def compare_data_diff_summary_table(results_by_run: dict) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# compare_data_diff_detail_table
+# diff_detail_table
 # ---------------------------------------------------------------------------
 
 
-#: Column names for :func:`compare_data_diff_detail_table`.
+#: Column names for :func:`diff_detail_table`.
 DATA_DIFF_DETAIL_COLUMNS = ["Status", "Mismatches", "Max % Diff", "Location"]
 
 
-def compare_data_diff_detail_table(data_diff: dict) -> pd.DataFrame:
+def diff_detail_table(data_diff: dict) -> pd.DataFrame:
     """Build a per-table detail DataFrame for a single pair comparison.
 
     Takes the ``data_diff`` sub-dict returned by
-    :func:`~lysis.analysis.compare.compare_data_tables` for one pair of
-    Runs and produces a DataFrame with one row per dataset label.
+    :func:`~lysis.analysis.diff.diff_runs` for one pair of Runs and
+    produces a DataFrame with one row per dataset label.
 
     Columns (:data:`DATA_DIFF_DETAIL_COLUMNS`):
 
@@ -551,8 +551,7 @@ def compare_data_diff_detail_table(data_diff: dict) -> pd.DataFrame:
       entry is the field name.
 
     :param data_diff: ``data_diff`` sub-dict from
-        :func:`~lysis.analysis.compare.compare_data_tables` (i.e.
-        ``{label: entry}``).
+        :func:`~lysis.analysis.diff.diff_runs` (i.e. ``{label: entry}``).
     :type data_diff: dict
     :return: DataFrame indexed by dataset label.  Empty DataFrame if
         *data_diff* is empty.
