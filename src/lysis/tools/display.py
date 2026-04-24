@@ -248,13 +248,17 @@ def render_dataset_side_by_side(
 ) -> None:
     """Render only differing rows of two arrays side-by-side in a Rich Table.
 
-    Rows where the two values are equal are skipped entirely so the
-    output fits in a typical pager buffer.  For plain numeric / boolean
-    arrays the table gets an additional ``% Diff`` column showing the
-    symmetric percent difference.  For structured arrays (event logs),
-    each struct field becomes a pair of columns
-    ``<field>\\n(<file1>)`` / ``<field>\\n(<file2>)``; a record is
-    included if any field differs.
+    Rows where the two values match are skipped entirely so the output
+    fits in a typical pager buffer.  A match uses the same ULP
+    tolerance as :func:`~lysis.analysis.compare.compare_data_tables`
+    for floating-point dtypes (see
+    :data:`~lysis.analysis.compare._MAX_ULPS`); other dtypes use exact
+    equality.  For plain numeric / boolean arrays the table gets an
+    additional ``% Diff`` column showing the symmetric percent
+    difference.  For structured arrays (event logs), each struct field
+    becomes a pair of columns ``<field>\\n(<file1>)`` /
+    ``<field>\\n(<file2>)``; a record is included if any field still
+    differs under the same rule.
 
     Shape mismatch is non-fatal: a note is printed and only the first
     ``min(len1, len2)`` rows of the common leading dimension are scanned.
@@ -281,7 +285,7 @@ def render_dataset_side_by_side(
 
     from rich.table import Table
 
-    from lysis.analysis.compare import percent_difference
+    from lysis.analysis.compare import _values_match, percent_difference
 
     shape1 = arr1.shape
     shape2 = arr2.shape
@@ -303,8 +307,17 @@ def render_dataset_side_by_side(
             table.add_column(f"{field}\n({file2_name})", justify="right")
 
         n = min(len(arr1), len(arr2))
+        # Pre-compute per-field match masks over the common prefix so
+        # the row loop reduces to a cheap boolean lookup.
+        common_slice = slice(0, n)
+        field_matches = {
+            field: np.asarray(
+                _values_match(arr1[field][common_slice], arr2[field][common_slice])
+            )
+            for field in fields
+        }
         for i in range(n):
-            if not any(arr1[field][i] != arr2[field][i] for field in fields):
+            if all(field_matches[field][i] for field in fields):
                 continue
             diff_count += 1
             cells = [str(i)]
@@ -325,11 +338,12 @@ def render_dataset_side_by_side(
         table.add_column("% Diff", justify="right")
 
         n = min(flat1.size, flat2.size)
+        match_mask = np.asarray(_values_match(flat1[:n], flat2[:n]))
         for i in range(n):
+            if match_mask[i]:
+                continue
             v1 = flat1[i]
             v2 = flat2[i]
-            if v1 == v2:
-                continue
             diff_count += 1
             idx_str = str(np.unravel_index(i, shape)) if multi_dim else str(i)
             try:

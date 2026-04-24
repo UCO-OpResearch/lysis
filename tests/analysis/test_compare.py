@@ -24,6 +24,7 @@ from lysis.analysis.compare import (
     MEASURE_EXTRACTORS,
     STATS_COMPUTERS,
     _compare_arrays,
+    _values_match,
     available_measure_sets,
     compare_data_tables,
     compare_runs,
@@ -397,6 +398,127 @@ class TestCompareArrays:
         result = _compare_arrays(a, b)
         assert result["status"] == "diff"
         assert result["location"] == (1, 2)
+
+
+# ---------------------------------------------------------------------------
+# N-ULP float tolerance
+# ---------------------------------------------------------------------------
+
+
+def _shift_ulps(a: np.ndarray, n: int) -> np.ndarray:
+    """Return *a* shifted by *n* ULPs (toward +inf if *n* > 0, -inf if < 0)."""
+    direction = np.inf if n >= 0 else -np.inf
+    out = np.asarray(a, dtype=np.float64).copy()
+    for _ in range(abs(n)):
+        out = np.nextafter(out, direction)
+    return out
+
+
+class TestValuesMatchUlpTolerance:
+    """:func:`_values_match` uses 2-ULP tolerance on float dtypes only."""
+
+    def test_equal_floats_match(self):
+        a = np.array([1.0, 2.0, 3.0])
+        assert _values_match(a, a.copy()).all()
+
+    def test_one_ulp_above_matches(self):
+        a = np.array([1.0, 2.0, 3.0])
+        assert _values_match(a, _shift_ulps(a, 1)).all()
+
+    def test_one_ulp_below_matches(self):
+        a = np.array([1.0, 2.0, 3.0])
+        assert _values_match(a, _shift_ulps(a, -1)).all()
+
+    def test_two_ulps_above_matches(self):
+        a = np.array([1.0, 2.0, 3.0])
+        assert _values_match(a, _shift_ulps(a, 2)).all()
+
+    def test_two_ulps_below_matches(self):
+        a = np.array([1.0, 2.0, 3.0])
+        assert _values_match(a, _shift_ulps(a, -2)).all()
+
+    def test_three_ulps_does_not_match(self):
+        a = np.array([1.0, 2.0, 3.0])
+        assert not _values_match(a, _shift_ulps(a, 3)).any()
+
+    def test_nan_does_not_match_nan(self):
+        a = np.array([np.nan, 1.0])
+        b = np.array([np.nan, 1.0])
+        assert _values_match(a, b).tolist() == [False, True]
+
+    def test_signed_zero_matches(self):
+        a = np.array([0.0])
+        b = np.array([-0.0])
+        assert _values_match(a, b).all()
+
+    def test_inf_matches_itself(self):
+        a = np.array([np.inf, -np.inf])
+        assert _values_match(a, a.copy()).all()
+
+    def test_integer_dtype_uses_exact_equality(self):
+        # With float semantics, 2^53 and 2^53 + 2 are within 2 ULPs;
+        # integers must NOT get that leniency.
+        a = np.array([2**53], dtype=np.int64)
+        b = np.array([2**53 + 2], dtype=np.int64)
+        assert _values_match(a, b).tolist() == [False]
+
+    def test_boolean_dtype_uses_exact_equality(self):
+        a = np.array([True, False, True])
+        b = np.array([True, True, True])
+        assert _values_match(a, b).tolist() == [True, False, True]
+
+
+class TestCompareArraysUlpTolerance:
+    """:func:`_compare_arrays` treats up to 2 ULPs of float drift as a match."""
+
+    def test_one_ulp_drift_reports_match(self):
+        a = np.array([1.0, 2.0, 3.0])
+        result = _compare_arrays(a, _shift_ulps(a, 1))
+        assert result["status"] == "match"
+        assert result["mismatches"] == 0
+        assert result["max_pct_diff"] == 0.0
+        assert result["location"] is None
+
+    def test_two_ulp_drift_reports_match(self):
+        a = np.array([1.0, 2.0, 3.0])
+        result = _compare_arrays(a, _shift_ulps(a, 2))
+        assert result["status"] == "match"
+        assert result["mismatches"] == 0
+
+    def test_mixed_tolerated_and_real_diff_reports_only_real(self):
+        a = np.array([1.0, 2.0, 3.0])
+        b = a.copy()
+        b[0] = _shift_ulps(np.array([a[0]]), 2)[0]  # 2 ULPs — tolerated
+        b[2] = 99.0  # real difference
+        result = _compare_arrays(a, b)
+        assert result["status"] == "diff"
+        assert result["mismatches"] == 1
+        assert result["location"] == (2,)
+
+    def test_three_ulp_drift_still_reports_diff(self):
+        a = np.array([10.0])
+        result = _compare_arrays(a, _shift_ulps(a, 3))
+        assert result["status"] == "diff"
+        assert result["mismatches"] == 1
+        assert result["location"] == (0,)
+
+    def test_structured_array_float_field_tolerates_two_ulps(self):
+        dtype = np.dtype([("t", np.float64), ("loc", np.int32)])
+        a = np.array([(1.0, 5), (2.0, 7)], dtype=dtype)
+        t_shifted = _shift_ulps(np.array([1.0]), 2)[0]
+        b = np.array([(t_shifted, 5), (2.0, 7)], dtype=dtype)
+        result = _compare_arrays(a, b)
+        assert result["status"] == "match"
+        assert result["mismatches"] == 0
+
+    def test_structured_array_integer_field_remains_exact(self):
+        dtype = np.dtype([("t", np.float64), ("loc", np.int32)])
+        a = np.array([(1.0, 5)], dtype=dtype)
+        b = np.array([(1.0, 6)], dtype=dtype)  # loc differs by 1 -> still a diff
+        result = _compare_arrays(a, b)
+        assert result["status"] == "diff"
+        assert result["mismatches"] == 1
+        assert result["location"][0] == "loc"
 
 
 # ---------------------------------------------------------------------------

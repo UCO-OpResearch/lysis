@@ -70,6 +70,26 @@ def two_divergent_files(two_identical_files):
 
 
 @pytest.fixture
+def ulp_divergent_files(two_identical_files):
+    """Start from two identical files, then shift one float dataset by 2 ULPs.
+
+    The `tpa_leaving_time` dataset in path2 is replaced with its
+    element-wise ``nextafter(nextafter(..., +inf), +inf)`` — every value
+    moves two steps up the representable-float64 ladder, mimicking the
+    compiler-driven last-bit rounding drift seen between different
+    Fortran builds (plus the small accumulation downstream).  Two ULPs
+    is the current tolerance boundary, so this fixture tests that the
+    full permitted drift is still swallowed.
+    """
+    _, path2 = two_identical_files
+    with h5py.File(str(path2), "a") as f:
+        arr = f["micro_data/tpa_leaving_time"][:]
+        shifted = np.nextafter(np.nextafter(arr, np.inf), np.inf)
+        f["micro_data/tpa_leaving_time"][:] = shifted
+    return two_identical_files
+
+
+@pytest.fixture
 def high_precision_files(two_identical_files):
     """Start from two identical files, then mutate with a value whose
     full-precision float64 string differs from its :.6g truncation."""
@@ -121,6 +141,40 @@ class TestCompareFilePairIdentical:
         assert result.exit_code == 0, result.output
         # First column header is "Table", not "Run".
         assert "Table" in result.output
+
+
+class TestCompareFilePairUlpTolerance:
+    """``lysis compare`` swallows up to 2 ULPs of float drift."""
+
+    def test_detail_table_reports_ok(self, runner, ulp_divergent_files):
+        path1, path2 = ulp_divergent_files
+        result = runner.invoke(
+            cli,
+            ["compare", "micro-data", str(path1), str(path2), "--no-progress"],
+        )
+        assert result.exit_code == 0, result.output
+        # 2-ULP drift is at the tolerance limit: no DIFF rows.
+        assert "DIFF" not in result.output
+        assert "OK" in result.output
+
+    def test_diff_side_by_side_shows_no_differences(
+        self, runner, ulp_divergent_files
+    ):
+        path1, path2 = ulp_divergent_files
+        result = runner.invoke(
+            cli,
+            [
+                "compare",
+                "data",
+                str(path1),
+                str(path2),
+                "--diff",
+                "microscale_out/tpa_leaving_time",
+                "--no-progress",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "No differences found" in result.output
 
 
 class TestCompareFilePairDivergent:
