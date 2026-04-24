@@ -91,6 +91,7 @@ program macrolysis
     double precision     :: percent2, percent4
     double precision     :: rmicro, ttPA
     double precision     :: r, r1, r3, r2, r4, r5
+    double precision     :: snan  !signalling NaN used as source= for real allocates
 
     character(:), allocatable :: filetype, formatted
     character(:), allocatable :: filename1
@@ -417,19 +418,21 @@ program macrolysis
     tstep = q*delx**2/(12*Diff)  ! 4/6/11 CHANGED THIS TO (12*Diff) FROM (8*Diff). SEE WRITTEN NOTES 4/6/11 FOR WHY
     num_t = tf/tstep            ! number of timesteps
 
+    snan = ieee_value(0.0d0, ieee_signaling_nan)
+
     ! allocate (closeneigh(num,num))
-    allocate (endpts(2, num))
-    allocate (neighborc(8, num))
+    allocate (endpts(2, num), source=0)
+    allocate (neighborc(8, num), source=0)
     ! allocate (new_neighborc(8,num))
-    allocate (V(2, M))
+    allocate (V(2, M), source=0)
     ! allocate (init_state(enoFB))
     ! allocate (degrade(num))
-    allocate (t_degrade(num))
-    allocate (t_leave(M))
-    allocate (t_wait(M))
-    allocate (bind(M))
-    allocate (Nsavevect(simulations))
-    allocate (rvect(M))
+    allocate (t_degrade(num), source=snan)
+    allocate (t_leave(M), source=snan)
+    allocate (t_wait(M), source=snan)
+    allocate (bind(M), source=snan)
+    allocate (Nsavevect(simulations), source=0)
+    allocate (rvect(M), source=snan)
     ! allocate (degnext(tf+1,num))
     ! allocate (Vedgenext(tf+1,M))
     ! allocate (Vboundnext(tf+1,M))
@@ -449,12 +452,12 @@ program macrolysis
     ! allocate (X2plot(2,N*(F-1)), Y2plot(2,N*(F-1)))
     ! allocate (Xvplot(N*F), Yvplot(N*F))
     ! allocate (bdtPA(2,M), freetPA(2,M))
-    allocate (lysismat(nummicro, 100))!(100,100) if only did 10,000 micro simulations, (500,100) if did 50,000
+    allocate (lysismat(nummicro, 100), source=snan)!(100,100) if only did 10,000 micro simulations, (500,100) if did 50,000
     ! allocate (countbindV(simulations,tf), countindepV(simulations,tf), bind1V(simulations,tf))
     ! allocate (bind1(num))
-    allocate (forcedunbdbydeg(M))
-    allocate (mfpt(M)) ! vector I'll use to save the first passage times of each tPA molecule
-    allocate (yesfpt(M))  ! vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
+    allocate (forcedunbdbydeg(M), source=0)
+    allocate (mfpt(M), source=snan) ! vector I'll use to save the first passage times of each tPA molecule
+    allocate (yesfpt(M), source=0)  ! vector of 1's and 0's to let me know if the particular tPA molecule has already hit the back edge of the clot or not
 
     !! BRAD END
 

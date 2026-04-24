@@ -77,6 +77,7 @@ program micromodel
     !! BRAD 2024-01-13:
     ! integer, dimension(nodes**2,nodes**2)  :: Lat_temp !matrix of the connections between nodes. For instance, if node 1 is not a direct neighbor of node 6, then there would be a 0 in the (1,6) and (6,1) entries of Lat
 
+    double precision  :: snan  !signalling NaN used as source= for real allocates
     double precision  :: r, rin, randdegexp
     integer  :: Tdoublets
     double precision  :: Tdoublets2
@@ -470,25 +471,27 @@ program micromodel
 
     write (*, *) 'command line processed'
 
-    allocate (state(Ntot, nodes**2))
-    allocate (statetemp(Ntot, nodes**2))
-    allocate (init_state(nodes))
-    allocate (cumsuminit(nodes))
-    allocate (Lat(nodes**2, nodes**2))
-    allocate (row2(nodes**2*Ntot))
-    allocate (col2(nodes**2*Ntot))
-    allocate (lysis_time(simulations))
-    allocate (tPA_time(simulations))
-    allocate (tPAunbind(simulations))
-    allocate (tPAPLiunbd(simulations))
-    allocate (ltPA(simulations))
-    allocate (Plasmin(simulations))
-    allocate (max_Plg(simulations))
-    allocate (lysiscomplete(simulations))
-    allocate (countvect(simulations))
-    allocate (PLGbd(simulations))
-    allocate (PLGunbd(simulations))
-    allocate (firstPLi(simulations))
+    snan = ieee_value(0.0d0, ieee_signaling_nan)
+
+    allocate (state(Ntot, nodes**2), source=0)
+    allocate (statetemp(Ntot, nodes**2), source=0)
+    allocate (init_state(nodes), source=snan)
+    allocate (cumsuminit(nodes), source=snan)
+    allocate (Lat(nodes**2, nodes**2), source=0)
+    allocate (row2(nodes**2*Ntot), source=0)
+    allocate (col2(nodes**2*Ntot), source=0)
+    allocate (lysis_time(simulations), source=snan)
+    allocate (tPA_time(simulations), source=snan)
+    allocate (tPAunbind(simulations), source=0)
+    allocate (tPAPLiunbd(simulations), source=0)
+    allocate (ltPA(simulations), source=0)
+    allocate (Plasmin(simulations), source=0)
+    allocate (max_Plg(simulations), source=0)
+    allocate (lysiscomplete(simulations), source=0)
+    allocate (countvect(simulations), source=0)
+    allocate (PLGbd(simulations), source=0)
+    allocate (PLGunbd(simulations), source=0)
+    allocate (firstPLi(simulations), source=snan)
 
     ! Calculate dependent parameters
     kplgoff = kplgon*KdPLGintact !units 1/s, off rate for intact FB
@@ -497,8 +500,6 @@ program micromodel
     kaoff10 = ktPAon*KdtPAnoplg     !units 1/s, off rate in absense of PLG
 
     !! BRAD 2024-01-13:
-
-	Lat = 0
     do i = 1, nodes
         do j = 1, nodes
             Lat((i - 1)*nodes + j, (i - 1)*nodes + j) = 1 ! Put a 1 along the diagonal for (i, j) to itself
