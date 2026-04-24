@@ -17,8 +17,10 @@ import json
 import os
 import textwrap
 
+import h5py
 import pytest
 
+from lysis.config.constants import CONST
 from lysis.config.experiment import Experiment
 from lysis.config.parameters import MacroParameters, MicroParameters
 from lysis.dataio.datastore import DataStore
@@ -399,3 +401,152 @@ class TestInversionViaCsv:
             0.72,
             rel_tol=1e-5,
         )
+
+
+# ─── Rename tests ────────────────────────────────────────────────────────────
+
+
+class TestRunRename:
+    def test_rename_renames_file_and_records_history(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+
+        run = exp.runs[0]
+        old_code = run.run_code
+        old_h5 = os.path.join(exp.path, f"{old_code}.h5")
+        new_h5 = os.path.join(exp.path, "new-code.h5")
+        assert os.path.isfile(old_h5)
+
+        returned = run.rename("new-code")
+
+        assert returned == old_code
+        assert run.run_code == "new-code"
+        assert not os.path.exists(old_h5)
+        assert os.path.isfile(new_h5)
+
+        with h5py.File(new_h5, "r") as f:
+            assert f.attrs[CONST.RENAMED_FROM_ATTR] == old_code
+
+    def test_rename_appends_history(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+
+        run = exp.runs[0]
+        original = run.run_code
+        run.rename("second")
+        run.rename("third")
+
+        final_h5 = os.path.join(exp.path, "third.h5")
+        with h5py.File(final_h5, "r") as f:
+            assert f.attrs[CONST.RENAMED_FROM_ATTR] == f"{original} -> second"
+
+    def test_rename_to_existing_filename_raises(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+
+        other_code = exp.runs[1].run_code
+        with pytest.raises(FileExistsError):
+            exp.runs[0].rename(other_code)
+
+    def test_rename_same_name_raises(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+
+        run = exp.runs[0]
+        with pytest.raises(ValueError):
+            run.rename(run.run_code)
+
+
+class TestExperimentRename:
+    def test_rename_folder_and_json(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="old-exp")
+        old_path = exp.path
+
+        exp.rename("new-exp")
+
+        assert not os.path.exists(old_path)
+        assert os.path.isdir(exp.path)
+        assert exp.name == "new-exp"
+
+        with open(os.path.join(exp.path, "experiment.json")) as fh:
+            meta = json.load(fh)
+        assert meta["name"] == "new-exp"
+
+        for run in exp.runs:
+            assert run.os_path == exp.path
+            assert os.path.isfile(os.path.join(exp.path, f"{run.run_code}.h5"))
+
+    def test_rename_then_load(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="old-exp")
+        exp.rename("new-exp")
+
+        reloaded = Experiment.load(exp.path)
+        assert reloaded.name == "new-exp"
+        assert len(reloaded.runs) == len(exp.runs)
+
+    def test_rename_existing_target_raises(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="old-exp")
+        (data_root / "taken").mkdir()
+
+        with pytest.raises(FileExistsError):
+            exp.rename("taken")
+
+
+class TestExperimentRenameRun:
+    def test_rename_run_updates_json_and_file(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+
+        old_code = exp.runs[0].run_code
+        exp.rename_run(old_code, "brand-new")
+
+        assert exp.runs[0].run_code == "brand-new"
+        assert os.path.isfile(os.path.join(exp.path, "brand-new.h5"))
+        assert not os.path.exists(os.path.join(exp.path, f"{old_code}.h5"))
+
+        with open(os.path.join(exp.path, "experiment.json")) as fh:
+            meta = json.load(fh)
+        run_codes = [r["run_code"] for r in meta["runs"]]
+        assert "brand-new" in run_codes
+        assert old_code not in run_codes
+
+        with h5py.File(os.path.join(exp.path, "brand-new.h5"), "r") as f:
+            assert f.attrs[CONST.RENAMED_FROM_ATTR] == old_code
+
+    def test_rename_run_unknown_code_raises(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+
+        with pytest.raises(KeyError):
+            exp.rename_run("not-a-real-run", "anything")
+
+    def test_rename_run_collision_raises(self, tmp_path):
+        csv_path = _two_row_csv(tmp_path)
+        data_root = tmp_path / "experiments"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="test-exp")
+
+        existing = exp.runs[1].run_code
+        with pytest.raises(ValueError):
+            exp.rename_run(exp.runs[0].run_code, existing)

@@ -76,6 +76,7 @@ class Const:
         self.DATASET_STORAGE_TYPE = DataSetStorageType
         self.DATASPEC_VERSION_ATTR = "dataspec_version"
         self.CONVERTED_FROM_ATTR = "converted_from"
+        self.RENAMED_FROM_ATTR = "renamed_from"
         self.NUMPY_SAVETXT_FORMATS = {
             # Boolean types - save as 0 or 1
             np.dtype("bool"): "%d",

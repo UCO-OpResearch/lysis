@@ -489,6 +489,92 @@ class Experiment:
 
         return exp
 
+    # ─── Renaming ──────────────────────────────────────────────────────────
+
+    def _write_json(self) -> None:
+        """Write the current state of this Experiment to ``experiment.json``."""
+        json_path = os.path.join(self.path, "experiment.json")
+        with open(json_path, "w", encoding="utf-8") as fh:
+            json.dump(self.to_dict(), fh, indent=2, default=_params_json_default)
+
+    def rename(self, new_name: str) -> str:
+        """Rename this Experiment's folder and update ``experiment.json``.
+
+        Renames the on-disk folder from ``{data_root}/{name}`` to
+        ``{data_root}/{new_name}``, updates ``self._name`` and the
+        ``os_path`` of every contained :class:`~lysis.config.run.Run`, and
+        rewrites ``experiment.json`` with the new name.
+
+        :param new_name: The new experiment name (becomes the new folder
+            name under ``data_root``).
+        :type new_name: str
+        :return: The previous experiment name.
+        :rtype: str
+        :raises ValueError: If ``new_name`` equals the current name.
+        :raises FileNotFoundError: If the current experiment folder does
+            not exist.
+        :raises FileExistsError: If a folder already exists at the
+            destination path.
+        """
+        if new_name == self._name:
+            raise ValueError(
+                f"new_name is identical to current name: {new_name!r}"
+            )
+
+        old_name = self._name
+        old_path = self.path
+        new_path = os.path.join(self._data_root, new_name)
+
+        if not os.path.isdir(old_path):
+            raise FileNotFoundError(f"Experiment folder not found: {old_path}")
+        if os.path.exists(new_path):
+            raise FileExistsError(f"Path already exists: {new_path}")
+
+        os.rename(old_path, new_path)
+
+        self._name = new_name
+        for run in self._runs:
+            run.os_path = new_path
+
+        self._write_json()
+        return old_name
+
+    def rename_run(self, old_run_code: str, new_run_code: str) -> None:
+        """Rename a Run belonging to this Experiment.
+
+        Locates the :class:`~lysis.config.run.Run` with ``run_code ==
+        old_run_code``, calls :meth:`~lysis.config.run.Run.rename` on it
+        (which renames the HDF5 file and records the history in the
+        ``renamed_from`` attribute), then updates the matching entry in
+        ``experiment.json``.
+
+        :param old_run_code: The current ``run_code`` of the Run.
+        :type old_run_code: str
+        :param new_run_code: The new ``run_code``.
+        :type new_run_code: str
+        :raises KeyError: If no Run in this Experiment has
+            ``run_code == old_run_code``.
+        :raises ValueError: If another Run in this Experiment already uses
+            ``new_run_code``.
+        """
+        target = None
+        for run in self._runs:
+            if run.run_code == old_run_code:
+                target = run
+                break
+        if target is None:
+            raise KeyError(
+                f"No run with run_code={old_run_code!r} in experiment {self._name!r}"
+            )
+        if any(r.run_code == new_run_code for r in self._runs):
+            raise ValueError(
+                f"run_code={new_run_code!r} is already in use in experiment "
+                f"{self._name!r}"
+            )
+
+        target.rename(new_run_code)
+        self._write_json()
+
     @classmethod
     def load(cls, experiment_path: str | os.PathLike) -> "Experiment":
         """Load an existing Experiment from its folder on disk.

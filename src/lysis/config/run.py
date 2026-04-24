@@ -190,6 +190,34 @@ class Run(object):
             if ds.macro_params is not None:
                 self.macro_params = ds.macro_params
 
+    def rename(self, new_run_code: str) -> str:
+        """Rename this Run's HDF5 file and record the previous name.
+
+        Delegates the on-disk rename and ``renamed_from`` history update
+        to :meth:`lysis.dataio.datastore.DataStore.rename`, then updates
+        this Run's ``run_code`` to reflect the new identifier.  Any
+        currently open :class:`~lysis.dataio.datastore.DataStore` is
+        closed first so the file handle does not point at the old path.
+
+        :param new_run_code: The new run identifier (becomes the new HDF5
+            filename stem).
+        :type new_run_code: str
+        :return: The previous ``run_code``.
+        :rtype: str
+        :raises ValueError: If ``new_run_code`` equals the current
+            ``run_code``.
+        :raises FileNotFoundError: If the current HDF5 file does not exist.
+        :raises FileExistsError: If an HDF5 file already exists at the
+            destination path.
+        """
+        old_run_code = self.run_code
+        if self.data is not None:
+            self.data.close()
+            self.data = None
+        DataStore.rename(old_run_code, new_run_code, self.os_path)
+        self.run_code = new_run_code
+        return old_run_code
+
     def open_data(self, mode: str = "r") -> DataStore:
         """Open the HDF5 DataStore for this run.
 

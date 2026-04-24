@@ -811,6 +811,55 @@ class DataStore:
 
         return cls(run_code, path, mode="a")
 
+    @classmethod
+    def rename(cls, old_run_code, new_run_code, path):
+        """Rename the HDF5 file for a Run and record the previous name.
+
+        Renames ``{path}/{old_run_code}.h5`` to
+        ``{path}/{new_run_code}.h5`` on disk, then writes the previous
+        ``run_code`` into the HDF5 root attribute
+        ``CONST.RENAMED_FROM_ATTR``.  If that attribute already contains a
+        chronological history (earlier names joined by ``" -> "``), the old
+        ``run_code`` is appended to the end so the attribute always reads
+        oldest → most recent previous name.
+
+        :param old_run_code: Current ``run_code`` — stem of the existing
+            HDF5 filename.
+        :type old_run_code: str
+        :param new_run_code: New ``run_code`` — stem of the destination
+            HDF5 filename.
+        :type new_run_code: str
+        :param path: Directory containing the HDF5 file.
+        :type path: str
+        :raises ValueError: If ``new_run_code`` equals ``old_run_code``.
+        :raises FileNotFoundError: If the source HDF5 file does not exist.
+        :raises FileExistsError: If an HDF5 file already exists at the
+            destination path.
+        """
+        if new_run_code == old_run_code:
+            raise ValueError(
+                f"new_run_code is identical to old_run_code: {new_run_code!r}"
+            )
+
+        old_path = os.path.join(path, f"{old_run_code}.h5")
+        new_path = os.path.join(path, f"{new_run_code}.h5")
+
+        if not os.path.isfile(old_path):
+            raise FileNotFoundError(f"HDF5 file not found: {old_path}")
+        if os.path.exists(new_path):
+            raise FileExistsError(f"HDF5 file already exists: {new_path}")
+
+        os.rename(old_path, new_path)
+
+        attr = CONST.RENAMED_FROM_ATTR
+        with h5py.File(new_path, "a") as f:
+            existing = f.attrs.get(attr)
+            if existing is None:
+                history = old_run_code
+            else:
+                history = f"{existing} -> {old_run_code}"
+            f.attrs[attr] = history
+
     def initialize_macroscale(self, macro_params):
         """Add macroscale parameters and empty datasets to this DataStore.
 
