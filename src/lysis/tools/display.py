@@ -9,11 +9,134 @@ Provides shared helpers used by all table-producing CLI commands:
 - :func:`params_df_to_rich` — render a parameters DataFrame as a Rich Table
 - :func:`params_df_to_markdown` — render a parameters DataFrame as Markdown
 - :func:`render_dataset_side_by_side` — page-through side-by-side diff of two arrays
+- :func:`format_pct_column` — decimal-aligned hybrid ``%`` formatter for table columns
 """
 
 from __future__ import annotations
 
+import math
+
 import pandas as pd
+
+
+# ---------------------------------------------------------------------------
+# Percent-difference formatting
+# ---------------------------------------------------------------------------
+
+
+def _format_pct_base(pct) -> str:
+    """Format a single percentage as a decimal-aligned cell string.
+
+    Rendered without a trailing ``%`` — the column header carries the
+    unit — and without a leading ``+`` on positive values.  Chooses
+    between fixed-point and scientific notation so that values with
+    very different magnitudes stay legible in the same column:
+
+    ========================  ==============  ============
+    Input                     Output          Example
+    ========================  ==============  ============
+    ``None``                  ``"—"``         ``"—"``
+    ``NaN``                   ``"NaN"``       ``"NaN"``
+    ``+Inf`` / ``-Inf``       ``"Inf"`` /     ``"-Inf"``
+                              ``"-Inf"``
+    exact ``0``               ``"0.00"``      ``"0.00"``
+    ``|pct| >= 0.005``        ``f"{pct:.2f}"``  ``"0.07"``, ``"200.00"``
+    ``|pct| < 0.005`` nonzero ``f"{pct:.2e}"``  ``"3.21e-13"``
+    ========================  ==============  ============
+
+    :param pct: Percentage value, ``None``, ``float('nan')``, or
+        ``float('inf')``.
+    :type pct: float or None
+    :return: Unaligned display string.
+    :rtype: str
+    """
+    if pct is None:
+        return "—"
+    try:
+        pctf = float(pct)
+    except (TypeError, ValueError):
+        return str(pct)
+    if math.isnan(pctf):
+        return "NaN"
+    if math.isinf(pctf):
+        return "Inf" if pctf > 0 else "-Inf"
+    if pctf == 0.0:
+        return "0.00"
+    if abs(pctf) >= 0.005:
+        return f"{pctf:.2f}"
+    return f"{pctf:.2e}"
+
+
+def _align_on_decimal(strings) -> list[str]:
+    """Left-pad strings so their decimal points land in the same column.
+
+    Inputs with a decimal point are split on the first ``.``; the
+    integer part is left-padded with spaces so every decimal point sits
+    at the same offset from the left edge.  All outputs are
+    right-padded with spaces to a uniform column width.  Strings
+    without a decimal (``"NaN"``, ``"—"``, ``"Inf"``) are left-aligned
+    at column 0 and right-padded to match.
+
+    :param strings: Iterable of strings (typically produced by
+        :func:`_format_pct_base`).
+    :type strings: Iterable[str]
+    :return: List of equal-width strings.
+    :rtype: list[str]
+    """
+    strs = list(strings)
+    if not strs:
+        return strs
+    parts = []
+    for s in strs:
+        if "." in s:
+            left, right = s.split(".", 1)
+            parts.append((left, right))
+        else:
+            parts.append((s, None))
+    max_left = max(
+        (len(left) for left, right in parts if right is not None),
+        default=0,
+    )
+    max_right = max(
+        (len(right) for left, right in parts if right is not None),
+        default=0,
+    )
+    has_dot = any(right is not None for _, right in parts)
+    # Aligned-row width is max_left (left padding + integer part) plus
+    # "." plus max_right — *not* the per-row unaligned widths.
+    max_dot_aligned = max_left + (1 + max_right if has_dot else 0)
+    max_nondot = max(
+        (len(left) for left, right in parts if right is None),
+        default=0,
+    )
+    col_width = max(max_dot_aligned, max_nondot)
+    out = []
+    for left, right in parts:
+        if right is not None:
+            aligned = " " * (max_left - len(left)) + left + "." + right
+        else:
+            aligned = left
+        out.append(aligned + " " * (col_width - len(aligned)))
+    return out
+
+
+def format_pct_column(pcts) -> list[str]:
+    """Format a column of percentages with decimal-point alignment.
+
+    Convenience composition of :func:`_format_pct_base` and
+    :func:`_align_on_decimal`.  All output strings have the same width
+    and line up their decimal points, which keeps mixed fixed-point
+    (``"0.07"``) and scientific-notation (``"3.21e-13"``) cells
+    scannable side-by-side in a single column.  Neither leading ``+``
+    nor trailing ``%`` appear — column headers carry the unit.
+
+    :param pcts: Iterable of percentage values (signed floats, or
+        ``None`` for a missing / non-numeric entry).
+    :type pcts: Iterable[float or None]
+    :return: List of equal-width aligned strings in the input order.
+    :rtype: list[str]
+    """
+    return _align_on_decimal([_format_pct_base(p) for p in pcts])
 
 
 # ---------------------------------------------------------------------------
@@ -255,10 +378,11 @@ def render_dataset_side_by_side(
     :data:`~lysis.analysis.compare._MAX_ULPS`); other dtypes use exact
     equality.  For plain numeric / boolean arrays the table gets an
     additional ``% Diff`` column showing the symmetric percent
-    difference.  For structured arrays (event logs), each struct field
-    becomes a pair of columns ``<field>\\n(<file1>)`` /
-    ``<field>\\n(<file2>)``; a record is included if any field still
-    differs under the same rule.
+    difference, rendered with :func:`format_pct_column` so fixed-point
+    and scientific-notation rows line up on their decimal points.  For
+    structured arrays (event logs), each struct field becomes a pair
+    of columns ``<field>\\n(<file1>)`` / ``<field>\\n(<file2>)``; a
+    record is included if any field still differs under the same rule.
 
     Shape mismatch is non-fatal: a note is printed and only the first
     ``min(len1, len2)`` rows of the common leading dimension are scanned.
@@ -339,18 +463,23 @@ def render_dataset_side_by_side(
 
         n = min(flat1.size, flat2.size)
         match_mask = np.asarray(_values_match(flat1[:n], flat2[:n]))
+        # Pass 1: gather every differing row plus its pct value.
+        diff_rows = []
         for i in range(n):
             if match_mask[i]:
                 continue
             v1 = flat1[i]
             v2 = flat2[i]
-            diff_count += 1
             idx_str = str(np.unravel_index(i, shape)) if multi_dim else str(i)
             try:
                 pct = percent_difference(float(v1), float(v2))
             except (TypeError, ValueError):
                 pct = float("nan")
-            pct_str = "NaN" if pct != pct else f"{pct:+.2f}%"
+            diff_rows.append((idx_str, v1, v2, pct))
+        diff_count = len(diff_rows)
+        # Pass 2: format the pct column so decimals align across all rows.
+        pct_strs = format_pct_column([r[3] for r in diff_rows])
+        for (idx_str, v1, v2, _), pct_str in zip(diff_rows, pct_strs):
             table.add_row(idx_str, _fmt_scalar(v1), _fmt_scalar(v2), pct_str)
 
     with console.pager():

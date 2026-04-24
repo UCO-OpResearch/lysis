@@ -316,8 +316,10 @@ class TestCompareDiffFlag:
             ],
         )
         assert result.exit_code == 0, result.output
-        # Diff row (index 2: 3 vs 4) shows up with its signed pct-diff.
-        assert "+28.57%" in result.output
+        # Diff row (index 2: 3 vs 4) shows up with its pct-diff.  The
+        # new hybrid formatter drops the leading "+" and trailing "%"
+        # (the column header carries the unit).
+        assert "28.57" in result.output
         # Matching values 1.5 (index 1) and 4.5 (index 3) are unique to
         # their rows — if either appears, a matching row leaked through.
         assert "1.5" not in result.output

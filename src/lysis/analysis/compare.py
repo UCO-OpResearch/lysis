@@ -23,12 +23,13 @@ boolean, and string dtypes still use exact equality.
 Typical workflow::
 
     from lysis.analysis.compare import compare_runs
+    from lysis.tools.display import _format_pct_base
 
     result = compare_runs(run1, run2, "macro-stats")
     for label, r in result["ks"].items():
         print(label, r.statistic, r.pvalue)
     for label, pct in result["pct_diff"].items():
-        print(label, f"{pct:+.2f}%")
+        print(label, _format_pct_base(pct))
 """
 
 __author__ = "Brittany Bannish and Bradley Paynter"

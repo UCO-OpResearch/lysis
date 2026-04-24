@@ -6,7 +6,10 @@ import pandas as pd
 import pytest
 
 from lysis.tools.display import (
+    _align_on_decimal,
+    _format_pct_base,
     emit_markdown,
+    format_pct_column,
     md_table,
     params_df_to_markdown,
     params_df_to_rich,
@@ -359,3 +362,125 @@ class TestParamsDfToRich:
         # 1 Parameter column + 2 run columns
         table = params_df_to_rich(_simple_params_df())
         assert len(table.columns) == 3
+
+
+# ---------------------------------------------------------------------------
+# Percent-difference formatter
+# ---------------------------------------------------------------------------
+
+
+class TestFormatPctBase:
+    """``_format_pct_base`` — single-value hybrid %/scientific formatter."""
+
+    def test_exact_zero(self):
+        assert _format_pct_base(0.0) == "0.00"
+
+    def test_none(self):
+        assert _format_pct_base(None) == "—"
+
+    def test_nan(self):
+        assert _format_pct_base(float("nan")) == "NaN"
+
+    def test_positive_infinity(self):
+        assert _format_pct_base(float("inf")) == "Inf"
+
+    def test_negative_infinity(self):
+        assert _format_pct_base(float("-inf")) == "-Inf"
+
+    def test_large_positive_fixed_no_plus_sign(self):
+        # Leading '+' is dropped; trailing '%' is dropped.
+        assert _format_pct_base(200.0) == "200.00"
+
+    def test_small_positive_fixed(self):
+        assert _format_pct_base(0.07) == "0.07"
+
+    def test_negative_fixed_keeps_minus(self):
+        assert _format_pct_base(-0.07) == "-0.07"
+
+    def test_boundary_rounds_to_fixed(self):
+        # 0.005 rounds to 0.01 under :.2f and uses fixed-point.
+        assert _format_pct_base(0.005) == "0.01"
+
+    def test_just_below_boundary_switches_to_scientific(self):
+        # 0.004999 is below the 0.005 threshold; scientific.
+        result = _format_pct_base(0.004999)
+        assert "e" in result
+
+    def test_very_small_positive_scientific(self):
+        assert _format_pct_base(3.21e-13) == "3.21e-13"
+
+    def test_very_small_negative_scientific_keeps_minus(self):
+        assert _format_pct_base(-8.30e-15) == "-8.30e-15"
+
+    def test_non_numeric_fallback(self):
+        assert _format_pct_base("N/A") == "N/A"
+
+
+class TestAlignOnDecimal:
+    """``_align_on_decimal`` — left-pad so decimals line up."""
+
+    def test_empty_input(self):
+        assert _align_on_decimal([]) == []
+
+    def test_uniform_widths_no_padding(self):
+        out = _align_on_decimal(["1.00", "2.00"])
+        assert out == ["1.00", "2.00"]
+
+    def test_mixed_integer_widths_align_decimals(self):
+        out = _align_on_decimal(["200.00", "1.00"])
+        # "  1.00" left-padded; "200.00" untouched; both 6 chars.
+        assert out == ["200.00", "  1.00"]
+        assert len({len(s) for s in out}) == 1
+
+    def test_mixed_scientific_and_fixed_align_decimals(self):
+        out = _align_on_decimal(["200.00", "3.21e-13"])
+        # Decimals must land at the same column.
+        dots = [s.index(".") for s in out]
+        assert dots[0] == dots[1]
+        assert len({len(s) for s in out}) == 1
+
+    def test_negative_sign_occupies_integer_padding(self):
+        out = _align_on_decimal(["200.00", "-1.00"])
+        dots = [s.index(".") for s in out]
+        assert dots[0] == dots[1]
+        # "-1.00" gets one leading space, not two, because "-" lives
+        # in the integer field.
+        assert out[1].startswith(" -1.")
+
+    def test_nondot_strings_right_padded_to_column_width(self):
+        out = _align_on_decimal(["200.00", "—"])
+        widths = {len(s) for s in out}
+        assert len(widths) == 1
+        # "—" stays at column 0 (left-aligned) and trails spaces.
+        assert out[1].startswith("—")
+
+    def test_all_nondot_strings_unchanged(self):
+        out = _align_on_decimal(["NaN", "Inf"])
+        assert len({len(s) for s in out}) == 1
+
+
+class TestFormatPctColumn:
+    """End-to-end column formatter (``_format_pct_base`` + alignment)."""
+
+    def test_decimal_points_align_across_mixed_formats(self):
+        pcts = [200.0, 0.07, 3.21e-13, -8.30e-15, None, float("nan")]
+        out = format_pct_column(pcts)
+        # Every cell has the same width.
+        assert len({len(s) for s in out}) == 1
+        # Decimal points (where present) all at the same column.
+        dot_cols = {s.index(".") for s in out if "." in s}
+        assert len(dot_cols) == 1
+
+    def test_no_leading_plus_no_trailing_percent(self):
+        out = format_pct_column([0.07, 200.0, 3.21e-13])
+        for s in out:
+            stripped = s.strip()
+            assert not stripped.startswith("+")
+            assert not stripped.endswith("%")
+
+    def test_empty_input(self):
+        assert format_pct_column([]) == []
+
+    def test_single_value_no_padding_needed(self):
+        out = format_pct_column([2.5])
+        assert out == ["2.50"]

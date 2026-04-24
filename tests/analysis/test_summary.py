@@ -480,7 +480,8 @@ class TestCompareStatsTableDataDiff:
         }
         df = compare_stats_table(results)
         cell = df.loc["run_A", "microscale_out/tpa_leaving_time"]
-        assert "+1.50%" in cell
+        # New pct format: no leading +, no trailing %; location unchanged.
+        assert "1.50" in cell
         assert "(3, 7)" in cell
 
     def test_shape_mismatch_renders_detail(self):
@@ -591,7 +592,7 @@ class TestCompareDataDiffSummaryTable:
         }
         df = compare_data_diff_summary_table(results)
         assert df.loc["run_A", "Result"] == "2 of 3 differ"
-        assert df.loc["run_A", "Max % Diff"] == "+3.00%"
+        assert df.loc["run_A", "Max % Diff"].strip() == "3.00"
         assert "micro/big" in df.loc["run_A", "Worst Table"]
         assert "(4,)" in df.loc["run_A", "Worst Table"]
 
@@ -610,7 +611,8 @@ class TestCompareDataDiffSummaryTable:
         }
         df = compare_data_diff_summary_table(results)
         assert df.loc["run_A", "Result"] == "1 of 1 differ"
-        assert df.loc["run_A", "Max % Diff"] == "—"
+        # Structural-only rows render "—" in the numeric pct column.
+        assert df.loc["run_A", "Max % Diff"].strip() == "—"
         assert "shapes" in df.loc["run_A", "Worst Table"]
         assert "(100,) vs (101,)" in df.loc["run_A", "Worst Table"]
 
@@ -635,7 +637,7 @@ class TestCompareDataDiffSummaryTable:
         }
         df = compare_data_diff_summary_table(results)
         assert "micro/b" in df.loc["run_A", "Worst Table"]
-        assert df.loc["run_A", "Max % Diff"] == "+0.10%"
+        assert df.loc["run_A", "Max % Diff"].strip() == "0.10"
 
     def test_missing_data_diff_treated_as_exact_match(self):
         results = {"run_A": {"ks": {}, "pct_diff": {}}}
@@ -697,7 +699,7 @@ class TestCompareDataDiffDetailTable:
         row = df.loc["micro/x"]
         assert row["Status"] == "DIFF"
         assert row["Mismatches"] == "4 of 100"
-        assert row["Max % Diff"] == "+2.50%"
+        assert row["Max % Diff"].strip() == "2.50"
         assert row["Location"] == "(3, 7)"
 
     def test_shape_mismatch_row(self):

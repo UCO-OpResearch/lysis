@@ -18,6 +18,8 @@ import math
 
 import pandas as pd
 
+from lysis.tools.display import _format_pct_base, format_pct_column
+
 
 # ---------------------------------------------------------------------------
 # micro_stats_table
@@ -262,10 +264,18 @@ def parameters_table(
 def _fmt_data_diff_cell(entry: dict) -> str:
     """Format one :func:`~lysis.analysis.compare.compare_data_tables` cell.
 
+    Percent values use :func:`~lysis.tools.display._format_pct_base`
+    (no trailing ``%``, no leading ``+``, hybrid fixed-point /
+    scientific notation).  Column-wide decimal alignment is *not*
+    applied here because data-diff cells are heterogeneous (mix of
+    ``"OK"``, ``"<pct> @ <loc>"``, ``"shapes ..."``, ``"missing ..."``)
+    and lining up decimals inside composite text strings would fight
+    the prose.
+
     :param entry: Result dict with ``"status"`` plus optional
         ``"max_pct_diff"``, ``"location"``, ``"detail"`` keys.
     :type entry: dict
-    :return: Display string (e.g. ``"OK"``, ``"+1.50% @ (3, 7)"``).
+    :return: Display string (e.g. ``"OK"``, ``"1.50 @ (3, 7)"``).
     :rtype: str
     """
     status = entry.get("status")
@@ -274,9 +284,7 @@ def _fmt_data_diff_cell(entry: dict) -> str:
     if status == "diff":
         pct = entry.get("max_pct_diff")
         loc = entry.get("location")
-        if pct is None or pct != pct:
-            return f"NaN @ {loc}"
-        return f"{pct:+.2f}% @ {loc}"
+        return f"{_format_pct_base(pct)} @ {loc}"
     if status == "shape_mismatch":
         return f"shapes {entry.get('detail', '')}"
     if status == "missing":
@@ -289,13 +297,18 @@ def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
 
     For each entry in the ``"ks"`` sub-dict, emits two columns:
     ``"{label} KS"`` (test statistic, ``:.4f``) and ``"{label} p-value"``
-    (``:.3g``).  For each entry in the ``"pct_diff"`` sub-dict, emits one
-    column: ``"{label} % diff"`` (signed, ``:+.2f`` with a ``%`` suffix).
-    For each entry in the ``"data_diff"`` sub-dict, emits one column using
-    the dataset label as the header and a formatted cell (``OK`` / percent
-    + location / shape-mismatch / missing).  Column groups appear in the
-    order KS → pct-diff → data-diff; orderings within each group are
-    taken from the first Run's result dict.
+    (``:.3g``).  For each entry in the ``"pct_diff"`` sub-dict, emits
+    one column ``"{label} % diff"`` rendered by
+    :func:`~lysis.tools.display.format_pct_column` — cells drop the
+    trailing ``%`` and the leading ``+`` and line up on their decimal
+    points across runs, switching automatically between fixed-point
+    and scientific notation (see
+    :func:`~lysis.tools.display._format_pct_base`).  For each entry in
+    the ``"data_diff"`` sub-dict, emits one column using the dataset
+    label as the header and a formatted cell (``OK`` / percent + location
+    / shape-mismatch / missing).  Column groups appear in the order
+    KS → pct-diff → data-diff; orderings within each group are taken
+    from the first Run's result dict.
 
     :param results_by_run: Maps run code to a compare-runs result dict
         (see :func:`~lysis.analysis.compare.compare_runs`) or, for
@@ -333,15 +346,31 @@ def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
     for label in data_labels:
         columns.append(label)
 
+    run_order = list(results_by_run.keys())
+
+    # Pre-format each pct-diff column so decimals align across all runs.
+    pct_col_strs: dict = {}
+    for label in pct_labels:
+        col_values = []
+        for rc in run_order:
+            entry = results_by_run[rc]
+            pct_dict = entry.get("pct_diff", {}) if new_format else {}
+            value = pct_dict.get(label)
+            # NaN percent values go through as None so they render as "NaN",
+            # aligned alongside the numeric cells.
+            if value is not None and value != value:
+                value = float("nan")
+            col_values.append(value)
+        pct_col_strs[label] = format_pct_column(col_values)
+
     rows = {}
-    for rc, entry in results_by_run.items():
+    for rc_idx, rc in enumerate(run_order):
+        entry = results_by_run[rc]
         if new_format:
             ks_dict = entry.get("ks", {})
-            pct_dict = entry.get("pct_diff", {})
             data_dict = entry.get("data_diff", {})
         else:
             ks_dict = entry
-            pct_dict = {}
             data_dict = {}
 
         row = {}
@@ -350,8 +379,7 @@ def compare_stats_table(results_by_run: dict) -> pd.DataFrame:
             row[f"{label} KS"] = f"{result.statistic:.4f}"
             row[f"{label} p-value"] = f"{result.pvalue:.3g}"
         for label in pct_labels:
-            pct = pct_dict[label]
-            row[f"{label} % diff"] = "N/A" if pct != pct else f"{pct:+.2f}%"
+            row[f"{label} % diff"] = pct_col_strs[label][rc_idx]
         for label in data_labels:
             row[label] = _fmt_data_diff_cell(data_dict[label])
         rows[rc] = row
@@ -404,8 +432,10 @@ def compare_data_diff_summary_table(results_by_run: dict) -> pd.DataFrame:
 
     - ``"Result"`` — ``"Exact Match"`` when every table matched, or
       ``"<n> of <total> differ"`` when some did not.
-    - ``"Max % Diff"`` — signed ``:+.2f`` percent of the worst numeric
-      mismatch, or ``"—"`` when no numeric difference exists.
+    - ``"Max % Diff"`` — the worst numeric mismatch formatted by
+      :func:`~lysis.tools.display.format_pct_column` (decimal-aligned,
+      no ``+``, no trailing ``%``, scientific notation once ``|pct| <
+      0.005``); ``"—"`` when no numeric difference exists.
     - ``"Worst Table"`` — dataset label (plus index tuple for numeric
       diffs, or structural detail for shape/missing issues) pointing
       at the mismatch most worth investigating.  ``"—"`` on exact
@@ -422,8 +452,14 @@ def compare_data_diff_summary_table(results_by_run: dict) -> pd.DataFrame:
     if not results_by_run:
         return pd.DataFrame()
 
-    rows = {}
-    for rc, entry in results_by_run.items():
+    run_order = list(results_by_run.keys())
+
+    # Pass 1: pick each run's worst mismatch and its pct value (or None
+    # for exact-match / structural-only rows).
+    worst_by_run = {}
+    row_pcts = []
+    for rc in run_order:
+        entry = results_by_run[rc]
         data_diff = (
             entry.get("data_diff", {}) if isinstance(entry, dict) else {}
         )
@@ -433,36 +469,46 @@ def compare_data_diff_summary_table(results_by_run: dict) -> pd.DataFrame:
             for label, info in data_diff.items()
             if info.get("status") != "match"
         }
-
         if not mismatches:
+            worst_by_run[rc] = (None, None, total, 0)
+            row_pcts.append(None)
+            continue
+        worst_label, worst_entry = _worst_mismatch(mismatches)
+        status = worst_entry.get("status")
+        pct = worst_entry.get("max_pct_diff") if status == "diff" else None
+        if pct is not None and pct != pct:
+            pct = float("nan")
+        worst_by_run[rc] = (worst_label, worst_entry, total, len(mismatches))
+        row_pcts.append(pct)
+
+    pct_strs = format_pct_column(row_pcts)
+
+    # Pass 2: build rows with the aligned pct column.
+    rows = {}
+    for rc_idx, rc in enumerate(run_order):
+        worst_label, worst_entry, total, num_mismatches = worst_by_run[rc]
+        pct_str = pct_strs[rc_idx]
+        if worst_label is None:
             rows[rc] = {
                 "Result": "Exact Match",
-                "Max % Diff": "—",
+                "Max % Diff": pct_str,
                 "Worst Table": "—",
             }
             continue
 
-        worst_label, worst_entry = _worst_mismatch(mismatches)
         status = worst_entry.get("status")
         if status == "diff":
-            pct = worst_entry.get("max_pct_diff")
             loc = worst_entry.get("location")
-            pct_str = (
-                "NaN" if pct is None or pct != pct else f"{pct:+.2f}%"
-            )
             worst_str = f"{worst_label} @ {loc}" if loc is not None else worst_label
         elif status == "shape_mismatch":
-            pct_str = "—"
             worst_str = f"{worst_label} (shapes {worst_entry.get('detail', '')})"
         elif status == "missing":
-            pct_str = "—"
             worst_str = f"{worst_label} (missing: {worst_entry.get('detail', '')})"
         else:
-            pct_str = "—"
             worst_str = worst_label
 
         rows[rc] = {
-            "Result": f"{len(mismatches)} of {total} differ",
+            "Result": f"{num_mismatches} of {total} differ",
             "Max % Diff": pct_str,
             "Worst Table": worst_str,
         }
@@ -495,9 +541,11 @@ def compare_data_diff_detail_table(data_diff: dict) -> pd.DataFrame:
       ``"MISSING"`` when the dataset is absent from one Run.
     - ``"Mismatches"`` — ``"<n> of <total>"`` for element-wise diffs;
       shape/missing detail for structural issues; ``"0"`` on match.
-    - ``"Max % Diff"`` — signed ``:+.2f`` percent of the worst element
-      (or ``"NaN"`` for opposite-sign cancellation) for ``DIFF`` rows;
-      ``"—"`` for match and structural rows.
+    - ``"Max % Diff"`` — the worst element's percent difference,
+      rendered by :func:`~lysis.tools.display.format_pct_column`
+      (decimal-aligned across all rows, no ``+``, no trailing ``%``,
+      scientific notation below ``0.005``; ``"NaN"`` on opposite-sign
+      cancellation); ``"—"`` for match and structural rows.
     - ``"Location"`` — index tuple of the worst element for ``DIFF``
       rows; ``"—"`` otherwise.  For structured-array diffs the first
       entry is the field name.
@@ -513,15 +561,32 @@ def compare_data_diff_detail_table(data_diff: dict) -> pd.DataFrame:
     if not data_diff:
         return pd.DataFrame()
 
+    labels = list(data_diff.keys())
+
+    # Collect pct values per row (None for non-diff statuses so they
+    # render as "—" within the aligned column).
+    row_pcts = []
+    for label in labels:
+        entry = data_diff[label]
+        if entry.get("status") != "diff":
+            row_pcts.append(None)
+            continue
+        pct = entry.get("max_pct_diff")
+        if pct is not None and pct != pct:
+            pct = float("nan")
+        row_pcts.append(pct)
+    pct_strs = format_pct_column(row_pcts)
+
     rows = {}
-    for label, entry in data_diff.items():
+    for label, pct_str in zip(labels, pct_strs):
+        entry = data_diff[label]
         status = entry.get("status")
         if status == "match":
             total = entry.get("total")
             rows[label] = {
                 "Status": "OK",
                 "Mismatches": "0" if total is None else f"0 of {total}",
-                "Max % Diff": "—",
+                "Max % Diff": pct_str,
                 "Location": "—",
             }
         elif status == "diff":
@@ -531,12 +596,7 @@ def compare_data_diff_detail_table(data_diff: dict) -> pd.DataFrame:
                 count_str = "—"
             else:
                 count_str = f"{mismatches} of {total}"
-            pct = entry.get("max_pct_diff")
             loc = entry.get("location")
-            if pct is None or pct != pct:
-                pct_str = "NaN"
-            else:
-                pct_str = f"{pct:+.2f}%"
             rows[label] = {
                 "Status": "DIFF",
                 "Mismatches": count_str,
@@ -547,21 +607,21 @@ def compare_data_diff_detail_table(data_diff: dict) -> pd.DataFrame:
             rows[label] = {
                 "Status": "SHAPE",
                 "Mismatches": entry.get("detail", ""),
-                "Max % Diff": "—",
+                "Max % Diff": pct_str,
                 "Location": "—",
             }
         elif status == "missing":
             rows[label] = {
                 "Status": "MISSING",
                 "Mismatches": entry.get("detail", ""),
-                "Max % Diff": "—",
+                "Max % Diff": pct_str,
                 "Location": "—",
             }
         else:
             rows[label] = {
                 "Status": str(status),
                 "Mismatches": "—",
-                "Max % Diff": "—",
+                "Max % Diff": pct_str,
                 "Location": "—",
             }
 
