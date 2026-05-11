@@ -18,7 +18,7 @@ dependencies = [
     "scipy>=1.10",
     "pandas>=2.0",
     "tqdm>=4.65",
-    "GooseSLURM>=0.14",
+    "GooseSLURM>=0.13.4",
 ]
 
 [project.optional-dependencies]
