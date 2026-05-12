@@ -31,6 +31,11 @@ octave-workspace
 CLAUDE.md
 QWEN.md
 
+# Fortran build artifacts (version stamp is regenerated each `make`;
+# .mod files land in cwd by default for ifort/gfortran)
+src/fortran/version_stamp.f90
+*.mod
+
 # Sphinx documentation build outputs
 docs/build/
 docs/_build/
