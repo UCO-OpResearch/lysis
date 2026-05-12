@@ -157,8 +157,10 @@ VS Code Setup
 SSH Configuration
 ------------------
 
+This configuration will need to be done once on each computer connected to Buddy.
+
 1. Open VS Code
-2. Select **Open a Remote Window**
+2. Select the **Open a Remote Window** button in the bottom-left corner of the application
 3. Choose **SSH**
 4. Select **Configure SSH Hosts...**
 5. Choose the SSH config file, typically:
@@ -177,6 +179,34 @@ Add the following configuration, replacing ``USERNAME`` with your HPC username:
 
     Host hpc.uco.edu
         User USERNAME
+
+Connect to Buddy
+----------------
+
+These steps will be done each time you connect to Buddy.
+
+.. code-block:: powershell
+
+    ssh USERNAME@hpc.uco.edu
+    salloc --exclusive
+
+- Leave this PowerShell open while using VS Code.
+- Note the node number allocated by Buddy. For example, ``salloc: Nodes node-XXX are ready for job`` 
+
+
+In VS Code, connect to the node
+
+1. Select **Open a Remote Window**
+2. Select **Connect to Host**
+3. Type ``node-XXX`` replacing XXX with the number noted above
+4. If it asks for the platform, select **Linux**
+5. If it shows *node-XXX has fingerprint...*, select **Continue**
+
+Once it finishes connecting
+
+1. Select **Open Folder** from the File dropdown.
+2. Enter ``/home/USERNAME/lysis`` and click **OK**
+3. Answer any trust requests that pop up
 
 
 Troubleshooting
