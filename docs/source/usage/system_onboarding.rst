@@ -44,8 +44,8 @@ Type ``yes`` to continue.
 
 Add the newly created public key to your Buddy account.
 
-Linux
-^^^^^
+Linux or MacOS
+^^^^^^^^^^^^^^
 
 Run:
 
@@ -58,17 +58,11 @@ Replace ``USERNAME`` with your HPC username.
 Windows
 ^^^^^^^
 
-From your local terminal, run:
+From your local PowerShell, run:
 
-.. code-block:: bash
+.. code-block:: powershell
 
-    scp .ssh/id_ed25519.pub USERNAME@hpc.uco.edu:~/DESIREDKEYNAME.pub
-
-Then, from the Buddy terminal, run:
-
-.. code-block:: bash
-
-    cat ~/DESIREDKEYNAME.pub >> ~/.ssh/authorized_keys
+    cat .ssh/id_ed25519.pub | ssh USERNAME@hpc.uco.edu "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 
 Step 3: Create Buddy SSH Key and Add It to GitHub
 --------------------------------------------------
