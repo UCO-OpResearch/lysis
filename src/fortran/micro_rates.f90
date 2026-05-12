@@ -5,6 +5,7 @@ program micromodel
     !!                  - Data is stored in subfolders based on runCode
     !!                  - Data file codes are now set globally from the (in/out)FileCode variables
 
+    use version_stamp
     implicit none
     character(40) :: runCode = '2024-01-13-0710'
     ! character(6)  :: inFileCode = 'Q2.dat'
@@ -317,6 +318,15 @@ program micromodel
     character(80) :: param_name, param_value
 
     cmd_count = command_argument_count()
+
+    if (cmd_count == 1) then
+        call get_command_argument(1, param_name, param_len, cmd_status)
+        if (cmd_status == 0 .and. param_name(1:param_len) == '--version') then
+            write (*, '(A)') BUILD_COMMIT // ' ' // BUILD_DIRTY
+            stop
+        end if
+    end if
+
     write (*, *) 'number of command arguments = ', cmd_count
 
     param_i = 0

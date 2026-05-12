@@ -62,6 +62,7 @@ LIB_DIR = ./lib
 C_SRC_DIR = ./src/c
 CPP_SRC_DIR = ./src/cpp
 FORT_SRC_DIR = ./src/fortran
+VERSION_F90 = $(FORT_SRC_DIR)/version_stamp.f90
 FORT_MICRO = micro_rates.f90
 FORT_MACRO = macro_Q2_diffuse_into \
              macro_Q2_diffuse_along \
@@ -110,17 +111,38 @@ f-macro-array: $(BUILD_DIR)/macro-array
 
 shared: $(LIB_DIR)/kiss.so
 
-$(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
+# Regenerated on every make; only touches the file when the embedded stamp
+# would actually change, so downstream Fortran compiles do not cascade on
+# no-op builds.  FORCE (an empty non-phony rule) makes the recipe re-run
+# every time while leaving the file's mtime alone when content is unchanged.
+$(VERSION_F90): FORCE
+	@if git rev-parse HEAD >/dev/null 2>&1; then \
+	    COMMIT=$$(git rev-parse HEAD); \
+	    if git diff --quiet HEAD -- $(FORT_SRC_DIR) 2>/dev/null; then DIRTY=clean; else DIRTY=dirty; fi; \
+	else \
+	    COMMIT=unknown; DIRTY=unknown; \
+	fi; \
+	printf 'module version_stamp\n  implicit none\n  character(len=*), parameter :: BUILD_COMMIT = "%s"\n  character(len=*), parameter :: BUILD_DIRTY  = "%s"\nend module version_stamp\n' \
+	    "$$COMMIT" "$$DIRTY" > $@.tmp; \
+	if cmp -s $@.tmp $@ 2>/dev/null; then \
+	    rm $@.tmp; \
+	else \
+	    mv $@.tmp $@; \
+	fi
 
-$(BUILD_DIR)/macro_diffuse_into_and_along__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__external
-    
+FORCE:
+
+$(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(VERSION_F90) $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(VERSION_F90) $(FORT_SRC_DIR)/micro_rates.f90 -o $(BUILD_DIR)/micro_rates
+
+$(BUILD_DIR)/macro_diffuse_into_and_along__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 $(VERSION_F90) $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(VERSION_F90) $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__external
+
 $(BUILD_DIR)/macro_diffuse_into_and_along_slow_micro__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along_slow_micro__external.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along_slow_micro__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along_slow_micro__external
     
-$(BUILD_DIR)/macro_diffuse_into_and_along__internal: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 $(BUILD_DIR)/kiss.o
-	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__internal
+$(BUILD_DIR)/macro_diffuse_into_and_along__internal: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 $(VERSION_F90) $(BUILD_DIR)/kiss.o
+	$(FORT) $(BUILD_DIR)/kiss.o $(VERSION_F90) $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__internal
         
 $(BUILD_DIR)/macro_Q2_diffuse_into: $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into

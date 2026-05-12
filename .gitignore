@@ -10,6 +10,12 @@ octave-workspace
 __pycache__
 fort.*
 *.sublime-*
+
+# Fortran build artifacts (version stamp is regenerated each `make`;
+# .mod files land in cwd by default for ifort/gfortran)
+src/fortran/version_stamp.f90
+*.mod
+
 data
 *.h5
 test.ipynb
