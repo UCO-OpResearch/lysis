@@ -143,6 +143,7 @@ class FortranMacro(FortranRunner):
         in_file_code: str = "",
         out_file_code: str = "",
         index: "int | None" = None,
+        allow_stale_binary: bool = False,
     ) -> "FortranMacro":
         """Construct a :class:`FortranMacro` from an existing HDF5 run file.
 
@@ -162,6 +163,11 @@ class FortranMacro(FortranRunner):
         :param index: Parallel run index for seed splitting, defaults to
             ``None``.
         :type index: int, optional
+        :param allow_stale_binary: Downgrade a stamp mismatch between the
+            Fortran binary and ``src/fortran/`` from
+            :class:`~lysis.tools.binary_version.StaleBinaryError` to a
+            loud warning, defaults to ``False``.
+        :type allow_stale_binary: bool, optional
         :return: Fully configured :class:`FortranMacro` instance.
         :rtype: FortranMacro
         :raises ValueError: If microscale datasets are empty (microscale not yet
@@ -202,6 +208,7 @@ class FortranMacro(FortranRunner):
             in_file_code=in_file_code,
             out_file_code=out_file_code,
             index=index,
+            allow_stale_binary=allow_stale_binary,
         )
 
     # ------------------------------------------------------------------
@@ -392,6 +399,13 @@ class FortranMacro(FortranRunner):
             with a non-zero status.
         """
         work_dir = Path(work_dir)
+
+        # Preflight: confirm the Fortran binary's embedded stamp matches the
+        # current src/fortran/ source tree.  Raises StaleBinaryError before
+        # we create any output files, unless allow_stale_binary is True (in
+        # which case it warns and primes a banner for each per-sim log file).
+        self._verify_binary_version()
+
         data_dir = work_dir / "data" / self.run.run_code
         data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -437,6 +451,7 @@ class FortranMacro(FortranRunner):
             # Execute — Fortran writes directly into sim_dir via the runCode path
             log_file = sim_dir / f"macro{sim_code}.txt"
             with open(log_file, "w") as fh:
+                self._write_stale_banner(fh)
                 subprocess.run(command, stdout=fh, cwd=str(work_dir), check=True)
 
             # Remove symlinks so only actual Fortran output remains

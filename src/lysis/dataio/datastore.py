@@ -1038,6 +1038,7 @@ class DataStore:
         file_codes,
         param_overrides=None,
         param_aliases=None,
+        binary_provenance=None,
     ):
         """Import a data collection from an external source into this DataStore.
 
@@ -1086,6 +1087,13 @@ class DataStore:
             example, ``{"micro_simulations": "runs"}`` renames the ``runs``
             key produced by v1.90.0 log parsing.
         :type param_aliases: dict, optional
+        :param binary_provenance: Optional dict of self-reported provenance
+            from a stale Fortran binary whose preflight check was overridden.
+            Keys are stamped on the per-scale params group alongside the
+            normal execution provenance, recording that the resulting data
+            was produced by a binary that did not match the current source.
+            Empty/``None`` when the binary matched (the common case).
+        :type binary_provenance: dict, optional
         :raises IOError: If the DataStore is in read-only mode.
         :raises ValueError: If *collection_name* is not ``"microscale_out"``
             or ``"macroscale_out"``, if the target collection does not yet
@@ -1222,6 +1230,12 @@ class DataStore:
         provenance_group = self._file[target_spec.params.data_location]
         for attr_name, attr_value in gather_execution_provenance().items():
             provenance_group.attrs[attr_name] = attr_value
+        # Stamp binary self-report when a stale-binary preflight override
+        # was used.  Empty dict on the common (clean-match) path, so this
+        # is normally a no-op.
+        if binary_provenance:
+            for attr_name, attr_value in binary_provenance.items():
+                provenance_group.attrs[attr_name] = attr_value
 
         # Re-initialize in place (reloads all collections, params, etc.)
         self._file.flush()

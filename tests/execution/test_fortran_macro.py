@@ -65,6 +65,20 @@ def tmp_run(tmp_path):
     return r
 
 
+@pytest.fixture(autouse=True)
+def _stub_preflight_binary_check(monkeypatch):
+    """Disable the preflight stamp check for every test in this module.
+
+    These tests dummy out ``subprocess.run`` and pass placeholder
+    executable paths.  Without this stub the new preflight would resolve
+    both sides to ``"unknown"`` and raise :class:`StaleBinaryError`
+    before the test reaches its actual assertions.  Tests that
+    specifically exercise the preflight live in
+    ``tests/tools/test_binary_version.py``.
+    """
+    monkeypatch.setattr(FortranMacro, "_verify_binary_version", lambda self: {})
+
+
 @pytest.fixture
 def fortran_macro(tmp_run):
     """A FortranMacro with default run and dummy executable."""

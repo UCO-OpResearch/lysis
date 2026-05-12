@@ -101,6 +101,14 @@ class FortranRunner(SimulationRunner):
     out_file_code: AnyStr = ""
     index: int = None
     num_children: int = None
+    #: When True, a mismatch between the Fortran binary's embedded build
+    #: stamp and the current ``src/fortran/`` source state downgrades from
+    #: a :class:`~lysis.tools.binary_version.StaleBinaryError` to a loud
+    #: :class:`UserWarning` plus a banner written to each Fortran stdout
+    #: log file and override metadata stamped onto the resulting HDF5
+    #: group.  Resolves from ``LYSIS_ALLOW_STALE_BINARY`` env var when not
+    #: explicitly set; defaults to False so that stale binaries fail loudly.
+    allow_stale_binary: bool = False
 
     # ------------------------------------------------------------------
     # Abstract hooks (implemented by subclasses)
@@ -227,6 +235,54 @@ class FortranRunner(SimulationRunner):
         to perform setup required by the legacy ``execute()`` path (e.g.
         generating input files).
         """
+
+    def _verify_binary_version(self) -> dict:
+        """Preflight-check that :attr:`executable` matches ``src/fortran/``.
+
+        Delegates to
+        :func:`~lysis.tools.binary_version.verify_binary_matches_source`
+        and caches the result so multi-simulation paths (e.g. the macro
+        loop) issue the warning exactly once even when called per-sim.
+
+        :return: The verify dict — empty on match; on overridden mismatch
+            contains ``"banner"`` (text to prepend to the Fortran stdout
+            log) plus HDF5-stampable attrs forwarded to
+            :meth:`~lysis.dataio.datastore.DataStore.import_collection`
+            via :meth:`_binary_hdf5_attrs`.
+        :rtype: dict
+        :raises ~lysis.tools.binary_version.StaleBinaryError: When the
+            binary stamp disagrees with ``src/fortran/`` and
+            :attr:`allow_stale_binary` is False.
+        """
+        if getattr(self, "_binary_check_info", None) is None:
+            from ..tools.binary_version import verify_binary_matches_source  # noqa: PLC0415
+
+            self._binary_check_info = verify_binary_matches_source(
+                self.executable,
+                allow_stale=self.allow_stale_binary,
+            )
+        return self._binary_check_info
+
+    @property
+    def _binary_hdf5_attrs(self) -> dict:
+        """HDF5-stampable attrs from :meth:`_verify_binary_version` (excludes banner)."""
+        info = getattr(self, "_binary_check_info", None) or {}
+        return {k: v for k, v in info.items() if k != "banner"}
+
+    def _write_stale_banner(self, fh) -> None:
+        """Write the stale-binary banner to *fh* if the preflight was overridden.
+
+        No-op on a clean match.  Must be called on the same file handle
+        the subprocess will write its stdout to, BEFORE
+        :func:`subprocess.run`, so the banner lands at the top of the log.
+
+        :param fh: An open writable text file handle.
+        """
+        info = getattr(self, "_binary_check_info", None) or {}
+        banner = info.get("banner")
+        if banner:
+            fh.write(banner)
+            fh.flush()
 
     # ------------------------------------------------------------------
     # Template methods
@@ -418,6 +474,7 @@ class FortranRunner(SimulationRunner):
                     self._fortran_dataspec_version(),
                     str(data_dir),
                     [self.out_file_code],
+                    binary_provenance=self._binary_hdf5_attrs,
                 )
 
             if not keep_tmpdir:

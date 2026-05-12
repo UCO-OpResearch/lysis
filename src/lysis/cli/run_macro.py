@@ -102,9 +102,23 @@ from lysis.cli import cli
     show_default=True,
     help="Input file code suffix for macroscale_in files.",
 )
+@click.option(
+    "--allow-stale-binary",
+    "allow_stale_binary",
+    is_flag=True,
+    default=False,
+    help=(
+        "Run even if the Fortran binary's embedded build commit does not "
+        "match the currently-checked-out src/fortran/.  A loud warning is "
+        "written to stderr, prepended to each Fortran log file, and stamped "
+        "onto the resulting HDF5 group.  Also honors the env var "
+        "LYSIS_ALLOW_STALE_BINARY=1."
+    ),
+)
 @click.pass_context
 def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
-              fast_tmp_root, keep_tmpdir, out_file_code, in_file_code):
+              fast_tmp_root, keep_tmpdir, out_file_code, in_file_code,
+              allow_stale_binary):
     """Execute the Fortran macroscale simulation for a Run or Experiment.
 
     PATH may be either:
@@ -175,6 +189,9 @@ def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
             )
     else:
         from lysis.execution.fortran_macro import FortranMacro
+        from lysis.tools.binary_version import allow_stale_from_env
+
+        effective_allow_stale = allow_stale_binary or allow_stale_from_env()
 
         n = len(hdf5_paths)
         for i, hdf5_path in enumerate(hdf5_paths):
@@ -182,8 +199,11 @@ def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
 
             try:
                 fm = FortranMacro.from_hdf5(
-                    hdf5_path, executable,
-                    in_file_code=in_file_code, out_file_code=out_file_code,
+                    hdf5_path,
+                    executable,
+                    in_file_code=in_file_code,
+                    out_file_code=out_file_code,
+                    allow_stale_binary=effective_allow_stale,
                 )
             except ValueError as e:
                 raise click.ClickException(str(e))

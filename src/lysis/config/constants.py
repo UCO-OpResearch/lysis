@@ -81,6 +81,13 @@ class Const:
         self.EXECUTION_DIRTY_ATTR = "execution_dirty"
         self.EXECUTION_TIMESTAMP_ATTR = "execution_timestamp"
         self.EXECUTION_HOSTNAME_ATTR = "execution_hostname"
+        # Self-reported provenance from the Fortran binary's --version output,
+        # stamped only when the binary's stamp disagrees with the source tree
+        # and the user has explicitly overridden the preflight check.
+        self.BINARY_COMMIT_ATTR = "binary_commit"
+        self.BINARY_DIRTY_ATTR = "binary_dirty"
+        self.STALE_BINARY_OVERRIDE_ATTR = "stale_binary_override"
+        self.LYSIS_ALLOW_STALE_BINARY_ENV = "LYSIS_ALLOW_STALE_BINARY"
         self.NUMPY_SAVETXT_FORMATS = {
             # Boolean types - save as 0 or 1
             np.dtype("bool"): "%d",

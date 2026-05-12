@@ -135,6 +135,7 @@ class FortranMicro(FortranRunner):
         out_file_code: str = "",
         index: "int | None" = None,
         num_children: "int | None" = None,
+        allow_stale_binary: bool = False,
     ) -> "FortranMicro":
         """Construct a :class:`FortranMicro` from an existing HDF5 run file.
 
@@ -158,6 +159,11 @@ class FortranMicro(FortranRunner):
             the children (see :class:`~lysis.execution.fortran.FortranRunner`
             for details).  Defaults to ``None`` (legacy single-sim-per-task).
         :type num_children: int, optional
+        :param allow_stale_binary: Downgrade a stamp mismatch between the
+            Fortran binary and ``src/fortran/`` from
+            :class:`~lysis.tools.binary_version.StaleBinaryError` to a
+            loud warning, defaults to ``False``.
+        :type allow_stale_binary: bool, optional
         :return: Fully configured :class:`FortranMicro` instance.
         :rtype: FortranMicro
         :raises RuntimeError: If the HDF5 file's directory is not found.
@@ -191,6 +197,7 @@ class FortranMicro(FortranRunner):
             out_file_code=out_file_code,
             index=index,
             num_children=num_children,
+            allow_stale_binary=allow_stale_binary,
         )
 
     # ------------------------------------------------------------------
@@ -325,6 +332,13 @@ class FortranMicro(FortranRunner):
             with a non-zero status.
         """
         work_dir = Path(work_dir)
+
+        # Preflight: confirm the Fortran binary's embedded stamp matches the
+        # current src/fortran/ source tree.  Raises StaleBinaryError before
+        # we create any output files, unless allow_stale_binary is True (in
+        # which case it warns and primes a banner for the log file below).
+        self._verify_binary_version()
+
         data_dir = work_dir / "data" / self.run.run_code
         data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -336,6 +350,7 @@ class FortranMicro(FortranRunner):
         command = self.exec_command()
         log_file = data_dir / f"micro{self.out_file_code}.txt"
         with open(log_file, "w") as fh:
+            self._write_stale_banner(fh)
             subprocess.run(command, stdout=fh, cwd=str(work_dir), check=True)
 
         return data_dir

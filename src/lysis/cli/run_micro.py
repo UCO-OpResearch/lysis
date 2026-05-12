@@ -106,9 +106,23 @@ from lysis.cli import cli
         "Only meaningful with --slurm."
     ),
 )
+@click.option(
+    "--allow-stale-binary",
+    "allow_stale_binary",
+    is_flag=True,
+    default=False,
+    help=(
+        "Run even if the Fortran binary's embedded build commit does not "
+        "match the currently-checked-out src/fortran/.  A loud warning is "
+        "written to stderr, prepended to each Fortran log file, and stamped "
+        "onto the resulting HDF5 group.  Also honors the env var "
+        "LYSIS_ALLOW_STALE_BINARY=1."
+    ),
+)
 @click.pass_context
 def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
-              fast_tmp_root, keep_tmpdir, file_code, num_children):
+              fast_tmp_root, keep_tmpdir, file_code, num_children,
+              allow_stale_binary):
     """Execute the Fortran microscale simulation for a Run or Experiment.
 
     PATH may be either:
@@ -180,14 +194,21 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
             )
     else:
         from lysis.execution.fortran_micro import FortranMicro
+        from lysis.tools.binary_version import allow_stale_from_env
+
+        effective_allow_stale = allow_stale_binary or allow_stale_from_env()
 
         n = len(hdf5_paths)
         for i, hdf5_path in enumerate(hdf5_paths):
             prefix = f"[{i + 1}/{n}] " if n > 1 else ""
 
             try:
-                fm = FortranMicro.from_hdf5(hdf5_path, executable,
-                                             out_file_code=file_code)
+                fm = FortranMicro.from_hdf5(
+                    hdf5_path,
+                    executable,
+                    out_file_code=file_code,
+                    allow_stale_binary=effective_allow_stale,
+                )
             except ValueError as e:
                 raise click.ClickException(str(e))
             if not ctx.obj.get("verbose", 0):
