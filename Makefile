@@ -119,14 +119,21 @@ shared: $(LIB_DIR)/kiss.so
 # so the Python wrapper can confirm the binary was built from the
 # currently-checked-out source before launching a simulation.
 #
+# BUILD_COMMIT is the most recent commit *that touched src/fortran/*,
+# not the repo HEAD.  This way commits that change only Python/docs/etc
+# do not flag the binary as stale -- only commits that actually modify
+# the Fortran source do.  BUILD_DIRTY is scoped the same way: tracked
+# uncommitted changes under src/fortran/ flip it to "dirty".
+#
 # The recipe runs on every `make` (via the FORCE prerequisite below) so
-# it always reflects current HEAD and dirty state, but writes via a
-# tmp+cmp+mv pattern: the file's mtime only bumps when the embedded
-# stamp actually changes, letting Make's normal mtime-based dependency
-# resolution skip recompiles when nothing has changed.
+# it always reflects current state, but writes via a tmp+cmp+mv pattern:
+# the file's mtime only bumps when the embedded stamp actually changes,
+# letting Make's normal mtime-based dependency resolution skip recompiles
+# when nothing has changed.
 $(VERSION_F90): FORCE
 	@if git rev-parse HEAD >/dev/null 2>&1; then \
-	    COMMIT=$$(git rev-parse HEAD); \
+	    COMMIT=$$(git log -1 --format=%H HEAD -- $(FORT_SRC_DIR) 2>/dev/null); \
+	    [ -n "$$COMMIT" ] || COMMIT=unknown; \
 	    if git diff --quiet HEAD -- $(FORT_SRC_DIR) 2>/dev/null; then DIRTY=clean; else DIRTY=dirty; fi; \
 	else \
 	    COMMIT=unknown; DIRTY=unknown; \
