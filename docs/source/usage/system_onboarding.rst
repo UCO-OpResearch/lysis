@@ -4,9 +4,9 @@ System Onboarding
 This guide walks through setting up your local environment and HPC account
 to run simulations on Buddy.
 
-Buddy is the UCO HPC cluster used for running simulations and computational workloads.
-Users connect remotely via SSH and develop either directly on the cluster or through a remote IDE workflow.
-Any IDE setup can be skipped by running VS Code or PyCharm on Buddy through `Buddy OnDemand <https://ondemand.hpc.uco.edu>`_
+| Buddy is the UCO HPC cluster used for running simulations and computational workloads. Users connect remotely via SSH and develop either directly on the cluster or through a remote IDE workflow.
+| *Any IDE setup can be skipped by running VS Code or PyCharm on Buddy through* `Buddy OnDemand <https://ondemand.hpc.uco.edu>`_
+|
 
 Note that two separate SSH keys are used in this setup:
 
@@ -86,7 +86,7 @@ Next, while logged into GitHub:
 
 1. Navigate to:
 
-   `https://github.com/settings/keys <https://github.com/settings/keys>`_
+   https://github.com/settings/keys
 
 2. Click **New SSH Key**
 3. Enter a title of your choice
