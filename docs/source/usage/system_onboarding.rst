@@ -6,6 +6,7 @@ to run simulations on Buddy.
 
 Buddy is the UCO HPC cluster used for running simulations and computational workloads.
 Users connect remotely via SSH and develop either directly on the cluster or through a remote IDE workflow.
+Any IDE setup can be skipped by running VS Code or PyCharm on Buddy through `Buddy OnDemand <https://ondemand.hpc.uco.edu>`_
 
 Note that two separate SSH keys are used in this setup:
 
@@ -85,7 +86,7 @@ Next, while logged into GitHub:
 
 1. Navigate to:
 
-   ``https://github.com/settings/keys``
+   `https://github.com/settings/keys <https://github.com/settings/keys>`_
 
 2. Click **New SSH Key**
 3. Enter a title of your choice
@@ -95,7 +96,28 @@ Next, while logged into GitHub:
 See the IDE-specific documentation below for connecting your IDE
 to the GitHub repository.
 
-Step 4: Configure ``.bashrc`` and Initialize ``uv``
+Step 4: Cloning the GitHub Repository
+-------------------------------------
+
+From the Buddy terminal, configure your Git User
+
+.. code-block:: bash
+
+    git config --global user.name "Your Name"
+    git config --global user.email your.email@example.com
+
+1. Navigate to the GitHub repository page
+2. Click the green **<> Code** dropdown
+3. Select **SSH**
+4. Copy the SSH repository URL
+
+Go back to the Buddy terminal
+
+.. code-block:: bash
+
+    git clone <paste SSH repository URL>
+
+Step 5: Configure ``.bashrc`` and Initialize ``uv``
 ---------------------------------------------------
 
 Add the Intel compiler module to your ``.bashrc``:
@@ -116,6 +138,7 @@ Install the project dependencies:
 
 .. code-block:: bash
 
+    cd ~/lysis
     uv sync --extra test
 
 Setup Verification
@@ -124,9 +147,9 @@ Setup Verification
 Verify the following before continuing:
 
 - You can SSH into Buddy without entering a password
-- You can clone the GitHub repository from Buddy
+- You can clone the GitHub repository from Buddy without error
 - ``uv sync --extra test`` completes successfully
-- VS Code can open a remote SSH session
+- IDE can open a remote SSH session
 
 VS Code Setup
 ==============
@@ -155,39 +178,6 @@ Add the following configuration, replacing ``USERNAME`` with your HPC username:
     Host hpc.uco.edu
         User USERNAME
 
-Sending Public Key to GitHub
------------------------------
-
-Prerequisites
-^^^^^^^^^^^^^^
-
-Ensure the following are configured:
-
-- Git installed
-- A GitHub account
-- Git username and email configured in VS Code
-
-If your Git username and email are not already configured, run:
-
-.. code-block:: bash
-
-    git config --global user.name "Your Name"
-    git config --global user.email your.email@example.com
-
-Cloning the Repository
-^^^^^^^^^^^^^^^^^^^^^^^
-
-1. Navigate to the GitHub repository page
-2. Click the green **<> Code** dropdown
-3. Select **SSH**
-4. Copy the SSH repository URL
-
-In VS Code:
-
-1. Open the **Source Control** tab
-2. Click **Clone Repository**
-3. Paste the SSH URL
-4. Select a local destination folder
 
 Troubleshooting
 ================
