@@ -125,12 +125,14 @@ Physical Parameters
 #####################################
 
 :radius:
-   
+
    :Description: The radius of each fiber in the model.
 
    :Default Value: 72.7/2 nanometers
 
    :Units: microns
+
+   :Python Name: ``fiber_radius`` (on ``MicroParameters``)
 
 :delx:
 
@@ -140,6 +142,8 @@ Physical Parameters
 
    :Units: centimeters
 
+   :Python Name: ``pore_size``
+
 :Diff:
 
    :Description: Diffusion coefficient
@@ -148,14 +152,18 @@ Physical Parameters
 
    :Units: square centimeters per second
 
+   :Python Name: ``diffusion_coeff``
+
 :avgwait:
 
-   :Description: This is the average time a tPA molecule stays bound to fibrin. 
+   :Description: This is the average time a tPA molecule stays bound to fibrin.
       For now I'm using 27.8 to be 1/0.036, the value in the absence of PLG.
 
    :Default Value: 27.8 seconds
 
    :Units: seconds
+
+   :Python Name: ``average_bound_time`` (dependent; ``1 / unbind_rate_tPA_woPLG``)
 
 :frac_forced:
 
@@ -165,6 +173,8 @@ Physical Parameters
 
    :Units: None
 
+   :Python Name: ``forced_unbind``
+
 :bs:
 
    :Description: Concentration of binding sites.
@@ -173,6 +183,8 @@ Physical Parameters
 
    :Units: micromolar
 
+   :Python Name: ``binding_sites`` (on ``MicroParameters``)
+
 :kon:
 
    :Description: The binding rate of tPA, :math:`k^\text{on}_\text{tPA}`, to fibrin.
@@ -180,6 +192,8 @@ Physical Parameters
    :Default Value: 0.1 (micromolar*sec)^-1
 
    :Units: per micromolar per sec
+
+   :Python Name: ``bind_rate_tPA`` (on ``MicroParameters``)
 
 
 Model Parameters
@@ -193,6 +207,8 @@ Model Parameters
 
    :Units: None
 
+   :Python Name: ``cols``
+
 :F:
 
    :Description: The number of lattice nodes in each (vertical) column.
@@ -201,16 +217,20 @@ Model Parameters
 
    :Units: None
 
+   :Python Name: ``rows``
+
 :Ffree:
 
    :Description: The 1st node in vertical direction containing fibers.
-      So if Ffree = 10, then rows 0-9 have no fibers, there's one more 
-      row of fiber-free planar vertical edges, and then the row with index 
+      So if Ffree = 10, then rows 0-9 have no fibers, there's one more
+      row of fiber-free planar vertical edges, and then the row with index
       'Ffree' (e.g. 11th) is a full row of fibers.
 
    :Default Value: 29
 
    :Units: None
+
+   :Python Name: ``empty_rows`` (Python = Fortran ``Ffree`` − 1)
 
 :M:
 
@@ -220,6 +240,8 @@ Model Parameters
 
    :Units: None
 
+   :Python Name: ``total_molecules``
+
 :q:
 
    :Description: The probability of moving.
@@ -227,6 +249,8 @@ Model Parameters
    :Default Value: 0.2
 
    :Units: None
+
+   :Python Name: ``moving_probability``
 
 
 Experimental Parameters
@@ -237,24 +261,30 @@ Experimental Parameters
    :Description: The number of independent trials run in the macroscale model.
 
    :Default Value: 10
-   
+
    :Units: None
+
+   :Python Name: ``macro_simulations``
 
 :tf:
 
    :Description: Total running time for model.
 
    :Default Value: 20 minutes
-   
+
    :Units: seconds
+
+   :Python Name: ``total_time``
 
 :nummicro:
 
    :Description: The number of independent trials run in the microscale model.
 
    :Default Value: 500
-   
+
    :Units: hundreds of simulations
+
+   :Python Name: ``micro_simulations`` (on ``MicroParameters``; Python = Fortran × 100)
 
 :seed:
 
@@ -267,10 +297,14 @@ Experimental Parameters
 
    :Units: None
 
+   :Python Name: ``macro_seed`` (Fortran ``INTEGER*4`` bits reinterpreted as ``np.uint32``)
+
 :save_interval:
 
    :Description: How often to record data from the model.
 
    :Default Value: 10 seconds
-   
+
    :Units: seconds
+
+   :Python Name: ``save_interval``
