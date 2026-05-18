@@ -189,9 +189,6 @@ def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
             )
     else:
         from lysis.execution.fortran_macro import FortranMacro
-        from lysis.tools.binary_version import allow_stale_from_env
-
-        effective_allow_stale = allow_stale_binary or allow_stale_from_env()
 
         n = len(hdf5_paths)
         for i, hdf5_path in enumerate(hdf5_paths):
@@ -203,7 +200,7 @@ def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
                     executable,
                     in_file_code=in_file_code,
                     out_file_code=out_file_code,
-                    allow_stale_binary=effective_allow_stale,
+                    allow_stale_binary=allow_stale_binary,
                 )
             except ValueError as e:
                 raise click.ClickException(str(e))

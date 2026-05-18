@@ -106,8 +106,9 @@ class FortranRunner(SimulationRunner):
     #: a :class:`~lysis.tools.binary_version.StaleBinaryError` to a loud
     #: :class:`UserWarning` plus a banner written to each Fortran stdout
     #: log file and override metadata stamped onto the resulting HDF5
-    #: group.  Resolves from ``LYSIS_ALLOW_STALE_BINARY`` env var when not
-    #: explicitly set; defaults to False so that stale binaries fail loudly.
+    #: group.  Defaults to False; :meth:`_verify_binary_version` also
+    #: honours the ``LYSIS_ALLOW_STALE_BINARY`` env var so callers don't
+    #: need to combine the two override sources themselves.
     allow_stale_binary: bool = False
 
     # ------------------------------------------------------------------
@@ -255,11 +256,15 @@ class FortranRunner(SimulationRunner):
             :attr:`allow_stale_binary` is False.
         """
         if getattr(self, "_binary_check_info", None) is None:
-            from ..tools.binary_version import verify_binary_matches_source  # noqa: PLC0415
+            from ..tools.binary_version import (  # noqa: PLC0415
+                allow_stale_from_env,
+                verify_binary_matches_source,
+            )
 
+            allow_stale = self.allow_stale_binary or allow_stale_from_env()
             self._binary_check_info = verify_binary_matches_source(
                 self.executable,
-                allow_stale=self.allow_stale_binary,
+                allow_stale=allow_stale,
             )
         return self._binary_check_info
 
