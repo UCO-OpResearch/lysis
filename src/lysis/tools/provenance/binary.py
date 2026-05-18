@@ -31,6 +31,7 @@ from ._git import _git, _package_repo_root
 __all__ = [
     "StaleBinaryError",
     "query_binary_version",
+    "gather_binary_provenance",
     "gather_fortran_source_provenance",
     "allow_stale_from_env",
     "verify_binary_matches_source",
@@ -43,20 +44,22 @@ class StaleBinaryError(RuntimeError):
 
 def query_binary_version(
     executable: "Path | str", *, timeout: float = 5.0
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     """Run ``<executable> --version`` and parse its single-line stamp.
 
     :param executable: Path to the Fortran binary.
     :param timeout: Seconds to wait for the subprocess; on timeout the
-        result is ``("unknown", "unknown")``.
-    :return: ``(commit_hash, dirty_state)`` parsed from the binary's
-        stdout — the first two whitespace-separated tokens of the first
-        line; any trailing tokens (the compiler-version string) are
-        discarded.  Returns ``("unknown", "unknown")`` for any failure
+        result is ``("unknown", "unknown", "unknown")``.
+    :return: ``(commit_hash, dirty_state, compiler)`` parsed from the
+        binary's stdout — the first three whitespace-separated tokens
+        of the first line.  The compiler-info field is everything after
+        the second whitespace gap, so it may itself contain spaces.
+        Returns ``("unknown", "unknown", "unknown")`` for any failure
         mode (missing binary, non-zero exit, empty output, fewer than
-        two tokens), which the comparison logic then treats as a
-        mismatch unless the source tree also resolves to ``"unknown"``.
-    :rtype: tuple[str, str]
+        two tokens).  When only the first two tokens are present, the
+        compiler field is ``"unknown"`` and the binary is still treated
+        as resolvable for the staleness check.
+    :rtype: tuple[str, str, str]
     """
     try:
         result = subprocess.run(
@@ -67,17 +70,40 @@ def query_binary_version(
             check=False,
         )
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-        return ("unknown", "unknown")
+        return ("unknown", "unknown", "unknown")
     if result.returncode != 0:
-        return ("unknown", "unknown")
+        return ("unknown", "unknown", "unknown")
 
     lines = result.stdout.strip().splitlines()
     if not lines:
-        return ("unknown", "unknown")
+        return ("unknown", "unknown", "unknown")
     parts = lines[0].split(maxsplit=2)
     if len(parts) < 2:
-        return ("unknown", "unknown")
-    return (parts[0], parts[1])
+        return ("unknown", "unknown", "unknown")
+    compiler = parts[2] if len(parts) == 3 else "unknown"
+    return (parts[0], parts[1], compiler)
+
+
+def gather_binary_provenance(executable: "Path | str") -> dict:
+    """Gather binary provenance attrs from ``<executable> --version``.
+
+    Pure data gather — never raises, no warnings.  Used by
+    :meth:`~lysis.dataio.datastore.DataStore.stamp_provenance` to record
+    what binary actually produced the simulation output.  Stamped on
+    every ``run-*`` invocation, not just stale-binary overrides.
+
+    :param executable: Path to the Fortran binary.
+    :return: Dict keyed by :data:`CONST.BINARY_COMMIT_ATTR`,
+        :data:`CONST.BINARY_DIRTY_ATTR`, :data:`CONST.BINARY_COMPILER_ATTR`.
+        Values are ``"unknown"`` on any failure mode.
+    :rtype: dict
+    """
+    commit, dirty, compiler = query_binary_version(executable)
+    return {
+        CONST.BINARY_COMMIT_ATTR: commit,
+        CONST.BINARY_DIRTY_ATTR: dirty,
+        CONST.BINARY_COMPILER_ATTR: compiler,
+    }
 
 
 def gather_fortran_source_provenance() -> tuple[str, str]:
@@ -166,12 +192,14 @@ def verify_binary_matches_source(
     :param allow_stale: Explicit override.  ``None`` (the default) consults
         :func:`allow_stale_from_env`; ``True`` downgrades a mismatch to a
         warning; ``False`` always raises on mismatch.
-    :return: Empty dict on match.  On overridden mismatch, a dict containing
-        ``"banner"`` (text to prepend to the Fortran stdout log file),
-        plus the keys :data:`CONST.STALE_BINARY_OVERRIDE_ATTR`,
-        :data:`CONST.BINARY_COMMIT_ATTR`, :data:`CONST.BINARY_DIRTY_ATTR`
-        for forwarding to
-        :meth:`~lysis.dataio.datastore.DataStore.import_collection`.
+    :return: Empty dict on match.  On overridden mismatch, a dict
+        containing ``"banner"`` (text to prepend to the Fortran stdout
+        log file) and :data:`CONST.STALE_BINARY_OVERRIDE_ATTR` for
+        forwarding to
+        :meth:`~lysis.dataio.datastore.DataStore.stamp_provenance` as
+        ``binary_override``.  The binary's commit/dirty/compiler are
+        no longer included here — they are gathered fresh and stamped
+        unconditionally via :func:`gather_binary_provenance`.
     :rtype: dict
     :raises StaleBinaryError: When the binary's stamp disagrees with the
         source tree and the override is not active.
@@ -179,7 +207,9 @@ def verify_binary_matches_source(
     if allow_stale is None:
         allow_stale = allow_stale_from_env()
 
-    binary_commit, binary_dirty = query_binary_version(executable)
+    binary_commit, binary_dirty, _binary_compiler = query_binary_version(
+        executable
+    )
     source_commit, source_dirty = gather_fortran_source_provenance()
 
     matches = (
@@ -210,6 +240,4 @@ def verify_binary_matches_source(
             source_dirty=source_dirty,
         ),
         CONST.STALE_BINARY_OVERRIDE_ATTR: True,
-        CONST.BINARY_COMMIT_ATTR: binary_commit,
-        CONST.BINARY_DIRTY_ATTR: binary_dirty,
     }

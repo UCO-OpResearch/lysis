@@ -47,49 +47,80 @@ def _patch_run(monkeypatch, *, returncode=0, stdout="", raises=None):
 
 def test_query_binary_version_happy_path(monkeypatch):
     _patch_run(monkeypatch, stdout="abc123 clean\n")
-    assert query_binary_version("/fake/bin") == ("abc123", "clean")
+    # No compiler token → compiler is "unknown".
+    assert query_binary_version("/fake/bin") == ("abc123", "clean", "unknown")
 
 
 def test_query_binary_version_dirty_state(monkeypatch):
     _patch_run(monkeypatch, stdout="abc123 dirty\n")
-    assert query_binary_version("/fake/bin") == ("abc123", "dirty")
+    assert query_binary_version("/fake/bin") == ("abc123", "dirty", "unknown")
 
 
 def test_query_binary_version_nonzero_exit_is_unknown(monkeypatch):
     _patch_run(monkeypatch, returncode=2, stdout="abc123 clean\n")
-    assert query_binary_version("/fake/bin") == ("unknown", "unknown")
+    assert query_binary_version("/fake/bin") == ("unknown", "unknown", "unknown")
 
 
 def test_query_binary_version_empty_output_is_unknown(monkeypatch):
     _patch_run(monkeypatch, stdout="")
-    assert query_binary_version("/fake/bin") == ("unknown", "unknown")
+    assert query_binary_version("/fake/bin") == ("unknown", "unknown", "unknown")
 
 
 def test_query_binary_version_too_few_fields_is_unknown(monkeypatch):
     _patch_run(monkeypatch, stdout="abc123\n")
-    assert query_binary_version("/fake/bin") == ("unknown", "unknown")
+    assert query_binary_version("/fake/bin") == ("unknown", "unknown", "unknown")
 
 
-def test_query_binary_version_discards_compiler_suffix(monkeypatch):
+def test_query_binary_version_returns_compiler_suffix(monkeypatch):
     # Real binaries emit "<commit> <state> <compiler-info>" where the
     # compiler string itself contains spaces (e.g. "Intel(R) Fortran ...").
-    # The parser must accept the line and discard everything past the
-    # second token.
+    # The parser must accept the line and return the compiler suffix
+    # verbatim as the third tuple element.
     _patch_run(
         monkeypatch,
         stdout="abc123 clean Intel(R) Fortran Classic 2021.9.0\n",
     )
-    assert query_binary_version("/fake/bin") == ("abc123", "clean")
+    assert query_binary_version("/fake/bin") == (
+        "abc123", "clean", "Intel(R) Fortran Classic 2021.9.0",
+    )
 
 
 def test_query_binary_version_file_not_found_is_unknown(monkeypatch):
     _patch_run(monkeypatch, raises=FileNotFoundError())
-    assert query_binary_version("/fake/bin") == ("unknown", "unknown")
+    assert query_binary_version("/fake/bin") == ("unknown", "unknown", "unknown")
 
 
 def test_query_binary_version_timeout_is_unknown(monkeypatch):
     _patch_run(monkeypatch, raises=subprocess.TimeoutExpired(cmd="x", timeout=1))
-    assert query_binary_version("/fake/bin") == ("unknown", "unknown")
+    assert query_binary_version("/fake/bin") == ("unknown", "unknown", "unknown")
+
+
+# ----------------------------------------------------------------------
+# gather_binary_provenance
+# ----------------------------------------------------------------------
+
+def test_gather_binary_provenance_keys(monkeypatch):
+    from lysis.tools.provenance import gather_binary_provenance
+
+    _patch_run(monkeypatch, stdout="abc123 clean Intel\n")
+    result = gather_binary_provenance("/fake/bin")
+    assert result == {
+        CONST.BINARY_COMMIT_ATTR: "abc123",
+        CONST.BINARY_DIRTY_ATTR: "clean",
+        CONST.BINARY_COMPILER_ATTR: "Intel",
+    }
+
+
+def test_gather_binary_provenance_failure_yields_unknown(monkeypatch):
+    from lysis.tools.provenance import gather_binary_provenance
+
+    _patch_run(monkeypatch, raises=FileNotFoundError())
+    result = gather_binary_provenance("/fake/bin")
+    assert result == {
+        CONST.BINARY_COMMIT_ATTR: "unknown",
+        CONST.BINARY_DIRTY_ATTR: "unknown",
+        CONST.BINARY_COMPILER_ATTR: "unknown",
+    }
 
 
 # ----------------------------------------------------------------------
@@ -149,7 +180,12 @@ def test_allow_stale_unset_is_false(monkeypatch):
 # ----------------------------------------------------------------------
 
 def _patch_check(monkeypatch, *, binary, source):
-    """Stub out both the binary query and source-tree query."""
+    """Stub out both the binary query and source-tree query.
+
+    *binary* is a 3-tuple ``(commit, dirty, compiler)``.  *source* is the
+    2-tuple ``(commit, dirty)`` returned by
+    :func:`gather_fortran_source_provenance`.
+    """
     monkeypatch.setattr(
         binary_mod, "query_binary_version", lambda exe, **kw: binary,
     )
@@ -159,19 +195,29 @@ def _patch_check(monkeypatch, *, binary, source):
 
 
 def test_verify_match_returns_empty(monkeypatch):
-    _patch_check(monkeypatch, binary=("abc123", "clean"), source=("abc123", "clean"))
+    _patch_check(
+        monkeypatch,
+        binary=("abc123", "clean", "Intel"),
+        source=("abc123", "clean"),
+    )
     assert verify_binary_matches_source("/fake/bin", allow_stale=False) == {}
 
 
 def test_verify_match_dirty_both_sides_returns_empty(monkeypatch):
-    # If both source and binary are dirty AND on the same commit, that's
-    # still a match — we trust the user knows what they're doing locally.
-    _patch_check(monkeypatch, binary=("abc123", "dirty"), source=("abc123", "dirty"))
+    _patch_check(
+        monkeypatch,
+        binary=("abc123", "dirty", "Intel"),
+        source=("abc123", "dirty"),
+    )
     assert verify_binary_matches_source("/fake/bin", allow_stale=False) == {}
 
 
 def test_verify_commit_mismatch_raises(monkeypatch):
-    _patch_check(monkeypatch, binary=("abc123", "clean"), source=("def456", "clean"))
+    _patch_check(
+        monkeypatch,
+        binary=("abc123", "clean", "Intel"),
+        source=("def456", "clean"),
+    )
     with pytest.raises(StaleBinaryError) as excinfo:
         verify_binary_matches_source("/fake/bin", allow_stale=False)
     assert "abc123" in str(excinfo.value)
@@ -179,32 +225,41 @@ def test_verify_commit_mismatch_raises(monkeypatch):
 
 
 def test_verify_dirty_mismatch_raises(monkeypatch):
-    # Binary built from a clean commit, but source has uncommitted edits.
-    _patch_check(monkeypatch, binary=("abc123", "clean"), source=("abc123", "dirty"))
+    _patch_check(
+        monkeypatch,
+        binary=("abc123", "clean", "Intel"),
+        source=("abc123", "dirty"),
+    )
     with pytest.raises(StaleBinaryError):
         verify_binary_matches_source("/fake/bin", allow_stale=False)
 
 
 def test_verify_unknown_binary_raises(monkeypatch):
     _patch_check(
-        monkeypatch, binary=("unknown", "unknown"), source=("abc123", "clean"),
+        monkeypatch,
+        binary=("unknown", "unknown", "unknown"),
+        source=("abc123", "clean"),
     )
     with pytest.raises(StaleBinaryError):
         verify_binary_matches_source("/fake/bin", allow_stale=False)
 
 
 def test_verify_unknown_source_raises(monkeypatch):
-    # Even matched unknowns count as mismatch — we never claim a clean
-    # match without a real commit to anchor on.
     _patch_check(
-        monkeypatch, binary=("unknown", "unknown"), source=("unknown", "unknown"),
+        monkeypatch,
+        binary=("unknown", "unknown", "unknown"),
+        source=("unknown", "unknown"),
     )
     with pytest.raises(StaleBinaryError):
         verify_binary_matches_source("/fake/bin", allow_stale=False)
 
 
 def test_verify_override_warns_and_returns_dict(monkeypatch):
-    _patch_check(monkeypatch, binary=("abc123", "clean"), source=("def456", "clean"))
+    _patch_check(
+        monkeypatch,
+        binary=("abc123", "clean", "Intel"),
+        source=("def456", "clean"),
+    )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", UserWarning)
         info = verify_binary_matches_source("/fake/bin", allow_stale=True)
@@ -216,14 +271,20 @@ def test_verify_override_warns_and_returns_dict(monkeypatch):
     assert "abc123" in info["banner"]
     assert "def456" in info["banner"]
     assert "STALE FORTRAN BINARY" in info["banner"]
-    # HDF5 attrs present.
+    # Only the override flag is forwarded as an HDF5 attr — the binary's
+    # commit/dirty/compiler are now stamped unconditionally by
+    # gather_binary_provenance(), not via this return value.
     assert info[CONST.STALE_BINARY_OVERRIDE_ATTR] is True
-    assert info[CONST.BINARY_COMMIT_ATTR] == "abc123"
-    assert info[CONST.BINARY_DIRTY_ATTR] == "clean"
+    assert CONST.BINARY_COMMIT_ATTR not in info
+    assert CONST.BINARY_DIRTY_ATTR not in info
 
 
 def test_verify_env_var_acts_as_override(monkeypatch):
-    _patch_check(monkeypatch, binary=("abc123", "clean"), source=("def456", "clean"))
+    _patch_check(
+        monkeypatch,
+        binary=("abc123", "clean", "Intel"),
+        source=("def456", "clean"),
+    )
     monkeypatch.setenv(CONST.LYSIS_ALLOW_STALE_BINARY_ENV, "1")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -233,7 +294,11 @@ def test_verify_env_var_acts_as_override(monkeypatch):
 
 def test_verify_explicit_false_overrides_env(monkeypatch):
     # allow_stale=False must take precedence over the env var.
-    _patch_check(monkeypatch, binary=("abc123", "clean"), source=("def456", "clean"))
+    _patch_check(
+        monkeypatch,
+        binary=("abc123", "clean", "Intel"),
+        source=("def456", "clean"),
+    )
     monkeypatch.setenv(CONST.LYSIS_ALLOW_STALE_BINARY_ENV, "1")
     with pytest.raises(StaleBinaryError):
         verify_binary_matches_source("/fake/bin", allow_stale=False)

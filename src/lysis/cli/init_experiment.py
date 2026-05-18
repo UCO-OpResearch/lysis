@@ -6,6 +6,7 @@ import sys
 import click
 
 from lysis.cli import cli
+from lysis.cli._provenance import allow_dirty_option, enforce_lysis_clean
 
 
 @cli.command("init-experiment")
@@ -50,8 +51,11 @@ from lysis.cli import cli
         "WARNING: all existing data in the folder will be lost."
     ),
 )
+@allow_dirty_option
 @click.pass_context
-def init_experiment(ctx, csv_path, data_root, name, description, dry_run, no_progress, force):
+def init_experiment(
+    ctx, csv_path, data_root, name, description, dry_run, no_progress, force, allow_dirty,
+):
     """Initialise an Experiment from a parameter CSV file.
 
     Reads CSV_PATH (one column = one Run), resolves any missing dependent
@@ -79,6 +83,9 @@ def init_experiment(ctx, csv_path, data_root, name, description, dry_run, no_pro
     from lysis.config.param_resolver import ParameterConflict, UnderdeterminedParameters
 
     console = ctx.obj["console"]
+
+    # Gate: refuse to write provenance if src/lysis/ is dirty (unless overridden).
+    enforce_lysis_clean(ctx, allow_dirty)
 
     # Ensure data_root exists (or create it silently)
     os.makedirs(data_root, exist_ok=True)
@@ -139,6 +146,12 @@ def init_experiment(ctx, csv_path, data_root, name, description, dry_run, no_pro
         _print_error(console, csv_path, exc)
         ctx.exit(1)
         return
+
+    # Stamp init provenance onto each Run's HDF5 file.
+    from lysis.dataio.datastore import DataStore  # noqa: PLC0415
+    for run in exp.runs:
+        with DataStore(run.run_code, exp.path, mode="a") as ds:
+            ds.stamp_provenance("micro", "init")
 
     console.print(
         f"[bold green]Experiment created:[/bold green] {exp.path}"

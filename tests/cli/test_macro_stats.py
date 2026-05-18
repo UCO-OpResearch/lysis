@@ -185,10 +185,10 @@ class TestSummarizeMarkdownDirectory:
         )
 
         assert result.exit_code == 0
-        assert "run_A" in result.output
-        assert "run_B" in result.output
+        assert "run_A" in result.stdout
+        assert "run_B" in result.stdout
         # First line is the header row beginning with "| Run |"
-        assert result.output.strip().startswith("| Run |")
+        assert result.stdout.strip().startswith("| Run |")
 
     @patch("lysis.cli.macro_stats._load_run_stats")
     def test_markdown_to_stdout_full_metric_names(self, mock_load, runner, mock_stats, tmp_path):

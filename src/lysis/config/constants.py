@@ -77,17 +77,29 @@ class Const:
         self.DATASPEC_VERSION_ATTR = "dataspec_version"
         self.CONVERTED_FROM_ATTR = "converted_from"
         self.RENAMED_FROM_ATTR = "renamed_from"
+        # Init-time provenance (stamped by init-experiment / init-macroscale)
+        self.INIT_VERSION_ATTR = "init_version"
+        self.INIT_DIRTY_ATTR = "init_dirty"
+        self.INIT_TIMESTAMP_ATTR = "init_timestamp"
+        self.INIT_HOSTNAME_ATTR = "init_hostname"
+        # Execution-time provenance (stamped by run-micro / run-macro)
         self.EXECUTION_VERSION_ATTR = "execution_version"
         self.EXECUTION_DIRTY_ATTR = "execution_dirty"
         self.EXECUTION_TIMESTAMP_ATTR = "execution_timestamp"
         self.EXECUTION_HOSTNAME_ATTR = "execution_hostname"
-        # Self-reported provenance from the Fortran binary's --version output,
-        # stamped only when the binary's stamp disagrees with the source tree
-        # and the user has explicitly overridden the preflight check.
+        # Self-reported provenance from the Fortran binary's --version output.
+        # ``binary_commit`` / ``binary_dirty`` / ``binary_compiler`` are
+        # stamped unconditionally by ``run-*`` commands.
+        # ``stale_binary_override`` is set only when the binary's stamp
+        # disagrees with the source tree and the user has explicitly
+        # overridden the preflight check.
         self.BINARY_COMMIT_ATTR = "binary_commit"
         self.BINARY_DIRTY_ATTR = "binary_dirty"
+        self.BINARY_COMPILER_ATTR = "binary_compiler"
         self.STALE_BINARY_OVERRIDE_ATTR = "stale_binary_override"
         self.LYSIS_ALLOW_STALE_BINARY_ENV = "LYSIS_ALLOW_STALE_BINARY"
+        self.LYSIS_ALLOW_DIRTY_ENV = "LYSIS_ALLOW_DIRTY"
+        self.LYSIS_ALLOW_COMMIT_MISMATCH_ENV = "LYSIS_ALLOW_COMMIT_MISMATCH"
         self.NUMPY_SAVETXT_FORMATS = {
             # Boolean types - save as 0 or 1
             np.dtype("bool"): "%d",

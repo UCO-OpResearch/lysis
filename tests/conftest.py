@@ -1,5 +1,6 @@
 """Shared fixtures for lysis.dataio unit tests."""
 
+import os
 import pathlib
 
 import pytest
@@ -7,6 +8,23 @@ import numpy as np
 
 from lysis.config.constants import CONST
 from lysis.dataio.dataspec import DataSetSpec, DataCollectionSpec
+
+
+# ----------------------------------------------------------------------
+# Suppress the src/lysis/ dirty-tree gate during the test session.
+#
+# The provenance feature added in ``provenance-stamps`` errors out when
+# ``src/lysis/`` has uncommitted changes — but developers iterating in
+# the source tree expect every test to pass regardless of working-tree
+# state.  Setting the env-var override globally means the tests behave
+# as if the tree were clean; the gate itself is exercised directly in
+# ``tests/cli/test_provenance_gates.py`` where the env var is cleared.
+# ----------------------------------------------------------------------
+@pytest.fixture(autouse=True, scope="session")
+def _allow_provenance_gates_during_tests():
+    os.environ.setdefault(CONST.LYSIS_ALLOW_DIRTY_ENV, "1")
+    os.environ.setdefault(CONST.LYSIS_ALLOW_COMMIT_MISMATCH_ENV, "1")
+    yield
 
 
 @pytest.fixture

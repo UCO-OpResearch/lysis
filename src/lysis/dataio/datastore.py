@@ -992,6 +992,148 @@ class DataStore:
         # Re-initialize in place (reloads all collections, params, etc.)
         self.__init__(self._run_code, self._path, mode=self._mode)
 
+    # ------------------------------------------------------------------
+    #  Provenance stamping
+    # ------------------------------------------------------------------
+
+    def _scale_to_params_location(self, scale):
+        """Resolve a ``"micro"``/``"macro"`` scale name to the HDF5 params
+        group location, via the v2.0.0 dataspec.
+
+        :raises ValueError: If *scale* is not ``"micro"`` or ``"macro"``.
+        """
+        if scale == "micro":
+            collection_name = "microscale_out"
+        elif scale == "macro":
+            collection_name = "macroscale_out"
+        else:
+            raise ValueError(
+                f"scale must be 'micro' or 'macro'; got {scale!r}"
+            )
+        spec = dataspec[COMPATIBLE_DATASPEC_VERSION][collection_name]
+        return spec.params.data_location
+
+    def stamp_provenance(
+        self,
+        scale,
+        kind,
+        *,
+        executable=None,
+        binary_override=None,
+    ):
+        """Stamp provenance attributes onto the per-scale params group.
+
+        Writes the ``init_*``, ``execution_*``, or ``binary_*`` attribute
+        family to the HDF5 group at ``{scale}_data`` (the params group
+        for the named scale).
+
+        :param scale: ``"micro"`` (targets ``micro_data``) or ``"macro"``
+            (targets ``macro_data``).
+        :type scale: str
+        :param kind: One of ``"init"``, ``"execution"``, ``"binary"``.
+
+            * ``"init"`` calls
+              :func:`~lysis.tools.provenance.gather_init_provenance`.
+            * ``"execution"`` calls
+              :func:`~lysis.tools.provenance.gather_execution_provenance`.
+            * ``"binary"`` calls
+              :func:`~lysis.tools.provenance.gather_binary_provenance`
+              against *executable* and additionally writes any keys in
+              *binary_override*.
+        :type kind: str
+        :param executable: Required when ``kind="binary"`` — path to the
+            Fortran binary whose ``--version`` output supplies commit /
+            dirty / compiler stamps.  Ignored otherwise.
+        :type executable: pathlib.Path or str, optional
+        :param binary_override: Optional dict of extra attrs to merge in
+            when ``kind="binary"`` — typically
+            ``{stale_binary_override: True}`` from
+            :func:`~lysis.tools.provenance.verify_binary_matches_source`
+            when the staleness check was overridden.  Ignored otherwise.
+        :type binary_override: dict, optional
+        :raises IOError: If the DataStore is in read-only mode.
+        :raises ValueError: For an unknown *scale*/*kind*, a missing
+            target group, or ``kind="binary"`` without an *executable*.
+        """
+        if self._mode == "r":
+            raise IOError(
+                "Cannot stamp provenance on a read-only DataStore. "
+                "Open with mode='a'."
+            )
+
+        params_location = self._scale_to_params_location(scale)
+        if params_location not in self._file:
+            raise ValueError(
+                f"Cannot stamp provenance: params group "
+                f"'{params_location}' does not exist in this DataStore.  "
+                f"Initialise the {scale}scale collection first."
+            )
+
+        if kind == "init":
+            from ..tools.provenance import gather_init_provenance  # noqa: PLC0415
+            attrs = gather_init_provenance()
+        elif kind == "execution":
+            from ..tools.provenance import gather_execution_provenance  # noqa: PLC0415
+            attrs = gather_execution_provenance()
+        elif kind == "binary":
+            if executable is None:
+                raise ValueError(
+                    "stamp_provenance(kind='binary') requires an "
+                    "'executable' argument."
+                )
+            from ..tools.provenance import gather_binary_provenance  # noqa: PLC0415
+            attrs = gather_binary_provenance(executable)
+            if binary_override:
+                attrs = {**attrs, **binary_override}
+        else:
+            raise ValueError(
+                f"kind must be 'init', 'execution', or 'binary'; "
+                f"got {kind!r}"
+            )
+
+        group = self._file[params_location]
+        for attr_name, attr_value in attrs.items():
+            group.attrs[attr_name] = attr_value
+
+    def read_init_provenance(self, scale):
+        """Read the ``init_*`` attributes stamped on the per-scale params group.
+
+        :param scale: ``"micro"`` or ``"macro"``.
+        :type scale: str
+        :return: Dict with keys :data:`CONST.INIT_VERSION_ATTR`,
+            :data:`CONST.INIT_DIRTY_ATTR`,
+            :data:`CONST.INIT_TIMESTAMP_ATTR`,
+            :data:`CONST.INIT_HOSTNAME_ATTR` — or ``None`` if the params
+            group exists but the file pre-dates the init-stamp feature
+            (no ``init_version`` attribute present).
+        :rtype: dict or None
+        :raises ValueError: For an unknown *scale* or a missing params
+            group.
+        """
+        params_location = self._scale_to_params_location(scale)
+        if params_location not in self._file:
+            raise ValueError(
+                f"Cannot read init provenance: params group "
+                f"'{params_location}' does not exist in this DataStore."
+            )
+        attrs = self._file[params_location].attrs
+        if CONST.INIT_VERSION_ATTR not in attrs:
+            return None
+        keys = (
+            CONST.INIT_VERSION_ATTR,
+            CONST.INIT_DIRTY_ATTR,
+            CONST.INIT_TIMESTAMP_ATTR,
+            CONST.INIT_HOSTNAME_ATTR,
+        )
+        result = {}
+        for k in keys:
+            if k in attrs:
+                val = attrs[k]
+                if isinstance(val, bytes):
+                    val = val.decode("utf-8")
+                result[k] = val
+        return result
+
     def _write_array_to_dataset(self, ds_spec, arr, sim=None):
         """Write a numpy array to an existing empty HDF5 dataset.
 
@@ -1038,7 +1180,8 @@ class DataStore:
         file_codes,
         param_overrides=None,
         param_aliases=None,
-        binary_provenance=None,
+        binary_executable=None,
+        binary_override=None,
     ):
         """Import a data collection from an external source into this DataStore.
 
@@ -1087,13 +1230,19 @@ class DataStore:
             example, ``{"micro_simulations": "runs"}`` renames the ``runs``
             key produced by v1.90.0 log parsing.
         :type param_aliases: dict, optional
-        :param binary_provenance: Optional dict of self-reported provenance
-            from a stale Fortran binary whose preflight check was overridden.
-            Keys are stamped on the per-scale params group alongside the
-            normal execution provenance, recording that the resulting data
-            was produced by a binary that did not match the current source.
-            Empty/``None`` when the binary matched (the common case).
-        :type binary_provenance: dict, optional
+        :param binary_executable: Path to the Fortran binary that produced
+            the source data.  When provided, the binary's commit/dirty/
+            compiler stamps (from ``<executable> --version``) are written
+            to the per-scale params group via
+            :meth:`stamp_provenance`.  ``None`` (the default) skips the
+            binary stamp — appropriate for HDF5→HDF5 conversions and tests.
+        :type binary_executable: pathlib.Path or str, optional
+        :param binary_override: Optional dict of override-only attrs from
+            :func:`~lysis.tools.provenance.verify_binary_matches_source`
+            (typically ``{stale_binary_override: True}``) when the binary
+            preflight check was bypassed.  Merged into the binary-stamp
+            group attrs.  Ignored when ``binary_executable`` is ``None``.
+        :type binary_override: dict, optional
         :raises IOError: If the DataStore is in read-only mode.
         :raises ValueError: If *collection_name* is not ``"microscale_out"``
             or ``"macroscale_out"``, if the target collection does not yet
@@ -1225,17 +1374,19 @@ class DataStore:
                 converted["params"][CONST.CONVERTED_FROM_ATTR]
             )
 
-        # Stamp execution provenance on the per-scale params group.
-        from ..tools.provenance import gather_execution_provenance  # noqa: PLC0415
-        provenance_group = self._file[target_spec.params.data_location]
-        for attr_name, attr_value in gather_execution_provenance().items():
-            provenance_group.attrs[attr_name] = attr_value
-        # Stamp binary self-report when a stale-binary preflight override
-        # was used.  Empty dict on the common (clean-match) path, so this
-        # is normally a no-op.
-        if binary_provenance:
-            for attr_name, attr_value in binary_provenance.items():
-                provenance_group.attrs[attr_name] = attr_value
+        # Stamp execution provenance on the per-scale params group, plus
+        # unconditional binary provenance (commit/dirty/compiler) when an
+        # executable path is known.  Both stamps go onto the same params
+        # group via the shared :meth:`stamp_provenance` helper.
+        scale = "micro" if collection_name == "microscale_out" else "macro"
+        self.stamp_provenance(scale, "execution")
+        if binary_executable is not None:
+            self.stamp_provenance(
+                scale,
+                "binary",
+                executable=binary_executable,
+                binary_override=binary_override,
+            )
 
         # Re-initialize in place (reloads all collections, params, etc.)
         self._file.flush()

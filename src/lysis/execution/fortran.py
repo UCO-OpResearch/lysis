@@ -247,9 +247,13 @@ class FortranRunner(SimulationRunner):
 
         :return: The verify dict — empty on match; on overridden mismatch
             contains ``"banner"`` (text to prepend to the Fortran stdout
-            log) plus HDF5-stampable attrs forwarded to
+            log) plus the ``stale_binary_override`` flag forwarded to
             :meth:`~lysis.dataio.datastore.DataStore.import_collection`
-            via :meth:`_binary_hdf5_attrs`.
+            via :meth:`_binary_hdf5_attrs`.  The binary's
+            commit/dirty/compiler stamps are no longer included here —
+            they are gathered fresh and stamped unconditionally by
+            :meth:`~lysis.dataio.datastore.DataStore.stamp_provenance`
+            on every run.
         :rtype: dict
         :raises ~lysis.tools.provenance.StaleBinaryError: When the
             binary stamp disagrees with ``src/fortran/`` and
@@ -270,7 +274,15 @@ class FortranRunner(SimulationRunner):
 
     @property
     def _binary_hdf5_attrs(self) -> dict:
-        """HDF5-stampable attrs from :meth:`_verify_binary_version` (excludes banner)."""
+        """Override-only attrs from :meth:`_verify_binary_version` to merge
+        into the binary stamp; ``{}`` when the binary matched the source.
+
+        Today this carries only :data:`CONST.STALE_BINARY_OVERRIDE_ATTR`
+        when the staleness check was overridden.  The binary's commit /
+        dirty / compiler stamps are written unconditionally by
+        :meth:`~lysis.dataio.datastore.DataStore.stamp_provenance` —
+        they are no longer routed through this property.
+        """
         info = getattr(self, "_binary_check_info", None) or {}
         return {k: v for k, v in info.items() if k != "banner"}
 
@@ -479,7 +491,8 @@ class FortranRunner(SimulationRunner):
                     self._fortran_dataspec_version(),
                     str(data_dir),
                     [self.out_file_code],
-                    binary_provenance=self._binary_hdf5_attrs,
+                    binary_executable=self.executable,
+                    binary_override=self._binary_hdf5_attrs,
                 )
 
             if not keep_tmpdir:

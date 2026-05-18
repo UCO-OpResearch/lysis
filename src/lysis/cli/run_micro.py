@@ -27,6 +27,12 @@ from pathlib import Path
 import click
 
 from lysis.cli import cli
+from lysis.cli._provenance import (
+    allow_commit_mismatch_option,
+    allow_dirty_option,
+    enforce_init_commit_match,
+    enforce_lysis_clean,
+)
 
 
 @cli.command(name="run-micro")
@@ -119,10 +125,12 @@ from lysis.cli import cli
         "LYSIS_ALLOW_STALE_BINARY=1."
     ),
 )
+@allow_dirty_option
+@allow_commit_mismatch_option
 @click.pass_context
 def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
               fast_tmp_root, keep_tmpdir, file_code, num_children,
-              allow_stale_binary):
+              allow_stale_binary, allow_dirty, allow_commit_mismatch):
     """Execute the Fortran microscale simulation for a Run or Experiment.
 
     PATH may be either:
@@ -149,6 +157,9 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
     """
     console = ctx.obj["console"]
 
+    # Gate: refuse to write provenance if src/lysis/ is dirty (unless overridden).
+    enforce_lysis_clean(ctx, allow_dirty)
+
     target = Path(target_path)
     is_batch = target.is_dir()
 
@@ -161,6 +172,13 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
         hdf5_paths = resolve_hdf5_paths(target)
     else:
         hdf5_paths = [target]
+
+    # Verify the init-experiment commit recorded on each HDF5 file matches
+    # the currently-checked-out src/lysis/ commit, before any work starts.
+    from lysis.dataio.datastore import DataStore
+    for hdf5_path in hdf5_paths:
+        with DataStore(hdf5_path.stem, str(hdf5_path.parent), mode="r") as ds:
+            enforce_init_commit_match(ctx, ds, "micro", allow_commit_mismatch)
 
     if use_slurm:
         from lysis.tools.slurm import submit_micro_slurm_job

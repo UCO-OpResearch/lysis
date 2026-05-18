@@ -215,9 +215,9 @@ class TestDegTimeMarkdownDirectory:
         result = runner.invoke(cli, ["deg-time", str(tmp_path), "--markdown", "-"])
 
         assert result.exit_code == 0
-        assert "run_A" in result.output
-        assert "run_B" in result.output
-        assert result.output.strip().startswith("| Run |")
+        assert "run_A" in result.stdout
+        assert "run_B" in result.stdout
+        assert result.stdout.strip().startswith("| Run |")
 
     @patch("lysis.cli.deg_time._load_run_deg_times")
     def test_markdown_to_stdout_milestones_in_header(self, mock_load, runner, mock_stats, tmp_path):

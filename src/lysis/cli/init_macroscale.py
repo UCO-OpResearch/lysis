@@ -18,6 +18,7 @@ import sys
 import click
 
 from lysis.cli import cli
+from lysis.cli._provenance import allow_dirty_option, enforce_lysis_clean
 
 
 def _coerce_value(val_str: str):
@@ -75,8 +76,9 @@ def _coerce_value(val_str: str):
         "WARNING: any existing macroscale simulation data will be lost."
     ),
 )
+@allow_dirty_option
 @click.pass_context
-def init_macroscale(ctx, path, params, dry_run, no_progress, force):
+def init_macroscale(ctx, path, params, dry_run, no_progress, force, allow_dirty):
     """Initialise macroscale structure in one or more HDF5 files.
 
     PATH may be an experiment folder (initialises all runs) or a single HDF5
@@ -98,6 +100,10 @@ def init_macroscale(ctx, path, params, dry_run, no_progress, force):
     from lysis.dataio.datastore import DataStore
 
     console = ctx.obj["console"]
+
+    # Gate: refuse to write provenance if src/lysis/ is dirty (unless overridden).
+    enforce_lysis_clean(ctx, allow_dirty)
+
     path_obj = Path(path)
 
     # ── Parse --param overrides ───────────────────────────────────────────
@@ -170,6 +176,7 @@ def _init_experiment_folder(ctx, console, folder_path, param_overrides, dry_run,
             else:
                 with DataStore(run.run_code, exp.path, mode="a") as ds:
                     ds.initialize_macroscale(run.macro_params, force=force)
+                    ds.stamp_provenance("macro", "init")
                 results.append((run.run_code, "initialized"))
         except Exception as exc:
             errors.append((run.run_code, str(exc)))
@@ -228,6 +235,7 @@ def _init_single_h5(ctx, console, h5_path, param_overrides, dry_run, no_progress
     try:
         with DataStore(run_code, run_dir, mode="a") as ds:
             ds.initialize_macroscale(macro_params, force=force)
+            ds.stamp_provenance("macro", "init")
     except Exception as exc:
         console.print(f"[bold red]Error initializing {h5_path.name}:[/bold red] {exc}")
         ctx.exit(1)

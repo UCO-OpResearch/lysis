@@ -218,10 +218,12 @@ class TestDegRateMarkdownDirectory:
 
         result = runner.invoke(cli, ["deg-rate", str(tmp_path), "--markdown", "-"])
 
+        # ``result.stdout`` (not ``result.output``) excludes the top-level
+        # src/lysis/ dirty warning that is emitted to stderr.
         assert result.exit_code == 0
-        assert "run_A" in result.output
-        assert "run_B" in result.output
-        assert result.output.strip().startswith("| Run |")
+        assert "run_A" in result.stdout
+        assert "run_B" in result.stdout
+        assert result.stdout.strip().startswith("| Run |")
 
     @patch("lysis.cli.deg_rate._load_run_deg_rates")
     def test_markdown_to_stdout_intervals_in_header(self, mock_load, runner, mock_stats, tmp_path):
