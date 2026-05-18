@@ -68,7 +68,7 @@ def _stub_preflight_binary_check(monkeypatch):
     both sides to ``"unknown"`` and raise :class:`StaleBinaryError`
     before the test reaches its actual assertions.  Tests that
     specifically exercise the preflight live in
-    ``tests/tools/test_binary_version.py``.
+    ``tests/tools/test_provenance_binary.py``.
     """
     monkeypatch.setattr(FortranMicro, "_verify_binary_version", lambda self: {})
 

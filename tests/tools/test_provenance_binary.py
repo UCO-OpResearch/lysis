@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`lysis.tools.binary_version`.
+"""Unit tests for :mod:`lysis.tools.provenance.binary`.
 
 Exercises each layer of the preflight check:
 
@@ -17,14 +17,14 @@ import warnings
 import pytest
 
 from lysis.config.constants import CONST
-from lysis.tools import binary_version
-from lysis.tools.binary_version import (
+from lysis.tools.provenance import (
     StaleBinaryError,
     allow_stale_from_env,
     gather_fortran_source_provenance,
     query_binary_version,
     verify_binary_matches_source,
 )
+from lysis.tools.provenance import binary as binary_mod
 
 
 # ----------------------------------------------------------------------
@@ -42,7 +42,7 @@ def _patch_run(monkeypatch, *, returncode=0, stdout="", raises=None):
         if raises is not None:
             raise raises
         return _FakeCompleted(returncode=returncode, stdout=stdout)
-    monkeypatch.setattr(binary_version.subprocess, "run", fake_run)
+    monkeypatch.setattr(binary_mod.subprocess, "run", fake_run)
 
 
 def test_query_binary_version_happy_path(monkeypatch):
@@ -90,29 +90,29 @@ def test_query_binary_version_timeout_is_unknown(monkeypatch):
 # ----------------------------------------------------------------------
 
 def test_source_provenance_no_repo_is_unknown(monkeypatch):
-    monkeypatch.setattr(binary_version, "_package_repo_root", lambda: None)
+    monkeypatch.setattr(binary_mod, "_package_repo_root", lambda: None)
     assert gather_fortran_source_provenance() == ("unknown", "unknown")
 
 
 def test_source_provenance_clean(monkeypatch, tmp_path):
-    monkeypatch.setattr(binary_version, "_package_repo_root", lambda: tmp_path)
-    monkeypatch.setattr(binary_version, "_git", lambda args, root: "abc123")
+    monkeypatch.setattr(binary_mod, "_package_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(binary_mod, "_git", lambda args, root: "abc123")
     # `git diff --quiet` exit 0 means clean.
     _patch_run(monkeypatch, returncode=0)
     assert gather_fortran_source_provenance() == ("abc123", "clean")
 
 
 def test_source_provenance_dirty(monkeypatch, tmp_path):
-    monkeypatch.setattr(binary_version, "_package_repo_root", lambda: tmp_path)
-    monkeypatch.setattr(binary_version, "_git", lambda args, root: "abc123")
+    monkeypatch.setattr(binary_mod, "_package_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(binary_mod, "_git", lambda args, root: "abc123")
     # `git diff --quiet` exit 1 means dirty.
     _patch_run(monkeypatch, returncode=1)
     assert gather_fortran_source_provenance() == ("abc123", "dirty")
 
 
 def test_source_provenance_git_unavailable_is_unknown(monkeypatch, tmp_path):
-    monkeypatch.setattr(binary_version, "_package_repo_root", lambda: tmp_path)
-    monkeypatch.setattr(binary_version, "_git", lambda args, root: None)
+    monkeypatch.setattr(binary_mod, "_package_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(binary_mod, "_git", lambda args, root: None)
     assert gather_fortran_source_provenance() == ("unknown", "unknown")
 
 
@@ -144,10 +144,10 @@ def test_allow_stale_unset_is_false(monkeypatch):
 def _patch_check(monkeypatch, *, binary, source):
     """Stub out both the binary query and source-tree query."""
     monkeypatch.setattr(
-        binary_version, "query_binary_version", lambda exe, **kw: binary,
+        binary_mod, "query_binary_version", lambda exe, **kw: binary,
     )
     monkeypatch.setattr(
-        binary_version, "gather_fortran_source_provenance", lambda: source,
+        binary_mod, "gather_fortran_source_provenance", lambda: source,
     )
 
 

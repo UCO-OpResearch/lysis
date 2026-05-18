@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`lysis.tools.provenance`.
+"""Unit tests for :mod:`lysis.tools.provenance.execution`.
 
 Covers the public :func:`gather_execution_provenance` entry point and each
 private resolver:
@@ -12,19 +12,17 @@ private resolver:
 import re
 import subprocess
 import warnings
-from pathlib import Path
 
 import pytest
 
 from lysis.config.constants import CONST
-from lysis.tools import provenance
-from lysis.tools.provenance import (
-    _package_repo_root,
+from lysis.tools.provenance import execution, gather_execution_provenance
+from lysis.tools.provenance._git import _package_repo_root
+from lysis.tools.provenance.execution import (
     _resolve_dirty,
     _resolve_hostname,
     _resolve_timestamp,
     _resolve_version,
-    gather_execution_provenance,
 )
 
 
@@ -50,14 +48,14 @@ def test_version_matches_git_head_when_no_tag(monkeypatch):
     if repo_root is None:
         pytest.skip("not running in a git checkout")
     # Pretend no tags exist at HEAD by intercepting the describe call.
-    real_git = provenance._git
+    real_git = execution._git
 
     def fake_git(args, root):
         if args[:3] == ["describe", "--exact-match", "--tags"]:
             return None
         return real_git(args, root)
 
-    monkeypatch.setattr(provenance, "_git", fake_git)
+    monkeypatch.setattr(execution, "_git", fake_git)
     version = _resolve_version()
     commit = subprocess.check_output(
         ["git", "-C", str(repo_root), "rev-parse", "HEAD"], text=True
@@ -66,7 +64,7 @@ def test_version_matches_git_head_when_no_tag(monkeypatch):
 
 
 def test_version_falls_back_to_package_metadata(monkeypatch):
-    monkeypatch.setattr(provenance, "_package_repo_root", lambda: None)
+    monkeypatch.setattr(execution, "_package_repo_root", lambda: None)
     version = _resolve_version()
     # Package is installed editable; importlib.metadata should resolve it.
     assert version
@@ -78,7 +76,7 @@ def test_dirty_is_bool():
 
 
 def test_dirty_false_when_not_a_git_checkout(monkeypatch):
-    monkeypatch.setattr(provenance, "_package_repo_root", lambda: None)
+    monkeypatch.setattr(execution, "_package_repo_root", lambda: None)
     assert _resolve_dirty() is False
 
 
@@ -93,14 +91,14 @@ def test_hostname_is_nonempty():
 
 
 def test_dirty_emits_warning(monkeypatch):
-    monkeypatch.setattr(provenance, "_resolve_dirty", lambda: True)
+    monkeypatch.setattr(execution, "_resolve_dirty", lambda: True)
     with pytest.warns(UserWarning, match="working tree is dirty"):
         result = gather_execution_provenance()
     assert result[CONST.EXECUTION_DIRTY_ATTR] is True
 
 
 def test_clean_tree_does_not_warn(monkeypatch):
-    monkeypatch.setattr(provenance, "_resolve_dirty", lambda: False)
+    monkeypatch.setattr(execution, "_resolve_dirty", lambda: False)
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
         result = gather_execution_provenance()

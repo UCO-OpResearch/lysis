@@ -165,7 +165,7 @@ class FortranMacro(FortranRunner):
         :type index: int, optional
         :param allow_stale_binary: Downgrade a stamp mismatch between the
             Fortran binary and ``src/fortran/`` from
-            :class:`~lysis.tools.binary_version.StaleBinaryError` to a
+            :class:`~lysis.tools.provenance.StaleBinaryError` to a
             loud warning, defaults to ``False``.
         :type allow_stale_binary: bool, optional
         :return: Fully configured :class:`FortranMacro` instance.

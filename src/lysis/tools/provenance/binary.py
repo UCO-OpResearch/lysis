@@ -22,13 +22,14 @@ import warnings
 from pathlib import Path
 from typing import Optional
 
-from ..config.constants import CONST
-from .provenance import _git, _package_repo_root
+from ...config.constants import CONST
+from ._git import _git, _package_repo_root
 
 __all__ = [
     "StaleBinaryError",
     "query_binary_version",
     "gather_fortran_source_provenance",
+    "allow_stale_from_env",
     "verify_binary_matches_source",
 ]
 

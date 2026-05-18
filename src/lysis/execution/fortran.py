@@ -103,7 +103,7 @@ class FortranRunner(SimulationRunner):
     num_children: int = None
     #: When True, a mismatch between the Fortran binary's embedded build
     #: stamp and the current ``src/fortran/`` source state downgrades from
-    #: a :class:`~lysis.tools.binary_version.StaleBinaryError` to a loud
+    #: a :class:`~lysis.tools.provenance.StaleBinaryError` to a loud
     #: :class:`UserWarning` plus a banner written to each Fortran stdout
     #: log file and override metadata stamped onto the resulting HDF5
     #: group.  Defaults to False; :meth:`_verify_binary_version` also
@@ -241,7 +241,7 @@ class FortranRunner(SimulationRunner):
         """Preflight-check that :attr:`executable` matches ``src/fortran/``.
 
         Delegates to
-        :func:`~lysis.tools.binary_version.verify_binary_matches_source`
+        :func:`~lysis.tools.provenance.verify_binary_matches_source`
         and caches the result so multi-simulation paths (e.g. the macro
         loop) issue the warning exactly once even when called per-sim.
 
@@ -251,12 +251,12 @@ class FortranRunner(SimulationRunner):
             :meth:`~lysis.dataio.datastore.DataStore.import_collection`
             via :meth:`_binary_hdf5_attrs`.
         :rtype: dict
-        :raises ~lysis.tools.binary_version.StaleBinaryError: When the
+        :raises ~lysis.tools.provenance.StaleBinaryError: When the
             binary stamp disagrees with ``src/fortran/`` and
             :attr:`allow_stale_binary` is False.
         """
         if getattr(self, "_binary_check_info", None) is None:
-            from ..tools.binary_version import (  # noqa: PLC0415
+            from ..tools.provenance import (  # noqa: PLC0415
                 allow_stale_from_env,
                 verify_binary_matches_source,
             )
