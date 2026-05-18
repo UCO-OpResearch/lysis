@@ -70,9 +70,16 @@ def test_query_binary_version_too_few_fields_is_unknown(monkeypatch):
     assert query_binary_version("/fake/bin") == ("unknown", "unknown")
 
 
-def test_query_binary_version_too_many_fields_is_unknown(monkeypatch):
-    _patch_run(monkeypatch, stdout="abc123 clean extra\n")
-    assert query_binary_version("/fake/bin") == ("unknown", "unknown")
+def test_query_binary_version_discards_compiler_suffix(monkeypatch):
+    # Real binaries emit "<commit> <state> <compiler-info>" where the
+    # compiler string itself contains spaces (e.g. "Intel(R) Fortran ...").
+    # The parser must accept the line and discard everything past the
+    # second token.
+    _patch_run(
+        monkeypatch,
+        stdout="abc123 clean Intel(R) Fortran Classic 2021.9.0\n",
+    )
+    assert query_binary_version("/fake/bin") == ("abc123", "clean")
 
 
 def test_query_binary_version_file_not_found_is_unknown(monkeypatch):
