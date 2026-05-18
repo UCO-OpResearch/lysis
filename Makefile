@@ -115,9 +115,13 @@ shared: $(LIB_DIR)/kiss.so
 
 # version_stamp.f90 is a tiny Fortran module holding BUILD_COMMIT and
 # BUILD_DIRTY string parameters resolved from git.  Each live Fortran
-# binary `use`s it and supports `--version`, which prints those values
-# so the Python wrapper can confirm the binary was built from the
-# currently-checked-out source before launching a simulation.
+# binary `use`s it -- together with the Fortran-2008 intrinsic
+# `compiler_version()` from iso_fortran_env -- and supports `--version`,
+# which prints "<commit> <clean|dirty> <compiler-string>" so the Python
+# wrapper can confirm the binary was built from the currently-checked-out
+# source AND the expected compiler before launching a simulation.  The
+# compiler info is contributed by the compiler itself at compile time, so
+# no Makefile probing is needed for it.
 #
 # The recipe runs on every `make` (via the FORCE prerequisite below) so
 # it always reflects current HEAD and dirty state, but writes via a
