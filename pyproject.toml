@@ -42,6 +42,14 @@ lysis = "lysis.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.uv]
+# Always use a uv-downloaded Python; never link against system/module Python.
+# Without this, the .venv ends up linked to the GCCcore Python that LMod
+# modules (e.g. Octave/foss-2023a) pull in, which becomes inaccessible after
+# `module purge` in the Slurm preamble — the resulting `.venv/bin/python`
+# fails with "libpython3.11.so.1.0: cannot open shared object file".
+python-preference = "only-managed"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
