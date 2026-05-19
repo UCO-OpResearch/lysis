@@ -346,6 +346,42 @@ class TestRunMacroSlurm:
         call_kwargs = mock_submit.call_args.kwargs
         assert call_kwargs.get("out_code") == "_out"
 
+    @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
+    def test_compiler_default_is_forwarded(self, mock_submit, runner, macro_hdf5):
+        """Without --compiler, the default module spec must be forwarded."""
+        from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(macro_hdf5),
+                "--executable", "/bin/macro.exe",
+                "--slurm",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert (
+            mock_submit.call_args.kwargs.get("compiler_module")
+            == DEFAULT_COMPILER_MODULE
+        )
+
+    @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
+    def test_compiler_override_is_forwarded(self, mock_submit, runner, macro_hdf5):
+        """--compiler=foo/2024 must reach submit_macro_slurm_job."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(macro_hdf5),
+                "--executable", "/bin/macro.exe",
+                "--slurm",
+                "--compiler", "intel-compilers/2024",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert (
+            mock_submit.call_args.kwargs.get("compiler_module")
+            == "intel-compilers/2024"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Batch (experiment / directory)

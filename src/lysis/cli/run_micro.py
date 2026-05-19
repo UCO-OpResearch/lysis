@@ -33,6 +33,7 @@ from lysis.cli._provenance import (
     enforce_init_commit_match,
     enforce_lysis_clean,
 )
+from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
 
 
 @cli.command(name="run-micro")
@@ -113,6 +114,18 @@ from lysis.cli._provenance import (
     ),
 )
 @click.option(
+    "--compiler",
+    "compiler",
+    default=DEFAULT_COMPILER_MODULE,
+    show_default=True,
+    metavar="MODULE",
+    help=(
+        "LMod module spec providing the Fortran compiler runtime, loaded "
+        "by each generated Slurm script (e.g. ``intel-compilers/2024``).  "
+        "Only meaningful with --slurm."
+    ),
+)
+@click.option(
     "--allow-stale-binary",
     "allow_stale_binary",
     is_flag=True,
@@ -129,7 +142,7 @@ from lysis.cli._provenance import (
 @allow_commit_mismatch_option
 @click.pass_context
 def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
-              fast_tmp_root, keep_tmpdir, file_code, num_children,
+              fast_tmp_root, keep_tmpdir, file_code, num_children, compiler,
               allow_stale_binary, allow_dirty, allow_commit_mismatch):
     """Execute the Fortran microscale simulation for a Run or Experiment.
 
@@ -197,6 +210,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
                     keep_tmpdir=keep_tmpdir,
                     out_code=file_code,
                     num_children=nc_arg,
+                    compiler_module=compiler,
                 )
             except ValueError as e:
                 raise click.ClickException(str(e))

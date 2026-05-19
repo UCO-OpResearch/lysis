@@ -68,9 +68,12 @@ __status__ = "Development"
 # the project's ``uv``-managed environment.  The submitting user's repo
 # root is baked in at script-generation time from ``lysis.__file__``.
 
-#: Intel compiler module providing the Fortran binary's runtime libraries.
+#: Default LMod module providing the Fortran binary's runtime libraries.
 #: Assumed to be available on the cluster's LMod stack for all users.
-_INTEL_MODULE: str = "intel-compilers/2023"
+#: Callers can override per-job via the ``compiler_module`` keyword argument
+#: on the public submit/generate functions (exposed as ``--compiler`` on the
+#: ``lysis run-micro`` and ``lysis run-macro`` CLI commands).
+DEFAULT_COMPILER_MODULE: str = "intel-compilers/2023"
 
 
 def _repo_root() -> Path:
@@ -86,18 +89,22 @@ def _repo_root() -> Path:
     return Path(lysis.__file__).resolve().parents[2]
 
 
-def _env_preamble(repo_root: Path) -> str:
+def _env_preamble(repo_root: Path, compiler_module: str) -> str:
     """Return the bash preamble that prepares a generated script's environment.
 
-    Loads the Intel compiler runtime (required by the Fortran binary) and
-    puts ``~/.local/bin`` on PATH so ``uv`` is discoverable on compute
-    nodes.  Defensive against non-login shells by sourcing ``lmod.sh``
-    when the ``module`` function isn't already defined.
+    Loads the requested Fortran compiler runtime via LMod (required by the
+    Fortran binary) and puts ``~/.local/bin`` on PATH so ``uv`` is
+    discoverable on compute nodes.  Defensive against non-login shells by
+    sourcing ``lmod.sh`` when the ``module`` function isn't already defined.
 
     :param repo_root: Absolute path to the lysis repo root (currently
         unused inside the preamble itself; included for future extensions
         like ``cd`` into the repo).
     :type repo_root: Path
+    :param compiler_module: LMod module spec to load (e.g.
+        ``"intel-compilers/2023"`` or ``"intel-compilers/2024"``).  See
+        :data:`DEFAULT_COMPILER_MODULE` for the project default.
+    :type compiler_module: str
     :return: Multi-line bash snippet, no trailing newline.
     :rtype: str
     """
@@ -105,7 +112,7 @@ def _env_preamble(repo_root: Path) -> str:
         "# Lysis environment setup (user-independent)\n"
         "[ -z \"${LMOD_CMD:-}\" ] && [ -f /etc/profile.d/lmod.sh ] "
         "&& source /etc/profile.d/lmod.sh\n"
-        f"module purge && module load {_INTEL_MODULE}\n"
+        f"module purge && module load {compiler_module}\n"
         'export PATH="$HOME/.local/bin:$PATH"'
     )
 
@@ -454,6 +461,7 @@ def generate_array_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
+    compiler_module: str = DEFAULT_COMPILER_MODULE,
 ) -> str:
     """Generate a Slurm array job bash script for an array-mode dispatch.
 
@@ -493,6 +501,10 @@ def generate_array_script(
     :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
         ``hdf5_path.parent / ".slurm"``.
     :type slurm_log_dir: Path or str, optional
+    :param compiler_module: LMod module spec for the Fortran compiler
+        runtime, baked into each generated task script.  Defaults to
+        :data:`DEFAULT_COMPILER_MODULE`.
+    :type compiler_module: str, optional
     :return: Slurm array job bash script text.
     :rtype: str
     """
@@ -505,7 +517,7 @@ def generate_array_script(
     slurm_log_dir = Path(slurm_log_dir)
 
     repo_root = _repo_root()
-    env_preamble = _env_preamble(repo_root)
+    env_preamble = _env_preamble(repo_root, compiler_module)
     py = _uv_python_prefix(repo_root)
 
     sbatch_opts = {
@@ -593,6 +605,7 @@ def submit_slurm_job(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     keep_tmpdir: bool = False,
+    compiler_module: str = DEFAULT_COMPILER_MODULE,
 ) -> int:
     """Stage scripts and submit a master Slurm job for an array-mode dispatch.
 
@@ -616,6 +629,10 @@ def submit_slurm_job(
     :type fast_tmp_root: str, optional
     :param keep_tmpdir: Preserve staging dir after the master job.
     :type keep_tmpdir: bool, optional
+    :param compiler_module: LMod module spec for the Fortran compiler
+        runtime, baked into both the master and array task scripts.
+        Defaults to :data:`DEFAULT_COMPILER_MODULE`.
+    :type compiler_module: str, optional
     :return: Master Slurm job ID.
     :rtype: int
     """
@@ -667,6 +684,7 @@ def submit_slurm_job(
         spec, staging_dir, run_code, hdf5_path, executable,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
+        compiler_module=compiler_module,
     )
     array_path = staging_dir / f"lysis-{spec.scale}-array__{run_code}.sh"
     array_path.write_text(array_script)
@@ -698,7 +716,7 @@ def submit_slurm_job(
 
     master_sh_content = gs.scripts.plain(
         [
-            _env_preamble(repo_root),
+            _env_preamble(repo_root, compiler_module),
             f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
@@ -725,6 +743,7 @@ def generate_micro_child_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
+    compiler_module: str = DEFAULT_COMPILER_MODULE,
 ) -> str:
     """Generate a Slurm bash script for a single child microscale Fortran job.
 
@@ -761,6 +780,10 @@ def generate_micro_child_script(
     :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
         ``hdf5_path.parent / ".slurm"``.
     :type slurm_log_dir: Path or str, optional
+    :param compiler_module: LMod module spec for the Fortran compiler
+        runtime, baked into the generated script.  Defaults to
+        :data:`DEFAULT_COMPILER_MODULE`.
+    :type compiler_module: str, optional
     :return: Slurm bash script text.
     :rtype: str
     """
@@ -773,7 +796,7 @@ def generate_micro_child_script(
     slurm_log_dir = Path(slurm_log_dir)
 
     repo_root = _repo_root()
-    env_preamble = _env_preamble(repo_root)
+    env_preamble = _env_preamble(repo_root, compiler_module)
     py = _uv_python_prefix(repo_root)
 
     sbatch_opts = {
@@ -917,6 +940,7 @@ def generate_micro_array_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
+    compiler_module: str = DEFAULT_COMPILER_MODULE,
 ) -> str:
     """Generate a Slurm array job script for the microscale Fortran simulation.
 
@@ -945,6 +969,7 @@ def generate_micro_array_script(
         spec, staging_dir, run_code, hdf5_path, executable,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
+        compiler_module=compiler_module,
     )
 
 
@@ -958,6 +983,7 @@ def submit_micro_slurm_job(
     keep_tmpdir: bool = False,
     out_code: str = "",
     num_children: Optional[int] = None,
+    compiler_module: str = DEFAULT_COMPILER_MODULE,
 ) -> int:
     """Submit the full HDF5-integrated microscale workflow as a Slurm master job.
 
@@ -1009,6 +1035,11 @@ def submit_micro_slurm_job(
         across that many tasks.  ``None`` (default) selects the legacy
         single-child path.
     :type num_children: int, optional
+    :param compiler_module: LMod module spec for the Fortran compiler
+        runtime, baked into every generated script (master, array tasks,
+        and the legacy single child).  Defaults to
+        :data:`DEFAULT_COMPILER_MODULE`.
+    :type compiler_module: str, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
@@ -1049,6 +1080,7 @@ def submit_micro_slurm_job(
             spec, hdf5_path, executable, staging_root_dir,
             partition=partition, fast_tmp_root=fast_tmp_root,
             keep_tmpdir=keep_tmpdir,
+            compiler_module=compiler_module,
         )
 
     # ------------------------------------------------------------------
@@ -1091,6 +1123,7 @@ def submit_micro_slurm_job(
         staging_dir, run_code, hdf5_path, executable, out_code,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
+        compiler_module=compiler_module,
     )
     child_path = staging_dir / f"lysis-micro-child__{run_code}.sh"
     child_path.write_text(child_script)
@@ -1122,7 +1155,7 @@ def submit_micro_slurm_job(
 
     master_sh_content = gs.scripts.plain(
         [
-            _env_preamble(repo_root),
+            _env_preamble(repo_root, compiler_module),
             f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
@@ -1167,6 +1200,7 @@ def generate_macro_array_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
+    compiler_module: str = DEFAULT_COMPILER_MODULE,
 ) -> str:
     """Generate a Slurm array job script for the macroscale Fortran simulation.
 
@@ -1193,6 +1227,7 @@ def generate_macro_array_script(
         spec, staging_dir, run_code, hdf5_path, executable,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
+        compiler_module=compiler_module,
     )
 
 
@@ -1206,6 +1241,7 @@ def submit_macro_slurm_job(
     keep_tmpdir: bool = False,
     in_code: str = "",
     out_code: str = "",
+    compiler_module: str = DEFAULT_COMPILER_MODULE,
 ) -> int:
     """Submit the full HDF5-integrated macroscale workflow as a Slurm master job.
 
@@ -1249,6 +1285,10 @@ def submit_macro_slurm_job(
     :param out_code: Output file code suffix for the Fortran binary,
         defaults to ``""``.
     :type out_code: str, optional
+    :param compiler_module: LMod module spec for the Fortran compiler
+        runtime, baked into the generated master and array task scripts.
+        Defaults to :data:`DEFAULT_COMPILER_MODULE`.
+    :type compiler_module: str, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
@@ -1276,4 +1316,5 @@ def submit_macro_slurm_job(
         spec, hdf5_path, executable, staging_root_dir,
         partition=partition, fast_tmp_root=fast_tmp_root,
         keep_tmpdir=keep_tmpdir,
+        compiler_module=compiler_module,
     )

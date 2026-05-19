@@ -34,6 +34,7 @@ from lysis.cli._provenance import (
     enforce_init_commit_match,
     enforce_lysis_clean,
 )
+from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
 
 
 @cli.command(name="run-macro")
@@ -109,6 +110,18 @@ from lysis.cli._provenance import (
     help="Input file code suffix for macroscale_in files.",
 )
 @click.option(
+    "--compiler",
+    "compiler",
+    default=DEFAULT_COMPILER_MODULE,
+    show_default=True,
+    metavar="MODULE",
+    help=(
+        "LMod module spec providing the Fortran compiler runtime, loaded "
+        "by each generated Slurm script (e.g. ``intel-compilers/2024``).  "
+        "Only meaningful with --slurm."
+    ),
+)
+@click.option(
     "--allow-stale-binary",
     "allow_stale_binary",
     is_flag=True,
@@ -125,7 +138,7 @@ from lysis.cli._provenance import (
 @allow_commit_mismatch_option
 @click.pass_context
 def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
-              fast_tmp_root, keep_tmpdir, out_file_code, in_file_code,
+              fast_tmp_root, keep_tmpdir, out_file_code, in_file_code, compiler,
               allow_stale_binary, allow_dirty, allow_commit_mismatch):
     """Execute the Fortran macroscale simulation for a Run or Experiment.
 
@@ -192,6 +205,7 @@ def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
                     keep_tmpdir=keep_tmpdir,
                     in_code=in_file_code,
                     out_code=out_file_code,
+                    compiler_module=compiler,
                 )
             except ValueError as e:
                 raise click.ClickException(str(e))

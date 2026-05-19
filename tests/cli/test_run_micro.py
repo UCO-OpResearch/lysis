@@ -315,6 +315,42 @@ class TestRunMicroSlurm:
         assert mock_submit.call_args.kwargs.get("num_children") is None
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
+    def test_compiler_default_is_forwarded(self, mock_submit, runner, micro_hdf5):
+        """Without --compiler, the default module spec must be forwarded."""
+        from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert (
+            mock_submit.call_args.kwargs.get("compiler_module")
+            == DEFAULT_COMPILER_MODULE
+        )
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
+    def test_compiler_override_is_forwarded(self, mock_submit, runner, micro_hdf5):
+        """--compiler=foo/2024 must reach submit_micro_slurm_job."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+                "--compiler", "intel-compilers/2024",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert (
+            mock_submit.call_args.kwargs.get("compiler_module")
+            == "intel-compilers/2024"
+        )
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
     def test_num_children_positive_is_forwarded(
         self, mock_submit, runner, micro_hdf5
     ):

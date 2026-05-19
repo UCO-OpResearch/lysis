@@ -209,6 +209,27 @@ class TestGenerateMicroChildScript:
         assert "lysis.execution.fortran_micro" in script
         assert "codeutil" not in script
 
+    def test_default_compiler_module_in_preamble(self, tmp_path):
+        """Without compiler_module, the default LMod spec is loaded."""
+        from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+        )
+        assert f"module load {DEFAULT_COMPILER_MODULE}" in script
+
+    def test_custom_compiler_module_in_preamble(self, tmp_path):
+        """compiler_module override must appear in the module-load line."""
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+            compiler_module="intel-compilers/2024.2.0",
+        )
+        assert "module load intel-compilers/2024.2.0" in script
+        assert "module load intel-compilers/2023" not in script
+
 
 # ---------------------------------------------------------------------------
 # TestSubmitMicroChildJob
