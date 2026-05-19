@@ -445,6 +445,64 @@ class TestRunMicroSlurm:
         assert result.exit_code == 0, result.output
         mock_fm.run_full.assert_called_once()
 
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
+    def test_sbatch_default_is_empty_overrides(
+        self, mock_submit, runner, micro_hdf5
+    ):
+        """Without --sbatch, sbatch_overrides must be an empty dict."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_args.kwargs.get("sbatch_overrides") == {}
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
+    def test_sbatch_tokens_parsed_and_forwarded(
+        self, mock_submit, runner, micro_hdf5
+    ):
+        """Repeated --sbatch tokens parse into the documented overrides dict."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+                "--sbatch", "mem=4G",
+                "--sbatch", "hold",
+                "--sbatch", "^exclusive=user",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_args.kwargs.get("sbatch_overrides") == {
+            "mem": "4G",
+            "hold": "",
+            "exclusive=user": None,
+        }
+
+    def test_sbatch_malformed_token_rejected(self, runner, micro_hdf5):
+        """--sbatch '^' (caret alone) must fail with a clear error."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro", str(micro_hdf5),
+                "--executable", "/bin/micro.exe",
+                "--slurm",
+                "--sbatch", "^",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "--sbatch" in result.output
+
+    def test_help_mentions_sbatch(self, runner):
+        result = runner.invoke(cli, ["run-micro", "--help"])
+        assert result.exit_code == 0
+        assert "--sbatch" in result.output
+
 
 # ---------------------------------------------------------------------------
 # Batch (experiment / directory) helpers

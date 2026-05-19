@@ -43,7 +43,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
-from typing import List, Optional
+from typing import Dict, List, Mapping, Optional
 
 import GooseSLURM as gs
 
@@ -150,6 +150,82 @@ def _ensure_env_synced(repo_root: Path) -> None:
         cwd=str(repo_root),
         check=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# User-facing #SBATCH override helpers
+# ---------------------------------------------------------------------------
+
+
+def parse_sbatch_tokens(tokens) -> Dict[str, Optional[str]]:
+    """Parse a sequence of ``--sbatch`` CLI tokens into an overrides mapping.
+
+    Token syntax (mirrors what users type after ``--sbatch``):
+
+    * ``KEY=VALUE`` → ``{KEY: VALUE}``.  Splits on the **first** ``=``;
+      anything after the first ``=`` is the value.  Suitable for the common
+      ``--mem=4MB``, ``--time=01:00:00`` style.
+    * ``KEY`` (no ``=``) → ``{KEY: ""}``.  Renders as a flag-only ``#SBATCH
+      --KEY`` (e.g. ``--sbatch hold``).
+    * ``^KEY`` (leading caret) → ``{KEY: None}``.  Marks the default whose
+      dict key matches ``KEY`` exactly for removal.  Use this to drop a
+      default whose key itself contains ``=`` — for example the built-in
+      ``exclusive=user`` is dropped via ``--sbatch '^exclusive=user'``.
+
+    The returned mapping is in the shape consumed by
+    :func:`apply_sbatch_overrides` (``None`` = remove, anything else = set).
+
+    :param tokens: Iterable of raw ``--sbatch`` token strings.
+    :type tokens: Iterable[str]
+    :return: Overrides mapping suitable for :func:`apply_sbatch_overrides`.
+    :rtype: dict[str, str or None]
+    :raises ValueError: If any token is empty or has an empty key after
+        the caret/``=`` split.
+    """
+    result: Dict[str, Optional[str]] = {}
+    for tok in tokens:
+        if not tok:
+            raise ValueError("empty --sbatch token")
+        if tok.startswith("^"):
+            key = tok[1:]
+            if not key:
+                raise ValueError(f"empty key in --sbatch override: {tok!r}")
+            result[key] = None
+        elif "=" in tok:
+            key, _, value = tok.partition("=")
+            if not key:
+                raise ValueError(f"empty key in --sbatch override: {tok!r}")
+            result[key] = value
+        else:
+            result[tok] = ""
+    return result
+
+
+def apply_sbatch_overrides(
+    base: Mapping[str, object],
+    overrides: Optional[Mapping[str, Optional[str]]],
+) -> Dict[str, object]:
+    """Return a copy of *base* with *overrides* merged in.
+
+    A value of ``None`` removes that key from the result (silent no-op if
+    the key isn't present in *base*).  Any other value sets the key.
+
+    :param base: The default ``sbatch_opts`` dict to start from.
+    :type base: Mapping[str, object]
+    :param overrides: Mapping of user overrides; ``None`` value = remove.
+    :type overrides: Mapping[str, str or None] or None
+    :return: New dict with overrides applied.  *base* is not mutated.
+    :rtype: dict[str, object]
+    """
+    result: Dict[str, object] = dict(base)
+    if not overrides:
+        return result
+    for key, value in overrides.items():
+        if value is None:
+            result.pop(key, None)
+        else:
+            result[key] = value
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +538,7 @@ def generate_array_script(
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
     compiler_module: str = DEFAULT_COMPILER_MODULE,
+    sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
 ) -> str:
     """Generate a Slurm array job bash script for an array-mode dispatch.
 
@@ -505,6 +582,11 @@ def generate_array_script(
         runtime, baked into each generated task script.  Defaults to
         :data:`DEFAULT_COMPILER_MODULE`.
     :type compiler_module: str, optional
+    :param sbatch_overrides: User overrides for the per-task ``#SBATCH``
+        header, in the shape returned by :func:`parse_sbatch_tokens`.
+        A ``None`` value removes the matching default; any other value
+        sets/overrides the key.  Defaults to ``None`` (no overrides).
+    :type sbatch_overrides: Mapping[str, str or None], optional
     :return: Slurm array job bash script text.
     :rtype: str
     """
@@ -532,6 +614,7 @@ def generate_array_script(
     }
     if partition:
         sbatch_opts["partition"] = partition
+    sbatch_opts = apply_sbatch_overrides(sbatch_opts, sbatch_overrides)
 
     if fast_tmp_root is None:
         # ------------------------------------------------------------------
@@ -606,6 +689,7 @@ def submit_slurm_job(
     fast_tmp_root: Optional[str] = None,
     keep_tmpdir: bool = False,
     compiler_module: str = DEFAULT_COMPILER_MODULE,
+    sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
 ) -> int:
     """Stage scripts and submit a master Slurm job for an array-mode dispatch.
 
@@ -633,6 +717,10 @@ def submit_slurm_job(
         runtime, baked into both the master and array task scripts.
         Defaults to :data:`DEFAULT_COMPILER_MODULE`.
     :type compiler_module: str, optional
+    :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
+        applied to BOTH the master job and each array task (shape returned
+        by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
+    :type sbatch_overrides: Mapping[str, str or None], optional
     :return: Master Slurm job ID.
     :rtype: int
     """
@@ -685,6 +773,7 @@ def submit_slurm_job(
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
         compiler_module=compiler_module,
+        sbatch_overrides=sbatch_overrides,
     )
     array_path = staging_dir / f"lysis-{spec.scale}-array__{run_code}.sh"
     array_path.write_text(array_script)
@@ -713,6 +802,7 @@ def submit_slurm_job(
     }
     if partition:
         sbatch_opts["partition"] = partition
+    sbatch_opts = apply_sbatch_overrides(sbatch_opts, sbatch_overrides)
 
     master_sh_content = gs.scripts.plain(
         [
@@ -744,6 +834,7 @@ def generate_micro_child_script(
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
     compiler_module: str = DEFAULT_COMPILER_MODULE,
+    sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
 ) -> str:
     """Generate a Slurm bash script for a single child microscale Fortran job.
 
@@ -784,6 +875,10 @@ def generate_micro_child_script(
         runtime, baked into the generated script.  Defaults to
         :data:`DEFAULT_COMPILER_MODULE`.
     :type compiler_module: str, optional
+    :param sbatch_overrides: User overrides for the child's ``#SBATCH``
+        header (shape returned by :func:`parse_sbatch_tokens`).  Defaults
+        to ``None``.
+    :type sbatch_overrides: Mapping[str, str or None], optional
     :return: Slurm bash script text.
     :rtype: str
     """
@@ -810,6 +905,7 @@ def generate_micro_child_script(
     }
     if partition:
         sbatch_opts["partition"] = partition
+    sbatch_opts = apply_sbatch_overrides(sbatch_opts, sbatch_overrides)
 
     if fast_tmp_root is None:
         # ------------------------------------------------------------------
@@ -941,6 +1037,7 @@ def generate_micro_array_script(
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
     compiler_module: str = DEFAULT_COMPILER_MODULE,
+    sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
 ) -> str:
     """Generate a Slurm array job script for the microscale Fortran simulation.
 
@@ -970,6 +1067,7 @@ def generate_micro_array_script(
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
         compiler_module=compiler_module,
+        sbatch_overrides=sbatch_overrides,
     )
 
 
@@ -984,6 +1082,7 @@ def submit_micro_slurm_job(
     out_code: str = "",
     num_children: Optional[int] = None,
     compiler_module: str = DEFAULT_COMPILER_MODULE,
+    sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
 ) -> int:
     """Submit the full HDF5-integrated microscale workflow as a Slurm master job.
 
@@ -1040,6 +1139,10 @@ def submit_micro_slurm_job(
         and the legacy single child).  Defaults to
         :data:`DEFAULT_COMPILER_MODULE`.
     :type compiler_module: str, optional
+    :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
+        applied to BOTH the master and child/array task scripts (shape
+        returned by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
+    :type sbatch_overrides: Mapping[str, str or None], optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
@@ -1081,6 +1184,7 @@ def submit_micro_slurm_job(
             partition=partition, fast_tmp_root=fast_tmp_root,
             keep_tmpdir=keep_tmpdir,
             compiler_module=compiler_module,
+            sbatch_overrides=sbatch_overrides,
         )
 
     # ------------------------------------------------------------------
@@ -1124,6 +1228,7 @@ def submit_micro_slurm_job(
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
         compiler_module=compiler_module,
+        sbatch_overrides=sbatch_overrides,
     )
     child_path = staging_dir / f"lysis-micro-child__{run_code}.sh"
     child_path.write_text(child_script)
@@ -1152,6 +1257,7 @@ def submit_micro_slurm_job(
     }
     if partition:
         sbatch_opts["partition"] = partition
+    sbatch_opts = apply_sbatch_overrides(sbatch_opts, sbatch_overrides)
 
     master_sh_content = gs.scripts.plain(
         [
@@ -1201,6 +1307,7 @@ def generate_macro_array_script(
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
     compiler_module: str = DEFAULT_COMPILER_MODULE,
+    sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
 ) -> str:
     """Generate a Slurm array job script for the macroscale Fortran simulation.
 
@@ -1228,6 +1335,7 @@ def generate_macro_array_script(
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
         compiler_module=compiler_module,
+        sbatch_overrides=sbatch_overrides,
     )
 
 
@@ -1242,6 +1350,7 @@ def submit_macro_slurm_job(
     in_code: str = "",
     out_code: str = "",
     compiler_module: str = DEFAULT_COMPILER_MODULE,
+    sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
 ) -> int:
     """Submit the full HDF5-integrated macroscale workflow as a Slurm master job.
 
@@ -1289,6 +1398,10 @@ def submit_macro_slurm_job(
         runtime, baked into the generated master and array task scripts.
         Defaults to :data:`DEFAULT_COMPILER_MODULE`.
     :type compiler_module: str, optional
+    :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
+        applied to BOTH the master and array task scripts (shape returned
+        by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
+    :type sbatch_overrides: Mapping[str, str or None], optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
@@ -1317,4 +1430,5 @@ def submit_macro_slurm_job(
         partition=partition, fast_tmp_root=fast_tmp_root,
         keep_tmpdir=keep_tmpdir,
         compiler_module=compiler_module,
+        sbatch_overrides=sbatch_overrides,
     )

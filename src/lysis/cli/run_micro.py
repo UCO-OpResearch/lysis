@@ -33,7 +33,7 @@ from lysis.cli._provenance import (
     enforce_init_commit_match,
     enforce_lysis_clean,
 )
-from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
+from lysis.tools.slurm import DEFAULT_COMPILER_MODULE, parse_sbatch_tokens
 
 
 @cli.command(name="run-micro")
@@ -126,6 +126,20 @@ from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
     ),
 )
 @click.option(
+    "--sbatch",
+    "sbatch_tokens",
+    multiple=True,
+    metavar="TOKEN",
+    help=(
+        "Override #SBATCH options on the generated master and array task "
+        "scripts.  Repeatable.  Syntax: 'KEY=VALUE' sets/overrides, 'KEY' "
+        "alone adds a flag-style option (e.g. 'hold'), and '^KEY' removes "
+        "a default whose dict key matches KEY exactly (use this to drop "
+        "the built-in 'exclusive=user' via --sbatch '^exclusive=user').  "
+        "Splits on the first '='.  Only meaningful with --slurm."
+    ),
+)
+@click.option(
     "--allow-stale-binary",
     "allow_stale_binary",
     is_flag=True,
@@ -143,7 +157,8 @@ from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
 @click.pass_context
 def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
               fast_tmp_root, keep_tmpdir, file_code, num_children, compiler,
-              allow_stale_binary, allow_dirty, allow_commit_mismatch):
+              sbatch_tokens, allow_stale_binary, allow_dirty,
+              allow_commit_mismatch):
     """Execute the Fortran microscale simulation for a Run or Experiment.
 
     PATH may be either:
@@ -198,6 +213,11 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
 
         nc_arg = None if num_children == 0 else num_children
 
+        try:
+            sbatch_overrides = parse_sbatch_tokens(sbatch_tokens)
+        except ValueError as e:
+            raise click.BadParameter(str(e), param_hint="--sbatch")
+
         submitted = []
         for hdf5_path in hdf5_paths:
             try:
@@ -211,6 +231,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
                     out_code=file_code,
                     num_children=nc_arg,
                     compiler_module=compiler,
+                    sbatch_overrides=sbatch_overrides,
                 )
             except ValueError as e:
                 raise click.ClickException(str(e))

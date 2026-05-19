@@ -18,9 +18,11 @@ import pytest
 from lysis.config.constants import CONST
 from lysis.config.parameters import MacroParameters, MicroParameters
 from lysis.tools.slurm import (
+    apply_sbatch_overrides,
     generate_macro_array_script,
     generate_micro_array_script,
     generate_micro_child_script,
+    parse_sbatch_tokens,
     submit_macro_slurm_job,
     submit_micro_child_job,
     submit_micro_slurm_job,
@@ -1205,3 +1207,221 @@ class TestSubmitMicroSlurmJobArrayPath:
         staging_dir = list(staging_root.iterdir())[0]
         assert (staging_dir / "lysis-micro-child__run-01.sh").exists()
         assert not (staging_dir / "lysis-micro-array__run-01.sh").exists()
+
+
+# ---------------------------------------------------------------------------
+# TestParseSbatchTokens
+# ---------------------------------------------------------------------------
+
+
+class TestParseSbatchTokens:
+    """Tests for :func:`parse_sbatch_tokens`."""
+
+    def test_key_value_pair(self):
+        assert parse_sbatch_tokens(["mem=4G"]) == {"mem": "4G"}
+
+    def test_bare_key_is_flag_style(self):
+        assert parse_sbatch_tokens(["hold"]) == {"hold": ""}
+
+    def test_caret_marks_removal(self):
+        assert parse_sbatch_tokens(["^exclusive=user"]) == {"exclusive=user": None}
+
+    def test_value_can_contain_equals(self):
+        """Split is on the FIRST '=' only; value keeps any remaining '='."""
+        assert parse_sbatch_tokens(["time=01:00:00"]) == {"time": "01:00:00"}
+        assert parse_sbatch_tokens(["foo=a=b=c"]) == {"foo": "a=b=c"}
+
+    def test_users_full_example(self):
+        """End-to-end: mirror the user's original dict-literal example."""
+        tokens = ["mem=4G", "hold", "^exclusive=user"]
+        assert parse_sbatch_tokens(tokens) == {
+            "mem": "4G",
+            "hold": "",
+            "exclusive=user": None,
+        }
+
+    def test_empty_token_raises(self):
+        with pytest.raises(ValueError):
+            parse_sbatch_tokens([""])
+
+    def test_empty_key_in_set_raises(self):
+        with pytest.raises(ValueError):
+            parse_sbatch_tokens(["=4G"])
+
+    def test_caret_alone_raises(self):
+        with pytest.raises(ValueError):
+            parse_sbatch_tokens(["^"])
+
+    def test_empty_input_returns_empty(self):
+        assert parse_sbatch_tokens([]) == {}
+
+
+# ---------------------------------------------------------------------------
+# TestApplySbatchOverrides
+# ---------------------------------------------------------------------------
+
+
+class TestApplySbatchOverrides:
+    """Tests for :func:`apply_sbatch_overrides`."""
+
+    def test_none_overrides_returns_base_copy(self):
+        base = {"mem": 3096, "exclusive=user": ""}
+        result = apply_sbatch_overrides(base, None)
+        assert result == base
+        assert result is not base
+
+    def test_empty_overrides_returns_base_copy(self):
+        base = {"mem": 3096}
+        assert apply_sbatch_overrides(base, {}) == base
+
+    def test_override_sets_value(self):
+        result = apply_sbatch_overrides({"mem": 3096}, {"mem": "4G"})
+        assert result["mem"] == "4G"
+
+    def test_override_adds_new_key(self):
+        result = apply_sbatch_overrides({"mem": 3096}, {"hold": ""})
+        assert result == {"mem": 3096, "hold": ""}
+
+    def test_none_value_removes_key(self):
+        result = apply_sbatch_overrides(
+            {"mem": 3096, "exclusive=user": ""},
+            {"exclusive=user": None},
+        )
+        assert "exclusive=user" not in result
+        assert result == {"mem": 3096}
+
+    def test_none_value_on_missing_key_is_noop(self):
+        """Removing a key that isn't in base must not raise."""
+        result = apply_sbatch_overrides({"mem": 3096}, {"nonexistent": None})
+        assert result == {"mem": 3096}
+
+    def test_does_not_mutate_base(self):
+        base = {"mem": 3096}
+        apply_sbatch_overrides(base, {"mem": "4G", "hold": ""})
+        assert base == {"mem": 3096}
+
+    def test_users_full_example_end_to_end(self):
+        """parse + apply on the user's example produces the documented result."""
+        base = {
+            "array": "0-9",
+            "job-name": "foo",
+            "mem": 3096,
+            "exclusive=user": "",
+        }
+        overrides = parse_sbatch_tokens(["mem=4G", "hold", "^exclusive=user"])
+        result = apply_sbatch_overrides(base, overrides)
+        assert result == {
+            "array": "0-9",
+            "job-name": "foo",
+            "mem": "4G",
+            "hold": "",
+        }
+
+
+# ---------------------------------------------------------------------------
+# TestSbatchOverridesInGeneratedScripts
+# ---------------------------------------------------------------------------
+
+
+class TestSbatchOverridesInGeneratedScripts:
+    """End-to-end: sbatch_overrides flows into the rendered #SBATCH header."""
+
+    def test_macro_array_override_adds_flag(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+            sbatch_overrides={"hold": ""},
+        )
+        assert "#SBATCH --hold" in script
+
+    def test_macro_array_override_removes_default(self, tmp_path):
+        """Removing the built-in exclusive=user default drops it from the header."""
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+            sbatch_overrides={"exclusive=user": None},
+        )
+        assert "--exclusive=user" not in script
+
+    def test_micro_array_override_propagates(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe", num_children=4,
+            sbatch_overrides={"hold": "", "exclusive=user": None},
+        )
+        assert "#SBATCH --hold" in script
+        assert "--exclusive=user" not in script
+
+    def test_micro_child_override_propagates(self, tmp_path):
+        script = generate_micro_child_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/micro.exe",
+            sbatch_overrides={"hold": ""},
+        )
+        assert "#SBATCH --hold" in script
+
+    def test_no_overrides_leaves_defaults_intact(self, tmp_path):
+        """Default behaviour is preserved when sbatch_overrides is None."""
+        script = generate_macro_array_script(
+            tmp_path / "staging", "run-01",
+            tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=3,
+        )
+        assert "--exclusive=user" in script
+        assert "#SBATCH --hold" not in script
+
+
+# ---------------------------------------------------------------------------
+# TestSbatchOverridesInSubmitMicroSlurmJob
+# ---------------------------------------------------------------------------
+
+
+class TestSbatchOverridesInSubmitMicroSlurmJob:
+    """Tests that sbatch_overrides reaches BOTH master and child/array scripts."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_copy2(self):
+        with patch("lysis.tools.slurm.shutil.copy2"):
+            yield
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_legacy_single_child_overrides_master_and_child(
+        self, mock_sbatch, micro_hdf5, tmp_path,
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root,
+            sbatch_overrides={"hold": "", "exclusive=user": None},
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master = (staging_dir / "lysis-micro-master__run-01.sh").read_text()
+        child = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
+        for content in (master, child):
+            assert "#SBATCH --hold" in content
+            assert "--exclusive=user" not in content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_path_overrides_master_and_array(
+        self, mock_sbatch, micro_hdf5, tmp_path,
+    ):
+        # _write_setup_files needs to run; the default fixture's HDF5 file
+        # has micro_simulations=400 so num_children up to 400 is valid.
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        with patch.object(
+            __import__("lysis.execution.fortran_micro", fromlist=["FortranMicro"]).FortranMicro,
+            "_write_setup_files",
+        ):
+            submit_micro_slurm_job(
+                micro_hdf5, "/bin/micro.exe",
+                staging_root=staging_root,
+                num_children=4,
+                sbatch_overrides={"hold": "", "exclusive=user": None},
+            )
+        staging_dir = list(staging_root.iterdir())[0]
+        master = (staging_dir / "lysis-micro-master__run-01.sh").read_text()
+        array = (staging_dir / "lysis-micro-array__run-01.sh").read_text()
+        for content in (master, array):
+            assert "#SBATCH --hold" in content
+            assert "--exclusive=user" not in content

@@ -382,6 +382,61 @@ class TestRunMacroSlurm:
             == "intel-compilers/2024"
         )
 
+    @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
+    def test_sbatch_default_is_empty_overrides(
+        self, mock_submit, runner, macro_hdf5
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(macro_hdf5),
+                "--executable", "/bin/macro.exe",
+                "--slurm",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_args.kwargs.get("sbatch_overrides") == {}
+
+    @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
+    def test_sbatch_tokens_parsed_and_forwarded(
+        self, mock_submit, runner, macro_hdf5
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(macro_hdf5),
+                "--executable", "/bin/macro.exe",
+                "--slurm",
+                "--sbatch", "mem=4G",
+                "--sbatch", "hold",
+                "--sbatch", "^exclusive=user",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_args.kwargs.get("sbatch_overrides") == {
+            "mem": "4G",
+            "hold": "",
+            "exclusive=user": None,
+        }
+
+    def test_sbatch_malformed_token_rejected(self, runner, macro_hdf5):
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(macro_hdf5),
+                "--executable", "/bin/macro.exe",
+                "--slurm",
+                "--sbatch", "^",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "--sbatch" in result.output
+
+    def test_help_mentions_sbatch(self, runner):
+        result = runner.invoke(cli, ["run-macro", "--help"])
+        assert result.exit_code == 0
+        assert "--sbatch" in result.output
+
 
 # ---------------------------------------------------------------------------
 # Batch (experiment / directory)
