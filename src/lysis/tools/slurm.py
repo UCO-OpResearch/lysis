@@ -167,6 +167,7 @@ STAGING_DIR = Path($staging_dir)
 HDF5_PATH = Path($hdf5_path)
 RUN_CODE = $run_code
 FILE_CODE = $file_code
+BINARY_NAME = $binary_name
 KEEP_TMPDIR = $keep_tmpdir
 
 # ---------------------------------------------------------------------------
@@ -205,7 +206,11 @@ print("All child jobs complete.", flush=True)
 # ---------------------------------------------------------------------------
 data_dir = STAGING_DIR / "data" / RUN_CODE
 run = Run(str(HDF5_PATH.parent), run_code=RUN_CODE)
-fm = FortranMicro(run=run, out_file_code=FILE_CODE)
+fm = FortranMicro(
+    run=run,
+    out_file_code=FILE_CODE,
+    executable=str(STAGING_DIR / BINARY_NAME),
+)
 fm.import_results(
     data_dir,
     keep_on_failure=True,
@@ -229,6 +234,7 @@ def _generate_micro_master_py(
     hdf5_path: Path,
     run_code: str,
     file_code: str,
+    binary_name: str,
     keep_tmpdir: bool,
 ) -> str:
     """Return the content of the single-child micro master Python script."""
@@ -237,6 +243,7 @@ def _generate_micro_master_py(
         hdf5_path=repr(str(hdf5_path)),
         run_code=repr(run_code),
         file_code=repr(file_code),
+        binary_name=repr(binary_name),
         keep_tmpdir=repr(keep_tmpdir),
     )
 
@@ -316,6 +323,7 @@ STAGING_DIR = Path($staging_dir)
 HDF5_PATH = Path($hdf5_path)
 RUN_CODE = $run_code
 OUT_FILE_CODE = $out_file_code
+BINARY_NAME = $binary_name
 KEEP_TMPDIR = $keep_tmpdir
 NUM_ARRAY_TASKS = $num_array_tasks
 NFS_WAIT_SECONDS = $nfs_wait_seconds
@@ -358,7 +366,11 @@ time.sleep(NFS_WAIT_SECONDS)
 # ---------------------------------------------------------------------------
 data_dir = STAGING_DIR / "data" / RUN_CODE
 run = Run(str(HDF5_PATH.parent), run_code=RUN_CODE)
-fm = $runner_class(run=run, out_file_code=OUT_FILE_CODE)
+fm = $runner_class(
+    run=run,
+    out_file_code=OUT_FILE_CODE,
+    executable=str(STAGING_DIR / BINARY_NAME),
+)
 $concat_block
 fm.import_results(
     data_dir,
@@ -383,6 +395,7 @@ def _generate_array_master_py(
     staging_dir: Path,
     hdf5_path: Path,
     run_code: str,
+    binary_name: str,
     keep_tmpdir: bool,
 ) -> str:
     """Return the master Python script for an array-mode dispatch."""
@@ -403,6 +416,7 @@ def _generate_array_master_py(
         hdf5_path=repr(str(hdf5_path)),
         run_code=repr(run_code),
         out_file_code=repr(spec.out_file_code),
+        binary_name=repr(binary_name),
         keep_tmpdir=repr(keep_tmpdir),
         num_array_tasks=spec.num_array_tasks,
         nfs_wait_seconds=spec.nfs_wait_seconds,
@@ -662,7 +676,7 @@ def submit_slurm_job(
     # Write master.py
     # ------------------------------------------------------------------
     master_py_content = _generate_array_master_py(
-        spec, staging_dir, hdf5_path, run_code, keep_tmpdir,
+        spec, staging_dir, hdf5_path, run_code, executable.name, keep_tmpdir,
     )
     master_py_path = staging_dir / f"lysis-{spec.scale}-master__{run_code}.py"
     master_py_path.write_text(master_py_content)
@@ -1064,6 +1078,12 @@ def submit_micro_slurm_job(
     )
     fm_setup._write_setup_files(staging_data_dir)
 
+    # Pre-stage the binary into staging_dir so the master can resolve it
+    # at import time (its `--version` output supplies binary provenance).
+    # Mirrors the pre-stage step in submit_slurm_job.  Always present so
+    # two-tier (fast_tmp_root) doesn't leave the master without a binary.
+    shutil.copy2(executable, staging_dir)
+
     # ------------------------------------------------------------------
     # Write child script
     # ------------------------------------------------------------------
@@ -1080,7 +1100,7 @@ def submit_micro_slurm_job(
     # Write master.py
     # ------------------------------------------------------------------
     master_py_content = _generate_micro_master_py(
-        staging_dir, hdf5_path, run_code, out_code, keep_tmpdir,
+        staging_dir, hdf5_path, run_code, out_code, executable.name, keep_tmpdir,
     )
     master_py_path = staging_dir / f"lysis-micro-master__{run_code}.py"
     master_py_path.write_text(master_py_content)

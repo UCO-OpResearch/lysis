@@ -326,6 +326,12 @@ class TestWaitForJobs:
 class TestSubmitMicroSlurmJob:
     """Tests for :func:`submit_micro_slurm_job`."""
 
+    @pytest.fixture(autouse=True)
+    def _patch_copy2(self):
+        """Patch shutil.copy2 so the executable pre-stage step doesn't need a real binary."""
+        with patch("lysis.tools.slurm.shutil.copy2"):
+            yield
+
     @patch("lysis.tools.slurm.gs.sbatch", return_value=999)
     def test_returns_master_job_id(self, mock_sbatch, micro_hdf5, tmp_path):
         job_id = submit_micro_slurm_job(
@@ -450,6 +456,20 @@ class TestSubmitMicroSlurmJob:
         master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
         assert "FortranMicro.import_results(" not in master_content
         assert "fm.import_results(" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_passes_executable_to_runner(
+        self, mock_sbatch, micro_hdf5, tmp_path
+    ):
+        """master.py must construct FortranMicro with executable= so import_results can stamp binary_* attrs."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root)
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
+        assert "BINARY_NAME = 'micro.exe'" in master_content
+        assert "executable=str(STAGING_DIR / BINARY_NAME)" in master_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_relative_executable_resolved_to_absolute(self, mock_sbatch, micro_hdf5, tmp_path):
@@ -758,6 +778,21 @@ class TestSubmitMacroSlurmJob:
         staging_dir = list(staging_root.iterdir())[0]
         master_content = (staging_dir / "lysis-macro-master__run-01.py").read_text()
         assert "lysis.execution.fortran_macro" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_passes_executable_to_runner(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        """master.py must construct FortranMacro with executable= so import_results can stamp binary_* attrs."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "lysis-macro-master__run-01.py").read_text()
+        assert "BINARY_NAME = 'macro.exe'" in master_content
+        assert "executable=str(STAGING_DIR / BINARY_NAME)" in master_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_partition_in_master_script(
@@ -1073,6 +1108,22 @@ class TestSubmitMicroSlurmJobArrayPath:
         assert "lysis.execution.fortran_micro" in master_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_passes_executable_to_runner(
+        self, mock_sbatch, micro_hdf5, tmp_path, mock_write_setup
+    ):
+        """master.py must construct FortranMicro with executable= so import_results can stamp binary_* attrs."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root, num_children=10,
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
+        assert "BINARY_NAME = 'micro.exe'" in master_content
+        assert "executable=str(STAGING_DIR / BINARY_NAME)" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_executable_pre_staged_in_staging_dir(
         self, mock_sbatch, micro_hdf5, tmp_path
     ):
@@ -1121,7 +1172,7 @@ class TestSubmitMicroSlurmJobArrayPath:
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_num_children_none_uses_legacy_single_child_path(
-        self, mock_sbatch, micro_hdf5, tmp_path
+        self, mock_sbatch, micro_hdf5, tmp_path, mock_write_setup
     ):
         """num_children=None (the default) keeps the legacy single-child path."""
         staging_root = tmp_path / "staging_root"
