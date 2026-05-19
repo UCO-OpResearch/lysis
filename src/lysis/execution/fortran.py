@@ -110,6 +110,24 @@ class FortranRunner(SimulationRunner):
     #: honours the ``LYSIS_ALLOW_STALE_BINARY`` env var so callers don't
     #: need to combine the two override sources themselves.
     allow_stale_binary: bool = False
+    #: When True, :meth:`_verify_binary_version` is bypassed entirely —
+    #: no ``<binary> --version`` subprocess, no staleness check, no
+    #: warning banner.  Set by the historical-build workflow
+    #: (``lysis run-{micro,macro} --fortran-commit ...``) where the
+    #: binary↔``src/fortran/`` mismatch is intentional and the historical
+    #: binary may not implement ``--version`` at all.  Pair with
+    #: :attr:`historical_binary_attrs` so the synthesised binary
+    #: provenance is still stamped into the HDF5 file.
+    skip_binary_verification: bool = False
+    #: Optional pre-computed binary-provenance dict shipped to
+    #: :meth:`~lysis.dataio.datastore.DataStore.import_collection` as
+    #: ``replace_binary_attrs``.  Populated by the historical-build
+    #: workflow from
+    #: :func:`~lysis.tools.provenance.gather_historical_binary_provenance`.
+    #: When ``None``, the default
+    #: :func:`~lysis.tools.provenance.gather_binary_provenance` path is
+    #: used (queries ``<binary> --version``).
+    historical_binary_attrs: "dict | None" = None
 
     # ------------------------------------------------------------------
     # Abstract hooks (implemented by subclasses)
@@ -245,9 +263,16 @@ class FortranRunner(SimulationRunner):
         and caches the result so multi-simulation paths (e.g. the macro
         loop) issue the warning exactly once even when called per-sim.
 
-        :return: The verify dict — empty on match; on overridden mismatch
-            contains ``"banner"`` (text to prepend to the Fortran stdout
-            log) plus the ``stale_binary_override`` flag forwarded to
+        When :attr:`skip_binary_verification` is True (historical-build
+        workflow), this is a no-op — no subprocess is spawned, no
+        warning banner is generated.  The caller has independently
+        synthesised the binary provenance and will pass it through
+        :attr:`historical_binary_attrs`.
+
+        :return: The verify dict — empty on match or when skipped; on
+            overridden mismatch contains ``"banner"`` (text to prepend
+            to the Fortran stdout log) plus the ``stale_binary_override``
+            flag forwarded to
             :meth:`~lysis.dataio.datastore.DataStore.import_collection`
             via :meth:`_binary_hdf5_attrs`.  The binary's
             commit/dirty/compiler stamps are no longer included here —
@@ -259,6 +284,9 @@ class FortranRunner(SimulationRunner):
             binary stamp disagrees with ``src/fortran/`` and
             :attr:`allow_stale_binary` is False.
         """
+        if self.skip_binary_verification:
+            self._binary_check_info = {}
+            return self._binary_check_info
         if getattr(self, "_binary_check_info", None) is None:
             from ..tools.provenance import (  # noqa: PLC0415
                 allow_stale_from_env,
@@ -493,6 +521,7 @@ class FortranRunner(SimulationRunner):
                     [self.out_file_code],
                     binary_executable=self.executable,
                     binary_override=self._binary_hdf5_attrs,
+                    replace_binary_attrs=self.historical_binary_attrs,
                 )
 
             if not keep_tmpdir:

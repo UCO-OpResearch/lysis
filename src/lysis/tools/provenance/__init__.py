@@ -23,6 +23,7 @@ from .binary import (
     allow_stale_from_env,
     gather_binary_provenance,
     gather_fortran_source_provenance,
+    gather_historical_binary_provenance,
     query_binary_version,
     verify_binary_matches_source,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "gather_binary_provenance",
     "gather_execution_provenance",
     "gather_fortran_source_provenance",
+    "gather_historical_binary_provenance",
     "gather_init_provenance",
     "mark_dirty_warning_emitted",
     "query_binary_version",

@@ -22,6 +22,7 @@ Execution modes
     jobs to finish).
 """
 
+import contextlib
 from pathlib import Path
 
 import click
@@ -122,7 +123,26 @@ from lysis.tools.slurm import DEFAULT_COMPILER_MODULE, parse_sbatch_tokens
     help=(
         "LMod module spec providing the Fortran compiler runtime, loaded "
         "by each generated Slurm script (e.g. ``intel-compilers/2024``).  "
-        "Only meaningful with --slurm."
+        "With --slurm, also wraps the historical-build ``make`` invocation "
+        "of --fortran-commit so the binary links against the same toolchain "
+        "the Slurm preamble will load.  Only meaningful with --slurm."
+    ),
+)
+@click.option(
+    "--fortran-commit",
+    "fortran_commit",
+    default=None,
+    metavar="REF",
+    help=(
+        "Build the Fortran binary from this git ref (SHA, tag, or branch) "
+        "before running, instead of using a pre-built binary at "
+        "--executable's path.  When set, --executable is interpreted as the "
+        "binary name (with or without a leading 'bin/') to pick from the "
+        "historical build's bin/ directory; the binary↔src/fortran "
+        "staleness check is bypassed because the mismatch is intentional.  "
+        "Synthesised provenance (resolved SHA, ``iso_fortran_env`` compiler "
+        "string, ``binary_source = 'historical:<sha>'``) is stamped into "
+        "the HDF5 file in place of the binary's own --version output."
     ),
 )
 @click.option(
@@ -157,7 +177,7 @@ from lysis.tools.slurm import DEFAULT_COMPILER_MODULE, parse_sbatch_tokens
 @click.pass_context
 def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
               fast_tmp_root, keep_tmpdir, file_code, num_children, compiler,
-              sbatch_tokens, allow_stale_binary, allow_dirty,
+              fortran_commit, sbatch_tokens, allow_stale_binary, allow_dirty,
               allow_commit_mismatch):
     """Execute the Fortran microscale simulation for a Run or Experiment.
 
@@ -208,71 +228,108 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
         with DataStore(hdf5_path.stem, str(hdf5_path.parent), mode="r") as ds:
             enforce_init_commit_match(ctx, ds, "micro", allow_commit_mismatch)
 
-    if use_slurm:
-        from lysis.tools.slurm import submit_micro_slurm_job
-
-        nc_arg = None if num_children == 0 else num_children
-
-        try:
-            sbatch_overrides = parse_sbatch_tokens(sbatch_tokens)
-        except ValueError as e:
-            raise click.BadParameter(str(e), param_hint="--sbatch")
-
-        submitted = []
-        for hdf5_path in hdf5_paths:
+    # --fortran-commit: build the historical binary once up front, share its
+    # path across every run in this invocation, tear down at the end.  Only
+    # load the compiler module around the build when Slurm jobs (which load
+    # the same module via the preamble) will be executing the binary.
+    with contextlib.ExitStack() as stack:
+        if fortran_commit is not None:
+            from lysis.execution.historical_build import (
+                HistoricalBuildError,
+                build_historical_binary,
+            )
             try:
-                job_id = submit_micro_slurm_job(
-                    hdf5_path,
-                    executable,
-                    staging_root=staging_root,
-                    partition=partition,
-                    fast_tmp_root=fast_tmp_root,
-                    keep_tmpdir=keep_tmpdir,
-                    out_code=file_code,
-                    num_children=nc_arg,
-                    compiler_module=compiler,
-                    sbatch_overrides=sbatch_overrides,
+                resolved_exe, historical_provenance = stack.enter_context(
+                    build_historical_binary(
+                        fortran_commit,
+                        executable,
+                        compiler_module=compiler if use_slurm else None,
+                        keep_dir=keep_tmpdir,
+                    )
                 )
-            except ValueError as e:
+            except HistoricalBuildError as e:
                 raise click.ClickException(str(e))
-            submitted.append((hdf5_path.stem, job_id))
+            executable = str(resolved_exe)
+            sha = historical_provenance.get("binary_commit", "?")
             console.print(
-                f"Submitted master Slurm job [bold]{job_id}[/bold]"
-                f" for {hdf5_path.stem}"
+                f"[yellow]Using Fortran built from {sha[:7]} "
+                f"(--fortran-commit {fortran_commit}); "
+                f"binary↔src/fortran mismatch is expected and not checked."
+                f"[/yellow]"
             )
+        else:
+            historical_provenance = None
 
-        if len(submitted) > 1:
-            console.print(
-                f"[green]Submitted {len(submitted)} master Slurm jobs.[/green]"
-            )
-    else:
-        from lysis.execution.fortran_micro import FortranMicro
+        if use_slurm:
+            from lysis.tools.slurm import submit_micro_slurm_job
 
-        n = len(hdf5_paths)
-        for i, hdf5_path in enumerate(hdf5_paths):
-            prefix = f"[{i + 1}/{n}] " if n > 1 else ""
+            nc_arg = None if num_children == 0 else num_children
 
             try:
-                fm = FortranMicro.from_hdf5(
-                    hdf5_path,
-                    executable,
-                    out_file_code=file_code,
-                    allow_stale_binary=allow_stale_binary,
-                )
+                sbatch_overrides = parse_sbatch_tokens(sbatch_tokens)
             except ValueError as e:
-                raise click.ClickException(str(e))
-            if not ctx.obj.get("verbose", 0):
-                with console.status(
-                    f"{prefix}Running microscale simulation for"
-                    f" {fm.run.run_code}..."
-                ):
-                    fm.run_full(keep_tmpdir=keep_tmpdir)
-            else:
+                raise click.BadParameter(str(e), param_hint="--sbatch")
+
+            submitted = []
+            for hdf5_path in hdf5_paths:
+                try:
+                    job_id = submit_micro_slurm_job(
+                        hdf5_path,
+                        executable,
+                        staging_root=staging_root,
+                        partition=partition,
+                        fast_tmp_root=fast_tmp_root,
+                        keep_tmpdir=keep_tmpdir,
+                        out_code=file_code,
+                        num_children=nc_arg,
+                        compiler_module=compiler,
+                        sbatch_overrides=sbatch_overrides,
+                        historical_binary_attrs=historical_provenance,
+                    )
+                except ValueError as e:
+                    raise click.ClickException(str(e))
+                submitted.append((hdf5_path.stem, job_id))
                 console.print(
-                    f"{prefix}Running microscale simulation for"
-                    f" [bold]{fm.run.run_code}[/bold]"
+                    f"Submitted master Slurm job [bold]{job_id}[/bold]"
+                    f" for {hdf5_path.stem}"
                 )
-                fm.run_full(keep_tmpdir=keep_tmpdir)
-            console.print(
-                f"[green]Microscale results imported into[/green] {hdf5_path}"
-            )
+
+            if len(submitted) > 1:
+                console.print(
+                    f"[green]Submitted {len(submitted)} master Slurm jobs.[/green]"
+                )
+        else:
+            from lysis.execution.fortran_micro import FortranMicro
+
+            n = len(hdf5_paths)
+            for i, hdf5_path in enumerate(hdf5_paths):
+                prefix = f"[{i + 1}/{n}] " if n > 1 else ""
+
+                try:
+                    fm = FortranMicro.from_hdf5(
+                        hdf5_path,
+                        executable,
+                        out_file_code=file_code,
+                        allow_stale_binary=allow_stale_binary,
+                        skip_binary_verification=(
+                            historical_provenance is not None
+                        ),
+                        historical_binary_attrs=historical_provenance,
+                    )
+                except ValueError as e:
+                    raise click.ClickException(str(e))
+                if not ctx.obj.get("verbose", 0):
+                    with console.status(
+                        f"{prefix}Running microscale simulation for"
+                        f" {fm.run.run_code}..."
+                    ):
+                        fm.run_full(keep_tmpdir=keep_tmpdir)
+                else:
+                    console.print(
+                        f"{prefix}Running microscale simulation for"
+                        f" [bold]{fm.run.run_code}[/bold]"
+                    )
+                    fm.run_full(keep_tmpdir=keep_tmpdir)
+                console.print(
+                    f"[green]Microscale results imported into[/green] {hdf5_path}"
+                )

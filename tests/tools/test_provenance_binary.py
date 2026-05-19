@@ -302,3 +302,149 @@ def test_verify_explicit_false_overrides_env(monkeypatch):
     monkeypatch.setenv(CONST.LYSIS_ALLOW_STALE_BINARY_ENV, "1")
     with pytest.raises(StaleBinaryError):
         verify_binary_matches_source("/fake/bin", allow_stale=False)
+
+
+# ----------------------------------------------------------------------
+# gather_historical_binary_provenance
+# ----------------------------------------------------------------------
+
+from lysis.tools.provenance import gather_historical_binary_provenance
+from lysis.tools.provenance.binary import (
+    _identify_compiler_binary,
+    _probe_iso_fortran_env_compiler_version,
+)
+
+
+def test_identify_compiler_gfortran(tmp_path):
+    log = tmp_path / "build.log"
+    log.write_text("gfortran -mcmodel=medium -fbacktrace src/fortran/foo.f90\n")
+    assert _identify_compiler_binary(log) == "gfortran"
+
+
+def test_identify_compiler_ifort(tmp_path):
+    log = tmp_path / "build.log"
+    log.write_text(
+        "ifort -r8 -mcmodel medium -traceback src/fortran/foo.f90\n"
+        "gcc -std=c99 src/c/kiss.c\n"
+    )
+    assert _identify_compiler_binary(log) == "ifort"
+
+
+def test_identify_compiler_ifx_prefers_first_known(tmp_path):
+    log = tmp_path / "build.log"
+    log.write_text("ifx src/fortran/foo.f90\nifort other.f90\n")
+    assert _identify_compiler_binary(log) == "ifx"
+
+
+def test_identify_compiler_no_log_returns_none():
+    assert _identify_compiler_binary(None) is None
+
+
+def test_identify_compiler_no_match_returns_none(tmp_path):
+    log = tmp_path / "build.log"
+    log.write_text("make: nothing to do\n")
+    assert _identify_compiler_binary(log) is None
+
+
+def test_identify_compiler_missing_file_returns_none(tmp_path):
+    assert _identify_compiler_binary(tmp_path / "nope.log") is None
+
+
+def test_historical_provenance_uses_binary_version_on_sha_match(monkeypatch):
+    sha = "a" * 40
+    _patch_run(monkeypatch, stdout=f"{sha} clean Intel(R) 2021.9\n")
+    result = gather_historical_binary_provenance(
+        "/fake/bin", resolved_sha=sha
+    )
+    assert result == {
+        CONST.BINARY_COMMIT_ATTR: sha,
+        CONST.BINARY_DIRTY_ATTR: "clean",
+        CONST.BINARY_COMPILER_ATTR: "Intel(R) 2021.9",
+        CONST.BINARY_SOURCE_ATTR: f"historical:{sha}",
+    }
+
+
+def test_historical_provenance_synthesises_when_version_missing(
+    monkeypatch, tmp_path
+):
+    sha = "b" * 40
+    _patch_run(monkeypatch, raises=FileNotFoundError())
+    log = tmp_path / "build.log"
+    log.write_text("gfortran -c src/fortran/foo.f90\n")
+    # Stub the iso_fortran_env probe so the test doesn't need a real compiler.
+    monkeypatch.setattr(
+        binary_mod,
+        "_probe_iso_fortran_env_compiler_version",
+        lambda compiler, **kw: "GCC version 11.4.0",
+    )
+    result = gather_historical_binary_provenance(
+        "/fake/bin", resolved_sha=sha, build_log=log
+    )
+    assert result[CONST.BINARY_COMMIT_ATTR] == sha
+    assert result[CONST.BINARY_DIRTY_ATTR] == "clean"
+    assert result[CONST.BINARY_COMPILER_ATTR] == "GCC version 11.4.0"
+    assert result[CONST.BINARY_SOURCE_ATTR] == f"historical:{sha}"
+
+
+def test_historical_provenance_synthesises_when_sha_mismatches(
+    monkeypatch, tmp_path
+):
+    requested = "c" * 40
+    embedded = "d" * 40
+    _patch_run(monkeypatch, stdout=f"{embedded} clean ifort\n")
+    log = tmp_path / "build.log"
+    log.write_text("ifort src/fortran/foo.f90\n")
+    monkeypatch.setattr(
+        binary_mod,
+        "_probe_iso_fortran_env_compiler_version",
+        lambda compiler, **kw: "Intel(R) Fortran 2023.0",
+    )
+    result = gather_historical_binary_provenance(
+        "/fake/bin", resolved_sha=requested, build_log=log
+    )
+    # Synthesised values, not the embedded ones.
+    assert result[CONST.BINARY_COMMIT_ATTR] == requested
+    assert result[CONST.BINARY_COMPILER_ATTR] == "Intel(R) Fortran 2023.0"
+    assert result[CONST.BINARY_SOURCE_ATTR] == f"historical:{requested}"
+
+
+def test_historical_provenance_compiler_unknown_when_log_absent(monkeypatch):
+    sha = "e" * 40
+    _patch_run(monkeypatch, raises=FileNotFoundError())
+    result = gather_historical_binary_provenance(
+        "/fake/bin", resolved_sha=sha, build_log=None
+    )
+    assert result[CONST.BINARY_COMPILER_ATTR] == "unknown"
+    assert result[CONST.BINARY_SOURCE_ATTR] == f"historical:{sha}"
+
+
+def test_historical_provenance_compiler_unknown_when_probe_fails(
+    monkeypatch, tmp_path
+):
+    sha = "f" * 40
+    _patch_run(monkeypatch, raises=FileNotFoundError())
+    log = tmp_path / "build.log"
+    log.write_text("gfortran src/fortran/foo.f90\n")
+    monkeypatch.setattr(
+        binary_mod,
+        "_probe_iso_fortran_env_compiler_version",
+        lambda compiler, **kw: None,
+    )
+    result = gather_historical_binary_provenance(
+        "/fake/bin", resolved_sha=sha, build_log=log
+    )
+    assert result[CONST.BINARY_COMPILER_ATTR] == "unknown"
+
+
+@pytest.mark.fortran_binary
+def test_probe_iso_fortran_env_with_real_gfortran():
+    # Smoke test that the probe actually compiles and runs against
+    # whichever gfortran happens to be on PATH.  Skipped on machines
+    # without it (the fortran_binary marker is documented as
+    # "requires a compiled Fortran executable").
+    import shutil as _sh
+    if _sh.which("gfortran") is None:
+        pytest.skip("gfortran not on PATH")
+    out = _probe_iso_fortran_env_compiler_version("gfortran")
+    assert out is not None
+    assert "GCC" in out or "gfortran" in out.lower()

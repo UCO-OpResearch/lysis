@@ -14,6 +14,7 @@ This documentation includes both usage guides and API reference.
    usage/run_microscale
    usage/fortran_microscale
    usage/fortran_macroscale
+   usage/historical_fortran
    usage/octave_notebooks
 
 .. toctree::

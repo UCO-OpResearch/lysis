@@ -1020,6 +1020,7 @@ class DataStore:
         *,
         executable=None,
         binary_override=None,
+        replace_binary_attrs=None,
     ):
         """Stamp provenance attributes onto the per-scale params group.
 
@@ -1043,17 +1044,34 @@ class DataStore:
         :type kind: str
         :param executable: Required when ``kind="binary"`` — path to the
             Fortran binary whose ``--version`` output supplies commit /
-            dirty / compiler stamps.  Ignored otherwise.
+            dirty / compiler stamps.  May be ``None`` when
+            *replace_binary_attrs* is supplied (historical-build mode,
+            where the binary's commit/dirty/compiler are synthesised
+            externally rather than queried).  Ignored for other kinds.
         :type executable: pathlib.Path or str, optional
         :param binary_override: Optional dict of extra attrs to merge in
-            when ``kind="binary"`` — typically
+            *on top of* the gathered (or replaced) attrs — typically
             ``{stale_binary_override: True}`` from
             :func:`~lysis.tools.provenance.verify_binary_matches_source`
-            when the staleness check was overridden.  Ignored otherwise.
+            when the staleness check was overridden.  Ignored when
+            ``kind != "binary"``.
         :type binary_override: dict, optional
+        :param replace_binary_attrs: Optional pre-computed dict that
+            *replaces* the default
+            :func:`~lysis.tools.provenance.gather_binary_provenance`
+            call when ``kind="binary"``.  Used by the historical-build
+            workflow to ship a synthesised provenance dict (commit SHA,
+            ``iso_fortran_env`` compiler probe output, and the
+            ``binary_source = "historical:<sha>"`` marker) for a binary
+            whose own ``--version`` may not match — or be absent.  When
+            supplied, *executable* may be ``None`` and no subprocess is
+            spawned against the binary.  ``binary_override`` (if also
+            supplied) is merged on top.  Ignored for other kinds.
+        :type replace_binary_attrs: dict, optional
         :raises IOError: If the DataStore is in read-only mode.
         :raises ValueError: For an unknown *scale*/*kind*, a missing
-            target group, or ``kind="binary"`` without an *executable*.
+            target group, or ``kind="binary"`` with neither
+            *executable* nor *replace_binary_attrs*.
         """
         if self._mode == "r":
             raise IOError(
@@ -1076,13 +1094,16 @@ class DataStore:
             from ..tools.provenance import gather_execution_provenance  # noqa: PLC0415
             attrs = gather_execution_provenance()
         elif kind == "binary":
-            if executable is None:
-                raise ValueError(
-                    "stamp_provenance(kind='binary') requires an "
-                    "'executable' argument."
-                )
-            from ..tools.provenance import gather_binary_provenance  # noqa: PLC0415
-            attrs = gather_binary_provenance(executable)
+            if replace_binary_attrs is not None:
+                attrs = dict(replace_binary_attrs)
+            else:
+                if executable is None:
+                    raise ValueError(
+                        "stamp_provenance(kind='binary') requires either "
+                        "an 'executable' argument or 'replace_binary_attrs'."
+                    )
+                from ..tools.provenance import gather_binary_provenance  # noqa: PLC0415
+                attrs = gather_binary_provenance(executable)
             if binary_override:
                 attrs = {**attrs, **binary_override}
         else:
@@ -1182,6 +1203,7 @@ class DataStore:
         param_aliases=None,
         binary_executable=None,
         binary_override=None,
+        replace_binary_attrs=None,
     ):
         """Import a data collection from an external source into this DataStore.
 
@@ -1241,8 +1263,18 @@ class DataStore:
             :func:`~lysis.tools.provenance.verify_binary_matches_source`
             (typically ``{stale_binary_override: True}``) when the binary
             preflight check was bypassed.  Merged into the binary-stamp
-            group attrs.  Ignored when ``binary_executable`` is ``None``.
+            group attrs.  Ignored when neither ``binary_executable`` nor
+            ``replace_binary_attrs`` is provided.
         :type binary_override: dict, optional
+        :param replace_binary_attrs: Optional pre-computed binary-provenance
+            dict from
+            :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+            (historical-build workflow).  When supplied, the binary stamp
+            is written from this dict instead of querying
+            ``<binary_executable> --version``; ``binary_executable`` may
+            be ``None`` in that case.  See
+            :meth:`stamp_provenance` for details.
+        :type replace_binary_attrs: dict, optional
         :raises IOError: If the DataStore is in read-only mode.
         :raises ValueError: If *collection_name* is not ``"microscale_out"``
             or ``"macroscale_out"``, if the target collection does not yet
@@ -1380,12 +1412,13 @@ class DataStore:
         # group via the shared :meth:`stamp_provenance` helper.
         scale = "micro" if collection_name == "microscale_out" else "macro"
         self.stamp_provenance(scale, "execution")
-        if binary_executable is not None:
+        if binary_executable is not None or replace_binary_attrs is not None:
             self.stamp_provenance(
                 scale,
                 "binary",
                 executable=binary_executable,
                 binary_override=binary_override,
+                replace_binary_attrs=replace_binary_attrs,
             )
 
         # Re-initialize in place (reloads all collections, params, etc.)

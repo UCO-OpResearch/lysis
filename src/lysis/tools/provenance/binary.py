@@ -20,7 +20,9 @@ group.
 """
 
 import os
+import re
 import subprocess
+import tempfile
 import warnings
 from pathlib import Path
 from typing import Optional
@@ -32,10 +34,15 @@ __all__ = [
     "StaleBinaryError",
     "query_binary_version",
     "gather_binary_provenance",
+    "gather_historical_binary_provenance",
     "gather_fortran_source_provenance",
     "allow_stale_from_env",
     "verify_binary_matches_source",
 ]
+
+#: Compiler binaries known to the lysis Fortran Makefile.  Order is
+#: priority order when scanning for the first match in a build log.
+_FORTRAN_COMPILERS: tuple[str, ...] = ("ifx", "ifort", "gfortran")
 
 
 class StaleBinaryError(RuntimeError):
@@ -240,4 +247,226 @@ def verify_binary_matches_source(
             source_dirty=source_dirty,
         ),
         CONST.STALE_BINARY_OVERRIDE_ATTR: True,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Historical-build provenance synthesis
+# ---------------------------------------------------------------------------
+#
+# When ``lysis run-{micro,macro} --fortran-commit <ref>`` builds a binary
+# from an old commit, the binary's own ``--version`` flag may not exist
+# (added later in history) or may report a commit different from what the
+# user requested.  We need a provenance dict shaped like the output of
+# :func:`gather_binary_provenance` so it can flow through the same
+# stamping pipeline.  The two non-obvious pieces are:
+#
+# - **commit / dirty**: take from the resolved git SHA (clean by
+#   construction, since we extracted from git).
+# - **compiler**: mirror what current binaries report — the string from
+#   ``iso_fortran_env.compiler_version()``.  Get it the same way the
+#   Makefile does: ask the compiler itself, by building and running a
+#   tiny stub.  See :func:`_probe_iso_fortran_env_compiler_version`.
+
+
+def _identify_compiler_binary(build_log: "Path | None") -> Optional[str]:
+    """Return the Fortran compiler basename that actually ran the build.
+
+    Scans *build_log* line-by-line and returns the first whitespace-
+    delimited token that matches a known compiler basename (``ifx``,
+    ``ifort``, ``gfortran``).  Returns ``None`` when no log is given or
+    no match is found.
+
+    :param build_log: Path to the captured ``make`` stdout/stderr log, or
+        ``None`` if no log was kept.
+    :type build_log: Path or None
+    :return: Compiler basename (e.g. ``"ifort"``) or ``None``.
+    :rtype: str or None
+    """
+    if build_log is None:
+        return None
+    try:
+        text = Path(build_log).read_text(errors="replace")
+    except (OSError, UnicodeDecodeError):
+        return None
+    pattern = re.compile(
+        r"\b(" + "|".join(re.escape(c) for c in _FORTRAN_COMPILERS) + r")\b"
+    )
+    match = pattern.search(text)
+    if match is None:
+        return None
+    return match.group(1)
+
+
+def _probe_iso_fortran_env_compiler_version(
+    compiler: str,
+    *,
+    module_wrapper: Optional[list[str]] = None,
+    timeout: float = 30.0,
+) -> Optional[str]:
+    """Compile and run a tiny stub that prints ``iso_fortran_env.compiler_version()``.
+
+    Mirrors exactly the mechanism that current Fortran binaries use to
+    embed their compiler identification in ``--version`` output: the F2008
+    intrinsic ``compiler_version()`` contributed by the compiler itself
+    at compile time.  Compiling with the same binary that built the
+    historical Fortran code guarantees a byte-for-byte equivalent string.
+
+    :param compiler: Compiler binary name (e.g. ``"gfortran"``,
+        ``"ifort"``, ``"ifx"``).  Must be discoverable on ``PATH`` —
+        or, when *module_wrapper* is given, on the ``PATH`` after the
+        module is loaded.
+    :type compiler: str
+    :param module_wrapper: Optional argv prefix that wraps the compile
+        and run steps in an LMod-aware shell, e.g.
+        ``["bash", "-c", "module purge && module load intel-compilers/2023 && exec \"$@\"", "--"]``.
+        ``None`` (the default) invokes the compiler directly in the
+        current environment.
+    :type module_wrapper: list[str] or None
+    :param timeout: Per-subprocess timeout in seconds.
+    :type timeout: float
+    :return: The first line of the stub's stdout (e.g.
+        ``"GCC version 11.4.0"``), or ``None`` if any step failed.
+    :rtype: str or None
+    """
+    stub = (
+        "program compiler_id\n"
+        "    use iso_fortran_env, only: compiler_version\n"
+        "    implicit none\n"
+        "    print '(a)', trim(compiler_version())\n"
+        "end program\n"
+    )
+    with tempfile.TemporaryDirectory(prefix="lysis-compiler-probe-") as td:
+        src = Path(td) / "probe.f90"
+        exe = Path(td) / "probe"
+        src.write_text(stub)
+        compile_argv = [compiler, "-o", str(exe), str(src)]
+        run_argv = [str(exe)]
+        if module_wrapper is not None:
+            compile_argv = [*module_wrapper, *compile_argv]
+            run_argv = [*module_wrapper, *run_argv]
+        try:
+            result = subprocess.run(
+                compile_argv,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode != 0 or not exe.exists():
+            return None
+        try:
+            result = subprocess.run(
+                run_argv,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode != 0:
+            return None
+        first = result.stdout.splitlines()
+        if not first:
+            return None
+        return first[0].strip() or None
+
+
+def _module_wrapper_argv(compiler_module: Optional[str]) -> Optional[list[str]]:
+    """Build the bash-wrapper argv used to load an LMod module around a subprocess.
+
+    :param compiler_module: LMod module spec, e.g. ``"intel-compilers/2023"``,
+        or ``None`` to skip wrapping.
+    :type compiler_module: str or None
+    :return: argv list with ``"exec \"$@\""`` as the bash body so the
+        wrapped command's exit status is preserved verbatim, or ``None``
+        when *compiler_module* is ``None``.
+    :rtype: list[str] or None
+    """
+    if compiler_module is None:
+        return None
+    script = (
+        "[ -z \"${LMOD_CMD:-}\" ] && [ -f /etc/profile.d/lmod.sh ] "
+        "&& source /etc/profile.d/lmod.sh; "
+        f"module purge && module load {compiler_module} && exec \"$@\""
+    )
+    return ["bash", "-c", script, "--"]
+
+
+def gather_historical_binary_provenance(
+    executable: "Path | str",
+    *,
+    resolved_sha: str,
+    build_log: "Path | None" = None,
+    compiler_module: Optional[str] = None,
+) -> dict:
+    """Build a binary-provenance dict for a binary rebuilt from an older commit.
+
+    Drop-in alternative to :func:`gather_binary_provenance`, intended
+    for the ``lysis run-{micro,macro} --fortran-commit <ref>`` workflow.
+    First tries the binary's own ``--version`` output (cheap, and if the
+    binary supports it and reports the requested commit, that's already
+    the authoritative answer).  Falls back to synthesising the dict when
+    ``--version`` is unsupported or reports a different commit:
+
+    - ``binary_commit`` = *resolved_sha* (the SHA we extracted from git).
+    - ``binary_dirty`` = ``"clean"`` (we extracted from a clean git tree).
+    - ``binary_compiler`` = result of
+      :func:`_probe_iso_fortran_env_compiler_version`, identifying the
+      compiler from *build_log* and running it on a tiny stub to capture
+      ``iso_fortran_env.compiler_version()`` — the exact string a
+      ``--version``-capable binary would have embedded.
+
+    Always sets :data:`CONST.BINARY_SOURCE_ATTR` to
+    ``f"historical:{resolved_sha}"`` so the deviation is auditable from
+    the HDF5 file alone.
+
+    :param executable: Path to the rebuilt Fortran binary.  Used only
+        for the initial ``--version`` probe; if synthesis is required,
+        the binary is not executed.
+    :type executable: pathlib.Path or str
+    :param resolved_sha: Full git SHA the binary was built from
+        (resolved upstream via ``git rev-parse <ref>^{commit}``).
+    :type resolved_sha: str
+    :param build_log: Path to the captured ``make`` log used to identify
+        which compiler binary actually ran.  ``None`` skips the probe
+        and the result is ``"unknown"`` for *binary_compiler* in the
+        synthesis path.
+    :type build_log: pathlib.Path or None
+    :param compiler_module: LMod module spec to load around the stub
+        compile/run pair (e.g. ``"intel-compilers/2023"``).  Should match
+        the module that wrapped ``make``.  ``None`` (default) runs the
+        probe in the current environment.
+    :type compiler_module: str or None
+    :return: Dict keyed by :data:`CONST.BINARY_COMMIT_ATTR`,
+        :data:`CONST.BINARY_DIRTY_ATTR`, :data:`CONST.BINARY_COMPILER_ATTR`,
+        :data:`CONST.BINARY_SOURCE_ATTR`.  All values are strings;
+        unknown fields are ``"unknown"``.
+    :rtype: dict
+    """
+    commit, dirty, compiler = query_binary_version(executable)
+    if commit == resolved_sha and commit != "unknown":
+        return {
+            CONST.BINARY_COMMIT_ATTR: commit,
+            CONST.BINARY_DIRTY_ATTR: dirty,
+            CONST.BINARY_COMPILER_ATTR: compiler,
+            CONST.BINARY_SOURCE_ATTR: f"historical:{resolved_sha}",
+        }
+
+    compiler_name = _identify_compiler_binary(build_log)
+    if compiler_name is None:
+        probed = None
+    else:
+        probed = _probe_iso_fortran_env_compiler_version(
+            compiler_name,
+            module_wrapper=_module_wrapper_argv(compiler_module),
+        )
+    return {
+        CONST.BINARY_COMMIT_ATTR: resolved_sha,
+        CONST.BINARY_DIRTY_ATTR: "clean",
+        CONST.BINARY_COMPILER_ATTR: probed or "unknown",
+        CONST.BINARY_SOURCE_ATTR: f"historical:{resolved_sha}",
     }

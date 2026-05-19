@@ -136,6 +136,8 @@ class FortranMicro(FortranRunner):
         index: "int | None" = None,
         num_children: "int | None" = None,
         allow_stale_binary: bool = False,
+        skip_binary_verification: bool = False,
+        historical_binary_attrs: "dict | None" = None,
     ) -> "FortranMicro":
         """Construct a :class:`FortranMicro` from an existing HDF5 run file.
 
@@ -164,6 +166,18 @@ class FortranMicro(FortranRunner):
             :class:`~lysis.tools.provenance.StaleBinaryError` to a
             loud warning, defaults to ``False``.
         :type allow_stale_binary: bool, optional
+        :param skip_binary_verification: Bypass the binary↔source
+            staleness check entirely (no ``<binary> --version``
+            subprocess, no warning banner).  Used by the historical-build
+            workflow where the mismatch is intentional and the binary
+            may not implement ``--version``.  Defaults to ``False``.
+        :type skip_binary_verification: bool, optional
+        :param historical_binary_attrs: Pre-computed binary provenance
+            dict (from
+            :func:`~lysis.tools.provenance.gather_historical_binary_provenance`)
+            stamped into the HDF5 file in place of the default
+            ``<binary> --version`` query.  Defaults to ``None``.
+        :type historical_binary_attrs: dict, optional
         :return: Fully configured :class:`FortranMicro` instance.
         :rtype: FortranMicro
         :raises RuntimeError: If the HDF5 file's directory is not found.
@@ -198,6 +212,8 @@ class FortranMicro(FortranRunner):
             index=index,
             num_children=num_children,
             allow_stale_binary=allow_stale_binary,
+            skip_binary_verification=skip_binary_verification,
+            historical_binary_attrs=historical_binary_attrs,
         )
 
     # ------------------------------------------------------------------

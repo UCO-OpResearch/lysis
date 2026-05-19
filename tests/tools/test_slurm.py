@@ -495,6 +495,48 @@ class TestSubmitMicroSlurmJob:
         assert "executable=str(STAGING_DIR / BINARY_NAME)" in master_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_historical_attrs_absent_by_default(
+        self, mock_sbatch, micro_hdf5, tmp_path
+    ):
+        """Without --fortran-commit, the master script keeps HISTORICAL_BINARY_ATTRS = None."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
+                               staging_root=staging_root)
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
+        assert "HISTORICAL_BINARY_ATTRS = None" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_bakes_historical_attrs(
+        self, mock_sbatch, micro_hdf5, tmp_path
+    ):
+        """When historical_binary_attrs is given, the dict is repr'd into the master script."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        prov = {
+            "binary_commit": "a" * 40,
+            "binary_dirty": "clean",
+            "binary_compiler": "GCC 11.4.0",
+            "binary_source": "historical:" + "a" * 40,
+        }
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root,
+            historical_binary_attrs=prov,
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
+        # The literal dict must round-trip through repr() into the script.
+        assert "HISTORICAL_BINARY_ATTRS = {" in master_content
+        assert "'binary_source': 'historical:" + "a" * 40 + "'" in master_content
+        # And the runner construction must opt in to skip_binary_verification.
+        assert (
+            "skip_binary_verification=(HISTORICAL_BINARY_ATTRS is not None)"
+            in master_content
+        )
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_relative_executable_resolved_to_absolute(self, mock_sbatch, micro_hdf5, tmp_path):
         """Relative executable paths must be resolved to absolute in generated scripts."""
         staging_root = tmp_path / "staging_root"
@@ -816,6 +858,33 @@ class TestSubmitMacroSlurmJob:
         master_content = (staging_dir / "lysis-macro-master__run-01.py").read_text()
         assert "BINARY_NAME = 'macro.exe'" in master_content
         assert "executable=str(STAGING_DIR / BINARY_NAME)" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_bakes_historical_attrs(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        """Macro slurm path: historical_binary_attrs dict gets repr'd into the master script."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        prov = {
+            "binary_commit": "b" * 40,
+            "binary_dirty": "clean",
+            "binary_compiler": "Intel(R) Fortran 2023.0",
+            "binary_source": "historical:" + "b" * 40,
+        }
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe",
+            staging_root=staging_root,
+            historical_binary_attrs=prov,
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "lysis-macro-master__run-01.py").read_text()
+        assert "HISTORICAL_BINARY_ATTRS = {" in master_content
+        assert "'binary_source': 'historical:" + "b" * 40 + "'" in master_content
+        assert (
+            "skip_binary_verification=(HISTORICAL_BINARY_ATTRS is not None)"
+            in master_content
+        )
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_partition_in_master_script(

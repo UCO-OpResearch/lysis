@@ -312,3 +312,53 @@ class TestExecCommandTemplate:
         cmd = runner.exec_command()
         assert "--seed" in cmd
         assert cmd[cmd.index("--seed") + 1] == "-559038737"
+
+
+# ---------------------------------------------------------------------------
+# skip_binary_verification (historical-build path)
+# ---------------------------------------------------------------------------
+
+
+class TestSkipBinaryVerification:
+    """Behaviour of the FortranRunner.skip_binary_verification field."""
+
+    def test_default_runs_the_check(self, monkeypatch, tmp_path):
+        """Without the flag, _verify_binary_version calls into the provenance helper."""
+        import lysis.tools.provenance as prov_pkg
+        called = []
+        monkeypatch.setattr(
+            prov_pkg,
+            "verify_binary_matches_source",
+            lambda exe, **kw: called.append(exe) or {},
+        )
+        r = Run(str(tmp_path))
+        r.initialize_micro_param()
+        cls = _make_stub_class()
+        runner = cls(run=r, executable="/bin/stub.exe")
+        runner._verify_binary_version()
+        assert called == ["/bin/stub.exe"]
+
+    def test_skip_returns_empty_dict_no_subprocess(
+        self, monkeypatch, tmp_path
+    ):
+        """skip_binary_verification=True must NOT invoke the provenance helper."""
+        import lysis.tools.provenance as prov_pkg
+        called = []
+        monkeypatch.setattr(
+            prov_pkg,
+            "verify_binary_matches_source",
+            lambda exe, **kw: called.append(exe) or {},
+        )
+        r = Run(str(tmp_path))
+        r.initialize_micro_param()
+        cls = _make_stub_class()
+        runner = cls(
+            run=r,
+            executable="/bin/does-not-exist",
+            skip_binary_verification=True,
+        )
+        info = runner._verify_binary_version()
+        assert info == {}
+        assert called == []
+        # No banner attrs either.
+        assert runner._binary_hdf5_attrs == {}

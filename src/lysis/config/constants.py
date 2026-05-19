@@ -97,6 +97,13 @@ class Const:
         self.BINARY_DIRTY_ATTR = "binary_dirty"
         self.BINARY_COMPILER_ATTR = "binary_compiler"
         self.STALE_BINARY_OVERRIDE_ATTR = "stale_binary_override"
+        # Marker stamped by the historical-build workflow
+        # (``lysis run-{micro,macro} --fortran-commit <ref>``).  Value is
+        # ``f"historical:{resolved_sha}"``; the field is absent on every
+        # other run.  Lets a reader of the HDF5 file see at a glance that
+        # this run's binary was rebuilt from an earlier commit rather
+        # than being the build that matches the current source tree.
+        self.BINARY_SOURCE_ATTR = "binary_source"
         self.LYSIS_ALLOW_STALE_BINARY_ENV = "LYSIS_ALLOW_STALE_BINARY"
         self.LYSIS_ALLOW_DIRTY_ENV = "LYSIS_ALLOW_DIRTY"
         self.LYSIS_ALLOW_COMMIT_MISMATCH_ENV = "LYSIS_ALLOW_COMMIT_MISMATCH"

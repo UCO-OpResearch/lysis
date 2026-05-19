@@ -54,7 +54,9 @@ class TestStampValidation:
             micro_only_ds.stamp_provenance("micro", "oops")
 
     def test_binary_without_executable_raises(self, micro_only_ds):
-        with pytest.raises(ValueError, match="requires an 'executable'"):
+        with pytest.raises(
+            ValueError, match="requires either an 'executable'"
+        ):
             micro_only_ds.stamp_provenance("micro", "binary")
 
     def test_missing_macro_group_raises(self, micro_only_ds):
@@ -182,6 +184,98 @@ class TestStampBinary:
         with h5py.File(str(h5_path), "r") as f:
             attrs = f["micro_data"].attrs
             assert bool(attrs[CONST.STALE_BINARY_OVERRIDE_ATTR]) is True
+
+    def test_replace_binary_attrs_skips_gather(
+        self, micro_only_ds, tmp_path, monkeypatch
+    ):
+        # When replace_binary_attrs is supplied, gather_binary_provenance
+        # must NOT be called — the historical-build path ships the dict
+        # itself (and the binary may not even support --version).
+        from lysis.tools.provenance import binary as binary_mod
+        sentinel_called = []
+        monkeypatch.setattr(
+            binary_mod,
+            "query_binary_version",
+            lambda exe, **kw: sentinel_called.append(exe) or ("X", "X", "X"),
+        )
+        replacement = {
+            CONST.BINARY_COMMIT_ATTR: "deadbeef" * 5,
+            CONST.BINARY_DIRTY_ATTR: "clean",
+            CONST.BINARY_COMPILER_ATTR: "GCC version 11.4.0",
+            CONST.BINARY_SOURCE_ATTR: f"historical:{'deadbeef' * 5}",
+        }
+        micro_only_ds.stamp_provenance(
+            "micro", "binary", replace_binary_attrs=replacement
+        )
+        assert sentinel_called == []
+        h5_path = tmp_path / "run-01.h5"
+        micro_only_ds.close()
+        with h5py.File(str(h5_path), "r") as f:
+            attrs = f["micro_data"].attrs
+            assert attrs[CONST.BINARY_SOURCE_ATTR] in (
+                b"historical:" + b"deadbeef" * 5,
+                f"historical:{'deadbeef' * 5}",
+            )
+            assert attrs[CONST.BINARY_COMPILER_ATTR] in (
+                b"GCC version 11.4.0", "GCC version 11.4.0",
+            )
+
+    def test_replace_binary_attrs_allows_none_executable(
+        self, micro_only_ds, tmp_path
+    ):
+        # The historical-build workflow does not always have an
+        # executable on hand to query; replace_binary_attrs alone must
+        # be sufficient.
+        replacement = {
+            CONST.BINARY_COMMIT_ATTR: "f" * 40,
+            CONST.BINARY_DIRTY_ATTR: "clean",
+            CONST.BINARY_COMPILER_ATTR: "unknown",
+            CONST.BINARY_SOURCE_ATTR: f"historical:{'f' * 40}",
+        }
+        # Should not raise.
+        micro_only_ds.stamp_provenance(
+            "micro", "binary", executable=None, replace_binary_attrs=replacement
+        )
+
+    def test_binary_kind_without_executable_or_replace_raises(
+        self, micro_only_ds
+    ):
+        import pytest
+        with pytest.raises(ValueError, match="executable.*replace_binary_attrs"):
+            micro_only_ds.stamp_provenance("micro", "binary")
+
+    def test_replace_and_override_compose(
+        self, micro_only_ds, tmp_path, monkeypatch
+    ):
+        # When both are given, binary_override merges on top of
+        # replace_binary_attrs (override wins on collision).  Important
+        # so we can still surface stale_binary_override alongside a
+        # historical synthesis if some future caller wants that.
+        from lysis.tools.provenance import binary as binary_mod
+        monkeypatch.setattr(
+            binary_mod,
+            "query_binary_version",
+            lambda exe, **kw: ("SHOULD_NOT_BE_CALLED", "x", "x"),
+        )
+        replacement = {
+            CONST.BINARY_COMMIT_ATTR: "a" * 40,
+            CONST.BINARY_DIRTY_ATTR: "clean",
+            CONST.BINARY_COMPILER_ATTR: "GCC",
+            CONST.BINARY_SOURCE_ATTR: "historical:" + "a" * 40,
+        }
+        micro_only_ds.stamp_provenance(
+            "micro", "binary",
+            replace_binary_attrs=replacement,
+            binary_override={CONST.STALE_BINARY_OVERRIDE_ATTR: True},
+        )
+        h5_path = tmp_path / "run-01.h5"
+        micro_only_ds.close()
+        with h5py.File(str(h5_path), "r") as f:
+            attrs = f["micro_data"].attrs
+            assert bool(attrs[CONST.STALE_BINARY_OVERRIDE_ATTR]) is True
+            assert attrs[CONST.BINARY_SOURCE_ATTR] in (
+                b"historical:" + b"a" * 40, "historical:" + "a" * 40,
+            )
 
 
 # ----------------------------------------------------------------------

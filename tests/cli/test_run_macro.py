@@ -519,3 +519,99 @@ class TestRunMacroExperiment:
         )
         assert result.exit_code == 0, result.output
         assert mock_submit.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# --fortran-commit (historical-build workflow)
+# ---------------------------------------------------------------------------
+
+
+class TestRunMacroFortranCommit:
+    def test_bad_ref_exits_nonzero(self, runner, macro_hdf5):
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(macro_hdf5),
+                "--executable", "macro_diffuse_into_and_along__internal",
+                "--fortran-commit", "this-ref-does-not-exist-deadbeef",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "does not resolve" in result.output
+
+    @patch("lysis.execution.fortran_macro.FortranMacro")
+    @patch("lysis.execution.historical_build.build_historical_binary")
+    def test_historical_attrs_threaded_to_runner(
+        self, mock_build, mock_cls, runner, macro_hdf5, tmp_path
+    ):
+        from contextlib import contextmanager
+
+        fake_binary = tmp_path / "bin" / "macro_diffuse_into_and_along__internal"
+        fake_binary.parent.mkdir(parents=True)
+        fake_binary.write_text("not a real binary")
+        prov = {
+            "binary_commit": "c" * 40,
+            "binary_dirty": "clean",
+            "binary_compiler": "GCC 11.4.0",
+            "binary_source": "historical:" + "c" * 40,
+        }
+
+        @contextmanager
+        def fake_cm(*args, **kwargs):
+            # Local mode: compiler_module should be None.
+            assert kwargs.get("compiler_module") is None
+            yield fake_binary, prov
+
+        mock_build.side_effect = fake_cm
+        mock_fm = MagicMock()
+        mock_cls.from_hdf5.return_value = mock_fm
+
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(macro_hdf5),
+                "--executable", "macro_diffuse_into_and_along__internal",
+                "--fortran-commit", "HEAD",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_cls.from_hdf5.call_args.kwargs
+        assert call_kwargs.get("historical_binary_attrs") == prov
+        assert call_kwargs.get("skip_binary_verification") is True
+
+    @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=99)
+    @patch("lysis.execution.historical_build.build_historical_binary")
+    def test_historical_attrs_threaded_to_slurm(
+        self, mock_build, mock_submit, runner, macro_hdf5, tmp_path
+    ):
+        from contextlib import contextmanager
+
+        fake_binary = tmp_path / "bin" / "macro_diffuse_into_and_along__internal"
+        fake_binary.parent.mkdir(parents=True)
+        fake_binary.write_text("not a real binary")
+        prov = {
+            "binary_commit": "d" * 40,
+            "binary_dirty": "clean",
+            "binary_compiler": "Intel(R) Fortran",
+            "binary_source": "historical:" + "d" * 40,
+        }
+
+        @contextmanager
+        def fake_cm(*args, **kwargs):
+            assert kwargs.get("compiler_module") == "intel-compilers/2024"
+            yield fake_binary, prov
+
+        mock_build.side_effect = fake_cm
+        result = runner.invoke(
+            cli,
+            [
+                "run-macro", str(macro_hdf5),
+                "--executable", "macro_diffuse_into_and_along__internal",
+                "--fortran-commit", "HEAD",
+                "--slurm",
+                "--compiler", "intel-compilers/2024",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_submit.call_args.kwargs
+        assert call_kwargs.get("historical_binary_attrs") == prov
