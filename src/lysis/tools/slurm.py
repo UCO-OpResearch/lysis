@@ -542,10 +542,16 @@ def _runner_init_line(
     spec: _SlurmJobSpec,
     hdf5_path: Path,
     binary_path: str,
+    *,
+    skip_binary_verification: bool = False,
 ) -> str:
     """Build the ``from_hdf5(...)`` call used inside the array task ``python -c``.
 
-    Single-line so it composes cleanly inside the bash heredoc.
+    Single-line so it composes cleanly inside the bash heredoc.  When
+    *skip_binary_verification* is True the call emits
+    ``skip_binary_verification=True`` so the historical-build workflow's
+    binary↔source mismatch does not crash ``_verify_binary_version`` at
+    task start.
     """
     args = [f"'{hdf5_path}'", f"'{binary_path}'"]
     if spec.in_file_code is not None:
@@ -554,6 +560,8 @@ def _runner_init_line(
     args.append("index=int(os.environ['SLURM_ARRAY_TASK_ID'])")
     if spec.num_children is not None:
         args.append(f"num_children={spec.num_children}")
+    if skip_binary_verification:
+        args.append("skip_binary_verification=True")
     return f"{spec.runner_class}.from_hdf5({', '.join(args)})"
 
 
@@ -569,6 +577,7 @@ def generate_array_script(
     slurm_log_dir: Optional["Path | str"] = None,
     compiler_module: str = DEFAULT_COMPILER_MODULE,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
+    historical_binary_attrs: Optional[dict] = None,
 ) -> str:
     """Generate a Slurm array job bash script for an array-mode dispatch.
 
@@ -617,6 +626,15 @@ def generate_array_script(
         A ``None`` value removes the matching default; any other value
         sets/overrides the key.  Defaults to ``None`` (no overrides).
     :type sbatch_overrides: Mapping[str, str or None], optional
+    :param historical_binary_attrs: When non-``None``, indicates the
+        binary was built from a historical commit (see
+        :func:`~lysis.execution.historical_build.build_historical_binary`).
+        The generated ``from_hdf5(...)`` call receives
+        ``skip_binary_verification=True`` so ``_verify_binary_version``
+        does not crash on the intentional binary↔source mismatch.  The
+        dict itself is not baked into the task — the master script
+        owns the actual provenance stamping.
+    :type historical_binary_attrs: dict or None
     :return: Slurm array job bash script text.
     :rtype: str
     """
@@ -627,6 +645,7 @@ def generate_array_script(
     if slurm_log_dir is None:
         slurm_log_dir = hdf5_path.parent / ".slurm"
     slurm_log_dir = Path(slurm_log_dir)
+    skip_binary_verification = historical_binary_attrs is not None
 
     repo_root = _repo_root()
     env_preamble = _env_preamble(repo_root, compiler_module)
@@ -652,7 +671,10 @@ def generate_array_script(
         # The executable is pre-staged by submit_slurm_job() before any
         # array tasks start, so no cp is needed here.
         # ------------------------------------------------------------------
-        init = _runner_init_line(spec, hdf5_path, f"{staging_dir}/{binary_name}")
+        init = _runner_init_line(
+            spec, hdf5_path, f"{staging_dir}/{binary_name}",
+            skip_binary_verification=skip_binary_verification,
+        )
         execute = f"""\
 # Execute {spec.scale}scale Fortran binary via lysis
 {env_preamble}
@@ -677,6 +699,9 @@ fm.exec_in_workdir(Path('{staging_dir}'))
             # Micro array tasks write flat __NN-suffixed files; mv all of them.
             mv_section = 'mv "${local_datadir}"/* "${staging_datadir}/"'
 
+        # Source the binary from the pre-staged staging-dir copy, not the
+        # caller's --executable path: under --fortran-commit the build dir
+        # is already gone by the time this script runs.
         setup = f"""\
 # Setup — create local fast dir, copy setup files and binary
 SIM=$(printf "%02d" ${{SLURM_ARRAY_TASK_ID}})
@@ -685,9 +710,12 @@ local_datadir="${{local_work_dir}}/data/{run_code}"
 staging_datadir="{staging_dir}/data/{run_code}"
 mkdir -p "${{local_datadir}}"
 cp "${{staging_datadir}}/"* "${{local_datadir}}/"
-cp "{executable}" "${{local_work_dir}}/" """
+cp "{staging_dir}/{binary_name}" "${{local_work_dir}}/" """
 
-        init = _runner_init_line(spec, hdf5_path, f"${{local_work_dir}}/{binary_name}")
+        init = _runner_init_line(
+            spec, hdf5_path, f"${{local_work_dir}}/{binary_name}",
+            skip_binary_verification=skip_binary_verification,
+        )
         execute = f"""\
 # Execute {spec.scale}scale Fortran binary into local fast storage
 {env_preamble}
@@ -813,6 +841,7 @@ def submit_slurm_job(
         slurm_log_dir=slurm_log_dir,
         compiler_module=compiler_module,
         sbatch_overrides=sbatch_overrides,
+        historical_binary_attrs=historical_binary_attrs,
     )
     array_path = staging_dir / f"lysis-{spec.scale}-array__{run_code}.sh"
     array_path.write_text(array_script)
@@ -875,6 +904,7 @@ def generate_micro_child_script(
     slurm_log_dir: Optional["Path | str"] = None,
     compiler_module: str = DEFAULT_COMPILER_MODULE,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
+    historical_binary_attrs: Optional[dict] = None,
 ) -> str:
     """Generate a Slurm bash script for a single child microscale Fortran job.
 
@@ -919,6 +949,15 @@ def generate_micro_child_script(
         header (shape returned by :func:`parse_sbatch_tokens`).  Defaults
         to ``None``.
     :type sbatch_overrides: Mapping[str, str or None], optional
+    :param historical_binary_attrs: When non-``None``, indicates the
+        binary was built from a historical commit (see
+        :func:`~lysis.execution.historical_build.build_historical_binary`).
+        The generated ``from_hdf5(...)`` call receives
+        ``skip_binary_verification=True`` so ``_verify_binary_version``
+        does not crash on the intentional binary↔source mismatch.  The
+        dict itself is not baked into the child — the master script
+        owns the actual provenance stamping.
+    :type historical_binary_attrs: dict or None
     :return: Slurm bash script text.
     :rtype: str
     """
@@ -947,15 +986,24 @@ def generate_micro_child_script(
         sbatch_opts["partition"] = partition
     sbatch_opts = apply_sbatch_overrides(sbatch_opts, sbatch_overrides)
 
+    skip_verify_kwarg = (
+        ", skip_binary_verification=True"
+        if historical_binary_attrs is not None
+        else ""
+    )
+
     if fast_tmp_root is None:
         # ------------------------------------------------------------------
-        # Single-tier: Fortran writes directly to the shared staging dir
+        # Single-tier: Fortran writes directly to the shared staging dir.
+        # The binary is pre-staged by submit_micro_slurm_job before this
+        # script runs, so no runtime cp is needed — and would in fact be
+        # broken under --fortran-commit, which removes the build dir as
+        # soon as sbatch returns.
         # ------------------------------------------------------------------
         setup = f"""\
-# Setup — create output directory and copy binary to staging dir
+# Setup — create output directory
 staging_datadir="{staging_dir}/data/{run_code}"
-mkdir -p "${{staging_datadir}}"
-cp "{executable}" "{staging_dir}/" """
+mkdir -p "${{staging_datadir}}" """
 
         execute = f"""\
 # Execute Fortran binary via lysis
@@ -963,7 +1011,7 @@ cp "{executable}" "{staging_dir}/" """
 {py} -c "
 from pathlib import Path
 from lysis.execution.fortran_micro import FortranMicro
-fm = FortranMicro.from_hdf5('{hdf5_path}', '{staging_dir}/{binary_name}', out_file_code='{out_code}')
+fm = FortranMicro.from_hdf5('{hdf5_path}', '{staging_dir}/{binary_name}', out_file_code='{out_code}'{skip_verify_kwarg})
 fm.exec_in_workdir(Path('{staging_dir}'))
 " """
 
@@ -971,7 +1019,10 @@ fm.exec_in_workdir(Path('{staging_dir}'))
 
     else:
         # ------------------------------------------------------------------
-        # Two-tier: Fortran → fast local dir, then mv to shared staging dir
+        # Two-tier: Fortran → fast local dir, then mv to shared staging dir.
+        # Source the binary from the pre-staged copy in staging_dir, not
+        # the caller's --executable path: under --fortran-commit the build
+        # dir is already gone by the time this script runs.
         # ------------------------------------------------------------------
         setup = f"""\
 # Setup — create local fast dir and shared staging dir
@@ -980,7 +1031,7 @@ local_datadir="${{local_work_dir}}/data/{run_code}"
 staging_datadir="{staging_dir}/data/{run_code}"
 mkdir -p "${{local_datadir}}"
 mkdir -p "${{staging_datadir}}"
-cp "{executable}" "${{local_work_dir}}/" """
+cp "{staging_dir}/{binary_name}" "${{local_work_dir}}/" """
 
         execute = f"""\
 # Execute Fortran binary into local fast storage
@@ -988,7 +1039,7 @@ cp "{executable}" "${{local_work_dir}}/" """
 {py} -c "
 from pathlib import Path
 from lysis.execution.fortran_micro import FortranMicro
-fm = FortranMicro.from_hdf5('{hdf5_path}', '${{local_work_dir}}/{binary_name}', out_file_code='{out_code}')
+fm = FortranMicro.from_hdf5('{hdf5_path}', '${{local_work_dir}}/{binary_name}', out_file_code='{out_code}'{skip_verify_kwarg})
 fm.exec_in_workdir(Path('${{local_work_dir}}'))
 " """
 
@@ -1078,6 +1129,7 @@ def generate_micro_array_script(
     slurm_log_dir: Optional["Path | str"] = None,
     compiler_module: str = DEFAULT_COMPILER_MODULE,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
+    historical_binary_attrs: Optional[dict] = None,
 ) -> str:
     """Generate a Slurm array job script for the microscale Fortran simulation.
 
@@ -1108,6 +1160,7 @@ def generate_micro_array_script(
         slurm_log_dir=slurm_log_dir,
         compiler_module=compiler_module,
         sbatch_overrides=sbatch_overrides,
+        historical_binary_attrs=historical_binary_attrs,
     )
 
 
@@ -1280,6 +1333,7 @@ def submit_micro_slurm_job(
         slurm_log_dir=slurm_log_dir,
         compiler_module=compiler_module,
         sbatch_overrides=sbatch_overrides,
+        historical_binary_attrs=historical_binary_attrs,
     )
     child_path = staging_dir / f"lysis-micro-child__{run_code}.sh"
     child_path.write_text(child_script)
@@ -1360,6 +1414,7 @@ def generate_macro_array_script(
     slurm_log_dir: Optional["Path | str"] = None,
     compiler_module: str = DEFAULT_COMPILER_MODULE,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
+    historical_binary_attrs: Optional[dict] = None,
 ) -> str:
     """Generate a Slurm array job script for the macroscale Fortran simulation.
 
@@ -1388,6 +1443,7 @@ def generate_macro_array_script(
         slurm_log_dir=slurm_log_dir,
         compiler_module=compiler_module,
         sbatch_overrides=sbatch_overrides,
+        historical_binary_attrs=historical_binary_attrs,
     )
 
 

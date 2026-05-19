@@ -77,14 +77,23 @@ class TestGenerateMicroChildScript:
         )
         assert "local_work_dir" not in script
 
-    def test_single_tier_contains_binary_copy(self, tmp_path):
+    def test_single_tier_no_runtime_binary_copy(self, tmp_path):
+        """Single-tier must NOT cp the binary at runtime.
+
+        The binary is pre-staged by submit_micro_slurm_job before sbatch
+        is called; a runtime cp is redundant and, under --fortran-commit,
+        actively broken because the build dir is already gone.
+        """
         staging = tmp_path / "staging"
         script = generate_micro_child_script(
             staging, "run-01", tmp_path / "run-01.h5",
             "/bin/micro.exe", ""
         )
-        assert "cp" in script
+        assert "cp " not in script
+        # The binary name still appears — inside the python heredoc, as
+        # the resolved staging-dir path passed to FortranMicro.from_hdf5.
         assert "micro.exe" in script
+        assert f"{staging}/micro.exe" in script
 
     def test_single_tier_contains_hdf5_path(self, tmp_path):
         staging = tmp_path / "staging"
@@ -155,15 +164,24 @@ class TestGenerateMicroChildScript:
         )
         assert "rm -rf" in script
 
-    def test_two_tier_contains_binary_copy(self, tmp_path):
+    def test_two_tier_copies_binary_from_staging_not_original(self, tmp_path):
+        """Two-tier cp must source the binary from staging_dir, not the
+        caller's --executable path.
+
+        Regression test for the --fortran-commit bug: the caller's path
+        points into a temp build dir that is removed as soon as sbatch
+        returns, so a later runtime cp from that path fails with
+        ``cp: cannot stat …``.  The pre-staged copy in staging_dir is
+        always present.
+        """
         staging = tmp_path / "staging"
         script = generate_micro_child_script(
             staging, "run-01", tmp_path / "run-01.h5",
             "/bin/micro.exe", "",
             fast_tmp_root="/nvme/scratch",
         )
-        assert "cp" in script
-        assert "micro.exe" in script
+        assert f'cp "{staging}/micro.exe" "${{local_work_dir}}/"' in script
+        assert "/bin/micro.exe" not in script
 
     def test_two_tier_staging_dir_also_present(self, tmp_path):
         staging = tmp_path / "staging"
@@ -538,7 +556,15 @@ class TestSubmitMicroSlurmJob:
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_relative_executable_resolved_to_absolute(self, mock_sbatch, micro_hdf5, tmp_path):
-        """Relative executable paths must be resolved to absolute in generated scripts."""
+        """Relative executable paths must be resolved before pre-staging.
+
+        Generated single-tier scripts reference the pre-staged copy at
+        ``{staging_dir}/{binary_basename}`` (not the caller's --executable
+        path).  Resolution still matters because ``submit_micro_slurm_job``
+        uses the resolved path for ``shutil.copy2(executable, staging_dir)``;
+        the test checks the binary basename appears at an absolute path
+        inside the script.
+        """
         staging_root = tmp_path / "staging_root"
         staging_root.mkdir()
         # Pass a relative path by making it relative to cwd
@@ -547,7 +573,8 @@ class TestSubmitMicroSlurmJob:
         submit_micro_slurm_job(micro_hdf5, rel_exe, staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
         child_content = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
-        assert "/bin/micro.exe" in child_content
+        # The staged binary is referenced by absolute path inside the heredoc.
+        assert f"{staging_dir}/micro.exe" in child_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_relative_hdf5_path_resolved_to_absolute(self, mock_sbatch, micro_hdf5, tmp_path):
@@ -1494,3 +1521,202 @@ class TestSbatchOverridesInSubmitMicroSlurmJob:
         for content in (master, array):
             assert "#SBATCH --hold" in content
             assert "--exclusive=user" not in content
+
+
+# ---------------------------------------------------------------------------
+# TestHistoricalBinaryAttrsInChildAndArrayScripts
+# ---------------------------------------------------------------------------
+
+
+class TestHistoricalBinaryAttrsInChildAndArrayScripts:
+    """Regression tests for the --fortran-commit child/array script bugs.
+
+    Two bugs the cherry-picked commit introduced:
+
+    * Generated bash scripts did a runtime ``cp "{executable}"`` that
+      pointed at the historical-build temp dir, which the CLI removes
+      as soon as ``sbatch`` returns.  Child/array tasks ran later and
+      hit ``cp: cannot stat …``.
+    * Generated ``FortranMicro.from_hdf5(...)`` / ``FortranMacro.from_hdf5(...)``
+      calls didn't pass ``skip_binary_verification=True``, so the
+      runner's ``_verify_binary_version`` raised
+      ``StaleBinaryError`` on the intentional binary↔source mismatch.
+    """
+
+    _HIST = {
+        "binary_commit": "a" * 40,
+        "binary_dirty": False,
+        "binary_source": "historical:" + "a" * 40,
+    }
+
+    # -- generate_micro_child_script (legacy single-child path) ------------
+
+    def test_legacy_single_tier_no_runtime_cp_under_historical(self, tmp_path):
+        """Single-tier legacy child must not cp from the (deleted) build dir."""
+        script = generate_micro_child_script(
+            tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/build/bin/micro_rates", "",
+            historical_binary_attrs=self._HIST,
+        )
+        assert "/build/bin/micro_rates" not in script
+        assert "cp " not in script
+
+    def test_legacy_single_tier_emits_skip_verify_under_historical(self, tmp_path):
+        script = generate_micro_child_script(
+            tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/build/bin/micro_rates", "",
+            historical_binary_attrs=self._HIST,
+        )
+        assert "skip_binary_verification=True" in script
+
+    def test_legacy_two_tier_cp_uses_staging_under_historical(self, tmp_path):
+        """Two-tier legacy child cp must source from staging_dir under --fortran-commit."""
+        staging = tmp_path / "stage"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/build/bin/micro_rates", "",
+            fast_tmp_root="/nvme/scratch",
+            historical_binary_attrs=self._HIST,
+        )
+        assert "/build/bin/micro_rates" not in script
+        assert f'cp "{staging}/micro_rates" "${{local_work_dir}}/"' in script
+
+    def test_legacy_two_tier_emits_skip_verify_under_historical(self, tmp_path):
+        script = generate_micro_child_script(
+            tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/build/bin/micro_rates", "",
+            fast_tmp_root="/nvme/scratch",
+            historical_binary_attrs=self._HIST,
+        )
+        assert "skip_binary_verification=True" in script
+
+    def test_no_skip_verify_when_historical_absent(self, tmp_path):
+        """Non-historical case must not emit skip_binary_verification."""
+        script = generate_micro_child_script(
+            tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+        )
+        assert "skip_binary_verification" not in script
+
+    # -- generate_micro_array_script (array micro path) --------------------
+
+    def test_micro_array_single_tier_emits_skip_verify_under_historical(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/build/bin/micro_rates", num_children=4,
+            historical_binary_attrs=self._HIST,
+        )
+        assert "skip_binary_verification=True" in script
+
+    def test_micro_array_two_tier_cp_uses_staging_under_historical(self, tmp_path):
+        staging = tmp_path / "stage"
+        script = generate_micro_array_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/build/bin/micro_rates", num_children=4,
+            fast_tmp_root="/nvme/scratch",
+            historical_binary_attrs=self._HIST,
+        )
+        assert "/build/bin/micro_rates" not in script
+        assert f'cp "{staging}/micro_rates" "${{local_work_dir}}/"' in script
+        assert "skip_binary_verification=True" in script
+
+    # -- generate_macro_array_script (array macro path) --------------------
+
+    def test_macro_array_single_tier_emits_skip_verify_under_historical(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/build/bin/macro.exe", n_sims=3,
+            historical_binary_attrs=self._HIST,
+        )
+        assert "skip_binary_verification=True" in script
+
+    def test_macro_array_two_tier_cp_uses_staging_under_historical(self, tmp_path):
+        staging = tmp_path / "stage"
+        script = generate_macro_array_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/build/bin/macro.exe", n_sims=3,
+            fast_tmp_root="/nvme/scratch",
+            historical_binary_attrs=self._HIST,
+        )
+        assert "/build/bin/macro.exe" not in script
+        assert f'cp "{staging}/macro.exe" "${{local_work_dir}}/"' in script
+        assert "skip_binary_verification=True" in script
+
+    # -- two-tier cp source is correct even WITHOUT --fortran-commit -------
+
+    def test_two_tier_cp_uses_staging_in_normal_mode_too(self, tmp_path):
+        """Two-tier cp must always source from staging_dir (not just under historical).
+
+        Regression: the original two-tier path cp'd from the caller's
+        --executable, which is fine in normal mode (the binary's still
+        there) but pointlessly leaks the caller's path into the script.
+        """
+        staging = tmp_path / "stage"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert f'cp "{staging}/micro.exe" "${{local_work_dir}}/"' in script
+        assert "/bin/micro.exe" not in script
+
+
+# ---------------------------------------------------------------------------
+# TestSubmitWithHistoricalBinaryAttrsEndToEnd
+# ---------------------------------------------------------------------------
+
+
+class TestSubmitWithHistoricalBinaryAttrsEndToEnd:
+    """End-to-end: submit_*_slurm_job threads historical_binary_attrs into
+    every generated child/array script.
+    """
+
+    _HIST = {
+        "binary_commit": "b" * 40,
+        "binary_dirty": False,
+        "binary_source": "historical:" + "b" * 40,
+    }
+
+    @pytest.fixture(autouse=True)
+    def _patch_copy2(self):
+        with patch("lysis.tools.slurm.shutil.copy2"):
+            yield
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_legacy_single_child_propagates_to_child_script(
+        self, mock_sbatch, micro_hdf5, tmp_path,
+    ):
+        """Bug reproducer: user's command was --num-children=0 --fortran-commit ..."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/build/bin/micro_rates",
+            staging_root=staging_root,
+            historical_binary_attrs=self._HIST,
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        child = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
+        assert "skip_binary_verification=True" in child
+        # The original --executable path must not appear (would imply
+        # the script tries to cp from the now-deleted build dir).
+        assert "/build/bin/micro_rates" not in child
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_path_propagates_to_array_script(
+        self, mock_sbatch, micro_hdf5, tmp_path,
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        with patch.object(
+            __import__("lysis.execution.fortran_micro", fromlist=["FortranMicro"]).FortranMicro,
+            "_write_setup_files",
+        ):
+            submit_micro_slurm_job(
+                micro_hdf5, "/build/bin/micro_rates",
+                staging_root=staging_root,
+                num_children=4,
+                historical_binary_attrs=self._HIST,
+            )
+        staging_dir = list(staging_root.iterdir())[0]
+        array = (staging_dir / "lysis-micro-array__run-01.sh").read_text()
+        assert "skip_binary_verification=True" in array
