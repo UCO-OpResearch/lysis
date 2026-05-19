@@ -37,6 +37,7 @@ This optimises I/O on clusters with NVMe scratch on compute nodes.
 """
 
 import shutil
+import subprocess
 import tempfile
 import time
 from dataclasses import dataclass
@@ -55,6 +56,93 @@ __version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
+
+
+# ---------------------------------------------------------------------------
+# Environment setup for generated Slurm scripts
+# ---------------------------------------------------------------------------
+#
+# Generated scripts no longer depend on per-user dotfiles (``~/.bashrc`` /
+# ``~/lysis.sh``).  Instead, every script emits a self-contained preamble
+# that loads the Intel compiler runtime via LMod and invokes Python through
+# the project's ``uv``-managed environment.  The submitting user's repo
+# root is baked in at script-generation time from ``lysis.__file__``.
+
+#: Intel compiler module providing the Fortran binary's runtime libraries.
+#: Assumed to be available on the cluster's LMod stack for all users.
+_INTEL_MODULE: str = "intel-compilers/2023"
+
+
+def _repo_root() -> Path:
+    """Return the absolute path to the lysis repository root.
+
+    Computed from the installed ``lysis`` package location
+    (``src/lysis/__init__.py`` → repo root is two parents up).  This is the
+    submitting user's *own* checkout — the path baked into generated scripts
+    is correct for that user without depending on any shared convention.
+    """
+    import lysis  # noqa: PLC0415 — avoids pulling lysis at module import
+
+    return Path(lysis.__file__).resolve().parents[2]
+
+
+def _env_preamble(repo_root: Path) -> str:
+    """Return the bash preamble that prepares a generated script's environment.
+
+    Loads the Intel compiler runtime (required by the Fortran binary) and
+    puts ``~/.local/bin`` on PATH so ``uv`` is discoverable on compute
+    nodes.  Defensive against non-login shells by sourcing ``lmod.sh``
+    when the ``module`` function isn't already defined.
+
+    :param repo_root: Absolute path to the lysis repo root (currently
+        unused inside the preamble itself; included for future extensions
+        like ``cd`` into the repo).
+    :type repo_root: Path
+    :return: Multi-line bash snippet, no trailing newline.
+    :rtype: str
+    """
+    return (
+        "# Lysis environment setup (user-independent)\n"
+        "[ -z \"${LMOD_CMD:-}\" ] && [ -f /etc/profile.d/lmod.sh ] "
+        "&& source /etc/profile.d/lmod.sh\n"
+        f"module purge && module load {_INTEL_MODULE}\n"
+        'export PATH="$HOME/.local/bin:$PATH"'
+    )
+
+
+def _uv_python_prefix(repo_root: Path) -> str:
+    """Return the command prefix used in place of bare ``python``.
+
+    Invokes Python through ``uv run`` pinned to the repo's ``uv.lock``
+    (``--frozen`` refuses any resolver activity), so generated scripts
+    use exactly the dependency set committed alongside the source.
+
+    :param repo_root: Absolute path to the lysis repo root.
+    :type repo_root: Path
+    :return: Shell command prefix, e.g.
+        ``uv run --project /home/.../lysis --frozen python``.
+    :rtype: str
+    """
+    return f'uv run --project "{repo_root}" --frozen python'
+
+
+def _ensure_env_synced(repo_root: Path) -> None:
+    """Run ``uv sync --frozen`` once on the submit host before sbatch.
+
+    Guarantees the project's ``.venv`` matches ``uv.lock`` before any
+    Slurm tasks fire — array tasks then start in a known-good state
+    without racing each other to create or populate the venv.
+
+    :param repo_root: Absolute path to the lysis repo root.
+    :type repo_root: Path
+    :raises subprocess.CalledProcessError: If ``uv sync --frozen`` fails
+        (e.g. lockfile drift, uv not on PATH).
+    """
+    subprocess.run(
+        ["uv", "sync", "--frozen"],
+        cwd=str(repo_root),
+        check=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +490,10 @@ def generate_array_script(
         slurm_log_dir = hdf5_path.parent / ".slurm"
     slurm_log_dir = Path(slurm_log_dir)
 
+    repo_root = _repo_root()
+    env_preamble = _env_preamble(repo_root)
+    py = _uv_python_prefix(repo_root)
+
     sbatch_opts = {
         "array": f"0-{spec.num_array_tasks - 1}",
         "job-name": f"lysis-{spec.scale}-array__{run_code}__%a",
@@ -424,8 +516,8 @@ def generate_array_script(
         init = _runner_init_line(spec, hdf5_path, f"{staging_dir}/{binary_name}")
         execute = f"""\
 # Execute {spec.scale}scale Fortran binary via lysis
-source ~/.bashrc && source ~/lysis.sh
-python -c "
+{env_preamble}
+{py} -c "
 import os
 from pathlib import Path
 from {spec.runner_module} import {spec.runner_class}
@@ -459,8 +551,8 @@ cp "{executable}" "${{local_work_dir}}/" """
         init = _runner_init_line(spec, hdf5_path, f"${{local_work_dir}}/{binary_name}")
         execute = f"""\
 # Execute {spec.scale}scale Fortran binary into local fast storage
-source ~/.bashrc && source ~/lysis.sh
-python -c "
+{env_preamble}
+{py} -c "
 import os
 from pathlib import Path
 from {spec.runner_module} import {spec.runner_class}
@@ -514,6 +606,11 @@ def submit_slurm_job(
     :rtype: int
     """
     run_code = hdf5_path.stem
+
+    # Sync the project venv against uv.lock before any Slurm tasks fire,
+    # so array tasks never race each other on first-use venv creation.
+    repo_root = _repo_root()
+    _ensure_env_synced(repo_root)
 
     # Create unique staging directory — never use /tmp
     staging_dir = Path(tempfile.mkdtemp(
@@ -587,8 +684,8 @@ def submit_slurm_job(
 
     master_sh_content = gs.scripts.plain(
         [
-            "source ~/.bashrc && source ~/lysis.sh",
-            f'python "{master_py_path}"',
+            _env_preamble(repo_root),
+            f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
     )
@@ -661,6 +758,10 @@ def generate_micro_child_script(
         slurm_log_dir = hdf5_path.parent / ".slurm"
     slurm_log_dir = Path(slurm_log_dir)
 
+    repo_root = _repo_root()
+    env_preamble = _env_preamble(repo_root)
+    py = _uv_python_prefix(repo_root)
+
     sbatch_opts = {
         "job-name": f"lysis-micro-child__{run_code}",
         "out": str(slurm_log_dir / f"lysis-micro-child__{run_code}.out"),
@@ -685,8 +786,8 @@ cp "{executable}" "{staging_dir}/" """
 
         execute = f"""\
 # Execute Fortran binary via lysis
-source ~/.bashrc && source ~/lysis.sh
-python -c "
+{env_preamble}
+{py} -c "
 from pathlib import Path
 from lysis.execution.fortran_micro import FortranMicro
 fm = FortranMicro.from_hdf5('{hdf5_path}', '{staging_dir}/{binary_name}', out_file_code='{out_code}')
@@ -710,8 +811,8 @@ cp "{executable}" "${{local_work_dir}}/" """
 
         execute = f"""\
 # Execute Fortran binary into local fast storage
-source ~/.bashrc && source ~/lysis.sh
-python -c "
+{env_preamble}
+{py} -c "
 from pathlib import Path
 from lysis.execution.fortran_micro import FortranMicro
 fm = FortranMicro.from_hdf5('{hdf5_path}', '${{local_work_dir}}/{binary_name}', out_file_code='{out_code}')
@@ -939,6 +1040,11 @@ def submit_micro_slurm_job(
     # ------------------------------------------------------------------
     # Legacy single-child path.
     # ------------------------------------------------------------------
+
+    # Sync the project venv against uv.lock before any Slurm tasks fire.
+    repo_root = _repo_root()
+    _ensure_env_synced(repo_root)
+
     staging_dir = Path(tempfile.mkdtemp(
         prefix=f"lysis-micro-{run_code}-",
         dir=str(staging_root_dir),
@@ -996,8 +1102,8 @@ def submit_micro_slurm_job(
 
     master_sh_content = gs.scripts.plain(
         [
-            "source ~/.bashrc && source ~/lysis.sh",
-            f'python "{master_py_path}"',
+            _env_preamble(repo_root),
+            f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
     )
