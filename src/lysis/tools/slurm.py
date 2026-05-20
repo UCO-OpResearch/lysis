@@ -29,6 +29,19 @@ node-local scratch (``mktemp -d -p <fast_tmp_root>``) rather than the
 shared staging directory, then moves the results to staging before exiting.
 This optimises I/O on clusters with NVMe scratch on compute nodes.
 
+Source pinning
+~~~~~~~~~~~~~~
+At submit time both ``submit_slurm_job`` and ``submit_micro_slurm_job``
+snapshot ``src/lysis/`` into ``{staging_dir}/python_src/`` (see
+:func:`_snapshot_lysis_src`) and bake ``PYTHONPATH=<snapshot>`` into the
+generated master and per-task scripts.  ``PYTHONPATH`` precedes
+site-packages on ``sys.path``, so the snapshot shadows the live editable
+install — every Python invocation in the job (master and array tasks)
+imports the frozen package, immune to source edits made while the job
+is queued or running.  Only ``src/lysis/`` is pinned; third-party
+dependencies still come from ``.venv`` and are pinned separately by
+``uv sync --frozen`` (see :func:`_ensure_env_synced`).
+
 .. important::
 
    All temporary directories are created with an explicit *dir* argument
@@ -89,13 +102,24 @@ def _repo_root() -> Path:
     return Path(lysis.__file__).resolve().parents[2]
 
 
-def _env_preamble(repo_root: Path, compiler_module: str) -> str:
+def _env_preamble(
+    repo_root: Path,
+    compiler_module: str,
+    *,
+    pythonpath: "Path | str | None" = None,
+) -> str:
     """Return the bash preamble that prepares a generated script's environment.
 
     Loads the requested Fortran compiler runtime via LMod (required by the
     Fortran binary) and puts ``~/.local/bin`` on PATH so ``uv`` is
     discoverable on compute nodes.  Defensive against non-login shells by
     sourcing ``lmod.sh`` when the ``module`` function isn't already defined.
+
+    When *pythonpath* is supplied, an ``export PYTHONPATH=...`` line is
+    appended.  ``uv run`` inherits environment variables from the calling
+    shell, and PYTHONPATH entries come before site-packages on ``sys.path``,
+    so a snapshot directory containing ``lysis/`` will shadow the editable
+    install — pinning the Python source for the duration of the job.
 
     :param repo_root: Absolute path to the lysis repo root (currently
         unused inside the preamble itself; included for future extensions
@@ -105,16 +129,56 @@ def _env_preamble(repo_root: Path, compiler_module: str) -> str:
         ``"intel-compilers/2023"`` or ``"intel-compilers/2024"``).  See
         :data:`DEFAULT_COMPILER_MODULE` for the project default.
     :type compiler_module: str
+    :param pythonpath: When set, exported as ``PYTHONPATH`` so generated
+        scripts import ``lysis`` from that path rather than the live
+        editable install (see :func:`_snapshot_lysis_src`).  ``None``
+        (default) leaves ``PYTHONPATH`` untouched.
+    :type pythonpath: Path or str, optional
     :return: Multi-line bash snippet, no trailing newline.
     :rtype: str
     """
-    return (
-        "# Lysis environment setup (user-independent)\n"
+    lines = [
+        "# Lysis environment setup (user-independent)",
         "[ -z \"${LMOD_CMD:-}\" ] && [ -f /etc/profile.d/lmod.sh ] "
-        "&& source /etc/profile.d/lmod.sh\n"
-        f"module purge && module load {compiler_module}\n"
-        'export PATH="$HOME/.local/bin:$PATH"'
+        "&& source /etc/profile.d/lmod.sh",
+        f"module purge && module load {compiler_module}",
+        'export PATH="$HOME/.local/bin:$PATH"',
+    ]
+    if pythonpath is not None:
+        lines.append(f'export PYTHONPATH="{pythonpath}"')
+    return "\n".join(lines)
+
+
+def _snapshot_lysis_src(repo_root: Path, staging_dir: Path) -> Path:
+    """Copy ``src/lysis/`` into the staging dir and return the importable root.
+
+    Produces ``{staging_dir}/python_src/lysis/`` from
+    ``{repo_root}/src/lysis/``, excluding ``__pycache__`` and ``.pyc``
+    files so the snapshot starts with no stale bytecode.  The returned
+    path is the directory to be placed on ``PYTHONPATH``
+    (``{staging_dir}/python_src``), so generated Slurm scripts import
+    ``lysis`` from this frozen copy instead of the live editable install.
+
+    Pins only the Python package — third-party dependencies still come
+    from the project's ``.venv`` (and from ``uv.lock``, frozen at submit
+    time by :func:`_ensure_env_synced`).
+
+    :param repo_root: Absolute path to the lysis repo root.
+    :type repo_root: Path
+    :param staging_dir: Existing per-job staging directory.
+    :type staging_dir: Path
+    :return: The directory to assign to ``PYTHONPATH`` (the parent of the
+        snapshot ``lysis/`` package).
+    :rtype: Path
+    """
+    src = repo_root / "src" / "lysis"
+    pythonpath = staging_dir / "python_src"
+    dst = pythonpath / "lysis"
+    pythonpath.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(
+        src, dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
     )
+    return pythonpath
 
 
 def _uv_python_prefix(repo_root: Path) -> str:
@@ -578,6 +642,7 @@ def generate_array_script(
     compiler_module: str = DEFAULT_COMPILER_MODULE,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
+    pythonpath: "Path | str | None" = None,
 ) -> str:
     """Generate a Slurm array job bash script for an array-mode dispatch.
 
@@ -635,6 +700,11 @@ def generate_array_script(
         dict itself is not baked into the task — the master script
         owns the actual provenance stamping.
     :type historical_binary_attrs: dict or None
+    :param pythonpath: When set, baked into the generated script as
+        ``export PYTHONPATH=...`` so each task imports ``lysis`` from
+        that path rather than the live editable install.  ``None``
+        (default) leaves ``PYTHONPATH`` untouched.
+    :type pythonpath: Path or str, optional
     :return: Slurm array job bash script text.
     :rtype: str
     """
@@ -648,7 +718,9 @@ def generate_array_script(
     skip_binary_verification = historical_binary_attrs is not None
 
     repo_root = _repo_root()
-    env_preamble = _env_preamble(repo_root, compiler_module)
+    env_preamble = _env_preamble(
+        repo_root, compiler_module, pythonpath=pythonpath
+    )
     py = _uv_python_prefix(repo_root)
 
     sbatch_opts = {
@@ -832,6 +904,11 @@ def submit_slurm_job(
     if spec.prestage_executable:
         shutil.copy2(executable, staging_dir)
 
+    # Snapshot src/lysis/ so every task (master + array) imports the
+    # frozen copy via PYTHONPATH, immune to source edits made while the
+    # job is queued or running.
+    pythonpath = _snapshot_lysis_src(repo_root, staging_dir)
+
     # ------------------------------------------------------------------
     # Write array job script
     # ------------------------------------------------------------------
@@ -842,6 +919,7 @@ def submit_slurm_job(
         compiler_module=compiler_module,
         sbatch_overrides=sbatch_overrides,
         historical_binary_attrs=historical_binary_attrs,
+        pythonpath=pythonpath,
     )
     array_path = staging_dir / f"lysis-{spec.scale}-array__{run_code}.sh"
     array_path.write_text(array_script)
@@ -875,7 +953,7 @@ def submit_slurm_job(
 
     master_sh_content = gs.scripts.plain(
         [
-            _env_preamble(repo_root, compiler_module),
+            _env_preamble(repo_root, compiler_module, pythonpath=pythonpath),
             f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
@@ -905,6 +983,7 @@ def generate_micro_child_script(
     compiler_module: str = DEFAULT_COMPILER_MODULE,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
+    pythonpath: "Path | str | None" = None,
 ) -> str:
     """Generate a Slurm bash script for a single child microscale Fortran job.
 
@@ -958,6 +1037,11 @@ def generate_micro_child_script(
         dict itself is not baked into the child — the master script
         owns the actual provenance stamping.
     :type historical_binary_attrs: dict or None
+    :param pythonpath: When set, baked into the generated script as
+        ``export PYTHONPATH=...`` so the child imports ``lysis`` from
+        that path rather than the live editable install.  ``None``
+        (default) leaves ``PYTHONPATH`` untouched.
+    :type pythonpath: Path or str, optional
     :return: Slurm bash script text.
     :rtype: str
     """
@@ -970,7 +1054,9 @@ def generate_micro_child_script(
     slurm_log_dir = Path(slurm_log_dir)
 
     repo_root = _repo_root()
-    env_preamble = _env_preamble(repo_root, compiler_module)
+    env_preamble = _env_preamble(
+        repo_root, compiler_module, pythonpath=pythonpath
+    )
     py = _uv_python_prefix(repo_root)
 
     sbatch_opts = {
@@ -1324,6 +1410,10 @@ def submit_micro_slurm_job(
     # two-tier (fast_tmp_root) doesn't leave the master without a binary.
     shutil.copy2(executable, staging_dir)
 
+    # Snapshot src/lysis/ so the master + child import the frozen copy
+    # via PYTHONPATH, immune to source edits made while the job runs.
+    pythonpath = _snapshot_lysis_src(repo_root, staging_dir)
+
     # ------------------------------------------------------------------
     # Write child script
     # ------------------------------------------------------------------
@@ -1334,6 +1424,7 @@ def submit_micro_slurm_job(
         compiler_module=compiler_module,
         sbatch_overrides=sbatch_overrides,
         historical_binary_attrs=historical_binary_attrs,
+        pythonpath=pythonpath,
     )
     child_path = staging_dir / f"lysis-micro-child__{run_code}.sh"
     child_path.write_text(child_script)
@@ -1367,7 +1458,7 @@ def submit_micro_slurm_job(
 
     master_sh_content = gs.scripts.plain(
         [
-            _env_preamble(repo_root, compiler_module),
+            _env_preamble(repo_root, compiler_module, pythonpath=pythonpath),
             f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
