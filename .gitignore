@@ -1,20 +1,40 @@
+fort.*
+test.ipynb
+docs/usage/Lysis-Component.vpp.bak_000f
+slurm-*
+
+# Ephemeral data
+*.conda
+bin
+lib
+__pycache__
+*.egg-info
+
+# Data files
+/data
+*.h5
+
+# System files
+**/.DS_Store
+
+# IDE data
+octave-workspace
+*.sublime-*
+**/.ipynb_checkpoints
 **/*.code-workspace
 *.vscode
 .vs
 *.idea
-*.conda
-**/.ipynb_checkpoints
-bin
-lib
-octave-workspace
-__pycache__
-fort.*
-*.sublime-*
-data
-*.h5
-test.ipynb
-docs/usage/Lysis-Component.vpp.bak_000f
-**/.DS_Store
+
+# AI files
+*.claude
+CLAUDE.md
+QWEN.md
+
+# Fortran build artifacts (version stamp is regenerated each `make`;
+# .mod files land in cwd by default for ifort/gfortran)
+src/fortran/version_stamp.f90
+*.mod
 
 # Sphinx documentation build outputs
 docs/build/
@@ -25,3 +45,7 @@ docs/html/
 # Uncomment these if you want to exclude auto-generated API docs
 # docs/source/modules.rst
 # docs/source/lysis*.rst
+
+# Generated Graphviz source for the internal-imports diagram
+# (regenerate with scripts/regen_import_graph.py; .svg/.png are committed)
+docs/planning/lysis_internal_imports.dot

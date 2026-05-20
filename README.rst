@@ -21,9 +21,9 @@ Code used to pre- and post-process data for the Fortran model code
 
 Also includes Jupyter Notebook versions of Matlab code. These will run using the Octave kernel for Jupyter.
 
-./src/python
+./src/lysis
 """""""""""
-An in-progress conversion of the model to Python
+The main Python package for the simulation
 
 * Current features
     * Macroscale

@@ -1,0 +1,40 @@
+parameter,all-defaults,minimal,dep-koff
+run_description,All independent parameters at their default values,Minimal column — blank cells use defaults; solver fills dependent params,Off-rates specified instead of dissociation constants — solver back-calculates diss_const_*
+fibrinogen_length,0.045 micron,,0.045 micron
+fibrinogen_radius,0.0012 micron,,0.0012 micron
+fiber_radius,0.03635 micron,0.03635 micron,0.03635 micron
+diss_const_tPA_wPLG,0.02 micromolar,,0.02 micromolar
+diss_const_tPA_woPLG,0.36 micromolar,,
+diss_const_PLG_intact,38 micromolar,,
+diss_const_PLG_nicked,2.2 micromolar,,2.2 micromolar
+bind_rate_tPA,0.1 / micromolar / second,,0.1 / micromolar / second
+bind_rate_PLG,0.1 / micromolar / second,,0.1 / micromolar / second
+conc_free_PLG,2 micromolar,,2 micromolar
+deg_rate_fibrin,5.0 / second,,5.0 / second
+unbind_rate_PLi,57.6 / second,,57.6 / second
+activation_rate_PLG,0.1 / second,,0.1 / second
+exposure_rate_binding_site,5.0 / second,,5.0 / second
+nodes_in_micro_row,7,7,7
+snap_proportion,0.6666666666666666,,0.6666666666666666
+micro_simulations,50000,50000,50000
+micro_seed,0,0,0
+micro_version,micro_rates,micro_rates,micro_rates
+micro_log_lvl,30,30,30
+unbind_rate_tPA_woPLG,,,0.036 / second
+unbind_rate_PLG_intact,,,3.8 / second
+pore_size,0.00010135 centimeter,,0.00010135 centimeter
+diffusion_coeff,5e-07 centimeter ** 2 / second,5e-07 centimeter ** 2 / second,5e-07 centimeter ** 2 / second
+forced_unbind,0.0852,,0.0852
+cols,93,93,93
+rows,121,121,121
+empty_rows,28,28,28
+total_molecules,43074,43074,43074
+moving_probability,0.2,,0.2
+macro_simulations,10,10,10
+total_time,1200 second,1200 second,1200 second
+macro_seed,0,0,0
+save_interval,10 second,10 second,10 second
+macro_version,diffuse_into_and_along,diffuse_into_and_along,diffuse_into_and_along
+macro_log_lvl,30,30,30
+duplicate_fortran,False,False,False
+processing_library,numpy,numpy,numpy

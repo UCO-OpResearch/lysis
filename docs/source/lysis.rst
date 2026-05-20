@@ -7,7 +7,12 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
-   lysis.util
+   lysis.cli
+   lysis.config
+   lysis.dataio
+   lysis.execution
+   lysis.geometry
+   lysis.tools
 
 Submodules
 ----------

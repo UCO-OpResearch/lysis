@@ -16,6 +16,10 @@ pint>=0.20
 tqdm>=4.60
 matplotlib>=3.3
 
+# CLI dependencies
+click>=8.0
+rich>=12.0
+
 # Optional dependencies (will be mocked in conf.py if not available)
 # cupy - GPU arrays (optional, only for GPU acceleration)
 # nvtx - NVIDIA profiling (optional, only for profiling)
