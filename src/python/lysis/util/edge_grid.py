@@ -3,14 +3,16 @@ from typing import Tuple
 
 import numpy as np
 
+from pint import Quantity
+
 from .constants import Const, BoundaryCondition
-from .parameters import Experiment
+from .run import Run
 
 
 __author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2022, Brittany Bannish"
+__copyright__ = "Copyright 2025, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
+__license__ = "GPLv3"
 __version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
@@ -22,6 +24,7 @@ CONST = Const()
 class EdgeGrid(object):
     """The main class containing a 3-D grid of edges. This represents an
     xy-planar slice, one edge high, of a clot.
+    An edge's location is determined by its Row and its Rank within that row.
 
     Co-ordinate arrangement::
 
@@ -54,28 +57,28 @@ class EdgeGrid(object):
 
     def __init__(
         self,
-        exp: Experiment,
+        run: Run,
         boundary_conditions: Tuple[BoundaryCondition, BoundaryCondition] | None = None,
         initial_fiber_status: float = float("inf"),
     ):
         """Initializes an EdgeGrid.
 
         Args:
-            exp: The experiment that this EdgeGrid is a part of.
+            run: The run that this EdgeGrid is a part of.
                  This structure passes many of the parameters used to set up
-                 the experiment.
+                 the run.
             boundary_conditions: A tuple that maps boundaries from CONST.BOUND
                 to conditions from CONST.BOUND_COND.
             initial_fiber_status: The initial value of the fiber status.
                 This should generally be an infinite degrade time
-                (degrade time > experiment length).
+                (degrade time > simulation length).
         """
 
-        self.total_rows = exp.macro_params.rows
+        self.total_rows = run.macro_params.rows
         """int: The total number of rows in the grid."""
-        self.nodes_in_row = exp.macro_params.cols
+        self.nodes_in_row = run.macro_params.cols
         """int: The number of nodes (not edges) in each row of this EdgeGrid."""
-        self.empty_rows = exp.macro_params.empty_rows
+        self.empty_rows = run.macro_params.empty_rows
         """int: The number of empty (fibrin-free) rows in the grid."""
         # Set the appropriate boundary conditions
         if boundary_conditions is not None:
@@ -86,10 +89,10 @@ class EdgeGrid(object):
                 CONST.BOUND_COND.REFLECTING,
             )
 
-        self.edges_in_row = 3 * self.nodes_in_row - 1
+        self.ranks = 3 * self.nodes_in_row - 1
         self.fiber_rows = self.total_rows - self.empty_rows
         self.fiber_status = initial_fiber_status * np.ones(
-            (self.total_rows, self.edges_in_row), dtype=np.double
+            (self.total_rows, self.ranks), dtype=np.double
         )
         """np.ndarray: The status of the fibers in this EdgeGrid. This is 
                     essentially the degrade time of the fiber.
@@ -106,16 +109,16 @@ class EdgeGrid(object):
 
         Args:
             i: The index of the edge's row.
-            j: The index of the edge within its row.
+            j: The index of the edge's rank within its row.
 
         Returns: None if the index is valid, or an error message (as a string)
             if the index is invalid.
         """
-        # Edges are 0 through self.edges_in_row-1
-        if j < 0 or j > self.edges_in_row - 1:
+        # Edges are 0 through self.ranks-1
+        if j < 0 or j > self.ranks - 1:
             return (
                 f"Index j={j} out of bounds. "
-                f"This model only has edges [0..{self.edges_in_row - 1}] in "
+                f"This model only has edges [0..{self.ranks - 1}] in "
                 f"each row."
             )
         # Rows are 0 through self.rows-1
@@ -154,57 +157,57 @@ class EdgeGrid(object):
 
             * x-edge neighborhood::
 
-                '        2:(i,j-2)     3:(i,j+1)
-                '            |             |
-                '            |  /          |  /
-                '            | 5:(i,j-1)   | 7:(i,j+2)
-                '            |/            |/
-                '            +----(i,j)----+
-                '          / |            /|
-                ' 4:(i,j-1)  |   6:(i,j+2) |
-                '        /   |          /  |
-                '            |             |
-                '      0:(i-1,j-2)   1:(i-1,j+1)
+                '        2:(i, j-2)      3:(i, j+1)
+                '            |              |
+                '            |  /           |  /
+                '            | 5:(i, j-1)   | 7:(i, j+2)
+                '            |/             |/
+                '            +----(i, j)----+
+                '          / |             /|
+                ' 4:(i, j-1) |   6:(i, j+2) |
+                '        /   |          /   |
+                '            |              |
+                '      0:(i-1, j-2)   1:(i-1, j+1)
 
             * y-edge neighborhood::
 
-                '                    /
-                '                   3:(i+1,j+1)
-                '                  /
-                ' 5:(i+1,j-1)-----+-----7:(i+1,j+2)
-                '                /|
-                '     2:(i+1,j+1) |
-                '              /  |
-                '               (i,j)
-                '                 |  /
-                '                 | 1:(i,j+1)
-                '                 |/
-                '   4:(i,j-1)-----+-----6:(i,j+2)
-                '                /
-                '       0:(i,j+1)
-                '              /
+                '                     /
+                '                    3:(i+1, j+1)
+                '                   /
+                ' 5:(i+1, j-1)-----+-----7:(i+1, j+2)
+                '                 /|
+                '     2:(i+1, j+1) |
+                '               /  |
+                '               (i, j)
+                '                  |  /
+                '                  | 1:(i, j+1)
+                '                  |/
+                '   4:(i, j-1)-----+-----6:(i, j+2)
+                '                 /
+                '       0:(i, j+1)
+                '               /
 
             * z-edge neighborhood::
 
-                '                         |
-                '               3:(i+1,j-1)
-                '                         |
-                '         5:(i+1,j-2)-----+-----7:(i+1,j+1)
-                '                        /|
-                '                       / 1:(i,j-1)
-                '                      /  |
-                '                   (i,j)
-                '                 |  /
-                '       2:(i+1,j-1) /
-                '                 |/
-                ' 4:(i+1,j-2)-----+-----6:(i+1,j+1)
-                '                 |
-                '                 0:(i,j-1)
-                '                 |
+                '                          |
+                '               3:(i+1, j-1)
+                '                          |
+                '         5:(i+1, j-2)-----+-----7:(i+1, j+1)
+                '                         /|
+                '                        / 1:(i, j-1)
+                '                       /  |
+                '                   (i, j)
+                '                  |  /
+                '       2:(i+1, j-1) /
+                '                  |/
+                ' 4:(i+1, j-2)-----+-----6:(i+1, j+1)
+                '                  |
+                '                  0:(i, j-1)
+                '                  |
 
         Args:
             i: The row of the generating edge.
-            j: The index of the generating edge within its row.
+            j: The rank of the generating edge within its row.
             k: The index of the neighbor in the neighborhood (i.e., the (k+1)st
                 neighbor)
 
@@ -224,8 +227,8 @@ class EdgeGrid(object):
             raise IndexError(valid_index)
 
         # The index of the neighboring fiber being requested
-        neighbor_i = i
-        neighbor_j = j
+        neighbor_i = int(i)
+        neighbor_j = int(j)
 
         # Move to the required neighbor
         if j % 3 == 0:  # We are a y-edge
@@ -260,7 +263,7 @@ class EdgeGrid(object):
         # The top boundary of the grid.
         # Note that, if the edge generating the neighborhood is a y-edge,
         # then its neighborhood only involves fibers on its own row, or the row
-        # above. But, if this row is the top of the entire experiment
+        # above. But, if this row is the top of the entire simulation
         # (REFLECTING) then there are no y-edges on this row. If this row is
         # the top of one slice (CONTINUING) then this row represents the bottom
         # row of the next slice and should not be processed here
@@ -280,18 +283,18 @@ class EdgeGrid(object):
         # The right boundary of the grid.
         # Note that, if the edge generating the neighborhood is an x-edge,
         # Then its neighborhood never overruns the side of the grid
-        elif j >= self.edges_in_row - 2:  # We are the right-most y- or z-edge
+        elif j >= self.ranks - 2:  # We are the right-most y- or z-edge
             neighbor_j += CONST.NEIGHBORHOOD.RIGHT_REFL[k]
 
         # Return the co-ordinates of the requested neighbor.
-        return neighbor_i, neighbor_j
+        return np.uint32(neighbor_i), np.uint32(neighbor_j)
 
     @staticmethod
-    def generate_neighborhood_structure(exp: Experiment):
-        # edge_grid = EdgeGrid(exp)
-        # neighbor_i = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=np.short)
-        # neighbor_j = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8), dtype=np.short)
-        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
+    def generate_neighborhood_structure(run: Run):
+        # edge_grid = EdgeGrid(run)
+        # neighbor_i = np.empty((edge_grid.total_rows, edge_grid.ranks, 8), dtype=np.short)
+        # neighbor_j = np.empty((edge_grid.total_rows, edge_grid.ranks, 8), dtype=np.short)
+        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.ranks, 8):
         #     if i == edge_grid.total_rows-1 and j % 3 == 0:
         #         neighbor_i[i, j, k] = 0
         #         neighbor_j[i, j, k] = 0
@@ -301,9 +304,9 @@ class EdgeGrid(object):
         #         neighbor_j[i, j, k] = n_j
         # return neighbor_i, neighbor_j
 
-        # edge_grid = EdgeGrid(exp)
-        # neighbors = np.empty((edge_grid.total_rows, edge_grid.edges_in_row, 8, 2), dtype=np.short)
-        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
+        # edge_grid = EdgeGrid(run)
+        # neighbors = np.empty((edge_grid.total_rows, edge_grid.ranks, 8, 2), dtype=np.short)
+        # for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.ranks, 8):
         #     if i == edge_grid.total_rows - 1 and j % 3 == 0:
         #         neighbors[i, j, k, :] = [-1, -1]
         #     else:
@@ -312,13 +315,13 @@ class EdgeGrid(object):
 
         edge_lookup = partial(
             np.ravel_multi_index,
-            dims=(exp.macro_params.rows, exp.macro_params.full_row),
+            dims=(run.macro_params.rows, run.macro_params.full_row),
         )
-        edge_grid = EdgeGrid(exp)
+        edge_grid = EdgeGrid(run)
         neighbors = np.empty(
-            (exp.macro_params.rows * exp.macro_params.full_row, 8), dtype=np.ushort
+            (run.macro_params.rows * run.macro_params.full_row, 8), dtype=np.ushort
         )
-        for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.edges_in_row, 8):
+        for i, j, k in np.ndindex(edge_grid.total_rows, edge_grid.ranks, 8):
             if i == edge_grid.total_rows - 1 and j % 3 == 0:
                 neighbors[
                     edge_lookup((i, j)),
@@ -332,20 +335,20 @@ class EdgeGrid(object):
         return neighbors
 
     @staticmethod
-    def generate_fortran_neighborhood_structure(exp: Experiment):
-        edge_grid = EdgeGrid(exp)
-        fort_neighbors = np.empty((exp.macro_params.total_edges, 8), dtype="int")
-        for f in range(exp.macro_params.total_edges):
+    def generate_fortran_neighborhood_structure(run: Run):
+        edge_grid = EdgeGrid(run)
+        fort_neighbors = np.empty((run.macro_params.total_edges, 8), dtype="int")
+        for f in range(run.macro_params.total_edges):
             i, j = from_fortran_edge_index(
-                f, exp.macro_params.rows, exp.macro_params.cols
+                f, run.macro_params.rows, run.macro_params.cols
             )
             for k in range(8):
                 neighbor_i, neighbor_j = edge_grid.neighbor(i, j, k)
                 fort_neighbors[f, k] = to_fortran_edge_index(
-                    neighbor_i, neighbor_j, exp.macro_params.rows, exp.macro_params.cols
+                    neighbor_i, neighbor_j, run.macro_params.rows, run.macro_params.cols
                 )
         return np.sort(fort_neighbors)
-    
+
     @staticmethod
     def get_spatial_coordinates(i: int, j: int):
         x = j // 3
@@ -359,30 +362,134 @@ class EdgeGrid(object):
             case 2:
                 x += 0.5
         return x, y, z
-    
+
     @staticmethod
-    def get_distance(exp: Experiment, a: Tuple[int, int], b: Tuple[int, int], metric: str = "euclidian"):
-        if metric == 'euclidian':
+    def get_distance(
+        run: Run, a: Tuple[int, int], b: Tuple[int, int], metric: str = "euclidian"
+    ) -> Quantity:
+        if metric == "euclidian":
             a_coord = EdgeGrid.get_spatial_coordinates(*a)
             b_coord = EdgeGrid.get_spatial_coordinates(*b)
-            squares = sum((a_coord[k]-b_coord[k])**2 for k in range(3))
-            # return exp.macro_params.grid_node_distance * squares**0.5
-            return exp.macro_params.pore_size * 10_000 * squares**0.5
-        elif metric in ['manhattan', 'taxicab']:
+            squares = sum((a_coord[k] - b_coord[k]) ** 2 for k in range(3))
+            # return run.macro_params.grid_node_distance * squares**0.5
+            return run.macro_params.pore_size * squares**0.5
+        elif metric in ["manhattan", "taxicab"]:
             a_coord = EdgeGrid.get_spatial_coordinates(*a)
             b_coord = EdgeGrid.get_spatial_coordinates(*b)
-            sides = sum(abs(a_coord[k]-b_coord[k]) for k in range(3))
-            return exp.macro_params.pore_size * 10_000 * sides
-        if metric == '2d_euclidian':
+            sides = sum(abs(a_coord[k] - b_coord[k]) for k in range(3))
+            return run.macro_params.pore_size * sides
+        if metric == "2d_euclidian":
             a_coord = EdgeGrid.get_spatial_coordinates(*a)
             b_coord = EdgeGrid.get_spatial_coordinates(*b)
-            squares = sum((a_coord[k]-b_coord[k])**2 for k in range(2))
-            # return exp.macro_params.grid_node_distance * squares**0.5
-            return exp.macro_params.pore_size * 10_000 * squares**0.5
+            squares = sum((a_coord[k] - b_coord[k]) ** 2 for k in range(2))
+            # return run.macro_params.grid_node_distance * squares**0.5
+            return run.macro_params.pore_size * squares**0.5
         else:
             raise AttributeError(f"{metric} metric not implemented yet.")
-            
-        
+
+    @staticmethod
+    def full_row(rows: int, nodes_in_row: int) -> int:
+        """
+        Calculates the number of edges in a full row of the edge grid
+
+        :param rows: The number of rows in the edge grid
+        :type rows: int
+        :param nodes_in_row: The number of nodes in each row of the edge grid
+        :type nodes_in_row: int
+        :return: The number of edges in a full row of the edge grid
+        :rtype: int
+        """
+        return 3 * nodes_in_row - 1
+
+    @staticmethod
+    def xz_row(rows: int, nodes_in_row: int) -> int:
+        """
+        Calculates the number of x- and z-edges in a row of the edge grid
+
+        :param rows: The number of rows in the edge grid
+        :type rows: int
+        :param nodes_in_row: The number of nodes in each row of the edge grid
+        :type nodes_in_row: int
+        :return: The number of x- and z-edges in a row of the edge grid
+        :rtype: int
+        """
+        return 2 * nodes_in_row - 1
+
+    @staticmethod
+    def total_edges(rows: int, nodes_in_row: int) -> int:
+        """
+        Calculates the total number of edges in an edge grid
+
+        :param rows: The number of rows in the edge grid
+        :type rows: int
+        :param nodes_in_row: The number of nodes in each row of the edge grid
+        :type nodes_in_row: int
+        :return: The total number of edges in an edge grid
+        :rtype: int
+        """
+        return EdgeGrid.full_row(rows, nodes_in_row) * (rows - 1) + EdgeGrid.xz_row(
+            rows, nodes_in_row
+        )
+
+
+def generate_fortran_neighborhood_structure(rows: int, nodes_in_row: int) -> np.ndarray:
+    """
+    Generates the neighbor structure needed by the Fortran Macroscale code.
+    This is a (-1, 8) array with a row for each edge, ordered by their Fortran index.
+    Each row contains the 0-indexed, fortran (1-D) indices for the 8 neighbors of the edge.
+    Each row is sorted in increasing order for consistency with the Fortran code.
+
+    :param rows: The number of rows in the edge grid
+    :type rows: int
+    :param nodes_in_row: The number of nodes in each row of the edge grid
+    :type nodes_in_row: int
+    :return: A (-1, 8) NumPy array of dtype uint32
+    :rtype: np.ndarray
+    """
+    # Generate a list of all fortran-index edges and get the equivalent 2-d indeces
+    edges = from_fortran_edge_index_array(
+        np.arange(EdgeGrid.total_edges(rows, nodes_in_row)), rows, nodes_in_row
+    )
+    # Figure out which edges are x-, y-, and z-edges
+    edge_type = edges[:, 1] % 3
+    # Top edges are x- and z-edges with the largest row index
+    top = (edges[:, 0] == rows - 1) & (edge_type != 0)
+    # Bottom edges are x- and z-edges with the smallest row index
+    bottom = (edges[:, 0] == 0) & (edge_type != 0)
+    # Left edges are those with rank 0 or 1
+    left = edges[:, 1] <= 1
+    # Right edges are those with the largest 2 ranks
+    right = edges[:, 1] >= EdgeGrid.full_row(rows, nodes_in_row) - 2
+    # Add an axis in the middle
+    edges = edges.reshape(-1, 1, 2)
+    # and then duplicate 8 times along that axis.
+    # This is where the 8 neighbors will go
+    neighbors = np.repeat(edges, 8, axis=1)
+
+    # Create a matrix for the neighbor delta
+    adds = np.empty(neighbors.shape, dtype=int)
+    # Get the appropriate neighbor delta for each edge type (x, y, z) and put them in the matrix
+    adds[edge_type == 0] = np.array(CONST.NEIGHBORHOOD.Y).T
+    adds[edge_type == 1] = np.array(CONST.NEIGHBORHOOD.Z).T
+    adds[edge_type == 2] = np.array(CONST.NEIGHBORHOOD.X).T
+    # Deal with the boundaries
+    adds[top, :, 0] += CONST.NEIGHBORHOOD.TOP_REFL
+    adds[bottom, :, 0] += CONST.NEIGHBORHOOD.BOTTOM_REFL
+    adds[left, :, 1] += CONST.NEIGHBORHOOD.LEFT_REFL
+    adds[right, :, 1] += CONST.NEIGHBORHOOD.RIGHT_REFL
+    # Add the delta to the current location to get the actual neighbor indices
+    # TODO: This casting should be fine, but it wouldn't hurt to add code to check it
+    neighbors = np.add(neighbors, adds, out=neighbors, casting="unsafe")
+
+    # Rearrange the axes so that its (8, -1, 2)
+    neighbors = np.moveaxis(neighbors, [0, 1, 2], [1, 0, 2])
+    # Slice up this matrix by neigbor number, convert its 2-D indices to 1-D,
+    # and then stack them back together.
+    neighbor_1d = np.array(
+        [to_fortran_edge_index_array(x, rows, nodes_in_row) for x in neighbors]
+    )
+    # Cast, Transpose, sort, and return
+    return np.sort(neighbor_1d.T)
 
 
 def from_fortran_edge_index(
@@ -456,23 +563,77 @@ def from_fortran_edge_index(
     # Count the number of full rows before this edge
     i = index // full_row
     # Determine the number of edges (in 1-D order) before this one in its own row
-    index_in_row = index % full_row
+    rank = index % full_row
     # If all x- and z-edges are already counted, this must be a y-edge
-    if index_in_row > xz_row - 1:
+    if rank > xz_row - 1:
         # Its index in the list of y-edges is the index of its triplet in the 2-D index
-        triplet = index_in_row - xz_row
+        triplet = rank - xz_row
         # The y-fiber is first in its triplet, so count up the triplets before this one.
         j = triplet * 3
     else:
         # Else it is an x- or z-edge. So find out which triplet it is in by
         # counting pairs of x- and z-edges.
-        triplet = index_in_row // 2
+        triplet = rank // 2
         # Then we need to insert all the y-edges for the preceding triplets,
         # and the y-edge for this triplet.
-        j = index_in_row + triplet + 1
+        j = rank + triplet + 1
 
     # Return the co-ordinates in the 2-D ordering.
     return i, j
+
+
+def from_fortran_edge_index_array(
+    index_array: np.ndarray, rows: int, nodes_in_row: int
+) -> np.ndarray:
+    """
+    Does the same as the from_fortran_edge_index() method, but with a whole numpy array at once.
+
+    :param index_array: A (-1,) array of 0-indexed indices in the Fortran 1-D indexing system.
+    :type index_array: np.ndarray
+    :param rows: The number of rows in the grid
+    :type rows: int
+    :param nodes_in_row: The number of nodes each row of the grid
+    :type nodes_in_row: int
+    :raises IndexError: Raised if any of the indices are out of bounds
+    :return: A (-1, 2) array with each row containing the indices of an edge in the 2-D ordering system
+    :rtype: np.ndarray
+    """
+    # The number of edges in a full row: 3 of each per node, except the last
+    # node which has no x-edge.
+    full_row = 3 * nodes_in_row - 1
+    # The number of x- and z-edges in a full row: 2 of each per node, except
+    # the last node which has no x-edge.
+    xz_row = 2 * nodes_in_row - 1
+    # The total number of edges in the grid: full_row for each row, except the
+    # last row which has no y-edges.
+    total_edges = full_row * (rows - 1) + xz_row
+
+    # Check if the index given is in-bounds.
+    if np.count_nonzero(index_array < 0) or np.count_nonzero(
+        index_array > total_edges - 1
+    ):
+        raise IndexError(
+            f"Index ({index_array}) out of bounds. Edge indices are in the range "
+            f"[0..{total_edges-1}]."
+        )
+
+    out_array = np.empty(shape=(index_array.size, 2), dtype=np.uint32)
+    # Count the number of full rows before this edge
+    # Determine the number of edges (in 1-D order) before this one in its own row
+    out_array[:, 0], rank = np.divmod(index_array, full_row)
+    # If all x- and z-edges are already counted, this must be a y-edge
+    # Its index in the list of y-edges is the index of its triplet in the 2-D index
+    # The y-fiber is first in its triplet, so count up the triplets before this one.
+    out_array[rank > xz_row - 1, 1] = (rank[rank > xz_row - 1] - xz_row) * 3
+    # Else it is an x- or z-edge. So find out which triplet it is in by
+    # counting pairs of x- and z-edges.
+    # Then we need to insert all the y-edges for the preceding triplets,
+    # and the y-edge for this triplet.
+    out_array[rank <= xz_row - 1, 1] = (
+        rank[rank <= xz_row - 1] + rank[rank <= xz_row - 1] // 2 + 1
+    )
+    # Return the co-ordinates in the 2-D ordering.
+    return out_array
 
 
 def to_fortran_edge_index(i: int, j: int, rows: int, nodes_in_row: int) -> int:
@@ -540,3 +701,63 @@ def to_fortran_edge_index(i: int, j: int, rows: int, nodes_in_row: int) -> int:
             raise IndexError(f"No y-edges on the top row (row {rows-1}).")
 
     return index
+
+
+def to_fortran_edge_index_array(
+    index_array: np.ndarray, rows: int, nodes_in_row: int
+) -> np.ndarray:
+    """
+    Does the same as the to_fortran_edge_index() method, but with a whole numpy array at once.
+
+    :param index_array: A (-1, 2) array with each row containing the indices of an edge in the 2-D ordering system
+    :type index_array: np.ndarray
+    :param rows: The number of rows in the grid.
+    :type rows: int
+    :param nodes_in_row: The number of nodes in each row of the grid.
+    :type nodes_in_row: int
+    :raises IndexError: Raised if any of the indices are out of bounds
+    :return: A (-1,) array of 0-indexed indices in the Fortran 1-D indexing system.
+    :rtype: np.ndarray
+    """
+    # The number of edges in a full row: 3 of each per node, except the last
+    # node which has no x-edge.
+    full_row = 3 * nodes_in_row - 1
+    # The number of x- and z-edges in a full row: 2 of each per node, except
+    # the last node which has no x-edge.
+    xz_row = 2 * nodes_in_row - 1
+
+    # Check that the indices given are valid
+    if np.count_nonzero(index_array[:, 0] < 0) or np.count_nonzero(
+        index_array[:, 0] > rows - 1
+    ):
+        raise IndexError(
+            f"Index i={index_array[:, 0]} out of bounds. Rows are [0..{rows-1}]."
+        )
+    if np.count_nonzero(index_array[:, 1] < 0) or np.count_nonzero(
+        index_array[:, 1] > full_row - 1
+    ):
+        raise IndexError(
+            f"Index j={index_array[:, 1]} out of bounds. Edges in each row are [0..{full_row-1}]."
+        )
+    # Determine which y-, z-, and x-edge triplet in its row it belongs to.
+    triplet, direction = np.divmod(index_array[:, 1], 3)
+    # In the last row, there are no y-edges.
+    if np.count_nonzero(index_array[direction == 0, 0] >= rows - 1):
+        raise IndexError(f"No y-edges on the top row (row {rows-1}).")
+    out = np.empty(shape=index_array.shape[0], dtype=np.uint32)
+    # Add up the number of edges that are in the preceding rows.
+    out = index_array[:, 0] * full_row
+    # If the edge is a z-edge,
+    # the number of edges before it in this row is two (x- and z-edges) per triplet.
+    out[direction == 1] += 2 * triplet[direction == 1]
+    # If the edge is an x-edge,
+    # the number of edges before it in this row is two (x- and z-edges) per triplet,
+    # plus its partner z-edge.
+    out[direction == 2] += 2 * triplet[direction == 2] + 1
+    # If the edge is a y-edge
+    # In all but the last row,
+    # the number of edges before it is all x- and z-edges in its row,
+    # plus the y-edges before it.
+    out[direction == 0] += xz_row + triplet[direction == 0]
+
+    return out
