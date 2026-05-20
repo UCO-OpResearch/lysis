@@ -114,21 +114,25 @@ Physical Parameters
 #####################################
 
 :radius:
-   
+
    :Description: The radius of each fiber in the model.
 
    :Default Value: 72.7/2 nanometers
 
    :Units: microns
 
+   :Python Name: ``fiber_radius``
+
 :KdtPAyesplg:
-   
-   :Description: The dissociation constant of tPA, :math:`k^D_\text{tPA}`, to fibrin 
+
+   :Description: The dissociation constant of tPA, :math:`k^D_\text{tPA}`, to fibrin
       in the presence of PLG.
 
    :Default Value: 0.02 micromolar
 
    :Units: micromolar
+
+   :Python Name: ``diss_const_tPA_wPLG``
 
 :KdtPAnoplg:
 
@@ -139,6 +143,8 @@ Physical Parameters
 
    :Units: micromolar
 
+   :Python Name: ``diss_const_tPA_woPLG``
+
 
 :KdPLGintact:
 
@@ -148,6 +154,8 @@ Physical Parameters
 
    :Units: micromolar
 
+   :Python Name: ``diss_const_PLG_intact``
+
 :KdPLGnicked:
 
    :Description: The dissociation constant of PLG, :math:`k^D_\text{PLG}`, to nicked fibrin.
@@ -156,65 +164,81 @@ Physical Parameters
 
    :Units: micromolar
 
+   :Python Name: ``diss_const_PLG_nicked``
+
 :ktPAon:
 
    :Description: The binding rate of tPA, :math:`k^\text{on}_\text{tPA}`, to fibrin.
-   
+
    :Default Value: 0.1 (micromolar*sec)^-1
 
    :Units: (micromolar*sec)^-1
+
+   :Python Name: ``bind_rate_tPA``
 
 :kplgon:
 
    :Description: The binding rate of PLG, :math:`k^\text{on}_\text{PLG}`, to fibrin.
 
    :Default Value: 0.1 (micromolar*sec)^-1
-   
+
    :Units: (micromolar*sec)^-1
+
+   :Python Name: ``bind_rate_PLG``
 
 :freeplg:
 
    :Description: The concentration of free plasminogen.
 
    :Default Value: 2 micromolar
-   
+
    :Units: micromolar
+
+   :Python Name: ``conc_free_PLG``
 
 :kdeg:
 
    :Description: The plasmin-mediated rate of fibrin degradation.
 
    :Default Value: 5 sec^-1
-   
+
    :Units: sec^-1
+
+   :Python Name: ``deg_rate_fibrin``
 
 
 :kplioff:
 
-   :Description: The unbinding rate of PLi, :math:`k^\text{off}_\text{PLi}`, 
+   :Description: The unbinding rate of PLi, :math:`k^\text{off}_\text{PLi}`,
       from fibrin.
 
    :Default Value: 57.6 sec^-1
-   
+
    :Units: sec^-1
+
+   :Python Name: ``unbind_rate_PLi``
 
 :kapcat:
 
-   :Description: The catalytic rate constant, :math:`k_\text{cat}^\text{ap}`, 
+   :Description: The catalytic rate constant, :math:`k_\text{cat}^\text{ap}`,
       for activation of PLG into PLI.
 
    :Default Value: 0.1 sec^-1
-   
+
    :Units: sec^-1
+
+   :Python Name: ``activation_rate_PLG``
 
 :kncat:
 
-   :Description: The catalytic rate constant, :math:`k_\text{cat}^\text{n}`, 
+   :Description: The catalytic rate constant, :math:`k_\text{cat}^\text{n}`,
       for the PLi-mediated rate of exposure of new binding sites.
 
    :Default Value: 5 sec^-1
-   
+
    :Units: sec^-1
+
+   :Python Name: ``exposure_rate_binding_site``
 
 
 
@@ -227,8 +251,10 @@ Model Parameters
       fiber.
 
    :Default Value: 7
-   
+
    :Units: None
+
+   :Python Name: ``nodes_in_micro_row``
 
 :snap_proportion:
 
@@ -236,8 +262,10 @@ Model Parameters
       fiber snaps.
 
    :Default Value: 0.6666666666667
-   
+
    :Units: None
+
+   :Python Name: ``snap_proportion``
 
 Experimental Parameters
 #####################################
@@ -247,8 +275,10 @@ Experimental Parameters
    :Description: The number of independent trials run in the microscale model.
 
    :Default Value: 50,000
-   
+
    :Units: None
+
+   :Python Name: ``micro_simulations``
 
 :seed:
 
@@ -260,3 +290,5 @@ Experimental Parameters
    :Default Value: 0 (randomly drawn)
 
    :Units: None
+
+   :Python Name: ``micro_seed`` (Fortran ``INTEGER*4`` bits reinterpreted as ``np.uint32``)
