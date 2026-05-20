@@ -18,6 +18,7 @@ import pytest
 from lysis.config.constants import CONST
 from lysis.config.parameters import MacroParameters, MicroParameters
 from lysis.tools.slurm import (
+    _snapshot_lysis_src,
     apply_sbatch_overrides,
     generate_macro_array_script,
     generate_micro_array_script,
@@ -1720,3 +1721,173 @@ class TestSubmitWithHistoricalBinaryAttrsEndToEnd:
         staging_dir = list(staging_root.iterdir())[0]
         array = (staging_dir / "lysis-micro-array__run-01.sh").read_text()
         assert "skip_binary_verification=True" in array
+
+
+# ---------------------------------------------------------------------------
+# TestSourcePinning
+# ---------------------------------------------------------------------------
+
+
+class TestSnapshotLysisSrc:
+    """Tests for :func:`_snapshot_lysis_src`."""
+
+    def test_returns_python_src_directory(self, tmp_path):
+        from lysis.tools.slurm import _repo_root
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        result = _snapshot_lysis_src(_repo_root(), staging)
+        assert result == staging / "python_src"
+
+    def test_creates_lysis_package_under_python_src(self, tmp_path):
+        from lysis.tools.slurm import _repo_root
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        _snapshot_lysis_src(_repo_root(), staging)
+        assert (staging / "python_src" / "lysis" / "__init__.py").exists()
+
+    def test_copies_subpackages(self, tmp_path):
+        """Subpackages such as tools/ and execution/ must be in the snapshot."""
+        from lysis.tools.slurm import _repo_root
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        _snapshot_lysis_src(_repo_root(), staging)
+        snap = staging / "python_src" / "lysis"
+        assert (snap / "tools" / "slurm.py").exists()
+        assert (snap / "execution" / "fortran_micro.py").exists()
+
+    def test_excludes_pycache(self, tmp_path):
+        """__pycache__ directories must be filtered out of the snapshot."""
+        from lysis.tools.slurm import _repo_root
+        # Ensure at least one __pycache__ exists in the source tree by importing.
+        import lysis.tools.slurm  # noqa: F401
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        _snapshot_lysis_src(_repo_root(), staging)
+        snap = staging / "python_src" / "lysis"
+        pycache_dirs = list(snap.rglob("__pycache__"))
+        assert pycache_dirs == []
+
+
+class TestSourcePinningInGeneratedScripts:
+    """PYTHONPATH source pinning must reach every generated script."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_copy2(self):
+        """The binary pre-stage copy doesn't need a real file."""
+        with patch("lysis.tools.slurm.shutil.copy2"):
+            yield
+
+    def _staging_dir(self, staging_root):
+        return list(staging_root.iterdir())[0]
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_legacy_micro_master_exports_pythonpath(
+        self, mock_sbatch, micro_hdf5, tmp_path,
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe", staging_root=staging_root,
+        )
+        staging_dir = self._staging_dir(staging_root)
+        master = (staging_dir / "lysis-micro-master__run-01.sh").read_text()
+        assert f'export PYTHONPATH="{staging_dir}/python_src"' in master
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_legacy_micro_child_exports_pythonpath(
+        self, mock_sbatch, micro_hdf5, tmp_path,
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe", staging_root=staging_root,
+        )
+        staging_dir = self._staging_dir(staging_root)
+        child = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
+        assert f'export PYTHONPATH="{staging_dir}/python_src"' in child
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_legacy_micro_creates_snapshot_directory(
+        self, mock_sbatch, micro_hdf5, tmp_path,
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe", staging_root=staging_root,
+        )
+        staging_dir = self._staging_dir(staging_root)
+        assert (staging_dir / "python_src" / "lysis" / "__init__.py").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_micro_master_and_array_export_pythonpath(
+        self, mock_sbatch, micro_hdf5, tmp_path,
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root,
+            num_children=4,
+        )
+        staging_dir = self._staging_dir(staging_root)
+        master = (staging_dir / "lysis-micro-master__run-01.sh").read_text()
+        array = (staging_dir / "lysis-micro-array__run-01.sh").read_text()
+        expected = f'export PYTHONPATH="{staging_dir}/python_src"'
+        assert expected in master
+        assert expected in array
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_macro_master_and_array_export_pythonpath(
+        self, mock_sbatch, macro_hdf5, tmp_path,
+    ):
+        with patch(
+            "lysis.execution.fortran_macro.FortranMacro._write_setup_files"
+        ):
+            staging_root = tmp_path / "staging_root"
+            staging_root.mkdir()
+            submit_macro_slurm_job(
+                macro_hdf5, "/bin/macro.exe", staging_root=staging_root,
+            )
+        staging_dir = self._staging_dir(staging_root)
+        master = (staging_dir / "lysis-macro-master__run-01.sh").read_text()
+        array = (staging_dir / "lysis-macro-array__run-01.sh").read_text()
+        expected = f'export PYTHONPATH="{staging_dir}/python_src"'
+        assert expected in master
+        assert expected in array
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_macro_creates_snapshot_directory(
+        self, mock_sbatch, macro_hdf5, tmp_path,
+    ):
+        with patch(
+            "lysis.execution.fortran_macro.FortranMacro._write_setup_files"
+        ):
+            staging_root = tmp_path / "staging_root"
+            staging_root.mkdir()
+            submit_macro_slurm_job(
+                macro_hdf5, "/bin/macro.exe", staging_root=staging_root,
+            )
+        staging_dir = self._staging_dir(staging_root)
+        assert (staging_dir / "python_src" / "lysis" / "__init__.py").exists()
+
+    def test_standalone_generate_micro_child_omits_pythonpath_by_default(
+        self, tmp_path,
+    ):
+        """The public generate_* helpers leave PYTHONPATH untouched unless asked."""
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+        )
+        assert "PYTHONPATH" not in script
+
+    def test_standalone_generate_micro_child_honours_pythonpath_arg(
+        self, tmp_path,
+    ):
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+            pythonpath="/snap/python_src",
+        )
+        assert 'export PYTHONPATH="/snap/python_src"' in script
