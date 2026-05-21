@@ -556,7 +556,7 @@ class EdgeGrid(object):
     def get_distance(
         run: Run, a: Tuple[int, int], b: Tuple[int, int], metric: str = "euclidian"
     ) -> Quantity:
-        """
+        r"""
         Calculate the distance between the centers of two edges on an EdgeGrid. 
         The distance returned will be a Pint Quantity which includes appropriate units.
 
