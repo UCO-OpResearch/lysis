@@ -246,7 +246,6 @@ program macrolysis
     integer :: m_bound_unit = 104
     integer :: m_bind_time_unit = 105
     integer :: f_deg_list_unit = 106
-    integer :: deg_per_unit = 107
 
     !! BRAD 2023-12-04:
     !!      Format: simulation time (t), molecule index (j), new status (m_stat), molecule location (V(1,j))
@@ -261,9 +260,6 @@ program macrolysis
     !! BRAD 2024-02-02:
     !!      Format: simulation time (t), fiber index (j), new degrade time (t_degrade)
     character(40) :: f_deg_list_format = '(f23.15, a, i0, a, f23.15)'
-    character(40) :: deg_per_format = '(f23.15)'
-    character(40) :: t_save_format = '(f23.15)'
-    character(40) :: N_save_format = '(f23.15)'
 
     !! BRAD 2023-02-02
 
@@ -790,8 +786,8 @@ program macrolysis
     ! write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     ! write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     ! open(degunit,file=ADJUSTL('data/' //TRIM(runCode)// '/deg' //TRIM(outFileCode)//'.dat'),form=filetype)
-    open (Nunit, file=ADJUSTL('data/'//TRIM(runCode)//'/Nsave'//TRIM(outFileCode)//'.dat'), form='formatted')
-    open (tunit, file=ADJUSTL('data/'//TRIM(runCode)//'/tsave'//TRIM(outFileCode)//'.dat'), form='formatted')
+    open (Nunit, file=ADJUSTL('data/'//TRIM(runCode)//'/Nsave'//TRIM(outFileCode)//'.dat'), form=filetype)
+    open (tunit, file=ADJUSTL('data/'//TRIM(runCode)//'/tsave'//TRIM(outFileCode)//'.dat'), form=filetype)
     ! open(moveunit,file=ADJUSTL('data/' //TRIM(runCode)// '/move' //TRIM(outFileCode)//'.dat'),form=filetype)
     ! open(lastmoveunit,file=ADJUSTL('data/' //TRIM(runCode)// '/lastmove' //TRIM(outFileCode)//'.dat'),form=filetype)
     ! open(plotunit,file=ADJUSTL('data/' //TRIM(runCode)// '/plot' //TRIM(outFileCode)//'.dat'),form=filetype)
@@ -807,7 +803,6 @@ program macrolysis
 
     !! BRAD 2024-02-02:
     open (f_deg_list_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/f_deg_list'//TRIM(outFileCode)//'.dat'), form='formatted')
-    open (deg_per_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/deg_percent'//TRIM(outFileCode)//'.dat'), form='formatted')
 
     !!!!! COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     ! open(degnextunit,file=degnextfile,form=filetype)
@@ -927,13 +922,12 @@ program macrolysis
 
         !! BRAD 2023-04-20
         ! write(degunit) degrade(:)
-        write (tunit,t_save_format) t
+        write (tunit) t
 
         !! BRAD 2023-01-21:
         ! write(t_degrade_unit) t_degrade(:)
         write (m_location_unit) V(1, :)
         write (m_bound_unit) V(2, :)
-        write (deg_per_unit,deg_per_format) 1.0  !initially, the clot is completely intact, so the fraction of clot remaining is 1
         Nsave = save_interval
 
         write (*, *) ' save as f_deg_list', outFileCode, '.dat'
@@ -1534,13 +1528,11 @@ program macrolysis
 
                 !! BRAD 2023-04-20:
                 ! write(degunit)    degrade(1:num)
-                write (tunit,t_save_format) t
+                write (tunit) t
                 !! BRAD 2023-01-21:
                 ! write(t_degrade_unit) t_degrade(:)
                 write (m_location_unit) V(1, :)
                 write (m_bound_unit) V(2, :)
-                !! BB 2026-02-14
-                write(deg_per_unit,deg_per_format) 1.0-real(degraded_fibers)/(num - enoFB)
 
                 Nsave = Nsave + save_interval
                 cNsave = cNsave + 1
@@ -2114,7 +2106,7 @@ program macrolysis
     ! write(cbindunit) countbindV
     ! write(cindunit) countindepV
     ! write(bind1unit) bind1V
-    write (Nunit,N_save_format) Nsavevect(:)
+    write (Nunit) Nsavevect(:)
     ! write(lastmoveunit) lastmove(:,:)
     ! write(mfptunit) mfpt(:)
 
@@ -2132,7 +2124,6 @@ program macrolysis
     close (m_bound_unit)
     close (m_bind_time_unit)
     close (f_deg_list_unit)
-    close(deg_per_unit)
 
     !!!!! COMMENTED OUT BELOW ON 5/16/16 BECAUSE I DON'T USE THIS DATA IN ANY POST-PROCESSING
     ! close(degnextunit)
