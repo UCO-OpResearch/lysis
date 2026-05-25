@@ -13,7 +13,6 @@ the once-per-process dirty-warning machinery, and the path-scoped
 """
 
 import re
-import subprocess
 import warnings
 
 import pytest
@@ -25,7 +24,6 @@ from lysis.tools.provenance import (
     gather_init_provenance,
     mark_dirty_warning_emitted,
 )
-from lysis.tools.provenance._git import _package_repo_root
 from lysis.tools.provenance.execution import (
     _resolve_dirty,
     _resolve_hostname,
@@ -71,28 +69,25 @@ def test_version_is_nonempty_string():
     assert _resolve_version()
 
 
-def test_version_matches_path_scoped_commit_when_no_tag(monkeypatch):
-    repo_root = _package_repo_root()
-    if repo_root is None:
-        pytest.skip("not running in a git checkout")
-    # Pretend no tags exist at HEAD by intercepting the describe call.
-    real_git = execution._git
+def test_version_matches_path_scoped_commit_when_no_tag(monkeypatch, tmp_path):
+    repo_root = tmp_path
+    lysis_path = repo_root / "src" / "lysis"
+    path_commit = "a" * 40
+
+    monkeypatch.setattr(execution, "_package_repo_root", lambda: repo_root)
 
     def fake_git(args, root):
-        if args[:3] == ["describe", "--exact-match", "--tags"]:
+        assert root == repo_root
+        if args == ["log", "-1", "--format=%H", "HEAD", "--", str(lysis_path)]:
+            return path_commit
+        if args == ["rev-parse", "HEAD"]:
+            return path_commit
+        if args == ["describe", "--exact-match", "--tags", "HEAD"]:
             return None
-        return real_git(args, root)
+        raise AssertionError(f"unexpected git call: {args}")
 
     monkeypatch.setattr(execution, "_git", fake_git)
-    version = _resolve_version()
-    # Should equal the most recent commit touching src/lysis/.
-    lysis_path = repo_root / "src" / "lysis"
-    path_commit = subprocess.check_output(
-        ["git", "-C", str(repo_root), "log", "-1", "--format=%H", "HEAD",
-         "--", str(lysis_path)],
-        text=True,
-    ).strip()
-    assert version == path_commit
+    assert _resolve_version() == path_commit
 
 
 def test_version_falls_back_to_package_metadata(monkeypatch):
