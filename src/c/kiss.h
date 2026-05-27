@@ -1,4 +1,20 @@
 /*
+** Provenance and license note (added 2026-05-27):
+**
+** The generator implemented here is George Marsaglia's KISS ("Keep It
+** Simple Stupid") pseudo-random number generator.  This Fortran-callable C
+** interface comes from Nelson H. F. Beebe's mathcw library (University of
+** Utah).  Dr. Brittany Bannish obtained the code directly from Nelson Beebe
+** while at the University of Utah, and it entered this project through her
+** work (confirmed by her own correspondence).
+**
+** The mathcw library is distributed under the GNU Lesser General Public
+** License (LGPL):  https://ftp.math.utah.edu/pub/mathcw/  (the upstream page
+** does not state a specific LGPL version).  This note is attributive and
+** claims no UCO copyright over the code.
+*/
+
+/*
 ** Minimal skeleton for using the Marsaglia KISS generator
 ** from Fortran 77/90/95 code.
 **
