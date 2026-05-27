@@ -158,10 +158,11 @@ File Organization
     macroscale port that used to live here now resides in ``archive/c/``.)
 
 ``./scripts``
-    Standalone utility scripts: test-fixture generation, data-conversion
-    checks, microscale-CSV building, and import-graph regeneration. (Running
-    the models is now handled by the ``lysis`` command-line interface; the
-    older run scripts now live in ``archive/scripts/``.)
+    Standalone utility scripts: test-fixture generation
+    (``create_test_fixture.py``, ``create_v190_fixture.py``), microscale-CSV
+    building, and import-graph regeneration. (Running the models is now
+    handled by the ``lysis`` command-line interface; the older run scripts
+    now live in ``archive/scripts/``.)
 
 ``./tests``
     The pytest test suite.
