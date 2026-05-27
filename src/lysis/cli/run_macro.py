@@ -41,10 +41,26 @@ from lysis.tools.slurm import DEFAULT_COMPILER_MODULE, parse_sbatch_tokens
 @cli.command(name="run-macro")
 @click.argument("target_path", metavar="PATH", type=click.Path(exists=True))
 @click.option(
+    "--backend",
+    type=click.Choice(["fortran", "python"]),
+    default="fortran",
+    show_default=True,
+    help=(
+        "Execution backend.  'fortran' runs the compiled Fortran binary "
+        "(requires --executable).  'python' runs the pure-Python NumPy "
+        "macroscale model in-process (no Fortran toolchain needed); the "
+        "Fortran-/Slurm-specific options are not supported with it."
+    ),
+)
+@click.option(
     "--executable",
-    required=True,
+    required=False,
+    default=None,
     type=click.Path(),
-    help="Path to the compiled Fortran macroscale binary.",
+    help=(
+        "Path to the compiled Fortran macroscale binary.  Required with "
+        "--backend fortran; not supported with --backend python."
+    ),
 )
 @click.option(
     "--slurm",
@@ -171,11 +187,11 @@ from lysis.tools.slurm import DEFAULT_COMPILER_MODULE, parse_sbatch_tokens
 @allow_dirty_option
 @allow_commit_mismatch_option
 @click.pass_context
-def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
-              fast_tmp_root, keep_tmpdir, out_file_code, in_file_code, compiler,
-              fortran_commit, sbatch_tokens, allow_stale_binary, allow_dirty,
-              allow_commit_mismatch):
-    """Execute the Fortran macroscale simulation for a Run or Experiment.
+def run_macro(ctx, target_path, backend, executable, use_slurm, partition,
+              staging_root, fast_tmp_root, keep_tmpdir, out_file_code,
+              in_file_code, compiler, fortran_commit, sbatch_tokens,
+              allow_stale_binary, allow_dirty, allow_commit_mismatch):
+    """Execute the macroscale simulation for a Run or Experiment.
 
     PATH may be either:
 
@@ -189,8 +205,18 @@ def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
     The simulation output is imported back into each HDF5 file on completion.
 
     \b
+    Backends (--backend):
+      - fortran (default): run the compiled Fortran binary (--executable).
+      - python: run the pure-Python NumPy macroscale model in-process, with
+        no Fortran toolchain.  Simulations run in series.  The Fortran-/Slurm-
+        specific options (--executable, --slurm, --fortran-commit, etc.) are
+        not supported with this backend.
+
+    \b
     Examples:
         lysis run-macro data/run01.h5 --executable bin/macro.exe
+        lysis run-macro data/run01.h5 --backend python
+        lysis run-macro data/my-experiment/ --backend python
         lysis run-macro data/run01.h5 --executable bin/macro.exe --keep-tmpdir
         lysis run-macro data/run01.h5 --executable bin/macro.exe --slurm
         lysis run-macro data/run01.h5 --executable bin/macro.exe --slurm \\
@@ -201,6 +227,34 @@ def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
         lysis run-macro data/my-experiment/ --executable bin/macro.exe --slurm
     """
     console = ctx.obj["console"]
+
+    # Validate backend/option combinations before any provenance gate or I/O.
+    if backend == "fortran":
+        if not executable:
+            raise click.UsageError(
+                "--executable is required with --backend fortran."
+            )
+    else:  # backend == "python"
+        fortran_only = [
+            (executable, "--executable"),
+            (use_slurm, "--slurm"),
+            (partition, "--partition"),
+            (fortran_commit, "--fortran-commit"),
+            (compiler != DEFAULT_COMPILER_MODULE, "--compiler"),
+            (sbatch_tokens, "--sbatch"),
+            (staging_root, "--staging-root"),
+            (fast_tmp_root, "--fast-tmp-root"),
+            (in_file_code, "--in-file-code"),
+            (out_file_code, "--out-file-code"),
+            (allow_stale_binary, "--allow-stale-binary"),
+        ]
+        offenders = [name for value, name in fortran_only if value]
+        if offenders:
+            raise click.UsageError(
+                f"{', '.join(offenders)} "
+                f"{'is' if len(offenders) == 1 else 'are'} not supported "
+                "with --backend python."
+            )
 
     # Gate: refuse to write provenance if src/lysis/ is dirty (unless overridden).
     enforce_lysis_clean(ctx, allow_dirty)
@@ -224,6 +278,35 @@ def run_macro(ctx, target_path, executable, use_slurm, partition, staging_root,
     for hdf5_path in hdf5_paths:
         with DataStore(hdf5_path.stem, str(hdf5_path.parent), mode="r") as ds:
             enforce_init_commit_match(ctx, ds, "macro", allow_commit_mismatch)
+
+    # Pure-Python backend: run each simulation in-process (in series) and
+    # write results straight into the HDF5 file.  No Fortran/Slurm machinery.
+    if backend == "python":
+        from lysis.execution.python_macro import PythonMacro
+
+        n = len(hdf5_paths)
+        for i, hdf5_path in enumerate(hdf5_paths):
+            prefix = f"[{i + 1}/{n}] " if n > 1 else ""
+            try:
+                pm = PythonMacro.from_hdf5(hdf5_path)
+            except ValueError as e:
+                raise click.ClickException(str(e))
+            run_code = pm.run.run_code
+            if not ctx.obj.get("verbose", 0):
+                with console.status(
+                    f"{prefix}Running macroscale simulation for {run_code}..."
+                ):
+                    pm.execute()
+            else:
+                console.print(
+                    f"{prefix}Running macroscale simulation for"
+                    f" [bold]{run_code}[/bold]"
+                )
+                pm.execute()
+            console.print(
+                f"[green]Macroscale results imported into[/green] {hdf5_path}"
+            )
+        return
 
     # --fortran-commit: build the historical binary once up front, share its
     # path across every run in this invocation, tear down at the end.  Only

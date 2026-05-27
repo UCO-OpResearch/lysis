@@ -37,6 +37,18 @@ The format is based on `Keep a Changelog
 Unreleased
 ==========
 
+Added
+-----
+
+- ``lysis run-macro`` gained a ``--backend {fortran,python}`` option (default
+  ``fortran``). ``--backend python`` runs the pure-Python NumPy macroscale
+  model in-process, requiring no Fortran toolchain, and writes results straight
+  into the run's HDF5 file (stamped with ``execution_backend = "python"``).
+  Simulations currently run in series (one HDF5 writer); a dispatch-collect
+  step (#59) and MPI4Py parallel execution (#60) are planned. ``--executable``
+  is now required only for the Fortran backend, and the Fortran-/Slurm-specific
+  options raise a clear error when combined with ``--backend python``. (#35)
+
 Changed
 -------
 

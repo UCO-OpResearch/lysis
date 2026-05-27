@@ -78,6 +78,10 @@ class Const:
         self.EXECUTION_DIRTY_ATTR = "execution_dirty"
         self.EXECUTION_TIMESTAMP_ATTR = "execution_timestamp"
         self.EXECUTION_HOSTNAME_ATTR = "execution_hostname"
+        # Which execution backend produced the results: "fortran" (compiled
+        # binary) or "python" (in-process np_macroscale).  Stamped alongside
+        # the other execution_* attrs by the run-macro backends.
+        self.EXECUTION_BACKEND_ATTR = "execution_backend"
         # Self-reported provenance from the Fortran binary's --version output.
         # ``binary_commit`` / ``binary_dirty`` / ``binary_compiler`` are
         # stamped unconditionally by ``run-*`` commands.

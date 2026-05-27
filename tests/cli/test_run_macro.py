@@ -5,12 +5,16 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import h5py
+import numpy as np
 import pytest
 from click.testing import CliRunner
 
 from lysis.cli import cli
-from lysis.config.constants import CONST
+from lysis.config.constants import CONST, Q_
 from lysis.config.parameters import MacroParameters, MicroParameters
+from lysis.config.run import Run
+from lysis.dataio.datastore import DataStore, HDF5State
+from lysis.dataio.dataspec import dataspec
 
 
 # ---------------------------------------------------------------------------
@@ -615,3 +619,239 @@ class TestRunMacroFortranCommit:
         assert result.exit_code == 0, result.output
         call_kwargs = mock_submit.call_args.kwargs
         assert call_kwargs.get("historical_binary_attrs") == prov
+
+
+# ---------------------------------------------------------------------------
+# Python backend (--backend python)
+# ---------------------------------------------------------------------------
+
+
+def _fill_microscale_data(ds, n_sims=100, seed=42):
+    """Fill microscale_out datasets in an open DataStore with synthetic data.
+
+    Mirrors the helper in ``tests/test_np_macroscale.py`` so the python backend
+    can run end-to-end against plausible microscale output.
+    """
+    rng = np.random.default_rng(seed)
+    spec = dataspec["v2.0.0"]["microscale_out"]
+
+    for name, ds_spec in spec.data.items():
+        if ds_spec.data_location is None:
+            continue
+        if ds_spec.data_location not in ds._file:
+            continue
+
+        dataset = ds._file[ds_spec.data_location]
+
+        if name == "tpa_leaving_time":
+            data = np.sort(rng.uniform(1, 100, n_sims)).astype(ds_spec.dtype)
+        elif name == "sim_final_time":
+            data = rng.uniform(50, 200, n_sims).astype(ds_spec.dtype)
+        elif name == "fiber_degraded":
+            data = np.ones(n_sims, dtype=bool)
+            data[::3] = False
+        elif name == "tpa_unbound_by_pli":
+            data = np.zeros(n_sims, dtype=bool)
+            data[: n_sims // 2] = True
+        elif name == "tpa_unbound_kinetic":
+            data = np.zeros(n_sims, dtype=bool)
+            data[n_sims // 2 :] = True
+        elif name == "pli_first_time":
+            data = rng.uniform(0, 50, n_sims).astype(ds_spec.dtype)
+        elif ds_spec.dtype == h5py.string_dtype():
+            continue
+        elif ds_spec.dtype == np.bool_:
+            data = rng.choice([True, False], n_sims)
+        elif np.issubdtype(ds_spec.dtype, np.integer):
+            data = rng.integers(0, 100, n_sims, dtype=ds_spec.dtype)
+        else:
+            data = rng.uniform(0, 100, n_sims).astype(ds_spec.dtype)
+
+        dataset.resize((n_sims,))
+        dataset[:] = data
+
+    ds._file.flush()
+
+
+def _make_macro_empty_hdf5(directory, run_code, n_micro_sims=100,
+                           macro_overrides=None):
+    """Write a real MACRO_EMPTY v2.0.0 HDF5 file and return its path.
+
+    Builds microscale output + an initialised (empty) macroscale_out collection
+    via the real DataStore, then closes the file so the CLI can open it.
+    """
+    run = Run(str(directory), run_code)
+    run.initialize_micro_param({"micro_simulations": n_micro_sims})
+
+    macro_defaults = {
+        "rows": 10,
+        "cols": 5,
+        "empty_rows": 2,
+        "total_molecules": 10,
+        "total_time": Q_("0.01 sec"),
+        "save_interval": Q_("0.01 sec"),
+        "macro_simulations": 1,
+    }
+    if macro_overrides:
+        macro_defaults.update(macro_overrides)
+    run.initialize_macro_param(macro_defaults)
+
+    ds = DataStore.create(run.run_code, run.os_path, run.micro_params)
+    _fill_microscale_data(ds, n_sims=n_micro_sims)
+    ds.initialize_macroscale(run.macro_params)
+    ds.close()
+
+    return Path(directory) / f"{run_code}.h5"
+
+
+def _state(hdf5_path):
+    """Return the HDF5State of a run file on disk."""
+    p = Path(hdf5_path)
+    with DataStore(p.stem, str(p.parent), mode="r") as ds:
+        return ds.hdf5_state
+
+
+@pytest.fixture
+def macro_ready_hdf5(tmp_path):
+    """A real MACRO_EMPTY HDF5 file ready for the python backend."""
+    return _make_macro_empty_hdf5(tmp_path, "py-run-01")
+
+
+class TestRunMacroPythonHelp:
+    def test_help_mentions_backend(self, runner):
+        result = runner.invoke(cli, ["run-macro", "--help"])
+        assert result.exit_code == 0
+        assert "--backend" in result.output
+
+    def test_help_mentions_python_backend(self, runner):
+        result = runner.invoke(cli, ["run-macro", "--help"])
+        assert "python" in result.output.lower()
+
+
+class TestRunMacroPythonValidation:
+    def test_python_with_executable_errors(self, runner, macro_hdf5):
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(macro_hdf5), "--backend", "python",
+             "--executable", "/bin/macro.exe"],
+        )
+        assert result.exit_code != 0
+        assert "--executable" in result.output
+        assert "python" in result.output.lower()
+
+    def test_python_with_slurm_errors(self, runner, macro_hdf5):
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(macro_hdf5), "--backend", "python", "--slurm"],
+        )
+        assert result.exit_code != 0
+        assert "--slurm" in result.output
+
+    def test_python_with_fortran_commit_errors(self, runner, macro_hdf5):
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(macro_hdf5), "--backend", "python",
+             "--fortran-commit", "HEAD"],
+        )
+        assert result.exit_code != 0
+        assert "--fortran-commit" in result.output
+
+    def test_fortran_default_still_requires_executable(self, runner, macro_hdf5):
+        """Default backend (fortran) with no --executable must still error."""
+        result = runner.invoke(cli, ["run-macro", str(macro_hdf5)])
+        assert result.exit_code != 0
+        assert "--executable" in result.output
+
+
+class TestRunMacroPythonExecution:
+    def test_end_to_end_single_run(self, runner, macro_ready_hdf5):
+        assert _state(macro_ready_hdf5) == HDF5State.MACRO_EMPTY
+
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(macro_ready_hdf5), "--backend", "python",
+             "--allow-dirty", "--allow-commit-mismatch"],
+        )
+        assert result.exit_code == 0, result.output
+        assert _state(macro_ready_hdf5) == HDF5State.MACRO_FILLED
+
+    def test_stamps_execution_backend(self, runner, macro_ready_hdf5):
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(macro_ready_hdf5), "--backend", "python",
+             "--allow-dirty", "--allow-commit-mismatch"],
+        )
+        assert result.exit_code == 0, result.output
+        with h5py.File(str(macro_ready_hdf5), "r") as f:
+            backend = f["macro_data"].attrs[CONST.EXECUTION_BACKEND_ATTR]
+            if isinstance(backend, bytes):
+                backend = backend.decode("utf-8")
+        assert backend == "python"
+
+    def test_series_two_simulations_independent(self, runner, tmp_path):
+        """Two simulations both fill, with distinct (seed-split) snapshots."""
+        path = _make_macro_empty_hdf5(
+            tmp_path, "py-2sim", macro_overrides={"macro_simulations": 2}
+        )
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(path), "--backend", "python",
+             "--allow-dirty", "--allow-commit-mismatch"],
+        )
+        assert result.exit_code == 0, result.output
+        assert _state(path) == HDF5State.MACRO_FILLED
+
+        p = Path(path)
+        with DataStore(p.stem, str(p.parent), mode="r") as ds:
+            snap0 = ds.macroscale_out[0].tpa_location_snapshot[:]
+            snap1 = ds.macroscale_out[1].tpa_location_snapshot[:]
+        assert snap0.shape[0] > 0 and snap1.shape[0] > 0
+        # Independent seeds → the two simulations must not be identical.
+        assert not np.array_equal(snap0, snap1)
+
+    def test_already_run_errors(self, runner, macro_ready_hdf5):
+        """Running twice (MACRO_FILLED) must surface a clear error."""
+        first = runner.invoke(
+            cli,
+            ["run-macro", str(macro_ready_hdf5), "--backend", "python",
+             "--allow-dirty", "--allow-commit-mismatch"],
+        )
+        assert first.exit_code == 0, first.output
+
+        second = runner.invoke(
+            cli,
+            ["run-macro", str(macro_ready_hdf5), "--backend", "python",
+             "--allow-dirty", "--allow-commit-mismatch"],
+        )
+        assert second.exit_code != 0
+        assert "already" in second.output.lower()
+
+
+class TestRunMacroPythonBatch:
+    def test_batch_runs_all(self, runner, tmp_path):
+        exp_dir = tmp_path / "py-experiment"
+        exp_dir.mkdir()
+        run_codes = ["py-run-01", "py-run-02"]
+        for rc in run_codes:
+            _make_macro_empty_hdf5(exp_dir, rc)
+        experiment_json = {
+            "name": "py-experiment",
+            "description": "",
+            "created": "2026-01-01T00:00:00",
+            "lysis_version": "test",
+            "runs": [
+                {"run_code": rc, "row_index": i, "description": "",
+                 "macro_params": None}
+                for i, rc in enumerate(run_codes)
+            ],
+        }
+        (exp_dir / "experiment.json").write_text(json.dumps(experiment_json))
+
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(exp_dir), "--backend", "python",
+             "--allow-dirty", "--allow-commit-mismatch"],
+        )
+        assert result.exit_code == 0, result.output
+        for rc in run_codes:
+            assert _state(exp_dir / f"{rc}.h5") == HDF5State.MACRO_FILLED

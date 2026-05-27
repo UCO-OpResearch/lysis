@@ -1013,6 +1013,7 @@ class DataStore:
         executable=None,
         binary_override=None,
         replace_binary_attrs=None,
+        backend=None,
     ):
         """Stamp provenance attributes onto the per-scale params group.
 
@@ -1060,6 +1061,10 @@ class DataStore:
             spawned against the binary.  ``binary_override`` (if also
             supplied) is merged on top.  Ignored for other kinds.
         :type replace_binary_attrs: dict, optional
+        :param backend: Optional execution-backend marker (``"fortran"`` or
+            ``"python"``) recorded as :data:`CONST.EXECUTION_BACKEND_ATTR`.
+            Only used when ``kind="execution"``; ignored otherwise.
+        :type backend: str, optional
         :raises IOError: If the DataStore is in read-only mode.
         :raises ValueError: For an unknown *scale*/*kind*, a missing
             target group, or ``kind="binary"`` with neither
@@ -1085,6 +1090,8 @@ class DataStore:
         elif kind == "execution":
             from ..tools.provenance import gather_execution_provenance  # noqa: PLC0415
             attrs = gather_execution_provenance()
+            if backend is not None:
+                attrs[CONST.EXECUTION_BACKEND_ATTR] = backend
         elif kind == "binary":
             if replace_binary_attrs is not None:
                 attrs = dict(replace_binary_attrs)
@@ -1403,7 +1410,7 @@ class DataStore:
         # executable path is known.  Both stamps go onto the same params
         # group via the shared :meth:`stamp_provenance` helper.
         scale = "micro" if collection_name == "microscale_out" else "macro"
-        self.stamp_provenance(scale, "execution")
+        self.stamp_provenance(scale, "execution", backend="fortran")
         if binary_executable is not None or replace_binary_attrs is not None:
             self.stamp_provenance(
                 scale,

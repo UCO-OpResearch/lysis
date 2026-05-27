@@ -22,9 +22,10 @@ import numpy as np
 from ..config.parameters import MacroParameters, MicroParameters
 from ..config.run import Run
 from ..dataio.dataspec import dataspec
-from ..dataio.datastore import DataStore, HDF5State, COMPATIBLE_DATASPEC_VERSION
+from ..dataio.datastore import DataStore, COMPATIBLE_DATASPEC_VERSION
 from ..dataio.fileops import write_dataset, write_data_collection
 from ..geometry.edge_grid import generate_fortran_neighborhood_structure
+from ._state import require_macro_empty
 from .fortran import FortranRunner, MACRO_FORTRAN_DATASPEC_VERSION
 
 
@@ -181,31 +182,9 @@ class FortranMacro(FortranRunner):
             are non-empty (macroscale has already been run).
         """
         hdf5_path = Path(hdf5_path)
+        require_macro_empty(hdf5_path)
         run = Run(str(hdf5_path.parent), run_code=hdf5_path.stem)
         run.load_params_from_hdf5()
-
-        with DataStore(hdf5_path.stem, str(hdf5_path.parent), mode="r") as ds:
-            state = ds.hdf5_state
-        if state in (HDF5State.MICRO_EMPTY, HDF5State.INCONSISTENT):
-            raise ValueError(
-                f"HDF5 file '{hdf5_path}' does not contain completed "
-                "microscale simulation data. The microscale simulation must "
-                f"be run before the macroscale simulation. Expected state: "
-                f"{HDF5State.MACRO_EMPTY.name}."
-            )
-        if state == HDF5State.MICRO_FILLED:
-            raise ValueError(
-                f"HDF5 file '{hdf5_path}' has not been initialized for "
-                "macroscale simulation. Call DataStore.initialize_macroscale() "
-                f"before running macroscale. Expected state: "
-                f"{HDF5State.MACRO_EMPTY.name}."
-            )
-        if state == HDF5State.MACRO_FILLED:
-            raise ValueError(
-                f"HDF5 file '{hdf5_path}' already contains macroscale "
-                "simulation results. The macroscale simulation has already "
-                f"been run. Expected state: {HDF5State.MACRO_EMPTY.name}."
-            )
 
         return cls(
             run=run,
