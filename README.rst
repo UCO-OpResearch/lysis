@@ -158,8 +158,10 @@ File Organization
     macroscale port that used to live here now resides in ``archive/c/``.)
 
 ``./scripts``
-    Standalone scripts for executing Fortran models, generating test
-    fixtures, and other data-processing tasks.
+    Standalone utility scripts: test-fixture generation, data-conversion
+    checks, microscale-CSV building, and import-graph regeneration. (Running
+    the models is now handled by the ``lysis`` command-line interface; the
+    older run scripts now live in ``archive/scripts/``.)
 
 ``./tests``
     The pytest test suite.
@@ -170,9 +172,9 @@ File Organization
 ``./archive``
     Unmaintained, preserved-for-reference code that is no longer part of the
     build: the C/OpenMPI and C++ macroscale ports, the CuPy/GPU
-    proof-of-concept, superseded Fortran macroscale variants, and the
-    original MATLAB/Octave pre- and post-processing pipeline. See
-    ``archive/README.rst``.
+    proof-of-concept, superseded Fortran macroscale variants, the original
+    MATLAB/Octave pre- and post-processing pipeline, and the legacy pre-CLI
+    run scripts. See ``archive/README.rst``.
 
 ``./docs``
     Sphinx documentation source (``docs/source``) and planning notes.

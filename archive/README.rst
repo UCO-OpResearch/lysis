@@ -11,7 +11,9 @@ alternative-language ports of the macroscale model; ``fortran/`` holds
 superseded prior versions of the *canonical* Fortran macroscale model (the
 lineage the active ``src/fortran/macro_diffuse_into_and_along__*.f90``
 replaced); and ``matlab/`` holds the original MATLAB/Octave pre- and
-post-processing pipeline, now superseded by the ``lysis`` Python package.
+post-processing pipeline, now superseded by the ``lysis`` Python package; and
+``scripts/`` holds the pre-CLI run scripts (plus one unused package module),
+superseded by the ``lysis`` command-line interface.
 
 GPU / CuPy macroscale experiment (``cupy/``)
 --------------------------------------------
@@ -148,3 +150,33 @@ Supporting files:
   under Octave on the Buddy cluster.
 - ``octave_notebooks.rst`` --- the former usage guide for running these
   notebooks on Buddy.
+
+Legacy run scripts + dead package code (``scripts/``)
+-----------------------------------------------------
+
+The pre-CLI scripts that drove the model before the ``lysis`` command-line
+interface (``lysis run-micro`` / ``lysis run-macro``) replaced them, plus one
+unused package module.
+
+Run scripts (formerly ``scripts/`` and the repo-root ``exec.sh``):
+
+- ``exec.py`` --- Python driver that ran a macroscale Run and recorded results
+  through the ``DataStore``.
+- ``fortran_exec.py`` --- wrapper that launched the compiled Fortran
+  micro/macro executables (via ``lysis.execution.codeutil``).
+- ``micro_to_macro.py`` --- Python reimplementation of the MATLAB
+  ``micro_to_macro`` bridge (computed ``frac_forced`` and wrote the macroscale
+  input files).
+- ``exec.sh`` --- shell wrapper that invoked ``fortran_exec.py``.
+- ``micro_fortran_run.sh`` / ``macro_fortran_run.sh`` --- SLURM batch scripts
+  for running the Fortran micro/macro models on the cluster.
+
+Dead package module (formerly ``src/lysis/molecule.py``):
+
+- ``molecule.py`` --- an unused ``Molecule`` dataclass. It was re-exported by
+  ``lysis/__init__.py`` but never instantiated anywhere; ``np_macroscale``
+  represents molecules with arrays instead.
+
+Note: the usage guides ``docs/source/usage/fortran_microscale.rst`` and
+``fortran_macroscale.rst`` still walk through the archived shell scripts and
+``micro_to_macro.py``; they should be updated to the CLI workflow.
