@@ -37,6 +37,18 @@ The format is based on `Keep a Changelog
 Unreleased
 ==========
 
+
+1.0.0-rc1 - 2026-05-27
+======================
+
+First release candidate for v1.0.0. The project becomes an installable Python
+package: a clot-lysis simulation library and ``lysis`` command-line interface
+wrapping the Fortran microscale and macroscale models, with HDF5 data I/O,
+format conversion, validation, analysis, and build/run provenance. Tagged for
+validation ahead of the final 1.0.0 release; remaining work is tracked under
+the open `v1.0.0 milestone
+<https://github.com/UCO-OpResearch/lysis/milestone/1>`_.
+
 Added
 -----
 
@@ -211,7 +223,9 @@ Comparisons
 ===========
 
 - `Unreleased
-  <https://github.com/UCO-OpResearch/lysis/compare/v0.3.0...HEAD>`_
+  <https://github.com/UCO-OpResearch/lysis/compare/v1.0.0-rc1...HEAD>`_
+- `1.0.0-rc1
+  <https://github.com/UCO-OpResearch/lysis/compare/v0.3.0...v1.0.0-rc1>`_
 - `0.3.0 <https://github.com/UCO-OpResearch/lysis/compare/v0.2.0...v0.3.0>`_
 - `0.2.0 <https://github.com/UCO-OpResearch/lysis/compare/v0.1.0...v0.2.0>`_
 - `0.1.0 <https://github.com/UCO-OpResearch/lysis/releases/tag/v0.1.0>`_
