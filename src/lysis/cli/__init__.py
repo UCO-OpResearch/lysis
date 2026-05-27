@@ -15,6 +15,8 @@ Use ``lysis --help`` or ``lysis <command> --help`` for details.
 import click
 from rich.console import Console
 
+from .._metadata import __version__
+
 
 # Shared console — auto-detects TTY vs file redirection.
 # In a terminal: colors and formatting.  Redirected to file: plain text.
@@ -22,7 +24,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option("0.1.0", prog_name="lysis")
+@click.version_option(__version__, prog_name="lysis")
 @click.option("-v", "--verbose", count=True, help="Increase verbosity (-v, -vv).")
 @click.pass_context
 def cli(ctx, verbose):
