@@ -155,11 +155,6 @@ File Organization
     MATLAB code used to pre- and post-process data for the Fortran models,
     along with Jupyter Notebook versions that run under the Octave kernel.
 
-``./src/cpp``
-    An abandoned partial conversion of the macroscale model to C++. Kept
-    for reference only; no longer developed (superseded by the Python and
-    CuPy implementations).
-
 ``./src/c``
     An abandoned partial conversion of the macroscale model to C, using MPI
     to multithread the macroscale grid. Kept for reference only and no
@@ -175,6 +170,11 @@ File Organization
 
 ``./notebooks``
     Jupyter notebooks for analysis and experiment work.
+
+``./archive``
+    Unmaintained, preserved-for-reference experiments that are no longer
+    part of the build: the partial C++ macroscale port and the CuPy/GPU
+    proof-of-concept. See ``archive/README.rst``.
 
 ``./docs``
     Sphinx documentation source (``docs/source``) and planning notes.

@@ -176,7 +176,7 @@ During the migration, the Fortran code must continue to work.  The two
 implementations coexist in the same repository:
 
 - ``src/fortran/`` --- Fortran microscale source
-- ``src/c/``, ``src/cpp/`` --- C/C++ macroscale source
+- ``src/c/`` --- C macroscale source
 - ``src/lysis/`` --- Python package (macroscale, data handling, tools)
 
 
@@ -231,11 +231,10 @@ Repository Layout
    |   |   +-- molecule.py        Molecule tracking
    |   +-- fortran/            Fortran microscale source
    |   +-- c/                  C macroscale source (original)
-   |   +-- cpp/                C++ macroscale source (variant)
    +-- tests/                  pytest test suite (630+ tests)
    +-- notebooks/              Jupyter notebooks (analysis, visualization)
    +-- scripts/                Execution and utility scripts
-   +-- archive/                Unmaintained experiments (stale GPU/CuPy port)
+   +-- archive/                Unmaintained experiments (C++ port, GPU/CuPy PoC)
    +-- docs/
    |   +-- source/usage/       Sphinx documentation (RST)
    |   +-- planning/           Planning documents (not published)
