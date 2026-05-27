@@ -146,11 +146,8 @@ from ..geometry.edge_grid import (
     to_fortran_edge_index_array,
 )
 
-__author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2025, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = "GPLv3"
-__version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
