@@ -1,0 +1,55 @@
+Lysis — Authors and Contributors
+=================================
+
+This file acknowledges the people who have contributed to Lysis. It is a
+record of authorship and contribution, not a definitive statement of copyright
+ownership; see LICENSE for the terms under which this software is distributed.
+
+Note on copyright: the underlying mathematical model and algorithms are not
+themselves subject to copyright; copyright attaches to the specific source code
+expressing them. Several contributions were made in the course of work at the
+University of Central Oklahoma, so the university may hold copyright in some or
+all of this code. Ownership questions should be directed to UCO.
+
+
+Originator of the Model
+-----------------------
+
+Dr. Brittany Bannish <bbannish@uco.edu> (https://github.com/bbannish)
+    Originator of the fibrinolysis model, its algorithms, and the original
+    Fortran implementation of the microscale and macroscale code on which this
+    project is built.
+
+
+Primary Author and Maintainer
+------------------------------
+
+Dr. Bradley Paynter <bpaynter@uco.edu> (https://github.com/bpaynter)
+    Python package and processing pipeline, data structures and HDF5 I/O,
+    command-line interface, C++ port of the macroscale code, modifications to
+    the original Fortran, documentation, and ongoing maintenance.
+
+
+Contributors
+------------
+
+Corey Beadle (https://github.com/researchercb)
+    C++ and Fortran code contributions.
+
+Eli Payton (https://github.com/Eli-Payton)
+    Python utilities, data-specification work, HDF5 file building, and
+    exploratory notebooks.
+
+Tyler Pumphrey (https://github.com/wpumphrey)
+    Continuous-integration (GitHub Actions) workflows, usage documentation,
+    and scripts.
+
+Austin Segrest (https://github.com/Austin9429)
+    MATLAB code and usage documentation.
+
+Mirochill (https://github.com/Mirochill)
+    Geometry module contributions.
+
+
+If you have contributed to Lysis and are not listed here, or any attribution
+above is inaccurate, please open an issue or contact the maintainer.
