@@ -37,6 +37,15 @@ The format is based on `Keep a Changelog
 Unreleased
 ==========
 
+Changed
+-------
+
+- The ``Makefile`` now builds the KISS RNG shared library (``lib/kiss.so``) as
+  part of the default ``make`` target and creates the ``bin/`` and ``lib/``
+  output directories on demand, so a fresh checkout builds with no manual
+  setup. The compiled ``lib/kiss.so`` is no longer tracked in git -- build it
+  with ``make`` (or ``make shared``).
+
 Removed
 -------
 
