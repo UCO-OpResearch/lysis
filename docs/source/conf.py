@@ -7,16 +7,18 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join("..", "..", "src")))
 
+from lysis import __author__, __copyright__, __version__  # noqa: E402
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "Lysis"
-copyright = (
-    "2022, Brittany Bannish <bbannish@uco.edu> & Brad Paynter <bpaynter@uco.edu>"
-)
-author = "Brittany Bannish <bbannish@uco.edu> & Brad Paynter <bpaynter@uco.edu>"
-release = "0.1"
-version = "0.1"
+# Derived from the single source of truth in src/lysis/_metadata.py.
+# Sphinx renders the "©" itself, so strip the leading "Copyright ".
+copyright = __copyright__.removeprefix("Copyright ")
+author = __author__
+release = __version__
+version = ".".join(__version__.split(".")[:2])
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
