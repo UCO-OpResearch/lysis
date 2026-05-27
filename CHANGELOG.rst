@@ -95,30 +95,116 @@ Removed
 0.3.0 - 2026-05-19
 ==================
 
+Adds a Python wrapper for the Fortran **microscale** model and takes several
+steps toward the packaged layout that lands in v1.0.0; the architecture is
+still "wrapper plus notebooks". A development release between papers, with no
+associated publication.
+
 Added
 -----
 
-- Python wrapper for the Fortran microscale model.
-- Project ontology and terminology documentation.
+- ``FortranMicro`` (in ``src/python/lysis/util/codeutil.py``), a companion to
+  ``FortranMacro`` that drives the compiled microscale binary from Python, plus
+  new entry points ``src/python/fortran_exec.py`` and ``cp_exec.py``.
+- Project ontology (``docs/usage/ontology.rst``) defining Run, Experiment,
+  Scenario, Mechanism, and Simulation.
+- The first formal HDF5 v2.0.0 on-disk data specification
+  (``docs/usage/data_specification.rst``).
+- Stand-alone Fortran usage guides (``fortran_microscale.rst``,
+  ``fortran_macroscale.rst``) and helper scripts (``micro_fortran_run.sh``,
+  ``macro_fortran_run.sh``, ``octave_setup.sh``, ``micro_to_macro.py``,
+  ``exec.sh``).
+- New ``lysis.util`` modules: ``dataconvert.py`` (including the
+  ``convert_fiber_degrade_time`` 1.99.0 → 2.0.0 converter), ``dataspec.py``
+  (the ``DataSpec`` class), and ``fileops.py``; ``run.py`` splits ``Run`` out
+  from ``Parameters``.
+
+Changed
+-------
+
+- HDF5 / ``DataStore``: reformatted layout for structured data
+  (``tpa_bind_events``, ``fiber_degrade_time``); micro and macro parameters
+  stored as HDF attributes; logs added to the HDF group; ``DataStore`` can read
+  HDF5 and export "micro to macro" data.
+- Naming convention cleanup, kept in sync across Python and Fortran:
+  ``expCode`` → ``runCode``; ``runs``/``stats`` → ``simulations``;
+  ``nodes_in_row`` → ``nodes_in_micro_row``; seed parameters → ``micro_seed`` /
+  ``macro_seed``; ``dist`` → ``radius``.
+- Fortran sources: large reformatting of the macroscale files plus the
+  ``runCode`` / ``radius`` renames; ``micro_rates.f90`` gains a
+  ``snap_proportion`` parameter and ``trim()`` cleanups.
+
+Removed
+-------
+
+- Legacy macroscale variants moved to ``src/fortran/_Archive/``;
+  ``macro_Q2.f90`` removed (now archived).
+- The four ``2024-0[1-3]-* - F-Macro Multi-Array-Process`` notebooks (their
+  ``-Run`` companions are retained, so the simulation inputs remain
+  reproducible).
+
+Fixed
+-----
+
+- Microscale ``Lat`` allocation bug (the Austin tip commits carried in by the
+  merge).
 
 
 0.2.0 - 2026-02-03
 ==================
 
+State used for the 2025 protofibril-packing-density paper (Risman et al.,
+2025, *Research and Practice in Thrombosis and Haemostasis*,
+`doi:10.1016/j.rpth.2025.102708 <https://doi.org/10.1016/j.rpth.2025.102708>`_).
+The architecture is unchanged from v0.1.0 — still a Python wrapper plus
+notebooks — but the codebase grew substantially.
+
 Added
 -----
 
-- Protofibril packing paper code.
+- A GPL v3 ``LICENSE``.
+- ReadTheDocs / Sphinx documentation skeleton (``docs/source/``,
+  ``docs/usage/``, ``.readthedocs.yaml``, ``docs/requirements.txt``).
+- New scenario and utility notebooks, and new analysis in the existing
+  notebooks: degradation heatmaps, linear interpolation of individual-fiber
+  degradation, and ``frac_forced`` calculations.
+
+Changed
+-------
+
+- Fortran macroscale
+  (``macro_diffuse_into_and_along__{external,internal}.f90``): precision fixes
+  for ``Fort_Macro`` output and adoption of the new long ``f_deg``
+  fiber-degrade-time data format.
+- ``micro_rates.f90``: rate tables unchanged; indentation reflow, the
+  ``expCode`` → ``runCode`` rename, and documentation of the Q0–Q3 fiber
+  parameters.
+
+Removed
+-------
+
+- Bulk simulation data removed from the git repository (now hosted externally;
+  the dataset for this release is archived on Zenodo,
+  `doi:10.5281/zenodo.15151618 <https://doi.org/10.5281/zenodo.15151618>`_).
 
 
 0.1.0 - 2024-01-12
 ==================
 
+First tagged release: an initial Python wrapper around the Fortran
+**macroscale** model, with run orchestration and post-run analysis driven from
+Jupyter notebooks rather than a packaged library. Mirrors the legacy
+``v2023.final`` tag. Captures the code state used for the 2023–24 papers —
+Risman et al. (2024, *Scientific Reports*,
+`doi:10.1038/s41598-024-52844-4 <https://doi.org/10.1038/s41598-024-52844-4>`_)
+and Bannish et al. (2024, *Biophysical Journal*,
+`doi:10.1016/j.bpj.2024.02.002 <https://doi.org/10.1016/j.bpj.2024.02.002>`_).
+
 Added
 -----
 
-- Initial tagged release: the 2023 papers code (microscale and macroscale
-  Fortran fibrinolysis model).
+- Python wrapper driving the Fortran macroscale simulation, with execution
+  orchestration and post-run analysis performed in Jupyter notebooks.
 
 
 Comparisons
