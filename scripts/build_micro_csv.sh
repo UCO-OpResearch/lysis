@@ -2,11 +2,42 @@
 
 set -euo pipefail
 
+# build_micro_csv.sh -- collect microscale Fortran run parameters into one CSV
+#
+# Scans a directory tree of completed *microscale* Fortran runs and extracts
+# the parameters each run was invoked with, writing them to a single CSV for
+# side-by-side comparison. Each run's parameters are recovered from its
+# captured Fortran stdout log: micro_rates echoes its command-line arguments
+# as lines like "command arg 5 = --nodes" / "command arg 6 = 5", and prints
+# the seed it used as "seed= <value>". This is handy for auditing or
+# recovering the inputs of legacy runs whose parameters live only in their
+# log files.
+#
 # Usage:
-# ./build_micro_csv.sh SIM_DIRECTORY OUTPUT.csv
+#   ./build_micro_csv.sh SIM_DIRECTORY OUTPUT.csv
 #
 # Example:
-# ./build_micro_csv.sh ./simulations micro_runs.csv
+#   ./build_micro_csv.sh ./simulations micro_runs.csv
+#
+# Input  (SIM_DIRECTORY): a directory with one subfolder per run, each holding
+#   a Fortran microscale log *.txt. Subfolders named "macro*" are skipped
+#   (those are macroscale runs, not microscale). Expects one log .txt per run
+#   folder; the folder's name becomes that run's column header.
+#
+# Output (OUTPUT.csv): one row per parameter (fixed order; see PARAM_ORDER),
+#   one column per run folder. Column 1 is the parameter name and the header
+#   row lists the folder names. Missing values are left blank.
+#
+# Notes:
+#   * Fortran CLI names are translated to their lysis/Python names via NAME_MAP
+#     (e.g. radius -> fiber_radius, nodes -> nodes_in_micro_row,
+#     simulations -> micro_simulations). See
+#     docs/source/usage/fortran_microscale.rst for the full parameter reference.
+#   * Canonical units (UNITS) are appended to values where applicable.
+#   * micro_seed is read from the log's "seed=" line -- the seed actually used,
+#     which matters when it was randomly drawn (--seed 0).
+#   * runCode / outFileCode and any unmapped arguments are ignored.
+#   * Requires bash 4+ (associative arrays), plus find, awk, and grep.
 
 ROOT_DIR="$1"
 OUTPUT_CSV="$2"
