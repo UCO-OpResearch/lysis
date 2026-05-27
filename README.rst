@@ -151,10 +151,6 @@ File Organization
 ``./src/fortran``
     The original microscale and macroscale Fortran models.
 
-``./src/matlab``
-    MATLAB code used to pre- and post-process data for the Fortran models,
-    along with Jupyter Notebook versions that run under the Octave kernel.
-
 ``./src/c``
     The KISS random number generator (``kiss.c`` / ``kiss.h``) --- the
     canonical source compiled into ``bin/kiss.o`` and ``lib/kiss.so`` and
@@ -172,9 +168,10 @@ File Organization
     Jupyter notebooks for analysis and experiment work.
 
 ``./archive``
-    Unmaintained, preserved-for-reference experiments that are no longer
-    part of the build: the C/OpenMPI and C++ macroscale ports, the CuPy/GPU
-    proof-of-concept, and superseded Fortran macroscale variants. See
+    Unmaintained, preserved-for-reference code that is no longer part of the
+    build: the C/OpenMPI and C++ macroscale ports, the CuPy/GPU
+    proof-of-concept, superseded Fortran macroscale variants, and the
+    original MATLAB/Octave pre- and post-processing pipeline. See
     ``archive/README.rst``.
 
 ``./docs``
