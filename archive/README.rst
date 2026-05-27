@@ -28,3 +28,20 @@ Files:
 
 These require the optional GPU dependencies (``cupy``, ``nvtx``), still declared
 under the ``gpu`` extra in ``pyproject.toml``.
+
+C++ macroscale port (``cpp/``)
+------------------------------
+
+A partial conversion of the macroscale model to C++, half-completed in 2015 and
+never finished. Formerly ``src/cpp/``; nothing in the active build references it.
+It was the only consumer of the old ``cpp`` Makefile target (now removed).
+
+Note on KISS RNG: the live build's shared random number generator is compiled
+from ``src/c/kiss.c`` (into ``bin/kiss.o`` for the Fortran binaries and
+``lib/kiss.so`` for ``np_macroscale`` via ``lysis.tools.kiss``). The
+``kiss.c`` / ``kiss.h`` / ``kiss.o`` copies preserved here belong to the C++
+port and were *not* part of that shared build --- the old ``cpp`` target itself
+linked ``src/c``'s ``kiss.o`` and used only ``cpp/kiss.h`` as a header.
+
+Files: ``macro_Q2.cpp`` (the port), ``fileio.h``, and the port's own
+``kiss.c`` / ``kiss.h`` / ``kiss.o``.
