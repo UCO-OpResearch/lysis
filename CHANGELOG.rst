@@ -45,7 +45,7 @@ Removed
   ``CudaMacroscaleRun``) are no longer importable from ``lysis``. Both, along
   with other unmaintained code (the C++ and C/OpenMPI ports, superseded Fortran
   macro variants, the MATLAB/Octave pipeline, and the pre-CLI run scripts), are
-  preserved under ``archive/``. (#TBD)
+  preserved under ``archive/``. (#57)
 
 
 1.0.0-rc1 - 2026-05-27
