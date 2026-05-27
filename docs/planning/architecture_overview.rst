@@ -176,7 +176,7 @@ During the migration, the Fortran code must continue to work.  The two
 implementations coexist in the same repository:
 
 - ``src/fortran/`` --- Fortran microscale source
-- ``src/c/`` --- C macroscale source
+- ``src/c/`` --- KISS random number generator (shared by Fortran and Python)
 - ``src/lysis/`` --- Python package (macroscale, data handling, tools)
 
 
@@ -230,11 +230,11 @@ Repository Layout
    |   |   +-- np_macroscale.py   Python macroscale simulation (NumPy)
    |   |   +-- molecule.py        Molecule tracking
    |   +-- fortran/            Fortran microscale source
-   |   +-- c/                  C macroscale source (original)
+   |   +-- c/                  KISS RNG (shared by Fortran and Python)
    +-- tests/                  pytest test suite (630+ tests)
    +-- notebooks/              Jupyter notebooks (analysis, visualization)
    +-- scripts/                Execution and utility scripts
-   +-- archive/                Unmaintained experiments (C++ port, GPU/CuPy PoC, Fortran variants)
+   +-- archive/                Unmaintained experiments (C/MPI + C++ ports, GPU/CuPy PoC, Fortran variants)
    +-- docs/
    |   +-- source/usage/       Sphinx documentation (RST)
    |   +-- planning/           Planning documents (not published)

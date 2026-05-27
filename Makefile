@@ -67,33 +67,10 @@ FORT_MICRO = micro_rates.f90
 FORT_MACRO = macro_diffuse_into_and_along__internal \
              macro_diffuse_into_and_along__external
 
-C_HEADERS = $(C_SRC_DIR)/all.h \
-			$(C_SRC_DIR)/initializeData.h \
-			$(C_SRC_DIR)/kiss.h \
-			$(C_SRC_DIR)/nodeGrid.h \
-			$(C_SRC_DIR)/parameters.h \
-			$(C_SRC_DIR)/retrieve.h \
-			$(C_SRC_DIR)/simulation.h \
-			$(C_SRC_DIR)/test.h \
-			$(C_SRC_DIR)/transfer.h \
-			$(C_SRC_DIR)/timeList.h
-C_SOURCE = $(C_SRC_DIR)/initializeData.c \
-			$(C_SRC_DIR)/kiss.c \
-			$(C_SRC_DIR)/main.c \
-			$(C_SRC_DIR)/nodeGrid.c \
-			$(C_SRC_DIR)/parameters.c \
-			$(C_SRC_DIR)/retrieve.c \
-			$(C_SRC_DIR)/simulation.c \
-			$(C_SRC_DIR)/test.c \
-			$(C_SRC_DIR)/transfer.c \
-			$(C_SRC_DIR)/timeList.c
-
 # build
 build: .build-pre fort
 
 fort: fort-micro fort-macro
-
-c: c-macro
 
 fort-micro: $(BUILD_DIR)/micro_rates # $(BUILD_DIR)/micro_wrapped
 
@@ -172,9 +149,6 @@ $(LIB_DIR)/kiss.so: $(C_SRC_DIR)/kiss.c
 $(BUILD_DIR)/kiss.o: $(C_SRC_DIR)/kiss.c
 	$(C) -c $(C_SRC_DIR)/kiss.c -o $(BUILD_DIR)/kiss.o
 #	gcc -c -std=c99 $(C_SRC_DIR)/kiss.c -o $(BUILD_DIR)/kiss.o
-
-c-macro: $(C_HEADERS) $(C_SOURCE) # This line sets what files make looks at to determine if it needs to recompile.
-	mpicc -O3 -lm -std=c11 -o $(BUILD_DIR)/c_macro ${C_SOURCE}
 
 .build-pre:
 
