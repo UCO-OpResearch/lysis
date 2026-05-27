@@ -228,7 +228,6 @@ Repository Layout
    |   |   +-- tools/          Utilities (RNG, SLURM, misc)
    |   |   +-- cli/            Command-line interface (convert, validate)
    |   |   +-- np_macroscale.py   Python macroscale simulation (NumPy)
-   |   |   +-- cp_macroscale.py   Python macroscale simulation (CuPy/GPU)
    |   |   +-- molecule.py        Molecule tracking
    |   +-- fortran/            Fortran microscale source
    |   +-- c/                  C macroscale source (original)
@@ -236,6 +235,7 @@ Repository Layout
    +-- tests/                  pytest test suite (630+ tests)
    +-- notebooks/              Jupyter notebooks (analysis, visualization)
    +-- scripts/                Execution and utility scripts
+   +-- archive/                Unmaintained experiments (stale GPU/CuPy port)
    +-- docs/
    |   +-- source/usage/       Sphinx documentation (RST)
    |   +-- planning/           Planning documents (not published)

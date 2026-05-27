@@ -17,14 +17,6 @@ Subpackages
 Submodules
 ----------
 
-lysis.cp\_macroscale module
----------------------------
-
-.. automodule:: lysis.cp_macroscale
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 lysis.molecule module
 ---------------------
 

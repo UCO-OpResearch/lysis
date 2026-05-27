@@ -45,13 +45,8 @@ autodoc_default_options = {
 
 # Mock imports for optional modules that aren't needed for documentation
 # These are specialized dependencies only used in specific contexts:
-# - cupy: GPU array library (only for CUDA acceleration)
-# - nvtx: NVIDIA profiling tools (only for performance profiling)
 # - GooseSLURM: SLURM cluster management (only for HPC job submission)
 autodoc_mock_imports = [
-    "cupy",
-    "cp",
-    "nvtx",
     "GooseSLURM",
     "gs",
 ]
