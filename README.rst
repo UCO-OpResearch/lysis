@@ -156,10 +156,10 @@ File Organization
     along with Jupyter Notebook versions that run under the Octave kernel.
 
 ``./src/c``
-    An abandoned partial conversion of the macroscale model to C, using MPI
-    to multithread the macroscale grid. Kept for reference only and no
-    longer developed. Also includes the KISS random number generator used
-    by the other implementations.
+    The KISS random number generator (``kiss.c`` / ``kiss.h``) --- the
+    canonical source compiled into ``bin/kiss.o`` and ``lib/kiss.so`` and
+    used by the Fortran and Python implementations. (The abandoned C/MPI
+    macroscale port that used to live here now resides in ``archive/c/``.)
 
 ``./scripts``
     Standalone scripts for executing Fortran models, generating test
@@ -173,7 +173,7 @@ File Organization
 
 ``./archive``
     Unmaintained, preserved-for-reference experiments that are no longer
-    part of the build: the partial C++ macroscale port, the CuPy/GPU
+    part of the build: the C/OpenMPI and C++ macroscale ports, the CuPy/GPU
     proof-of-concept, and superseded Fortran macroscale variants. See
     ``archive/README.rst``.
 

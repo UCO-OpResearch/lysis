@@ -6,7 +6,7 @@ Unmaintained, preserved-for-reference code. **Nothing here is imported by the
 It is kept in version control so past experiments can be revisited, but it is
 not expected to run against the current codebase without rework.
 
-Subfolders group code by lineage: ``cupy/`` and ``cpp/`` are abandoned
+Subfolders group code by lineage: ``cupy/``, ``cpp/`` and ``c/`` are abandoned
 alternative-language ports of the macroscale model, while ``fortran/`` holds
 superseded prior versions of the *canonical* Fortran macroscale model --- the
 lineage that the active ``src/fortran/macro_diffuse_into_and_along__*.f90``
@@ -51,6 +51,25 @@ linked ``src/c``'s ``kiss.o`` and used only ``cpp/kiss.h`` as a header.
 
 Files: ``macro_Q2.cpp`` (the port), ``fileio.h``, and the port's own
 ``kiss.c`` / ``kiss.h`` / ``kiss.o``.
+
+C / OpenMPI macroscale port (``c/``)
+------------------------------------
+
+An abandoned partial conversion of the macroscale model to C, parallelised
+across the lattice with OpenMPI/MPICH (built into a ``c_macro`` /
+``ParallelMacro`` binary). Written by **Bryan Carroll** (misspelled "Carrol"
+in the 2022-12-21 import commit) and imported into this repository in Dec 2022
+-- back when it was named ``UCO-OpResearch/BloodClotting``, before the rename
+to ``lysis``. His own commits are not in this history (the code was imported
+wholesale by Brad Paynter), so this note is the record of his authorship. Formerly ``src/c/`` (minus the kiss files); nothing
+in the active build references it (the old ``c`` / ``c-macro`` Makefile target
+has been removed). ``old/`` holds earlier drafts, including a C++ variant.
+
+KISS RNG note: the canonical ``kiss.c`` / ``kiss.h`` -- the shared RNG compiled
+into ``bin/kiss.o`` (Fortran binaries) and ``lib/kiss.so`` (``np_macroscale``
+via ``lysis.tools.kiss``) -- **remain in** ``src/c/`` and were deliberately not
+moved. This C port ``#include``\ s ``kiss.h`` (via ``all.h``) and linked
+``kiss.c``, so rebuilding it from the archive would need those paths adjusted.
 
 Fortran macroscale variants (``fortran/``)
 ------------------------------------------
