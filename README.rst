@@ -5,6 +5,22 @@ Lysis
 Clot lysis simulation based on the work of Dr. Brittany Bannish at the
 University of Central Oklahoma.
 
+.. image:: https://github.com/UCO-OpResearch/lysis/actions/workflows/tests.yml/badge.svg
+   :target: https://github.com/UCO-OpResearch/lysis/actions/workflows/tests.yml
+   :alt: Tests
+
+.. image:: https://readthedocs.org/projects/lysis/badge/?version=latest
+   :target: https://lysis.readthedocs.io/en/latest/
+   :alt: Documentation Status
+
+.. image:: https://img.shields.io/badge/License-GPLv3-blue.svg
+   :target: https://www.gnu.org/licenses/gpl-3.0
+   :alt: License: GPL v3
+
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.20406003.svg
+   :target: https://doi.org/10.5281/zenodo.20406003
+   :alt: DOI
+
 Lysis is a computational model for studying the breakdown (lysis) of blood
 clots. It implements the multiscale stochastic model of fibrinolysis described
 by Bannish, Keener, and Fogelson (see References_) and provides Python tooling
@@ -62,6 +78,29 @@ Run any command in the environment with ``uv run`` (e.g. ``uv run lysis``,
 ``uv run pytest``).
 
 
+Quick start
+===========
+
+A minimal end-to-end workflow, driven entirely through the ``lysis`` CLI::
+
+    # Build an Experiment (one HDF5 file per Run) from a parameter CSV
+    uv run lysis init-experiment params.csv ./data
+
+    # Initialise the macroscale edge-grid structure in each Run's HDF5 file
+    uv run lysis init-macroscale ./data/<experiment>
+
+    # Execute the Fortran microscale, then macroscale, simulations
+    uv run lysis run-micro ./data/<experiment>
+    uv run lysis run-macro ./data/<experiment>
+
+    # Inspect and compare results
+    uv run lysis parameters ./data/<experiment>
+    uv run lysis compare ./data/<experiment-a> ./data/<experiment-b>
+
+See the `command-line interface`_ section below and the usage guide under
+``docs/source/usage/`` for the full set of commands and options.
+
+
 Command-line interface
 ======================
 
@@ -117,12 +156,15 @@ File Organization
     along with Jupyter Notebook versions that run under the Octave kernel.
 
 ``./src/cpp``
-    An incomplete conversion of the macroscale model to C++.
+    An abandoned partial conversion of the macroscale model to C++. Kept
+    for reference only; no longer developed (superseded by the Python and
+    CuPy implementations).
 
 ``./src/c``
-    An incomplete conversion of the macroscale model to C, using MPI to
-    multithread the macroscale grid. Also includes the KISS random number
-    generator used by the other implementations.
+    An abandoned partial conversion of the macroscale model to C, using MPI
+    to multithread the macroscale grid. Kept for reference only and no
+    longer developed. Also includes the KISS random number generator used
+    by the other implementations.
 
 ``./scripts``
     Standalone scripts for executing Fortran models, generating test
@@ -158,12 +200,69 @@ File Organization
     `HDFView <https://www.hdfgroup.org/download-hdfview/>`_.
 
 
-.. _References:
+Releases and publications
+=========================
+
+Tagged releases are listed on the `GitHub Releases page
+<https://github.com/UCO-OpResearch/lysis/releases>`__, where each release's
+notes record the exact code state, the paper(s) generated with it, and the
+associated Zenodo dataset where one exists.
+
+* **v0.1.0** — initial Python wrapper around the Fortran macroscale model;
+  state used for Risman et al. (2024) and Bannish et al. (2024) below.
+* **v0.2.0** — protofibril packing-density paper; state used for Risman et al.
+  (2025) below.
+* **v0.3.0** — Python wrapper for the Fortran microscale (development release,
+  no associated paper).
+
 
 References
 ==========
+
+The model is described in:
 
 Bannish, Brittany E., James P. Keener, and Aaron L. Fogelson. "Modelling
 fibrinolysis: a 3D stochastic multiscale model." *Mathematical medicine and
 biology: a journal of the IMA* 31.1 (2014): 17-44.
 https://doi.org/10.1093/imammb/dqs029
+
+Papers that used this code (see the matching releases above):
+
+Risman, R. A., Paynter, B., Percoco, V., Shroff, M., Bannish, B. E., &
+Tutwiler, V. (2024). Internal fibrinolysis of fibrin clots is driven by pore
+expansion. *Scientific Reports*, 14(1), 2623.
+https://doi.org/10.1038/s41598-024-52844-4
+(dataset: https://doi.org/10.5281/zenodo.8115180)
+
+Bannish, B. E., Paynter, B., Risman, R. A., Shroff, M., & Tutwiler, V. (2024).
+The effect of plasmin-mediated degradation on fibrinolysis and tissue
+plasminogen activator diffusion. *Biophysical Journal*, 123(5), 610-621.
+https://doi.org/10.1016/j.bpj.2024.02.002
+
+Risman, R. A., Percoco, V., Paynter, B., Bannish, B. E., & Tutwiler, V. (2025).
+Protofibril packing density of individual fibers alters fibrinolysis.
+*Research and Practice in Thrombosis and Haemostasis*, 9(2), 102708.
+https://doi.org/10.1016/j.rpth.2025.102708
+(dataset: https://doi.org/10.5281/zenodo.15151618)
+
+
+License
+=======
+
+Lysis is distributed under the GNU General Public License v3.0. See the
+`LICENSE <LICENSE>`__ file for the full text.
+
+
+How to cite
+===========
+
+If you use this software in your research, please cite the modelling paper
+(Bannish, Keener, and Fogelson, 2014, above) together with the software itself
+via its archived Zenodo record:
+
+    https://doi.org/10.5281/zenodo.20406003
+
+This DOI always resolves to the latest archived version; each tagged release
+also has its own version-specific DOI on Zenodo. Releases and their associated
+papers and datasets are listed on the `GitHub Releases page
+<https://github.com/UCO-OpResearch/lysis/releases>`__.
