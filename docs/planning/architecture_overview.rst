@@ -234,7 +234,7 @@ Repository Layout
    +-- tests/                  pytest test suite (630+ tests)
    +-- notebooks/              Jupyter notebooks (analysis, visualization)
    +-- scripts/                Execution and utility scripts
-   +-- archive/                Unmaintained experiments (C++ port, GPU/CuPy PoC)
+   +-- archive/                Unmaintained experiments (C++ port, GPU/CuPy PoC, Fortran variants)
    +-- docs/
    |   +-- source/usage/       Sphinx documentation (RST)
    |   +-- planning/           Planning documents (not published)

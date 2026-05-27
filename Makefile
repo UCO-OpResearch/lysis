@@ -65,11 +65,7 @@ FORT_SRC_DIR = ./src/fortran
 VERSION_F90 = $(FORT_SRC_DIR)/version_stamp.f90
 FORT_MICRO = micro_rates.f90
 FORT_MACRO = macro_diffuse_into_and_along__internal \
-             macro_diffuse_into_and_along__external \
-            #  macro_Q2_diffuse_into \
-            #  macro_Q2_diffuse_along \
-            #  macro_Q2_always_rebind \
-            #  macro_diffuse_into_and_along_slow_micro__external
+             macro_diffuse_into_and_along__external
 
 C_HEADERS = $(C_SRC_DIR)/all.h \
 			$(C_SRC_DIR)/initializeData.h \
@@ -91,7 +87,7 @@ C_SOURCE = $(C_SRC_DIR)/initializeData.c \
 			$(C_SRC_DIR)/test.c \
 			$(C_SRC_DIR)/transfer.c \
 			$(C_SRC_DIR)/timeList.c
-	
+
 # build
 build: .build-pre fort
 
@@ -102,10 +98,6 @@ c: c-macro
 fort-micro: $(BUILD_DIR)/micro_rates # $(BUILD_DIR)/micro_wrapped
 
 fort-macro: $(foreach file,$(FORT_MACRO),$(BUILD_DIR)/$(file))
-
-f-macro-normal: $(BUILD_DIR)/macro-normal
-
-f-macro-array: $(BUILD_DIR)/macro-array
 
 shared: $(LIB_DIR)/kiss.so
 
@@ -171,27 +163,9 @@ $(BUILD_DIR)/micro_rates: $(FORT_SRC_DIR)/micro_rates.f90 $(VERSION_F90) $(BUILD
 $(BUILD_DIR)/macro_diffuse_into_and_along__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 $(VERSION_F90) $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(VERSION_F90) $(FORT_SRC_DIR)/macro_diffuse_into_and_along__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__external
 
-# $(BUILD_DIR)/macro_diffuse_into_and_along_slow_micro__external: $(FORT_SRC_DIR)/macro_diffuse_into_and_along_slow_micro__external.f90 $(BUILD_DIR)/kiss.o
-# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_diffuse_into_and_along_slow_micro__external.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along_slow_micro__external
-    
 $(BUILD_DIR)/macro_diffuse_into_and_along__internal: $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 $(VERSION_F90) $(BUILD_DIR)/kiss.o
 	$(FORT) $(BUILD_DIR)/kiss.o $(VERSION_F90) $(FORT_SRC_DIR)/macro_diffuse_into_and_along__internal.f90 -o $(BUILD_DIR)/macro_diffuse_into_and_along__internal
-        
-# $(BUILD_DIR)/macro_Q2_diffuse_into: $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 $(BUILD_DIR)/kiss.o
-# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_into.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_into
-    
-# $(BUILD_DIR)/macro_Q2_diffuse_along: $(FORT_SRC_DIR)/macro_Q2_diffuse_along.f90 $(BUILD_DIR)/kiss.o
-# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_diffuse_along.f90 -o $(BUILD_DIR)/macro_Q2_diffuse_along
-    
-# $(BUILD_DIR)/macro_Q2_always_rebind: $(FORT_SRC_DIR)/macro_Q2_always_rebind.f90 $(BUILD_DIR)/kiss.o
-# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_Q2_always_rebind.f90 -o $(BUILD_DIR)/macro_Q2_always_rebind
-    
-# $(BUILD_DIR)/macro-normal: $(FORT_SRC_DIR)/macro_brad_scratch.f90 $(BUILD_DIR)/kiss.o
-# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_brad_scratch.f90 -o $(BUILD_DIR)/macro-normal
-    
-# $(BUILD_DIR)/macro-array: $(FORT_SRC_DIR)/macro_rng_array.f90 $(BUILD_DIR)/kiss.o
-# 	$(FORT) $(BUILD_DIR)/kiss.o $(FORT_SRC_DIR)/macro_rng_array.f90 -o $(BUILD_DIR)/macro-array
-    
+
 $(LIB_DIR)/kiss.so: $(C_SRC_DIR)/kiss.c
 	$(C) -fPIC -std=c99 -shared -o $(LIB_DIR)/kiss.so $(C_SRC_DIR)/kiss.c
 
@@ -207,7 +181,6 @@ c-macro: $(C_HEADERS) $(C_SOURCE) # This line sets what files make looks at to d
 .build-post:
 # Add your post 'build' code here...
 
-
 # clean
 clean: .clean-post
 	rm -r $(BUILD_DIR)
@@ -219,7 +192,6 @@ clean: .clean-post
 .clean-post:
 # Add your post 'clean' code here...
 
-
 # clobber
 clobber: .clobber-post
 
@@ -228,7 +200,6 @@ clobber: .clobber-post
 
 .clobber-post:
 # Add your post 'clobber' code here...
-
 
 # all
 all: .all-post
@@ -239,7 +210,6 @@ all: .all-post
 .all-post:
 # Add your post 'all' code here...
 
-
 # build tests
 build-tests: .build-tests-post
 
@@ -248,7 +218,6 @@ build-tests: .build-tests-post
 
 .build-tests-post:
 # Add your post 'build-tests' code here...
-
 
 # run tests
 test: .test-post
@@ -259,7 +228,6 @@ test: .test-post
 .test-post:
 # Add your post 'test' code here...
 
-
 # help
 help: .help-post
 
@@ -268,5 +236,3 @@ help: .help-post
 
 .help-post:
 # Add your post 'help' code here...
-
-
