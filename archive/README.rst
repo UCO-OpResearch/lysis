@@ -7,10 +7,11 @@ It is kept in version control so past experiments can be revisited, but it is
 not expected to run against the current codebase without rework.
 
 Subfolders group code by lineage: ``cupy/``, ``cpp/`` and ``c/`` are abandoned
-alternative-language ports of the macroscale model, while ``fortran/`` holds
-superseded prior versions of the *canonical* Fortran macroscale model --- the
-lineage that the active ``src/fortran/macro_diffuse_into_and_along__*.f90``
-replaced.
+alternative-language ports of the macroscale model; ``fortran/`` holds
+superseded prior versions of the *canonical* Fortran macroscale model (the
+lineage the active ``src/fortran/macro_diffuse_into_and_along__*.f90``
+replaced); and ``matlab/`` holds the original MATLAB/Octave pre- and
+post-processing pipeline, now superseded by the ``lysis`` Python package.
 
 GPU / CuPy macroscale experiment (``cupy/``)
 --------------------------------------------
@@ -118,3 +119,32 @@ Files:
    so it is not listed above.
 
    TODO: track this porting work as a GitHub issue once v2.0.0 ships.
+
+MATLAB / Octave pipeline (``matlab/``)
+--------------------------------------
+
+The original pre- and post-processing pipeline for the Fortran model, written
+in MATLAB by Dr. Brittany Bannish, together with Octave/Jupyter notebook ports
+of the same code (the ``.ipynb`` files) made by Brad Paynter for easier use
+under the Octave kernel. All of this functionality is now provided by the
+``lysis`` Python package. Formerly ``src/matlab/``, plus ``octave_setup.sh``
+(from ``scripts/``) and ``octave_notebooks.rst`` (from ``docs/source/usage/``;
+removed from the ``docs/source/index.rst`` toctree when archived).
+
+Pipeline (each ``.m`` has a matching ``.ipynb`` Octave port):
+
+- ``Lat_create.m`` --- generates the lattice input file read by the Fortran
+  microscale code (as ``Lat``).
+- ``micro_to_macro.m`` --- reads the microscale results, produces figures and
+  metrics, and writes the input files required by the ``macro_Q2`` macroscale
+  code.
+- ``macro_scale_model_post_processing.m`` --- post-processes macroscale results
+  (metrics and plots).
+- ``movie.m`` / ``movie_snapshot.m`` --- animate / snapshot macroscale results.
+
+Supporting files:
+
+- ``octave_setup.sh`` --- one-time environment setup for running the notebooks
+  under Octave on the Buddy cluster.
+- ``octave_notebooks.rst`` --- the former usage guide for running these
+  notebooks on Buddy.
