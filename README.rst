@@ -173,8 +173,9 @@ File Organization
 
 ``./archive``
     Unmaintained, preserved-for-reference experiments that are no longer
-    part of the build: the partial C++ macroscale port and the CuPy/GPU
-    proof-of-concept. See ``archive/README.rst``.
+    part of the build: the partial C++ macroscale port, the CuPy/GPU
+    proof-of-concept, and superseded Fortran macroscale variants. See
+    ``archive/README.rst``.
 
 ``./docs``
     Sphinx documentation source (``docs/source``) and planning notes.
