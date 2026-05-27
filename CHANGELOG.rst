@@ -37,6 +37,16 @@ The format is based on `Keep a Changelog
 Unreleased
 ==========
 
+Removed
+-------
+
+- Trimmed the public package namespace: the unused ``Molecule`` dataclass and
+  the experimental CuPy GPU macroscale module (``lysis.cp_macroscale`` /
+  ``CudaMacroscaleRun``) are no longer importable from ``lysis``. Both, along
+  with other unmaintained code (the C++ and C/OpenMPI ports, superseded Fortran
+  macro variants, the MATLAB/Octave pipeline, and the pre-CLI run scripts), are
+  preserved under ``archive/``. (#TBD)
+
 
 1.0.0-rc1 - 2026-05-27
 ======================
