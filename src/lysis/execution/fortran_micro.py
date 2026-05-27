@@ -26,11 +26,8 @@ from ..dataio.datastore import DataStore, HDF5State
 from ..dataio.fileops import write_dataset
 from .fortran import FortranRunner, MICRO_FORTRAN_DATASPEC_VERSION
 
-__author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2025, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = "GPLv3"
-__version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"

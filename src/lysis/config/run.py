@@ -32,11 +32,8 @@ from ..tools.util import dict_to_formatted_str
 from .parameters import MicroParameters, MacroParameters
 
 
-__author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2026, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = ""
-__version__ = "0.2"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"

@@ -68,8 +68,6 @@ from .parameters import MacroParameters, MicroParameters
 from .run import Run
 
 
-__author__ = "Bradley Paynter"
-__copyright__ = "Copyright 2026, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = "GPLv3"
 __maintainer__ = "Bradley Paynter"

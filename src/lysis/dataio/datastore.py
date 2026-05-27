@@ -94,11 +94,8 @@ from ..config.parameters import MicroParameters, MacroParameters
 from .dataspec import DataCollectionSpec, DataSetSpec, dataspec, parse_shape, tags
 from .fileops import read_dataset, write_dataset, _validate_hdf5_version, read_data_collection
 
-__author__ = "Brittany Bannish and Bradley Paynter"
-__copyright__ = "Copyright 2025, Brittany Bannish"
 __credits__ = ["Brittany Bannish", "Bradley Paynter"]
 __license__ = "GPLv3"
-__version__ = "0.1"
 __maintainer__ = "Bradley Paynter"
 __email__ = "bpaynter@uco.edu"
 __status__ = "Development"
