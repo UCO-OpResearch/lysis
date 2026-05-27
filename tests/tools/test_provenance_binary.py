@@ -46,18 +46,19 @@ def _patch_run(monkeypatch, *, returncode=0, stdout="", raises=None):
 
 
 def test_query_binary_version_happy_path(monkeypatch):
-    _patch_run(monkeypatch, stdout="abc123 clean\n")
-    # No compiler token → compiler is "unknown".
+    # Output is "<tag> <commit> <state> [compiler]"; the tag is dropped and
+    # with no compiler token the compiler is "unknown".
+    _patch_run(monkeypatch, stdout="v0.3.0 abc123 clean\n")
     assert query_binary_version("/fake/bin") == ("abc123", "clean", "unknown")
 
 
 def test_query_binary_version_dirty_state(monkeypatch):
-    _patch_run(monkeypatch, stdout="abc123 dirty\n")
+    _patch_run(monkeypatch, stdout="v0.3.0 abc123 dirty\n")
     assert query_binary_version("/fake/bin") == ("abc123", "dirty", "unknown")
 
 
 def test_query_binary_version_nonzero_exit_is_unknown(monkeypatch):
-    _patch_run(monkeypatch, returncode=2, stdout="abc123 clean\n")
+    _patch_run(monkeypatch, returncode=2, stdout="v0.3.0 abc123 clean\n")
     assert query_binary_version("/fake/bin") == ("unknown", "unknown", "unknown")
 
 
@@ -67,18 +68,19 @@ def test_query_binary_version_empty_output_is_unknown(monkeypatch):
 
 
 def test_query_binary_version_too_few_fields_is_unknown(monkeypatch):
-    _patch_run(monkeypatch, stdout="abc123\n")
+    # Only tag + commit (no dirty state) → fewer than three tokens → unknown.
+    _patch_run(monkeypatch, stdout="v0.3.0 abc123\n")
     assert query_binary_version("/fake/bin") == ("unknown", "unknown", "unknown")
 
 
 def test_query_binary_version_returns_compiler_suffix(monkeypatch):
-    # Real binaries emit "<commit> <state> <compiler-info>" where the
+    # Real binaries emit "<tag> <commit> <state> <compiler-info>" where the
     # compiler string itself contains spaces (e.g. "Intel(R) Fortran ...").
-    # The parser must accept the line and return the compiler suffix
-    # verbatim as the third tuple element.
+    # The parser must drop the tag and return the compiler suffix verbatim
+    # as the third tuple element.
     _patch_run(
         monkeypatch,
-        stdout="abc123 clean Intel(R) Fortran Classic 2021.9.0\n",
+        stdout="v0.3.0 abc123 clean Intel(R) Fortran Classic 2021.9.0\n",
     )
     assert query_binary_version("/fake/bin") == (
         "abc123", "clean", "Intel(R) Fortran Classic 2021.9.0",
@@ -102,7 +104,7 @@ def test_query_binary_version_timeout_is_unknown(monkeypatch):
 def test_gather_binary_provenance_keys(monkeypatch):
     from lysis.tools.provenance import gather_binary_provenance
 
-    _patch_run(monkeypatch, stdout="abc123 clean Intel\n")
+    _patch_run(monkeypatch, stdout="v0.3.0 abc123 clean Intel\n")
     result = gather_binary_provenance("/fake/bin")
     assert result == {
         CONST.BINARY_COMMIT_ATTR: "abc123",
@@ -352,7 +354,7 @@ def test_identify_compiler_missing_file_returns_none(tmp_path):
 
 def test_historical_provenance_uses_binary_version_on_sha_match(monkeypatch):
     sha = "a" * 40
-    _patch_run(monkeypatch, stdout=f"{sha} clean Intel(R) 2021.9\n")
+    _patch_run(monkeypatch, stdout=f"v0.3.0 {sha} clean Intel(R) 2021.9\n")
     result = gather_historical_binary_provenance(
         "/fake/bin", resolved_sha=sha
     )
@@ -391,7 +393,7 @@ def test_historical_provenance_synthesises_when_sha_mismatches(
 ):
     requested = "c" * 40
     embedded = "d" * 40
-    _patch_run(monkeypatch, stdout=f"{embedded} clean ifort\n")
+    _patch_run(monkeypatch, stdout=f"v0.3.0 {embedded} clean ifort\n")
     log = tmp_path / "build.log"
     log.write_text("ifort src/fortran/foo.f90\n")
     monkeypatch.setattr(

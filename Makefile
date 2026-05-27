@@ -113,21 +113,24 @@ f-macro-array: $(BUILD_DIR)/macro-array
 
 shared: $(LIB_DIR)/kiss.so
 
-# version_stamp.f90 is a tiny Fortran module holding BUILD_COMMIT and
-# BUILD_DIRTY string parameters resolved from git.  Each live Fortran
-# binary `use`s it -- together with the Fortran-2008 intrinsic
+# version_stamp.f90 is a tiny Fortran module holding BUILD_TAG,
+# BUILD_COMMIT and BUILD_DIRTY string parameters resolved from git.  Each
+# live Fortran binary `use`s it -- together with the Fortran-2008 intrinsic
 # `compiler_version()` from iso_fortran_env -- and supports `--version`,
-# which prints "<commit> <clean|dirty> <compiler-string>" so the Python
-# wrapper can confirm the binary was built from the currently-checked-out
-# source AND the expected compiler before launching a simulation.  The
-# compiler info is contributed by the compiler itself at compile time, so
-# no Makefile probing is needed for it.
+# which prints "<tag> <commit> <clean|dirty> <compiler-string>" so the
+# Python wrapper can confirm the binary was built from the currently-
+# checked-out source AND the expected compiler before launching a
+# simulation.  The compiler info is contributed by the compiler itself at
+# compile time, so no Makefile probing is needed for it.
 #
-# BUILD_COMMIT is the most recent commit *that touched src/fortran/*,
-# not the repo HEAD.  This way commits that change only Python/docs/etc
-# do not flag the binary as stale -- only commits that actually modify
-# the Fortran source do.  BUILD_DIRTY is scoped the same way: tracked
-# uncommitted changes under src/fortran/ flip it to "dirty".
+# BUILD_TAG is the nearest release tag reachable from HEAD
+# (`git describe --tags --abbrev=0`, e.g. "v0.3.0"); it is a human-facing
+# release label only and is not used by the staleness check.  BUILD_COMMIT
+# is the most recent commit *that touched src/fortran/*, not the repo HEAD.
+# This way commits that change only Python/docs/etc do not flag the binary
+# as stale -- only commits that actually modify the Fortran source do.
+# BUILD_DIRTY is scoped the same way: tracked uncommitted changes under
+# src/fortran/ flip it to "dirty".
 #
 # The recipe runs on every `make` (via the FORCE prerequisite below) so
 # it always reflects current state, but writes via a tmp+cmp+mv pattern:
@@ -138,12 +141,14 @@ $(VERSION_F90): FORCE
 	@if git rev-parse HEAD >/dev/null 2>&1; then \
 	    COMMIT=$$(git log -1 --format=%H HEAD -- $(FORT_SRC_DIR) 2>/dev/null); \
 	    [ -n "$$COMMIT" ] || COMMIT=unknown; \
+	    TAG=$$(git describe --tags --abbrev=0 2>/dev/null); \
+	    [ -n "$$TAG" ] || TAG=unknown; \
 	    if git diff --quiet HEAD -- $(FORT_SRC_DIR) 2>/dev/null; then DIRTY=clean; else DIRTY=dirty; fi; \
 	else \
-	    COMMIT=unknown; DIRTY=unknown; \
+	    TAG=unknown; COMMIT=unknown; DIRTY=unknown; \
 	fi; \
-	printf 'module version_stamp\n  implicit none\n  character(len=*), parameter :: BUILD_COMMIT = "%s"\n  character(len=*), parameter :: BUILD_DIRTY  = "%s"\nend module version_stamp\n' \
-	    "$$COMMIT" "$$DIRTY" > $@.tmp; \
+	printf 'module version_stamp\n  implicit none\n  character(len=*), parameter :: BUILD_TAG    = "%s"\n  character(len=*), parameter :: BUILD_COMMIT = "%s"\n  character(len=*), parameter :: BUILD_DIRTY  = "%s"\nend module version_stamp\n' \
+	    "$$TAG" "$$COMMIT" "$$DIRTY" > $@.tmp; \
 	if cmp -s $@.tmp $@ 2>/dev/null; then \
 	    rm $@.tmp; \
 	else \
