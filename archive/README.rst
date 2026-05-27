@@ -6,8 +6,8 @@ Unmaintained, preserved-for-reference code. **Nothing here is imported by the
 It is kept in version control so past experiments can be revisited, but it is
 not expected to run against the current codebase without rework.
 
-GPU / CuPy macroscale experiment
---------------------------------
+GPU / CuPy macroscale experiment (``cupy/``)
+--------------------------------------------
 
 An early (circa 2022-2023) proof-of-concept that ran the NumPy macroscale model
 on a GPU via `CuPy <https://cupy.dev/>`_. It demonstrated that the simulation
@@ -18,12 +18,12 @@ redesigned rather than resumed from this code.
 
 Files:
 
-- ``cp_macroscale.py`` --- CuPy port of the macroscale model
+- ``cupy/cp_macroscale.py`` --- CuPy port of the macroscale model
   (``CudaMacroscaleRun``). Was previously exposed as ``lysis.cp_macroscale`` via
   an optional ``import cupy`` guard in ``src/lysis/__init__.py``.
-- ``cp_exec.py`` --- standalone runner script for the GPU model (references the
-  even older ``CudaMacroscaleSim`` name).
-- ``CuPy Workbook.ipynb`` --- benchmarking/exploration notebook driving
+- ``cupy/cp_exec.py`` --- standalone runner script for the GPU model (references
+  the even older ``CudaMacroscaleSim`` name).
+- ``cupy/CuPy Workbook.ipynb`` --- benchmarking/exploration notebook driving
   ``lysis.CudaMacroscaleRun``.
 
 These require the optional GPU dependencies (``cupy``, ``nvtx``), still declared
