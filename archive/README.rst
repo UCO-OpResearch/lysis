@@ -76,9 +76,6 @@ Files:
 - ``macro_rng_array.f90`` --- the into-and-along behavior, but draws every
   random number at the start of each iteration rather than on demand (an
   RNG-ordering rule that matches how the Python model draws random numbers).
-- ``macro_brad_scratch.f90`` --- the baseline into-and-along reference build,
-  heavily annotated during the Python port; its behavior is what the active
-  Fortran/Python macroscale model already implements.
 
 .. note::
 
@@ -97,7 +94,8 @@ Files:
      so the work is mainly to expose it as a selectable Mechanism rather than
      reimplement the behavior)
 
-   Excluded: ``macro_brad_scratch.f90`` --- its into-and-along behavior is the
-   baseline Mechanism the active Fortran/Python model already implements.
+   The plain into-and-along baseline that these variants descend from is the
+   behavior the active ``__internal`` / ``__external`` model already implements,
+   so it is not listed above.
 
    TODO: track this porting work as a GitHub issue once v2.0.0 ships.
