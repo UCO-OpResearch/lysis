@@ -20,11 +20,6 @@ Example::
     from lysis.analysis.summary import micro_stats_table, macro_stats_table
 """
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
 
 from .degradation import (
     calculate_time_row_exposed,

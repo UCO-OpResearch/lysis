@@ -26,12 +26,6 @@ from ..dataio.datastore import DataStore, HDF5State
 from ..dataio.fileops import write_dataset
 from .fortran import FortranRunner, MICRO_FORTRAN_DATASPEC_VERSION
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
 
 #: The eight per-simulation binary datasets in ``microscale_out``.
 #:

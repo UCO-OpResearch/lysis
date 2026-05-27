@@ -7,11 +7,6 @@ simulation time without materialising the full snapshot array at every
 save point.
 """
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
 
 from typing import TYPE_CHECKING
 

@@ -16,7 +16,6 @@ in lexicographic order.  If the codes cannot be tokenised consistently (differen
 token counts) the function falls back to a plain lexicographic sort.
 """
 
-__status__ = "Development"
 
 __all__ = ["smart_sort"]
 

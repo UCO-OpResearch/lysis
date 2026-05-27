@@ -94,11 +94,6 @@ from ..config.parameters import MicroParameters, MacroParameters
 from .dataspec import DataCollectionSpec, DataSetSpec, dataspec, parse_shape, tags
 from .fileops import read_dataset, write_dataset, _validate_hdf5_version, read_data_collection
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
 
 #: The dataspec version that this module is compatible with.
 COMPATIBLE_DATASPEC_VERSION = "v2.0.0"

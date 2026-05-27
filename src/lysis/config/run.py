@@ -32,13 +32,6 @@ from ..tools.util import dict_to_formatted_str
 from .parameters import MicroParameters, MacroParameters
 
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
-
 class Run(object):
     """Houses all information about a given simulation Run.
 

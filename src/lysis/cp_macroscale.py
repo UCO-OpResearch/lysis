@@ -10,12 +10,6 @@ from tqdm import tqdm
 from .config.run import Run
 from .geometry.edge_grid import EdgeGrid
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
 
 class CudaMacroscaleRun:
     def __init__(self, run: Run):
