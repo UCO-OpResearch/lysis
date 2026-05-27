@@ -36,12 +36,6 @@ from ..config.run import Run
 from ..dataio.datastore import DataStore
 from .base import SimulationRunner
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
 
 #: Dataspec version produced by the Fortran microscale binary.
 #: Update this constant when the binary's output format changes.

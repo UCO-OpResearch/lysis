@@ -27,12 +27,6 @@ from ..dataio.fileops import write_dataset, write_data_collection
 from ..geometry.edge_grid import generate_fortran_neighborhood_structure
 from .fortran import FortranRunner, MACRO_FORTRAN_DATASPEC_VERSION
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
 
 @dataclass
 class FortranMacro(FortranRunner):

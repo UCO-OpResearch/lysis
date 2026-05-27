@@ -8,12 +8,6 @@ accelerated code.
 
 from abc import ABC, abstractmethod
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
 
 class SimulationRunner(ABC):
     """Abstract base class for all simulation execution classes.

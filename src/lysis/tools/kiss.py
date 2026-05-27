@@ -39,12 +39,6 @@ from typing import Tuple
 
 import numpy as np
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
 
 class KissRandomGenerator:
     """Pseudo-random number generator using the KISS algorithm.

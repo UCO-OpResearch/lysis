@@ -1,11 +1,5 @@
 from dataclasses import dataclass, field
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
 
 @dataclass
 class Molecule:

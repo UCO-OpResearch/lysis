@@ -21,12 +21,6 @@ import numpy as np
 from pint import UnitRegistry
 
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
 # A Pint unit registry for use across the entire project.
 # Any additional units should be added here.
 # This registry handles unit conversions and dimensional analysis.

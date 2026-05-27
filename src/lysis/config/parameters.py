@@ -86,13 +86,6 @@ from .constants import ureg, Q_
 from ..tools.util import dict_to_formatted_str
 
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
-
 ################################
 ###  NOTE:
 ###  In the following dataclass definitions, do not use triple-quotes (""")

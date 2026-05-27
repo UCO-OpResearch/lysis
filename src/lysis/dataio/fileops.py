@@ -167,12 +167,6 @@ from .dataspec import (
     check_dataset_spec,
 )
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fortran log parsing

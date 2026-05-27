@@ -146,12 +146,6 @@ from ..geometry.edge_grid import (
     to_fortran_edge_index_array,
 )
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = "GPLv3"
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
 
 def safe_np_int_conversion(int_array, dtype=np.uint8, copy=True):
     """Safely convert integer arrays to a target dtype with bounds checking.

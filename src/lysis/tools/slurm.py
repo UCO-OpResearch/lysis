@@ -61,13 +61,6 @@ from typing import Dict, List, Mapping, Optional
 import GooseSLURM as gs
 
 
-__credits__ = ["Brittany Bannish", "Bradley Paynter"]
-__license__ = ""
-__maintainer__ = "Bradley Paynter"
-__email__ = "bpaynter@uco.edu"
-__status__ = "Development"
-
-
 # ---------------------------------------------------------------------------
 # Environment setup for generated Slurm scripts
 # ---------------------------------------------------------------------------
