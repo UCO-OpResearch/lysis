@@ -443,6 +443,15 @@ class _SlurmJobSpec:
         array only).  Threaded into ``from_hdf5`` so the runner sees the
         partition contract; ``None`` for macro.
     :vartype num_children: int or None
+    :ivar backend: ``"fortran"`` (default) or ``"python"``.  Selects the
+        body of the array-task bash script (Fortran binary vs. in-process
+        :class:`~lysis.execution.python_macro.PythonMacro`) and of the
+        master Python script's post-poll block (Fortran imports per-task
+        outputs into HDF5; Python tasks write to HDF5 themselves and the
+        master has nothing left to do).  Python backends ignore
+        ``out_file_code``, ``in_file_code``, ``num_children``,
+        ``needs_concat_step`` and ``prestage_executable``.
+    :vartype backend: str
     """
 
     scale: str
@@ -455,31 +464,30 @@ class _SlurmJobSpec:
     out_file_code: str
     in_file_code: Optional[str] = None
     num_children: Optional[int] = None
+    backend: str = "fortran"
 
 
-#: Template for the master Python script in array mode (both scales).
+#: Template for the master Python script in array mode (both backends).
 #: Substitution keys use ``$name`` syntax so Python braces in the
-#: template body are untouched.
+#: template body are untouched.  The post-poll body is supplied per-backend
+#: via the ``$import_block`` substitution (Fortran: instantiate runner and
+#: call ``import_results``; Python: print a status line, since the array
+#: task wrote to HDF5 itself).
 _ARRAY_MASTER_PY_TEMPLATE = Template('''\
 #!/usr/bin/env python3
-"""Master Slurm job: submit array tasks, poll for completion, $concat_blurb import."""
+"""Master Slurm job: submit array tasks, poll for completion, $post_poll_blurb."""
 import time
 import shutil
 from pathlib import Path
 
 import GooseSLURM as gs
-from lysis.config.run import Run
-from $runner_module import $runner_class
 
 STAGING_DIR = Path($staging_dir)
 HDF5_PATH = Path($hdf5_path)
 RUN_CODE = $run_code
-OUT_FILE_CODE = $out_file_code
-BINARY_NAME = $binary_name
 KEEP_TMPDIR = $keep_tmpdir
 NUM_ARRAY_TASKS = $num_array_tasks
 NFS_WAIT_SECONDS = $nfs_wait_seconds
-HISTORICAL_BINARY_ATTRS = $historical_binary_attrs
 
 # ---------------------------------------------------------------------------
 # Submit array job
@@ -515,24 +523,10 @@ print("All array tasks complete.", flush=True)
 time.sleep(NFS_WAIT_SECONDS)
 
 # ---------------------------------------------------------------------------
-# Import results into HDF5
+# Per-backend post-poll body (Fortran: import per-task outputs into HDF5;
+# Python: nothing to do — array task already wrote directly to HDF5).
 # ---------------------------------------------------------------------------
-data_dir = STAGING_DIR / "data" / RUN_CODE
-run = Run(str(HDF5_PATH.parent), run_code=RUN_CODE)
-fm = $runner_class(
-    run=run,
-    out_file_code=OUT_FILE_CODE,
-    executable=str(STAGING_DIR / BINARY_NAME),
-    skip_binary_verification=(HISTORICAL_BINARY_ATTRS is not None),
-    historical_binary_attrs=HISTORICAL_BINARY_ATTRS,
-)
-$concat_block
-fm.import_results(
-    data_dir,
-    keep_on_failure=True,
-    keep_tmpdir=KEEP_TMPDIR,
-)
-print("Results imported successfully.", flush=True)
+$import_block
 
 # ---------------------------------------------------------------------------
 # Clean up staging directory
@@ -550,63 +544,129 @@ def _generate_array_master_py(
     staging_dir: Path,
     hdf5_path: Path,
     run_code: str,
-    binary_name: str,
+    binary_name: Optional[str],
     keep_tmpdir: bool,
     historical_binary_attrs: Optional[dict] = None,
 ) -> str:
     """Return the master Python script for an array-mode dispatch.
 
+    The post-poll body is assembled per-backend:
+
+    * ``"fortran"``: imports the runner class, instantiates it, optionally
+      concatenates per-task outputs, and calls ``import_results`` to merge
+      the per-task Fortran output into the HDF5 file.
+    * ``"python"``: prints a status line.  The array task ran
+      :meth:`~lysis.execution.python_macro.PythonRunner.execute` itself
+      and wrote directly to HDF5, so the master has nothing left to do
+      before the staging-dir cleanup.
+
+    :param binary_name: Basename of the pre-staged Fortran binary inside
+        the staging dir.  Required for ``backend="fortran"``; ignored
+        (and may be ``None``) for ``backend="python"``.
+    :type binary_name: str or None
     :param historical_binary_attrs: Pre-computed binary-provenance dict
         from
         :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
         for the historical-build workflow.  Baked into the master script
         as a literal so the master can stamp it in place of the default
-        ``<binary> --version`` query.  ``None`` (default) preserves the
-        normal-mode behaviour.
+        ``<binary> --version`` query.  Only meaningful for
+        ``backend="fortran"``.
     :type historical_binary_attrs: dict or None
     """
-    if spec.needs_concat_step:
-        concat_block = (
-            f"fm.concatenate_child_outputs(data_dir, num_children={spec.num_array_tasks})"
+    if spec.backend == "python":
+        import_block = (
+            'print("Python task wrote results directly into HDF5.",'
+            " flush=True)"
         )
-        concat_blurb = "concatenate per-task outputs, then"
+        post_poll_blurb = "exit (HDF5 already written by the array task)"
     else:
-        concat_block = "# (no concatenation step — runner imports per-task subdirs directly)"
-        concat_blurb = "then"
+        if spec.needs_concat_step:
+            concat_block = (
+                "fm.concatenate_child_outputs("
+                f"data_dir, num_children={spec.num_array_tasks})"
+            )
+            post_poll_blurb = "concatenate per-task outputs, then import"
+        else:
+            concat_block = (
+                "# (no concatenation step — runner imports per-task subdirs"
+                " directly)"
+            )
+            post_poll_blurb = "import"
+
+        import_block = (
+            "from lysis.config.run import Run\n"
+            f"from {spec.runner_module} import {spec.runner_class}\n"
+            "\n"
+            f"OUT_FILE_CODE = {repr(spec.out_file_code)}\n"
+            f"BINARY_NAME = {repr(binary_name)}\n"
+            f"HISTORICAL_BINARY_ATTRS = {repr(historical_binary_attrs)}\n"
+            "\n"
+            "data_dir = STAGING_DIR / \"data\" / RUN_CODE\n"
+            "run = Run(str(HDF5_PATH.parent), run_code=RUN_CODE)\n"
+            f"fm = {spec.runner_class}(\n"
+            "    run=run,\n"
+            "    out_file_code=OUT_FILE_CODE,\n"
+            "    executable=str(STAGING_DIR / BINARY_NAME),\n"
+            "    skip_binary_verification=(HISTORICAL_BINARY_ATTRS is not None),\n"
+            "    historical_binary_attrs=HISTORICAL_BINARY_ATTRS,\n"
+            ")\n"
+            f"{concat_block}\n"
+            "fm.import_results(\n"
+            "    data_dir,\n"
+            "    keep_on_failure=True,\n"
+            "    keep_tmpdir=KEEP_TMPDIR,\n"
+            ")\n"
+            'print("Results imported successfully.", flush=True)'
+        )
 
     return _ARRAY_MASTER_PY_TEMPLATE.substitute(
         scale=spec.scale,
-        runner_module=spec.runner_module,
-        runner_class=spec.runner_class,
         staging_dir=repr(str(staging_dir)),
         hdf5_path=repr(str(hdf5_path)),
         run_code=repr(run_code),
-        out_file_code=repr(spec.out_file_code),
-        binary_name=repr(binary_name),
         keep_tmpdir=repr(keep_tmpdir),
         num_array_tasks=spec.num_array_tasks,
         nfs_wait_seconds=spec.nfs_wait_seconds,
-        concat_block=concat_block,
-        concat_blurb=concat_blurb,
-        historical_binary_attrs=repr(historical_binary_attrs),
+        import_block=import_block,
+        post_poll_blurb=post_poll_blurb,
     )
 
 
 def _runner_init_line(
     spec: _SlurmJobSpec,
-    hdf5_path: Path,
-    binary_path: str,
+    hdf5_path: str,
+    binary_path: Optional[str],
     *,
     skip_binary_verification: bool = False,
 ) -> str:
     """Build the ``from_hdf5(...)`` call used inside the array task ``python -c``.
 
-    Single-line so it composes cleanly inside the bash heredoc.  When
-    *skip_binary_verification* is True the call emits
-    ``skip_binary_verification=True`` so the historical-build workflow's
+    Single-line so it composes cleanly inside the bash heredoc.
+
+    For ``spec.backend == "fortran"`` the call carries the binary path,
+    in/out file codes, the per-task ``SLURM_ARRAY_TASK_ID``, optionally
+    ``num_children`` for the microscale array partition, and (when
+    *skip_binary_verification* is True under the historical-build
+    workflow) ``skip_binary_verification=True`` so the intentional
     binary↔source mismatch does not crash ``_verify_binary_version`` at
     task start.
+
+    For ``spec.backend == "python"`` only ``hdf5_path`` is emitted —
+    :meth:`~lysis.execution.python_macro.PythonRunner.from_hdf5` takes
+    no other arguments, the single array task runs every simulation in
+    series, and there is no binary to verify.
+
+    :param hdf5_path: HDF5 path as it should appear inside the ``python
+        -c`` string.  May be a literal absolute path or a ``${...}`` bash
+        variable reference (the caller is responsible for picking which).
+    :type hdf5_path: str
+    :param binary_path: Fortran binary path inside the bash script.
+        Required for ``backend="fortran"``; ignored (and may be ``None``)
+        for ``backend="python"``.
+    :type binary_path: str or None
     """
+    if spec.backend == "python":
+        return f"{spec.runner_class}.from_hdf5('{hdf5_path}')"
     args = [f"'{hdf5_path}'", f"'{binary_path}'"]
     if spec.in_file_code is not None:
         args.append(f"in_file_code='{spec.in_file_code}'")
@@ -624,7 +684,7 @@ def generate_array_script(
     staging_dir: "Path | str",
     run_code: str,
     hdf5_path: "Path | str",
-    executable: "Path | str",
+    executable: "Path | str | None",
     *,
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
@@ -636,24 +696,42 @@ def generate_array_script(
 ) -> str:
     """Generate a Slurm array job bash script for an array-mode dispatch.
 
-    Each array task indexed by ``SLURM_ARRAY_TASK_ID`` calls
-    ``{spec.runner_class}.from_hdf5(...).exec_in_workdir(...)``.
-
-    For the *macroscale* path each task isolates its output in a
-    per-simulation subdirectory ``data/{run_code}/{sim:02}/`` (managed by
+    For ``spec.backend == "fortran"`` each array task indexed by
+    ``SLURM_ARRAY_TASK_ID`` calls
+    ``{spec.runner_class}.from_hdf5(...).exec_in_workdir(...)``.  For the
+    *macroscale* path each task isolates its output in a per-simulation
+    subdirectory ``data/{run_code}/{sim:02}/`` (managed by
     :class:`~lysis.execution.fortran_macro.FortranMacro` itself).  For the
     *microscale* array path each task writes flat files with a ``__NN``
     suffix into ``data/{run_code}/``; the master concatenates them after
     all tasks complete.
 
-    **Single-tier** (default, ``fast_tmp_root=None``): Fortran writes its
-    output directly into ``{staging_dir}/data/{run_code}/``.  The
-    executable is *not* copied here — :func:`submit_slurm_job` pre-stages
-    it before any task starts (avoids a cp race).
+    For ``spec.backend == "python"`` the single array task calls
+    ``{spec.runner_class}.from_hdf5(hdf5).execute()`` directly — the
+    Python runner writes every simulation, in series, straight into the
+    HDF5 file via its open DataStore (HDF5 has a single-writer
+    constraint, so an n-task array is not possible at this scale).
+    ``executable`` is ignored and may be ``None``.
 
-    **Two-tier** (``fast_tmp_root`` provided): Fortran writes to a private
-    ``mktemp -d -p {fast_tmp_root}`` directory on the compute node; the
-    output is moved to the shared staging dir before exit.
+    **Single-tier** (default, ``fast_tmp_root=None``):
+
+    * Fortran: writes its output directly into
+      ``{staging_dir}/data/{run_code}/``.  The executable is *not* copied
+      here — :func:`submit_slurm_job` pre-stages it before any task
+      starts (avoids a cp race).
+    * Python: writes directly into the original ``hdf5_path`` (typically
+      on a shared filesystem).
+
+    **Two-tier** (``fast_tmp_root`` provided):
+
+    * Fortran: writes to a private ``mktemp -d -p {fast_tmp_root}``
+      directory on the compute node; the output is moved to the shared
+      staging dir before exit.
+    * Python: ``cp``\\ s ``hdf5_path`` into the local fast dir, runs the
+      Python task against that copy, then ``cp``\\ s the result back
+      over the original on success.  A mid-job crash leaves the
+      original ``.h5`` in its ``MACRO_EMPTY`` state for clean
+      resubmission.
 
     :param spec: Scale-specific dispatch description.
     :type spec: _SlurmJobSpec
@@ -663,8 +741,9 @@ def generate_array_script(
     :type run_code: str
     :param hdf5_path: Full path to the run's ``.h5`` file.
     :type hdf5_path: Path or str
-    :param executable: Path to the compiled Fortran binary.
-    :type executable: Path or str
+    :param executable: Path to the compiled Fortran binary.  May be
+        ``None`` when ``spec.backend == "python"``.
+    :type executable: Path or str or None
     :param partition: Slurm partition for ``#SBATCH --partition``.
     :type partition: str, optional
     :param fast_tmp_root: Root directory for fast node-local scratch.
@@ -700,8 +779,11 @@ def generate_array_script(
     """
     staging_dir = Path(staging_dir)
     hdf5_path = Path(hdf5_path)
-    executable = Path(executable)
-    binary_name = executable.name
+    if executable is not None:
+        executable = Path(executable)
+        binary_name = executable.name
+    else:
+        binary_name = None
     if slurm_log_dir is None:
         slurm_log_dir = hdf5_path.parent / ".slurm"
     slurm_log_dir = Path(slurm_log_dir)
@@ -727,14 +809,61 @@ def generate_array_script(
         sbatch_opts["partition"] = partition
     sbatch_opts = apply_sbatch_overrides(sbatch_opts, sbatch_overrides)
 
-    if fast_tmp_root is None:
+    if spec.backend == "python":
+        # ------------------------------------------------------------------
+        # Python backend: single array task runs every simulation in series
+        # via PythonRunner.execute(), writing directly to HDF5.  No binary,
+        # no per-task subdirs, no setup files.
+        # ------------------------------------------------------------------
+        if fast_tmp_root is None:
+            # Single-tier: write directly to the original .h5 path.
+            init = _runner_init_line(
+                spec, str(hdf5_path), None,
+            )
+            execute = f"""\
+# Execute {spec.scale}scale Python runner via lysis
+{env_preamble}
+{py} -c "
+from {spec.runner_module} import {spec.runner_class}
+{init}.execute()
+" """
+            sections = [execute]
+        else:
+            # Two-tier: cp the .h5 to node-local scratch, run there, cp back.
+            # Use cp (not mv) so a mid-job crash leaves the original .h5 in
+            # its MACRO_EMPTY state for clean resubmission.
+            setup = f"""\
+# Setup — create local fast dir, copy HDF5 file in
+local_work_dir=$(mktemp -d -p "{fast_tmp_root}")
+local_h5_path="${{local_work_dir}}/{hdf5_path.name}"
+cp "{hdf5_path}" "${{local_h5_path}}" """
+
+            init = _runner_init_line(
+                spec, "${local_h5_path}", None,
+            )
+            execute = f"""\
+# Execute {spec.scale}scale Python runner against the local HDF5 copy
+{env_preamble}
+{py} -c "
+from {spec.runner_module} import {spec.runner_class}
+{init}.execute()
+" """
+
+            move = f"""\
+# Copy populated HDF5 back over the original, then clean up local dir
+cp "${{local_h5_path}}" "{hdf5_path}"
+rm -rf "${{local_work_dir}}" """
+
+            sections = [setup, execute, move]
+
+    elif fast_tmp_root is None:
         # ------------------------------------------------------------------
         # Single-tier: Fortran writes directly to the shared staging dir.
         # The executable is pre-staged by submit_slurm_job() before any
         # array tasks start, so no cp is needed here.
         # ------------------------------------------------------------------
         init = _runner_init_line(
-            spec, hdf5_path, f"{staging_dir}/{binary_name}",
+            spec, str(hdf5_path), f"{staging_dir}/{binary_name}",
             skip_binary_verification=skip_binary_verification,
         )
         execute = f"""\
@@ -775,7 +904,7 @@ cp "${{staging_datadir}}/"* "${{local_datadir}}/"
 cp "{staging_dir}/{binary_name}" "${{local_work_dir}}/" """
 
         init = _runner_init_line(
-            spec, hdf5_path, f"${{local_work_dir}}/{binary_name}",
+            spec, str(hdf5_path), f"${{local_work_dir}}/{binary_name}",
             skip_binary_verification=skip_binary_verification,
         )
         execute = f"""\
@@ -802,7 +931,7 @@ rm -rf "${{local_work_dir}}" """
 def submit_slurm_job(
     spec: _SlurmJobSpec,
     hdf5_path: Path,
-    executable: Path,
+    executable: Optional[Path],
     staging_root_dir: Path,
     *,
     partition: Optional[str] = None,
@@ -814,16 +943,24 @@ def submit_slurm_job(
 ) -> int:
     """Stage scripts and submit a master Slurm job for an array-mode dispatch.
 
-    Pre-stages setup files (and optionally the executable, per ``spec``),
-    writes the array bash script and master Python+bash scripts into a
-    unique staging directory, and ``sbatch``-submits the master.
+    For ``spec.backend == "fortran"`` pre-stages setup files (and
+    optionally the executable, per ``spec``), then writes the array bash
+    script and master Python+bash scripts into a unique staging directory
+    and ``sbatch``-submits the master.
+
+    For ``spec.backend == "python"`` skips the setup-file and executable
+    pre-staging — the Python runner writes directly to the HDF5 file and
+    has no per-task input files — and otherwise follows the same flow:
+    snapshot ``src/lysis/`` for PYTHONPATH pinning, write the array bash
+    script and master Python+bash scripts, ``sbatch``-submit the master.
 
     :param spec: Scale-specific dispatch description.
     :type spec: _SlurmJobSpec
     :param hdf5_path: Resolved absolute path to the ``.h5`` file.
     :type hdf5_path: Path
     :param executable: Resolved absolute path to the Fortran binary.
-    :type executable: Path
+        May be ``None`` when ``spec.backend == "python"``.
+    :type executable: Path or None
     :param staging_root_dir: Root directory under which the staging temp
         dir is created (must already exist; the temp dir itself is
         created here).
@@ -871,23 +1008,26 @@ def submit_slurm_job(
     slurm_log_dir.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
-    # Pre-stage setup files (params.json, plus macroscale_in for macro)
+    # Pre-stage setup files (Fortran only — params.json, plus
+    # macroscale_in for macro).  Python runners write directly to HDF5
+    # and have no per-task setup files.
     # ------------------------------------------------------------------
-    staging_data_dir = staging_dir / "data" / run_code
-    staging_data_dir.mkdir(parents=True, exist_ok=True)
+    if spec.backend != "python":
+        staging_data_dir = staging_dir / "data" / run_code
+        staging_data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build a setup runner via from_hdf5 to call _write_setup_files.
-    # We import lazily to avoid pulling in numpy etc. at module load.
-    import importlib
-    runner_module = importlib.import_module(spec.runner_module)
-    runner_class = getattr(runner_module, spec.runner_class)
-    setup_kwargs = {"out_file_code": spec.out_file_code}
-    if spec.in_file_code is not None:
-        setup_kwargs["in_file_code"] = spec.in_file_code
-    fm_setup = runner_class.from_hdf5(
-        hdf5_path, str(executable), **setup_kwargs,
-    )
-    fm_setup._write_setup_files(staging_data_dir)
+        # Build a setup runner via from_hdf5 to call _write_setup_files.
+        # We import lazily to avoid pulling in numpy etc. at module load.
+        import importlib
+        runner_module = importlib.import_module(spec.runner_module)
+        runner_class = getattr(runner_module, spec.runner_class)
+        setup_kwargs = {"out_file_code": spec.out_file_code}
+        if spec.in_file_code is not None:
+            setup_kwargs["in_file_code"] = spec.in_file_code
+        fm_setup = runner_class.from_hdf5(
+            hdf5_path, str(executable), **setup_kwargs,
+        )
+        fm_setup._write_setup_files(staging_data_dir)
 
     # Pre-stage the executable so no array task needs to cp it — avoids a
     # race where multiple tasks simultaneously try to create the same file.
@@ -918,8 +1058,9 @@ def submit_slurm_job(
     # ------------------------------------------------------------------
     # Write master.py
     # ------------------------------------------------------------------
+    binary_name = executable.name if executable is not None else None
     master_py_content = _generate_array_master_py(
-        spec, staging_dir, hdf5_path, run_code, executable.name, keep_tmpdir,
+        spec, staging_dir, hdf5_path, run_code, binary_name, keep_tmpdir,
         historical_binary_attrs=historical_binary_attrs,
     )
     master_py_path = staging_dir / f"lysis-{spec.scale}-master__{run_code}.py"
@@ -1630,4 +1771,117 @@ def submit_macro_slurm_job(
         compiler_module=compiler_module,
         sbatch_overrides=sbatch_overrides,
         historical_binary_attrs=historical_binary_attrs,
+    )
+
+
+def _python_macro_spec() -> _SlurmJobSpec:
+    """Build the macroscale Python-backend dispatch spec.
+
+    Single-task array (``num_array_tasks=1``) — HDF5's single-writer
+    constraint forces every simulation in one Run to run in series within
+    one job.  Each Run is a separate ``.h5`` file, so the CLI batch loop
+    will fan out one independent master job per Run when invoked against
+    a directory.
+
+    No executable to pre-stage, no per-task setup files, no per-task
+    output to concatenate, no NFS flush wait — the task writes directly
+    to HDF5 via :class:`~lysis.execution.python_macro.PythonMacro` and
+    the master has nothing left to do once the task completes.
+    """
+    return _SlurmJobSpec(
+        scale="macro",
+        runner_module="lysis.execution.python_macro",
+        runner_class="PythonMacro",
+        num_array_tasks=1,
+        needs_concat_step=False,
+        nfs_wait_seconds=0,
+        prestage_executable=False,
+        out_file_code="",
+        in_file_code=None,
+        num_children=None,
+        backend="python",
+    )
+
+
+def submit_python_macro_slurm_job(
+    hdf5_path: "Path | str",
+    *,
+    staging_root: Optional["Path | str"] = None,
+    partition: Optional[str] = None,
+    fast_tmp_root: Optional[str] = None,
+    keep_tmpdir: bool = False,
+    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
+) -> int:
+    """Submit the Python-backend macroscale workflow as a Slurm master job.
+
+    The master job submits a single array task (``--array=0-0``) that
+    runs :meth:`~lysis.execution.python_macro.PythonRunner.execute` —
+    every simulation for this Run, in series, writing straight into the
+    HDF5 file's open DataStore.  The master then exits without touching
+    the file.  ``src/lysis/`` is snapshotted into the staging directory
+    and bound to ``PYTHONPATH`` so the job imports the frozen package
+    (immune to source edits while queued).
+
+    Directory naming
+    ~~~~~~~~~~~~~~~~
+    Same as :func:`submit_macro_slurm_job` — staging dir is::
+
+        tempfile.mkdtemp(
+            prefix=f"lysis-macro-{run_code}-",
+            dir=staging_root or hdf5_path.parent,
+        )
+
+    HDF5 staging
+    ~~~~~~~~~~~~
+    * **Without** ``fast_tmp_root``: the array task writes directly to
+      ``hdf5_path`` (typically a shared filesystem).
+    * **With** ``fast_tmp_root``: the array task ``cp``\\ s ``hdf5_path``
+      into ``mktemp -d -p {fast_tmp_root}`` on the compute node, runs
+      against that copy, then ``cp``\\ s the populated file back over
+      ``hdf5_path`` on success.  A mid-job crash leaves the original
+      ``.h5`` in its ``MACRO_EMPTY`` state for clean resubmission.
+
+    :param hdf5_path: Full path to the run's ``.h5`` file.  Must contain
+        both ``micro_params`` and ``macro_params``.
+    :type hdf5_path: Path or str
+    :param staging_root: Root directory under which the staging temp dir
+        is created.  Defaults to ``hdf5_path.parent``.
+    :type staging_root: Path or str, optional
+    :param partition: Slurm partition for both master and array jobs.
+    :type partition: str, optional
+    :param fast_tmp_root: Root directory for node-local fast scratch
+        (opt-in two-tier HDF5 staging).  When ``None`` (default) the
+        array task writes directly to ``hdf5_path``.
+    :type fast_tmp_root: str, optional
+    :param keep_tmpdir: If ``True``, preserve the staging directory
+        after the master job completes (useful for debugging).
+    :type keep_tmpdir: bool, optional
+    :param compiler_module: LMod module spec for the Fortran compiler
+        runtime, baked into the generated master and array task scripts
+        — also exported by the Python-only path so the preamble matches
+        the Fortran path verbatim and node module state remains
+        predictable.  Defaults to :data:`DEFAULT_COMPILER_MODULE`.
+    :type compiler_module: str, optional
+    :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
+        applied to BOTH the master and array task scripts (shape returned
+        by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
+    :type sbatch_overrides: Mapping[str, str or None], optional
+    :return: Master Slurm job ID.
+    :rtype: int
+    :raises subprocess.CalledProcessError: If ``sbatch`` fails.
+    """
+    hdf5_path = Path(hdf5_path).resolve()
+
+    staging_root_dir = (
+        Path(staging_root) if staging_root is not None else hdf5_path.parent
+    )
+
+    spec = _python_macro_spec()
+    return submit_slurm_job(
+        spec, hdf5_path, None, staging_root_dir,
+        partition=partition, fast_tmp_root=fast_tmp_root,
+        keep_tmpdir=keep_tmpdir,
+        compiler_module=compiler_module,
+        sbatch_overrides=sbatch_overrides,
     )

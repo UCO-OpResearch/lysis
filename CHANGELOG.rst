@@ -51,6 +51,20 @@ Added
   ``total_time = 0`` runs the simulation to completion (until every fiber
   degrades) rather than for a fixed duration; the snapshot buffers grow on
   demand to accommodate the unknown number of save points. (#35)
+- ``lysis run-macro --backend python`` now accepts ``--slurm`` and the
+  storage-redirection flags (``--staging-root``, ``--fast-tmp-root``,
+  ``--keep-tmpdir``, ``--partition``, ``--compiler``, ``--sbatch``). With
+  ``--slurm`` each Run is submitted as one Slurm job (no array — HDF5's
+  single-writer constraint requires every simulation for a Run to execute
+  in series within one job); in batch mode the existing CLI loop submits one
+  independent master job per ``.h5`` file. Without ``--fast-tmp-root`` the
+  job writes directly to the original ``.h5`` on the shared filesystem; with
+  ``--fast-tmp-root`` the job ``cp``\\ s the ``.h5`` to node-local scratch,
+  runs there, and ``cp``\\ s the populated file back over the original on
+  success (a mid-job crash leaves the original in its ``MACRO_EMPTY`` state
+  for clean resubmission). The Fortran-only flags ``--executable``,
+  ``--fortran-commit``, ``--in-file-code``, ``--out-file-code``, and
+  ``--allow-stale-binary`` remain rejected for ``--backend python``. (#65)
 
 Changed
 -------

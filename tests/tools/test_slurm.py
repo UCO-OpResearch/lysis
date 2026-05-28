@@ -18,6 +18,7 @@ import pytest
 from lysis.config.constants import CONST
 from lysis.config.parameters import MacroParameters, MicroParameters
 from lysis.tools.slurm import (
+    _python_macro_spec,
     _snapshot_lysis_src,
     apply_sbatch_overrides,
     generate_macro_array_script,
@@ -27,6 +28,7 @@ from lysis.tools.slurm import (
     submit_macro_slurm_job,
     submit_micro_child_job,
     submit_micro_slurm_job,
+    submit_python_macro_slurm_job,
     wait_for_jobs,
 )
 
@@ -1891,3 +1893,269 @@ class TestSourcePinningInGeneratedScripts:
             pythonpath="/snap/python_src",
         )
         assert 'export PYTHONPATH="/snap/python_src"' in script
+
+
+# ---------------------------------------------------------------------------
+# Python backend (--backend python --slurm)
+# ---------------------------------------------------------------------------
+
+
+class TestPythonMacroSpec:
+    """:func:`_python_macro_spec` is the contract between Python CLI dispatch
+    and the shared array-mode internals."""
+
+    def test_backend_is_python(self):
+        assert _python_macro_spec().backend == "python"
+
+    def test_single_task_array(self):
+        """HDF5 single-writer constraint forces all sims in series → 1 task."""
+        assert _python_macro_spec().num_array_tasks == 1
+
+    def test_runner_class_is_python_macro(self):
+        spec = _python_macro_spec()
+        assert spec.runner_module == "lysis.execution.python_macro"
+        assert spec.runner_class == "PythonMacro"
+
+    def test_no_binary_or_codes(self):
+        """No Fortran executable to pre-stage, no in/out file codes."""
+        spec = _python_macro_spec()
+        assert spec.prestage_executable is False
+        assert spec.in_file_code is None
+        assert spec.out_file_code == ""
+        assert spec.num_children is None
+
+    def test_no_concat_no_nfs_wait(self):
+        """Task writes directly to HDF5 — nothing to concat, nothing to flush."""
+        spec = _python_macro_spec()
+        assert spec.needs_concat_step is False
+        assert spec.nfs_wait_seconds == 0
+
+
+class TestSubmitPythonMacroSlurmJob:
+    """End-to-end script generation for the Python --slurm path.
+
+    All tests monkeypatch ``gs.sbatch`` and the venv-sync side effect so
+    nothing leaves the test tmpdir.  We then inspect the generated array
+    and master scripts to assert the contract.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _patch_env_sync(self):
+        """The venv sync is expensive and irrelevant here."""
+        with patch("lysis.tools.slurm._ensure_env_synced"):
+            yield
+
+    def _staging_dir(self, staging_root):
+        return list(staging_root.iterdir())[0]
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=8765)
+    def test_returns_master_job_id(self, mock_sbatch, tmp_path):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")  # placeholder; PythonMacro is never instantiated here
+        job_id = submit_python_macro_slurm_job(
+            h5, staging_root=staging_root,
+        )
+        assert job_id == 8765
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_no_setup_data_dir_pre_staged(self, mock_sbatch, tmp_path):
+        """Python backend has no setup files — staging dir must not contain
+        a data/{run_code}/ skeleton that the Fortran path pre-stages."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(h5, staging_root=staging_root)
+        staging_dir = self._staging_dir(staging_root)
+        assert not (staging_dir / "data").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_script_calls_python_macro_execute(
+        self, mock_sbatch, tmp_path,
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(h5, staging_root=staging_root)
+        staging_dir = self._staging_dir(staging_root)
+        array = (staging_dir / "lysis-macro-array__py-run.sh").read_text()
+        assert "from lysis.execution.python_macro import PythonMacro" in array
+        assert f"PythonMacro.from_hdf5('{h5.resolve()}').execute()" in array
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_script_has_array_zero_zero_directive(
+        self, mock_sbatch, tmp_path,
+    ):
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(h5, staging_root=staging_root)
+        staging_dir = self._staging_dir(staging_root)
+        array = (staging_dir / "lysis-macro-array__py-run.sh").read_text()
+        assert "0-0" in array
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_script_does_not_reference_binary_or_index(
+        self, mock_sbatch, tmp_path,
+    ):
+        """PythonMacro.from_hdf5 takes no binary, no index, no file codes."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(h5, staging_root=staging_root)
+        staging_dir = self._staging_dir(staging_root)
+        array = (staging_dir / "lysis-macro-array__py-run.sh").read_text()
+        assert "SLURM_ARRAY_TASK_ID" not in array
+        assert "exec_in_workdir" not in array
+        assert "out_file_code" not in array
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_single_tier_no_local_workdir_or_h5_copy(
+        self, mock_sbatch, tmp_path,
+    ):
+        """Without --fast-tmp-root the task writes straight to the original h5."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(h5, staging_root=staging_root)
+        staging_dir = self._staging_dir(staging_root)
+        array = (staging_dir / "lysis-macro-array__py-run.sh").read_text()
+        assert "local_work_dir" not in array
+        assert "local_h5_path" not in array
+        assert "mktemp" not in array
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_two_tier_copies_h5_to_fast_tmp_and_back(
+        self, mock_sbatch, tmp_path,
+    ):
+        """--fast-tmp-root must cp the .h5 in before running and back after."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(
+            h5, staging_root=staging_root, fast_tmp_root="/nvme/scratch",
+        )
+        staging_dir = self._staging_dir(staging_root)
+        array = (staging_dir / "lysis-macro-array__py-run.sh").read_text()
+        h5_resolved = str(h5.resolve())
+        assert 'mktemp -d -p "/nvme/scratch"' in array
+        assert 'local_h5_path="${local_work_dir}/py-run.h5"' in array
+        # cp out (h5 → fast tmp)
+        assert f'cp "{h5_resolved}" "${{local_h5_path}}"' in array
+        # cp back (fast tmp → h5)
+        assert f'cp "${{local_h5_path}}" "{h5_resolved}"' in array
+        # final cleanup of the local work dir
+        assert 'rm -rf "${local_work_dir}"' in array
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_two_tier_array_script_uses_local_h5_in_python_call(
+        self, mock_sbatch, tmp_path,
+    ):
+        """The python -c must run PythonMacro against the local h5 copy."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(
+            h5, staging_root=staging_root, fast_tmp_root="/nvme/scratch",
+        )
+        staging_dir = self._staging_dir(staging_root)
+        array = (staging_dir / "lysis-macro-array__py-run.sh").read_text()
+        assert "PythonMacro.from_hdf5('${local_h5_path}').execute()" in array
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_script_does_not_import_results(
+        self, mock_sbatch, tmp_path,
+    ):
+        """Task wrote to HDF5 itself — master must not try to import per-sim
+        outputs (no Fortran-style data_dir / runner construction)."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(h5, staging_root=staging_root)
+        staging_dir = self._staging_dir(staging_root)
+        master = (staging_dir / "lysis-macro-master__py-run.py").read_text()
+        assert "import_results" not in master
+        assert "concatenate_child_outputs" not in master
+        assert "BINARY_NAME" not in master
+        assert "Python task wrote results directly into HDF5" in master
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_script_still_polls_squeue(
+        self, mock_sbatch, tmp_path,
+    ):
+        """Single-task array still needs the squeue poll — the master is
+        the only handle on task completion before staging cleanup."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(h5, staging_root=staging_root)
+        staging_dir = self._staging_dir(staging_root)
+        master = (staging_dir / "lysis-macro-master__py-run.py").read_text()
+        assert "gs.squeue.read()" in master
+        assert "ARRAY_JOB_ID" in master
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_python_backend_exports_pythonpath_to_snapshot(
+        self, mock_sbatch, tmp_path,
+    ):
+        """Source pinning applies to the Python backend too — same snapshot
+        directory, same PYTHONPATH export, immune to source edits while queued."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(h5, staging_root=staging_root)
+        staging_dir = self._staging_dir(staging_root)
+        array = (staging_dir / "lysis-macro-array__py-run.sh").read_text()
+        master = (staging_dir / "lysis-macro-master__py-run.sh").read_text()
+        expected = f'export PYTHONPATH="{staging_dir}/python_src"'
+        assert expected in array
+        assert expected in master
+        assert (staging_dir / "python_src" / "lysis" / "__init__.py").exists()
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_partition_and_sbatch_overrides_apply(
+        self, mock_sbatch, tmp_path,
+    ):
+        """--partition and --sbatch must reach both array and master headers."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(
+            h5,
+            staging_root=staging_root,
+            partition="long",
+            sbatch_overrides={"hold": "", "exclusive=user": None},
+        )
+        staging_dir = self._staging_dir(staging_root)
+        array = (staging_dir / "lysis-macro-array__py-run.sh").read_text()
+        master = (staging_dir / "lysis-macro-master__py-run.sh").read_text()
+        for content in (array, master):
+            assert "long" in content
+            assert "#SBATCH --hold" in content
+            assert "--exclusive=user" not in content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_python_uses_uv_run_prefix(self, mock_sbatch, tmp_path):
+        """Generated python invocations must go through ``uv run --frozen
+        python`` so the project's .venv is on sys.path."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        h5 = tmp_path / "py-run.h5"
+        h5.write_text("")
+        submit_python_macro_slurm_job(h5, staging_root=staging_root)
+        staging_dir = self._staging_dir(staging_root)
+        array = (staging_dir / "lysis-macro-array__py-run.sh").read_text()
+        assert "uv run" in array
+        assert "--frozen" in array
