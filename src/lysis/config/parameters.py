@@ -1010,7 +1010,9 @@ class MacroParameters(Parameters):
     :Fortran: simulations"""
 
     total_time: Quantity = Q_("20 min")
-    """Total running time for model.
+    """Total simulation time the model should run for.
+    A `total_time` of zero indicates that the simulation should run until
+    all fibers are degraded, no matter the time elapsed.
      
     :Units: seconds
     :Fortran: tf"""
