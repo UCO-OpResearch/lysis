@@ -179,6 +179,7 @@ Progress is logged every 100K timesteps, showing degradation percentage and
 molecules reaching the back row.
 """
 
+import itertools
 import logging
 import os
 from functools import partial
@@ -397,11 +398,16 @@ class MacroscaleSim:
         # Index for the next save operation
         self.current_save_interval = 0
 
-        # Pre-allocate arrays to store simulation snapshots at save intervals
+        # Pre-allocate arrays to store simulation snapshots at save intervals.
+        # The capacity is only an initial estimate: save_data() doubles these
+        # buffers on demand, so run-to-completion simulations (total_time == 0,
+        # number_of_saves == 1) whose length is unknown still work.  Start at
+        # a minimum of 1 so the doubling in _grow_snapshot_buffers() can grow.
+        initial_saves = max(1, self.run.macro_params.number_of_saves)
         # Stores molecule locations as (row, rank) at each save point
         self.tpa_location_snapshot = np.empty(
             (
-                self.run.macro_params.number_of_saves,
+                initial_saves,
                 2,
                 self.run.macro_params.total_molecules,
             ),
@@ -409,7 +415,7 @@ class MacroscaleSim:
         )
         # Stores the simulation time corresponding to each save point
         self.snapshot_time = np.empty(
-            (self.run.macro_params.number_of_saves,),
+            (initial_saves,),
             dtype=np.float64,
         )
 
@@ -1119,6 +1125,28 @@ class MacroscaleSim:
             # Update the counter
             self.number_reached_back_row += np.count_nonzero(first_time)
 
+    def _grow_snapshot_buffers(self):
+        """Double the capacity of the in-memory snapshot buffers.
+
+        The number of saves is not known in advance for run-to-completion
+        simulations (``total_time == 0``), so the snapshot buffers start small
+        and are doubled on demand (amortized O(1) appends).
+        :meth:`record_data_to_disk` later trims to the actual count on write.
+        """
+        old_capacity = self.snapshot_time.shape[0]
+        new_capacity = max(1, old_capacity * 2)
+
+        new_times = np.empty((new_capacity,), dtype=self.snapshot_time.dtype)
+        new_times[:old_capacity] = self.snapshot_time
+        self.snapshot_time = new_times
+
+        new_locations = np.empty(
+            (new_capacity, 2, self.run.macro_params.total_molecules),
+            dtype=self.tpa_location_snapshot.dtype,
+        )
+        new_locations[:old_capacity] = self.tpa_location_snapshot
+        self.tpa_location_snapshot = new_locations
+
     def save_data(self, current_time):
         """Save the current simulation state as a v2.0.0 snapshot.
 
@@ -1128,6 +1156,10 @@ class MacroscaleSim:
         :param current_time: The current simulation time to record
         :type current_time: float
         """
+        # Grow the buffers if they are full (run-to-completion runs do not know
+        # their length up front).
+        if self.current_save_interval >= self.snapshot_time.shape[0]:
+            self._grow_snapshot_buffers()
         rows, ranks = np.unravel_index(
             self.location,
             (self.run.macro_params.rows, self.run.macro_params.full_row),
@@ -1203,9 +1235,20 @@ class MacroscaleSim:
         """
         # Save initial state at t=0
         self.save_data(0)
-        for ts in tqdm(
-            np.arange(self.run.macro_params.total_time_steps), mininterval=2
-        ):
+
+        # total_time == 0 is a sentinel meaning "run until all fibers degrade,
+        # no matter how long that takes" rather than stopping after a fixed
+        # number of timesteps.  In that mode the step count is unknown, so we
+        # iterate without bound and rely on the all-degraded check (performed
+        # at each save point below) to terminate.
+        run_to_completion = self.run.macro_params.total_time_steps == 0
+        if run_to_completion:
+            step_iterator = itertools.count()
+        else:
+            step_iterator = np.arange(self.run.macro_params.total_time_steps)
+
+        current_time = 0.0
+        for ts in tqdm(step_iterator, mininterval=2):
             # Calculate current simulation time
             current_time = ts * self.run.macro_params.time_step.magnitude
             if self.run.macro_params.duplicate_fortran:
@@ -1345,21 +1388,23 @@ class MacroscaleSim:
             self.bind(should_bind, current_time)
             self.move(should_move, current_time)
 
-            # Save simulation state at regular intervals
+            # Save simulation state at regular intervals.  We pause here to
+            # write data anyway, so this is also where we check progress and
+            # the termination condition (all fibers degraded) — the only stop
+            # condition for run-to-completion runs, and an early exit for
+            # fixed-length runs.  Checking every timestep would be too
+            # expensive; the save cadence is a natural, cheap place to do it.
             if (
                 current_time
                 >= self.run.macro_params.save_interval.magnitude * self.current_save_interval
             ):
                 self.save_data(current_time)
 
-            # Check progress and termination condition every 100K timesteps
-            # (checking every step would be too expensive)
-            if ts % 100000 == 100000 - 1:
                 # Count how many fibers are still intact
                 unlysed_fibers = np.count_nonzero(self.fiber_status > current_time)
 
                 if unlysed_fibers == 0:
-                    # Early termination: all fibers degraded
+                    # All fibers degraded — terminate.
                     self.logger.info(
                         f"All fibers degraded after {current_time:.2f} sec. Terminating"
                     )
@@ -1383,10 +1428,9 @@ class MacroscaleSim:
                         f"the back row ({reached_back_row_percent:.1f}% of total)."
                     )
 
-        # Save final state and write all data to disk
-        self.save_data(
-            self.run.macro_params.total_time.to_reduced_units().magnitude
-        )
+        # Save final state at the actual last simulated time (which need not
+        # land exactly on total_time) and write all data to disk.
+        self.save_data(current_time)
         self.record_data_to_disk()
 
         # Log final statistics

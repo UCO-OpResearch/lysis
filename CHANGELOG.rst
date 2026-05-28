@@ -47,7 +47,10 @@ Added
   Simulations currently run in series (one HDF5 writer); a dispatch-collect
   step (#59) and MPI4Py parallel execution (#60) are planned. ``--executable``
   is now required only for the Fortran backend, and the Fortran-/Slurm-specific
-  options raise a clear error when combined with ``--backend python``. (#35)
+  options raise a clear error when combined with ``--backend python``.
+  ``total_time = 0`` runs the simulation to completion (until every fiber
+  degrades) rather than for a fixed duration; the snapshot buffers grow on
+  demand to accommodate the unknown number of save points. (#35)
 
 Changed
 -------

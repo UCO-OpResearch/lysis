@@ -817,3 +817,67 @@ class TestShortSimulation:
             statuses = set(all_events["Molecule New Status"])
             valid = {s.value for s in MolStatus}
             assert statuses.issubset(valid)
+
+
+# ---------------------------------------------------------------------------
+#  Snapshot buffer growth + run-to-completion (total_time == 0)
+# ---------------------------------------------------------------------------
+
+
+class TestSnapshotBufferGrowth:
+    """The in-memory snapshot buffers grow on demand so the number of saves
+    need not be known up front."""
+
+    def test_buffer_grows_when_underallocated(self, tmp_path):
+        """total_time < save_interval gives number_of_saves == 1, but go()
+        always records both an initial (t=0) and a final snapshot — the buffer
+        must grow rather than raising IndexError."""
+        run = _make_run_and_datastore(
+            tmp_path,
+            run_code="grow_sim",
+            macro_overrides={
+                "total_time": Q_("0.005 sec"),
+                "save_interval": Q_("0.01 sec"),
+            },
+        )
+        assert run.macro_params.number_of_saves == 1  # initial buffer capacity
+
+        sim = MacroscaleSim(run)
+        assert sim.snapshot_time.shape[0] == 1
+        sim.go()  # must not raise
+
+        # At least the initial + final snapshot were recorded.
+        assert sim.current_save_interval >= 2
+        assert sim.snapshot_time.shape[0] >= sim.current_save_interval
+
+        sv = run.data.macroscale_out[0]
+        assert sv.snapshot_time.shape[0] == sim.current_save_interval
+
+    def test_run_to_completion_terminates(self, tmp_path):
+        """total_time == 0 means 'run until all fibers degrade'.  Forcing all
+        fibers degraded makes the unbounded loop terminate at the first save
+        point and write trimmed output."""
+        run = _make_run_and_datastore(
+            tmp_path,
+            run_code="rtc_sim",
+            macro_overrides={
+                "total_time": Q_("0 sec"),
+                "save_interval": Q_("0.05 sec"),
+            },
+        )
+        # total_time == 0 is the run-to-completion sentinel.
+        assert run.macro_params.total_time_steps == 0
+
+        sim = MacroscaleSim(run)
+        # Force every fiber degraded so the all-degraded check ends the run
+        # promptly (without depending on stochastic lysis fully completing).
+        sim.fiber_status[:] = 0.0
+        sim.go()
+
+        # Initial save (t=0) plus a final save → at least 2 snapshots.
+        assert sim.current_save_interval >= 2
+        sv = run.data.macroscale_out[0]
+        assert sv.snapshot_time.shape[0] == sim.current_save_interval
+        # The final snapshot time is the actual last simulated time (> 0),
+        # not the (zero) total_time sentinel.
+        assert sv.snapshot_time[-1] > 0.0

@@ -809,6 +809,26 @@ class TestRunMacroPythonExecution:
         # Independent seeds → the two simulations must not be identical.
         assert not np.array_equal(snap0, snap1)
 
+    def test_total_time_below_save_interval(self, runner, tmp_path):
+        """Regression: total_time < save_interval gives number_of_saves == 1,
+        which previously overflowed the snapshot buffer (IndexError).  The
+        growable buffer must let the run complete and fill macroscale_out."""
+        path = _make_macro_empty_hdf5(
+            tmp_path,
+            "py-tiny-time",
+            macro_overrides={
+                "total_time": Q_("0.005 sec"),
+                "save_interval": Q_("0.01 sec"),
+            },
+        )
+        result = runner.invoke(
+            cli,
+            ["run-macro", str(path), "--backend", "python",
+             "--allow-dirty", "--allow-commit-mismatch"],
+        )
+        assert result.exit_code == 0, result.output
+        assert _state(path) == HDF5State.MACRO_FILLED
+
     def test_already_run_errors(self, runner, macro_ready_hdf5):
         """Running twice (MACRO_FILLED) must surface a clear error."""
         first = runner.invoke(
