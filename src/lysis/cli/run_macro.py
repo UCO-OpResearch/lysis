@@ -48,8 +48,11 @@ from lysis.tools.slurm import DEFAULT_COMPILER_MODULE, parse_sbatch_tokens
     help=(
         "Execution backend.  'fortran' runs the compiled Fortran binary "
         "(requires --executable).  'python' runs the pure-Python NumPy "
-        "macroscale model in-process (no Fortran toolchain needed); the "
-        "Fortran-/Slurm-specific options are not supported with it."
+        "macroscale model — either in-process (the default) or, with "
+        "--slurm, as a single Slurm job per Run that runs every "
+        "simulation in series.  --executable, --fortran-commit, "
+        "--in-file-code, --out-file-code, and --allow-stale-binary are "
+        "Fortran-only."
     ),
 )
 @click.option(
@@ -97,7 +100,9 @@ from lysis.tools.slurm import DEFAULT_COMPILER_MODULE, parse_sbatch_tokens
         "Root directory for fast node-local scratch storage.  "
         "When set, each Slurm array task writes here and moves results to "
         "the staging directory on completion (two-tier storage).  "
-        "Only meaningful with --slurm."
+        "With --backend python --slurm, the .h5 file itself is cp'd to "
+        "this directory before running and cp'd back over the original "
+        "on success.  Only meaningful with --slurm."
     ),
 )
 @click.option(
@@ -207,10 +212,13 @@ def run_macro(ctx, target_path, backend, executable, use_slurm, partition,
     \b
     Backends (--backend):
       - fortran (default): run the compiled Fortran binary (--executable).
-      - python: run the pure-Python NumPy macroscale model in-process, with
-        no Fortran toolchain.  Simulations run in series.  The Fortran-/Slurm-
-        specific options (--executable, --slurm, --fortran-commit, etc.) are
-        not supported with this backend.
+      - python: run the pure-Python NumPy macroscale model.  Without --slurm,
+        runs in-process with no Fortran toolchain.  With --slurm, submits one
+        Slurm job per Run that runs every simulation in series (HDF5 has a
+        single-writer constraint; --fast-tmp-root cp's the .h5 to node-local
+        scratch and back on completion).  --executable, --fortran-commit,
+        --in-file-code, --out-file-code, and --allow-stale-binary are not
+        supported with this backend.
 
     \b
     Examples:
@@ -223,6 +231,10 @@ def run_macro(ctx, target_path, backend, executable, use_slurm, partition,
             --partition normal --staging-root /scratch/staging
         lysis run-macro data/run01.h5 --executable bin/macro.exe --slurm \\
             --fast-tmp-root /nvme/scratch
+        lysis run-macro data/run01.h5 --backend python --slurm
+        lysis run-macro data/run01.h5 --backend python --slurm \\
+            --partition normal --fast-tmp-root /nvme/scratch
+        lysis run-macro data/my-experiment/ --backend python --slurm
         lysis run-macro data/my-experiment/ --executable bin/macro.exe
         lysis run-macro data/my-experiment/ --executable bin/macro.exe --slurm
     """
@@ -237,13 +249,7 @@ def run_macro(ctx, target_path, backend, executable, use_slurm, partition,
     else:  # backend == "python"
         fortran_only = [
             (executable, "--executable"),
-            (use_slurm, "--slurm"),
-            (partition, "--partition"),
             (fortran_commit, "--fortran-commit"),
-            (compiler != DEFAULT_COMPILER_MODULE, "--compiler"),
-            (sbatch_tokens, "--sbatch"),
-            (staging_root, "--staging-root"),
-            (fast_tmp_root, "--fast-tmp-root"),
             (in_file_code, "--in-file-code"),
             (out_file_code, "--out-file-code"),
             (allow_stale_binary, "--allow-stale-binary"),
@@ -279,9 +285,43 @@ def run_macro(ctx, target_path, backend, executable, use_slurm, partition,
         with DataStore(hdf5_path.stem, str(hdf5_path.parent), mode="r") as ds:
             enforce_init_commit_match(ctx, ds, "macro", allow_commit_mismatch)
 
-    # Pure-Python backend: run each simulation in-process (in series) and
-    # write results straight into the HDF5 file.  No Fortran/Slurm machinery.
+    # Pure-Python backend: either dispatch one Slurm master job per Run
+    # (each runs all sims in series within the job) or run in-process.
     if backend == "python":
+        if use_slurm:
+            from lysis.tools.slurm import submit_python_macro_slurm_job
+
+            try:
+                sbatch_overrides = parse_sbatch_tokens(sbatch_tokens)
+            except ValueError as e:
+                raise click.BadParameter(str(e), param_hint="--sbatch")
+
+            submitted = []
+            for hdf5_path in hdf5_paths:
+                try:
+                    job_id = submit_python_macro_slurm_job(
+                        hdf5_path,
+                        staging_root=staging_root,
+                        partition=partition,
+                        fast_tmp_root=fast_tmp_root,
+                        keep_tmpdir=keep_tmpdir,
+                        compiler_module=compiler,
+                        sbatch_overrides=sbatch_overrides,
+                    )
+                except ValueError as e:
+                    raise click.ClickException(str(e))
+                submitted.append((hdf5_path.stem, job_id))
+                console.print(
+                    f"Submitted master Slurm job [bold]{job_id}[/bold]"
+                    f" for {hdf5_path.stem}"
+                )
+
+            if len(submitted) > 1:
+                console.print(
+                    f"[green]Submitted {len(submitted)} master Slurm jobs.[/green]"
+                )
+            return
+
         from lysis.execution.python_macro import PythonMacro
 
         n = len(hdf5_paths)

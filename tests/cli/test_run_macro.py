@@ -739,14 +739,6 @@ class TestRunMacroPythonValidation:
         assert "--executable" in result.output
         assert "python" in result.output.lower()
 
-    def test_python_with_slurm_errors(self, runner, macro_hdf5):
-        result = runner.invoke(
-            cli,
-            ["run-macro", str(macro_hdf5), "--backend", "python", "--slurm"],
-        )
-        assert result.exit_code != 0
-        assert "--slurm" in result.output
-
     def test_python_with_fortran_commit_errors(self, runner, macro_hdf5):
         result = runner.invoke(
             cli,
@@ -875,3 +867,99 @@ class TestRunMacroPythonBatch:
         assert result.exit_code == 0, result.output
         for rc in run_codes:
             assert _state(exp_dir / f"{rc}.h5") == HDF5State.MACRO_FILLED
+
+
+class TestRunMacroPythonSlurmDispatch:
+    """``--backend python --slurm`` reaches ``submit_python_macro_slurm_job``.
+
+    The Python+Slurm CLI path skips the in-process executor and instead
+    calls :func:`lysis.tools.slurm.submit_python_macro_slurm_job` once
+    per HDF5 file.  These tests monkeypatch the submit function (so no
+    real Slurm or staging is touched) and assert on what the CLI passes
+    through.
+    """
+
+    def test_single_file_calls_submit_python(self, runner, macro_ready_hdf5):
+        with patch(
+            "lysis.tools.slurm.submit_python_macro_slurm_job",
+            return_value=4242,
+        ) as mock_submit:
+            result = runner.invoke(
+                cli,
+                ["run-macro", str(macro_ready_hdf5), "--backend", "python",
+                 "--slurm",
+                 "--allow-dirty", "--allow-commit-mismatch"],
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_count == 1
+        (called_path,), kwargs = mock_submit.call_args
+        assert Path(called_path) == macro_ready_hdf5
+        assert kwargs["staging_root"] is None
+        assert kwargs["fast_tmp_root"] is None
+        assert kwargs["keep_tmpdir"] is False
+        assert "4242" in result.output
+
+    def test_threads_storage_and_partition_options(
+        self, runner, macro_ready_hdf5, tmp_path
+    ):
+        staging = tmp_path / "stg"
+        fast = tmp_path / "fast"
+        with patch(
+            "lysis.tools.slurm.submit_python_macro_slurm_job",
+            return_value=1,
+        ) as mock_submit:
+            result = runner.invoke(
+                cli,
+                ["run-macro", str(macro_ready_hdf5), "--backend", "python",
+                 "--slurm",
+                 "--partition", "normal",
+                 "--staging-root", str(staging),
+                 "--fast-tmp-root", str(fast),
+                 "--keep-tmpdir",
+                 "--compiler", "intel-compilers/2024",
+                 "--sbatch", "mem=8GB",
+                 "--allow-dirty", "--allow-commit-mismatch"],
+            )
+        assert result.exit_code == 0, result.output
+        kwargs = mock_submit.call_args.kwargs
+        assert kwargs["partition"] == "normal"
+        assert kwargs["staging_root"] == str(staging)
+        assert kwargs["fast_tmp_root"] == str(fast)
+        assert kwargs["keep_tmpdir"] is True
+        assert kwargs["compiler_module"] == "intel-compilers/2024"
+        assert kwargs["sbatch_overrides"] == {"mem": "8GB"}
+
+    def test_batch_dispatches_one_submit_per_file(
+        self, runner, tmp_path
+    ):
+        exp_dir = tmp_path / "py-slurm-experiment"
+        exp_dir.mkdir()
+        run_codes = ["py-run-01", "py-run-02", "py-run-03"]
+        for rc in run_codes:
+            _make_macro_empty_hdf5(exp_dir, rc)
+        experiment_json = {
+            "name": "py-slurm-experiment",
+            "description": "",
+            "created": "2026-01-01T00:00:00",
+            "lysis_version": "test",
+            "runs": [
+                {"run_code": rc, "row_index": i, "description": "",
+                 "macro_params": None}
+                for i, rc in enumerate(run_codes)
+            ],
+        }
+        (exp_dir / "experiment.json").write_text(json.dumps(experiment_json))
+
+        with patch(
+            "lysis.tools.slurm.submit_python_macro_slurm_job",
+            side_effect=[101, 102, 103],
+        ) as mock_submit:
+            result = runner.invoke(
+                cli,
+                ["run-macro", str(exp_dir), "--backend", "python", "--slurm",
+                 "--allow-dirty", "--allow-commit-mismatch"],
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_submit.call_count == 3
+        for jid in (101, 102, 103):
+            assert str(jid) in result.output
