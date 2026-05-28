@@ -137,6 +137,7 @@ class FortranMacro(FortranRunner):
         allow_stale_binary: bool = False,
         skip_binary_verification: bool = False,
         historical_binary_attrs: "dict | None" = None,
+        source_stamp: "tuple[str, str] | None" = None,
     ) -> "FortranMacro":
         """Construct a :class:`FortranMacro` from an existing HDF5 run file.
 
@@ -173,6 +174,14 @@ class FortranMacro(FortranRunner):
             stamped into the HDF5 file in place of the default
             ``<binary> --version`` query.  Defaults to ``None``.
         :type historical_binary_attrs: dict, optional
+        :param source_stamp: Optional pre-computed ``(commit, dirty)``
+            tuple for ``src/fortran/``, forwarded to
+            :func:`~lysis.tools.provenance.verify_binary_matches_source`.
+            Used by Slurm masters that resolve the stamp once before
+            copying ``src/`` out to a staging dir, so the child does not
+            need to invoke git from outside the checkout.  Defaults to
+            ``None`` (in-process git lookup).
+        :type source_stamp: tuple[str, str] or None
         :return: Fully configured :class:`FortranMacro` instance.
         :rtype: FortranMacro
         :raises ValueError: If microscale datasets are empty (microscale not yet
@@ -216,6 +225,7 @@ class FortranMacro(FortranRunner):
             allow_stale_binary=allow_stale_binary,
             skip_binary_verification=skip_binary_verification,
             historical_binary_attrs=historical_binary_attrs,
+            source_stamp=source_stamp,
         )
 
     # ------------------------------------------------------------------

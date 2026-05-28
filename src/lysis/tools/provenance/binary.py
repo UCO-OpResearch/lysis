@@ -201,6 +201,7 @@ def verify_binary_matches_source(
     executable: "Path | str",
     *,
     allow_stale: Optional[bool] = None,
+    source_stamp: "Optional[tuple[str, str]]" = None,
 ) -> dict:
     """Compare the binary's embedded stamp to the current source tree.
 
@@ -208,6 +209,16 @@ def verify_binary_matches_source(
     :param allow_stale: Explicit override.  ``None`` (the default) consults
         :func:`allow_stale_from_env`; ``True`` downgrades a mismatch to a
         warning; ``False`` always raises on mismatch.
+    :param source_stamp: Optional pre-computed ``(commit, dirty)`` tuple
+        to compare the binary against, in place of the default
+        :func:`gather_fortran_source_provenance` lookup.  Allows a caller
+        that has already resolved the source stamp (e.g. a Slurm master
+        that has copied ``src/`` out to a staging directory outside the
+        repository) to skip the in-process ``git`` query that would
+        otherwise fail because the binary's directory is no longer inside
+        a checkout.  ``None`` (the default) preserves the in-process git
+        lookup.
+    :type source_stamp: tuple[str, str] or None
     :return: Empty dict on match.  On overridden mismatch, a dict
         containing ``"banner"`` (text to prepend to the Fortran stdout
         log file) and :data:`CONST.STALE_BINARY_OVERRIDE_ATTR` for
@@ -226,7 +237,10 @@ def verify_binary_matches_source(
     binary_commit, binary_dirty, _binary_compiler = query_binary_version(
         executable
     )
-    source_commit, source_dirty = gather_fortran_source_provenance()
+    if source_stamp is not None:
+        source_commit, source_dirty = source_stamp
+    else:
+        source_commit, source_dirty = gather_fortran_source_provenance()
 
     matches = (
         binary_commit == source_commit

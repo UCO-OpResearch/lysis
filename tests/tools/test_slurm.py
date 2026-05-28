@@ -1663,6 +1663,98 @@ class TestHistoricalBinaryAttrsInChildAndArrayScripts:
 
 
 # ---------------------------------------------------------------------------
+# TestSourceStampInGeneratedScripts
+# ---------------------------------------------------------------------------
+
+
+class TestSourceStampInGeneratedScripts:
+    """The master Slurm job resolves the ``src/fortran/`` stamp on the
+    submit host (where the repo is) and bakes it into the generated child
+    and array task scripts as a ``source_stamp=(commit, dirty)`` kwarg to
+    ``FortranMicro.from_hdf5`` / ``FortranMacro.from_hdf5``.  The compute
+    node then compares the binary against that stamp directly instead of
+    running ``git`` from the staging directory (which is outside the
+    checkout and would fail).
+    """
+
+    _STAMP = ("abc123def456", "clean")
+
+    # -- generate_micro_child_script (legacy single-child path) ------------
+
+    def test_legacy_single_tier_bakes_source_stamp(self, tmp_path):
+        script = generate_micro_child_script(
+            tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+            source_stamp=self._STAMP,
+        )
+        assert "source_stamp=('abc123def456', 'clean')" in script
+
+    def test_legacy_two_tier_bakes_source_stamp(self, tmp_path):
+        script = generate_micro_child_script(
+            tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+            fast_tmp_root="/nvme/scratch",
+            source_stamp=self._STAMP,
+        )
+        assert "source_stamp=('abc123def456', 'clean')" in script
+
+    def test_legacy_no_source_stamp_when_unset(self, tmp_path):
+        script = generate_micro_child_script(
+            tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+        )
+        assert "source_stamp=" not in script
+
+    def test_legacy_source_stamp_suppressed_under_historical(self, tmp_path):
+        """Under --fortran-commit the staleness check is bypassed, so any
+        passed source_stamp must not be baked into the script (it would be
+        dead code at best, confusing at worst)."""
+        script = generate_micro_child_script(
+            tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+            historical_binary_attrs={"binary_commit": "h" * 40},
+            source_stamp=self._STAMP,
+        )
+        assert "source_stamp=" not in script
+        assert "skip_binary_verification=True" in script
+
+    # -- generate_micro_array_script (array micro path) --------------------
+
+    def test_micro_array_single_tier_bakes_source_stamp(self, tmp_path):
+        from lysis.tools.slurm import generate_array_script, _micro_spec
+        spec = _micro_spec(4, "")
+        script = generate_array_script(
+            spec, tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe",
+            source_stamp=self._STAMP,
+        )
+        assert "source_stamp=('abc123def456', 'clean')" in script
+
+    def test_micro_array_two_tier_bakes_source_stamp(self, tmp_path):
+        from lysis.tools.slurm import generate_array_script, _micro_spec
+        spec = _micro_spec(4, "")
+        script = generate_array_script(
+            spec, tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe",
+            fast_tmp_root="/nvme/scratch",
+            source_stamp=self._STAMP,
+        )
+        assert "source_stamp=('abc123def456', 'clean')" in script
+
+    def test_array_source_stamp_suppressed_under_historical(self, tmp_path):
+        from lysis.tools.slurm import generate_array_script, _micro_spec
+        spec = _micro_spec(4, "")
+        script = generate_array_script(
+            spec, tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe",
+            historical_binary_attrs={"binary_commit": "h" * 40},
+            source_stamp=self._STAMP,
+        )
+        assert "source_stamp=" not in script
+        assert "skip_binary_verification=True" in script
+
+
+# ---------------------------------------------------------------------------
 # TestSubmitWithHistoricalBinaryAttrsEndToEnd
 # ---------------------------------------------------------------------------
 
