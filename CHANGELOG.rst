@@ -46,6 +46,17 @@ Changed
   setup. The compiled ``lib/kiss.so`` is no longer tracked in git -- build it
   with ``make`` (or ``make shared``).
 
+Fixed
+-----
+
+- ``lysis run-micro`` / ``run-macro`` (especially under ``--slurm``) no longer
+  abort with a spurious ``StaleBinaryError`` when the staging directory lives
+  outside the source repository. The Slurm master now resolves the
+  ``src/fortran/`` git stamp once on the submit host and bakes it into the
+  generated child/array task scripts, so the compute-node preflight check
+  compares the binary against that stamp directly instead of trying to run
+  ``git`` from a directory that is no longer inside a checkout. (#67)
+
 Removed
 -------
 
