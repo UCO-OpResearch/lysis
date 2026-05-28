@@ -86,16 +86,23 @@ A minimal end-to-end workflow, driven entirely through the ``lysis`` CLI::
     # Build an Experiment (one HDF5 file per Run) from a parameter CSV
     uv run lysis init-experiment params.csv ./data
 
+    # Execute the Fortran microscale simulation
+    uv run lysis run-micro ./data/<experiment>
+
     # Initialise the macroscale edge-grid structure in each Run's HDF5 file
     uv run lysis init-macroscale ./data/<experiment>
 
-    # Execute the Fortran microscale, then macroscale, simulations
-    uv run lysis run-micro ./data/<experiment>
+    # Execute the Fortran macroscale simulation
     uv run lysis run-macro ./data/<experiment>
 
-    # Inspect and compare results
-    uv run lysis parameters ./data/<experiment>
-    uv run lysis compare ./data/<experiment-a> ./data/<experiment-b>
+    # Inspect results
+    uv run lysis micro-stats ./data/<experiment>
+    uv run lysis macro-stats ./data/<experiment>
+
+    # Compare experiments
+    uv run lysis diff ./data/<experiment-a> ./data/<experiment-b>
+    uv run lysis compare micro-stats ./data/<experiment-a> ./data/<experiment-b>
+    uv run lysis compare macro-stats ./data/<experiment-a> ./data/<experiment-b>
 
 See the `command-line interface`_ section below and the usage guide under
 ``docs/source/usage/`` for the full set of commands and options.
