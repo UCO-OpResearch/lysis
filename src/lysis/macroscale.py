@@ -93,7 +93,7 @@ Example Usage
 Basic simulation setup::
 
     >>> from lysis.config.run import Run
-    >>> from lysis.np_macroscale import MacroscaleSim
+    >>> from lysis.macroscale import MacroscaleSim
     >>>
     >>> # Create run with parameters
     >>> run = Run(...)

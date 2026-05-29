@@ -30,7 +30,7 @@ The lysis project has a well-architected data handling system with clear separat
   limited to direct version pairs
 - Created real data integration tests using truncated Fortran fixture data
   (68 tests in ``tests/data/test_real_data.py``)
-- Integrated ``np_macroscale`` with ``DataStore`` for both macroscale_in reads
+- Integrated ``macroscale`` with ``DataStore`` for both macroscale_in reads
   and macroscale_out writes in v2.0.0 format
 - Added lazy ``macroscale_in`` generation in ``DataStore``
 - Implemented ``_read_file_parsed()`` for reading micro parameters from Fortran
@@ -42,7 +42,7 @@ The lysis project has a well-architected data handling system with clear separat
   separate aliases/overrides parameters
 - Added unit tests for parameters module (53 tests) and paramcheck module
   (30 tests)
-- Added ``np_macroscale`` test suite (40 tests)
+- Added ``macroscale`` test suite (40 tests)
 - Removed filename references from constants and parameters (now in dataspec)
 - Added null write function for datasets with ``None`` storage type
 - Expanded test suite to 630 tests across 10 test files (from 291 across 6)
@@ -174,7 +174,7 @@ Covered by 124 unit tests in ``tests/data/test_datastore.py``.
   validation, overlap checks
 - ``tests/data/test_fileops.py`` (49 tests) - Read/write for all formats,
   Fortran log parsing, parameter validation on load
-- ``tests/test_np_macroscale.py`` (40 tests) - Macroscale simulation with
+- ``tests/test_macroscale.py`` (40 tests) - Macroscale simulation with
   DataStore integration
 - ``tests/config/test_paramcheck.py`` (30 tests) - Strict parameter loading,
   log parsing, verification
@@ -349,12 +349,12 @@ End-to-end integration tests using truncated real Fortran simulation data:
 - Covers full v1.95.0 -> v1.99.0 -> v2.0.0 conversion pipelines
 - Validates round-trip data integrity with real data
 
-17. np_macroscale DataStore Integration -- COMPLETED
+17. macroscale DataStore Integration -- COMPLETED
 ++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-:Files: ``np_macroscale.py``, ``datastore.py``, ``scripts/exec.py``
+:Files: ``macroscale.py``, ``datastore.py``, ``scripts/exec.py``
 
-The macroscale simulation (``np_macroscale``) is now fully integrated with
+The macroscale simulation (``macroscale``) is now fully integrated with
 the DataStore:
 
 - Reads ``macroscale_in`` data directly from ``DataStore``
@@ -364,7 +364,7 @@ the DataStore:
 - Updated exec script (``scripts/exec.py``) for DataStore workflow
 - Event dtypes pulled from dataspec instead of being redefined locally
 
-Covered by 40 tests in ``tests/test_np_macroscale.py``.
+Covered by 40 tests in ``tests/test_macroscale.py``.
 
 
 Remaining Work
@@ -407,7 +407,7 @@ Currently auto-calculated by h5py, may not be optimal.
 :Task: #10
 
 Many docstrings have "_description_" placeholders. Documentation for
-``np_macroscale.py`` has been substantially updated. Sphinx API documentation
+``macroscale.py`` has been substantially updated. Sphinx API documentation
 covers all subpackages. RST documentation in ``docs/source/usage/`` has known
 syntax issues that need fixing.
 
@@ -434,29 +434,29 @@ automatically on commits and pull requests.
 :Impact: Fortran subprocess wrappers cannot use DataStore directly
 
 The Fortran subprocess execution wrappers in ``codeutil.py`` do not yet
-reference ``DataStore``. The ``np_macroscale`` simulation is integrated
+reference ``DataStore``. The ``macroscale`` simulation is integrated
 (item 17), but the Fortran execution helpers still use the older file-based
 data flow. These need to be updated so that Fortran simulations can read
 from and write to HDF5 via ``DataStore`` and ``dataconvert``.
 
-25. Convert np_macroscale to Quantity (MEDIUM)
+25. Convert macroscale to Quantity (MEDIUM)
 ++++++++++++++++++++++++++++++++++++++++++++++
 
-:File: ``np_macroscale.py``
+:File: ``macroscale.py``
 :Impact: Dimensioned quantities not tracked at simulation level
 
-``np_macroscale.py`` does not use ``pint.Quantity`` objects for dimensioned
+``macroscale.py`` does not use ``pint.Quantity`` objects for dimensioned
 parameters. Other modules (``parameters.py``, ``paramcheck.py``,
 ``edge_grid.py``, ``dataspec.py``) already use ``Quantity``. Converting
-``np_macroscale`` would ensure unit consistency throughout the simulation.
+``macroscale`` would ensure unit consistency throughout the simulation.
 
 26. forced_unbind Calculation (MEDIUM)
 ++++++++++++++++++++++++++++++++++++++
 
-:File: ``np_macroscale.py``, ``dataconvert.py``
+:File: ``macroscale.py``, ``dataconvert.py``
 :Impact: Calculation logic needs review or implementation
 
-The ``forced_unbind`` parameter is used in ``np_macroscale.py`` and computed
+The ``forced_unbind`` parameter is used in ``macroscale.py`` and computed
 during data conversion in ``dataconvert.py``. The calculation task requires
 further specification.
 
@@ -529,7 +529,7 @@ All items delivered:
 #.  v1.95.0 data specification and converters -- COMPLETED
 #.  Automatic multi-step conversion routing -- COMPLETED
 #.  Integration tests with real Fortran data -- COMPLETED
-#.  np_macroscale DataStore integration -- COMPLETED
+#.  macroscale DataStore integration -- COMPLETED
 
 **Deliverable**: Read-write data handling system with parameter validation |checkmark|
 
@@ -539,7 +539,7 @@ Phase 4: Simulation Integration (Current)
 Active work:
 
 19. Integrate ``codeutil.py`` with DataStore (item 24)
-#.  Convert ``np_macroscale`` to ``Quantity`` (item 25)
+#.  Convert ``macroscale`` to ``Quantity`` (item 25)
 #.  ``forced_unbind`` calculation (item 26)
 #.  **Task #6**: Add safe float type conversion (item 18)
 #.  **Task #8**: Extract hard-coded constants (item 19)
@@ -599,7 +599,7 @@ Ready for Use
    protection
 #. Write-through to HDF5 datasets (resize, slice-write, incremental append)
 #. Lazy ``macroscale_in`` generation in DataStore
-#. ``np_macroscale`` reads from and writes to DataStore
+#. ``macroscale`` reads from and writes to DataStore
 #. 630 automated unit tests (124 for DataStore, 114 for dataconvert,
    68 for real-data integration)
 
@@ -608,7 +608,7 @@ Needs Work
 
 #. Float-to-float type conversion (not implemented)
 #. ``codeutil.py`` Fortran subprocess wrappers not integrated with DataStore
-#. ``np_macroscale`` does not use ``Quantity`` for dimensioned parameters
+#. ``macroscale`` does not use ``Quantity`` for dimensioned parameters
 #. ``forced_unbind`` calculation needs review
 #. Fortran data specs for f_deg and combined macro simulations
 #. Notebook imports (still reference removed ``lysis.util``)
@@ -733,13 +733,13 @@ Phase 3 Success -- ACHIEVED
 - [x] v1.95.0 data specification and converters implemented
 - [x] Multi-step conversion routing works automatically
 - [x] Integration tests cover real data conversion pipelines
-- [x] np_macroscale reads from and writes to DataStore
+- [x] macroscale reads from and writes to DataStore
 
 Phase 4 Success
 +++++++++++++++
 
 - [ ] ``codeutil.py`` Fortran wrappers use DataStore
-- [ ] ``np_macroscale`` uses ``Quantity`` for dimensioned parameters
+- [ ] ``macroscale`` uses ``Quantity`` for dimensioned parameters
 - [ ] ``forced_unbind`` calculation reviewed/implemented
 - [ ] Float-to-float type conversion works
 - [ ] Constants extracted from code
@@ -767,7 +767,7 @@ Recommended Next Steps
 
 #. **Short-term**:
 
-   - Convert ``np_macroscale`` to ``Quantity`` (item 25)
+   - Convert ``macroscale`` to ``Quantity`` (item 25)
    - Review/implement ``forced_unbind`` calculation (item 26)
    - Extract hard-coded constants (Task #8)
 
@@ -813,12 +813,12 @@ and the parameter validation system complete:
    access to conversion and validation with multi-file and override support
 #. Clean package structure with ``run.py`` in ``config/`` per project ontology
    and no backward-compatibility shim layers
-#. ``np_macroscale`` is fully integrated with DataStore for both reads and
+#. ``macroscale`` is fully integrated with DataStore for both reads and
    writes
 
 With Phase 3 now complete, the focus shifts to **simulation integration**
 (Phase 4): connecting the Fortran execution wrappers to DataStore, adding
-``Quantity`` support to ``np_macroscale``, and adding data specs for remaining
+``Quantity`` support to ``macroscale``, and adding data specs for remaining
 Fortran simulation types. The remaining Phase 5 items are polish and
 infrastructure work.
 

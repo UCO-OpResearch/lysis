@@ -98,7 +98,7 @@ See Also
 --------
 
 - constants.py: Neighbor offset constants and boundary condition enumerations
-- np_macroscale.py: Macroscale simulation that uses EdgeGrid
+- macroscale.py: Macroscale simulation that uses EdgeGrid
 """
 
 from __future__ import annotations

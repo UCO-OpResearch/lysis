@@ -40,6 +40,12 @@ Unreleased
 Changed
 -------
 
+- Renamed the macroscale simulation module ``lysis.np_macroscale`` to
+  ``lysis.macroscale``. The ``np_`` prefix distinguished it from a since-removed
+  CuPy/GPU sibling and no longer means anything. ``MacroscaleSim`` is still
+  importable from the top-level ``lysis`` namespace; only the deep import path
+  changes (``from lysis.np_macroscale import ...`` becomes
+  ``from lysis.macroscale import ...``). No compatibility shim is provided. (#63)
 - The ``Makefile`` now builds the KISS RNG shared library (``lib/kiss.so``) as
   part of the default ``make`` target and creates the ``bin/`` and ``lib/``
   output directories on demand, so a fresh checkout builds with no manual

@@ -21,7 +21,7 @@ GPU / CuPy macroscale experiment (``cupy/``)
 An early (circa 2022-2023) proof-of-concept that ran the NumPy macroscale model
 on a GPU via `CuPy <https://cupy.dev/>`_. It demonstrated that the simulation
 *could* use the GPU, but was never optimized and has since diverged
-significantly from ``src/lysis/np_macroscale.py``. GPU acceleration is **not**
+significantly from ``src/lysis/macroscale.py``. GPU acceleration is **not**
 on the near- or medium-term roadmap; if it is revisited it will likely be
 redesigned rather than resumed from this code.
 
@@ -47,7 +47,7 @@ It was the only consumer of the old ``cpp`` Makefile target (now removed).
 
 Note on KISS RNG: the live build's shared random number generator is compiled
 from ``src/c/kiss.c`` (into ``bin/kiss.o`` for the Fortran binaries and
-``lib/kiss.so`` for ``np_macroscale`` via ``lysis.tools.kiss``). The
+``lib/kiss.so`` for ``macroscale`` via ``lysis.tools.kiss``). The
 ``kiss.c`` / ``kiss.h`` / ``kiss.o`` copies preserved here belong to the C++
 port and were *not* part of that shared build --- the old ``cpp`` target itself
 linked ``src/c``'s ``kiss.o`` and used only ``cpp/kiss.h`` as a header.
@@ -69,7 +69,7 @@ in the active build references it (the old ``c`` / ``c-macro`` Makefile target
 has been removed). ``old/`` holds earlier drafts, including a C++ variant.
 
 KISS RNG note: the canonical ``kiss.c`` / ``kiss.h`` -- the shared RNG compiled
-into ``bin/kiss.o`` (Fortran binaries) and ``lib/kiss.so`` (``np_macroscale``
+into ``bin/kiss.o`` (Fortran binaries) and ``lib/kiss.so`` (``macroscale``
 via ``lysis.tools.kiss``) -- **remain in** ``src/c/`` and were deliberately not
 moved. This C port ``#include``\ s ``kiss.h`` (via ``all.h``) and linked
 ``kiss.c``, so rebuilding it from the archive would need those paths adjusted.
@@ -174,7 +174,7 @@ Run scripts (formerly ``scripts/`` and the repo-root ``exec.sh``):
 Dead package module (formerly ``src/lysis/molecule.py``):
 
 - ``molecule.py`` --- an unused ``Molecule`` dataclass. It was re-exported by
-  ``lysis/__init__.py`` but never instantiated anywhere; ``np_macroscale``
+  ``lysis/__init__.py`` but never instantiated anywhere; ``macroscale``
   represents molecules with arrays instead.
 
 Note: the usage guides ``docs/source/usage/fortran_microscale.rst`` and

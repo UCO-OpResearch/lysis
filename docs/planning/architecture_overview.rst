@@ -95,7 +95,7 @@ behaviour is injected via **swappable functions** selected by configuration
 flags.
 
 A concrete example already exists in the macroscale Python code
-(``np_macroscale.py``), where the ``duplicate_fortran`` flag controls 13
+(``macroscale.py``), where the ``duplicate_fortran`` flag controls 13
 branch points --- RNG selection, neighbourhood calculation, molecule
 placement, random-number generation order, and several others.  Today these
 are inline ``if``/``else`` blocks.  The goal is to extract each branch into a
@@ -162,7 +162,7 @@ Python** to make the code more accessible.  Current status:
 
 :Microscale: **Fortran only.**  No Python implementation exists yet.
 :Macroscale: **Python written, not yet validated.**  The Python macroscale
-    (``np_macroscale.py``) has been implemented with a ``duplicate_fortran``
+    (``macroscale.py``) has been implemented with a ``duplicate_fortran``
     mode that replicates the Fortran logic step-by-step for validation
     purposes.  Until validation is complete, the Fortran macroscale
     continues to be used in production.
@@ -227,7 +227,7 @@ Repository Layout
    |   |   +-- execution/      Fortran subprocess wrappers
    |   |   +-- tools/          Utilities (RNG, SLURM, misc)
    |   |   +-- cli/            Command-line interface (convert, validate)
-   |   |   +-- np_macroscale.py   Python macroscale simulation (NumPy)
+   |   |   +-- macroscale.py      Python macroscale simulation (NumPy)
    |   |   +-- molecule.py        Molecule tracking
    |   +-- fortran/            Fortran microscale source
    |   +-- c/                  KISS RNG (shared by Fortran and Python)
@@ -270,7 +270,7 @@ For the complete status and remaining items, see the
 Macroscale Simulation (Written, Pending Validation)
 ----------------------------------------------------
 
-The Python macroscale simulation (``np_macroscale.py``) is functionally
+The Python macroscale simulation (``macroscale.py``) is functionally
 complete and integrated with the DataStore for both reads and writes.  It
 includes a ``duplicate_fortran`` mode for step-by-step validation against
 the Fortran implementation.  Validation is in progress.
