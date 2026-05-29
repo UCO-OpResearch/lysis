@@ -639,6 +639,7 @@ class MacroscaleSim:
         generated binding time.
 
         This method:
+
         - Updates bound status to False for affected molecules
         - Clears the unbound_by_degradation flag
         - For forced unbinds (MICRO_UNBOUND): sets waiting time and
@@ -795,16 +796,20 @@ class MacroscaleSim:
 
         If 100*r is an integer i, we simply return unbinding_time[i].
 
-        If 100*r is not an integer, then f(r) lies in the interval:
+        If 100*r is not an integer, then f(r) lies in the interval::
+
             (f(floor(100*r)), f(ceil(100*r)))
 
-        We define a linear function g(x) such that:
+        We define a linear function g(x) such that::
+
             g(floor(100*r)) = f(floor(100*r))
             g(ceil(100*r)) = f(ceil(100*r))
+
         and use g(r) to approximate f(r).
 
         Equivalently, if i is an integer such that 100i < 100r < 100(i+1) and
-        λ is defined such that 100i + λ = 100r, then:
+        λ is defined such that 100i + λ = 100r, then::
+
             f(r) ≈ (1-λ)*f(i/100) + λ*f((i+1)/100)
 
         :param unbinding_time_bin: Array of values in [0, 100] representing which bin

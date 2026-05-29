@@ -738,6 +738,7 @@ Parameters
   (``micro{file_code}.txt``) instead of ``params.json``.
 - All parameters are stored as plain ``numpy.float64`` values
   instead of ``pint.Quantity`` objects with units.
+
 ``Nsave.dat``
   The number of snapshots recorded in the simulation.
 
@@ -759,7 +760,7 @@ v1.90.0
 Identical to v1.95.0 with the following exception in macroscale output:
 
 Macroscale Output
-++++++++++++++++
++++++++++++++++++
 
 - ``f_deg_list.dat`` **does not exist** in v1.90.0.
 - ``f_deg_time.dat`` replaces it with a binary snapshot array recording the
