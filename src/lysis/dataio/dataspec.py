@@ -1053,6 +1053,7 @@ def parse_shape(
     grid dimensions.
 
     Shape elements can be:
+
     - **Integers**: Passed through unchanged (e.g., 100, -1)
     - **Strings**: Parameter references in "dict_key.param_name" format
       (e.g., "macro_params.total_molecules")

@@ -1,11 +1,11 @@
 lysis.dataio package
-==================
+====================
 
 Submodules
 ----------
 
 lysis.dataio.dataconvert module
------------------------------
+-------------------------------
 
 .. automodule:: lysis.dataio.dataconvert
    :members:
@@ -13,7 +13,7 @@ lysis.dataio.dataconvert module
    :undoc-members:
 
 lysis.dataio.dataspec module
---------------------------
+----------------------------
 
 .. automodule:: lysis.dataio.dataspec
    :members:
@@ -21,7 +21,7 @@ lysis.dataio.dataspec module
    :undoc-members:
 
 lysis.dataio.datastore module
----------------------------
+-----------------------------
 
 .. automodule:: lysis.dataio.datastore
    :members:
@@ -29,7 +29,7 @@ lysis.dataio.datastore module
    :undoc-members:
 
 lysis.dataio.fileops module
--------------------------
+---------------------------
 
 .. automodule:: lysis.dataio.fileops
    :members:

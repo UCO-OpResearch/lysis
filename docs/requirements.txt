@@ -16,6 +16,9 @@ pint>=0.20
 tqdm>=4.60
 matplotlib>=3.3
 
+# Data frames (used by lysis.tools.display and lysis.analysis)
+pandas>=1.3
+
 # CLI dependencies
 click>=8.0
 rich>=12.0

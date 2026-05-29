@@ -54,12 +54,13 @@ class KissRandomGenerator:
     The interface mimics numpy.random.Generator to allow drop-in replacement
     in code that needs to exactly replicate the Fortran KISS sequence.
 
+    The ``mscw`` and ``kiss32`` C functions are documented as methods below
+    (their stubs are overwritten by the C library during ``__init__``).
+
     Attributes:
         state_type: ctypes array type for the 4-element generator state
         urcw1: C function for generating single U(0,1) random numbers
         vurcw1: C function for generating arrays of U(0,1) random numbers
-        mscw: C function for generating time-based seeds
-        kiss32: C function for generating 32-bit unsigned integers
 
     Note:
         The underlying C library (kiss.so) must be compiled and available in
