@@ -52,3 +52,4 @@ jobs:
 
         - name: Build docs (warnings treated as errors, like RTD fail_on_warning)
           run: uv run --no-project python -m sphinx -T -W --keep-going -b html -d _build/doctrees docs/source _build/html
+          
