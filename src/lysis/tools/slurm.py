@@ -709,8 +709,9 @@ def generate_array_script(
     :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
         ``hdf5_path.parent / ".slurm"``.
     :type slurm_log_dir: Path or str, optional
-    :param modules: Space-separated list of LMod module specs (include a
-        Fortran compiler module so the binary finds its runtime), baked into each generated task script.  Defaults to
+    :param modules: Space-separated list of LMod module specs to load in
+        each generated task script (include a Fortran compiler module so
+        the binary finds its runtime).  Defaults to
         :data:`DEFAULT_MODULES`.
     :type modules: str, optional
     :param sbatch_overrides: User overrides for the per-task ``#SBATCH``
