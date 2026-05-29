@@ -40,12 +40,17 @@ Unreleased
 Changed
 -------
 
+- Renamed the macroscale simulation module ``lysis.np_macroscale`` to
+  ``lysis.macroscale``. The ``np_`` prefix distinguished it from a since-removed
+  CuPy/GPU sibling and no longer means anything. ``MacroscaleSim`` is still
+  importable from the top-level ``lysis`` namespace; only the deep import path
+  changes (``from lysis.np_macroscale import ...`` becomes
+  ``from lysis.macroscale import ...``). No compatibility shim is provided. (#63)
 - The ``--compiler`` option on ``lysis run-micro`` / ``run-macro`` has been
   renamed to ``--modules``. Its value is passed verbatim to ``module load``,
   so you can now request several LMod modules at once as a quoted,
   space-separated list (e.g. ``--modules "intel-compilers/2023 hdf5"``).
   This is a hard break: ``--compiler`` is no longer recognised. (#64)
-
 - The ``Makefile`` now builds the KISS RNG shared library (``lib/kiss.so``) as
   part of the default ``make`` target and creates the ``bin/`` and ``lib/``
   output directories on demand, so a fresh checkout builds with no manual
