@@ -398,23 +398,25 @@ def _probe_iso_fortran_env_compiler_version(
         return first[0].strip() or None
 
 
-def _module_wrapper_argv(compiler_module: Optional[str]) -> Optional[list[str]]:
-    """Build the bash-wrapper argv used to load an LMod module around a subprocess.
+def _module_wrapper_argv(modules: Optional[str]) -> Optional[list[str]]:
+    """Build the bash-wrapper argv used to load LMod modules around a subprocess.
 
-    :param compiler_module: LMod module spec, e.g. ``"intel-compilers/2023"``,
-        or ``None`` to skip wrapping.
-    :type compiler_module: str or None
+    :param modules: Space-separated list of LMod module specs, e.g.
+        ``"intel-compilers/2023"`` or
+        ``"intel-compilers/2024 SciPy-bundle/2023.07"``, forwarded verbatim
+        to ``module load``; or ``None`` to skip wrapping.
+    :type modules: str or None
     :return: argv list with ``"exec \"$@\""`` as the bash body so the
         wrapped command's exit status is preserved verbatim, or ``None``
-        when *compiler_module* is ``None``.
+        when *modules* is ``None``.
     :rtype: list[str] or None
     """
-    if compiler_module is None:
+    if modules is None:
         return None
     script = (
         "[ -z \"${LMOD_CMD:-}\" ] && [ -f /etc/profile.d/lmod.sh ] "
         "&& source /etc/profile.d/lmod.sh; "
-        f"module purge && module load {compiler_module} && exec \"$@\""
+        f"module purge && module load {modules} && exec \"$@\""
     )
     return ["bash", "-c", script, "--"]
 
@@ -424,7 +426,7 @@ def gather_historical_binary_provenance(
     *,
     resolved_sha: str,
     build_log: "Path | None" = None,
-    compiler_module: Optional[str] = None,
+    modules: Optional[str] = None,
 ) -> dict:
     """Build a binary-provenance dict for a binary rebuilt from an older commit.
 
@@ -459,11 +461,11 @@ def gather_historical_binary_provenance(
         and the result is ``"unknown"`` for *binary_compiler* in the
         synthesis path.
     :type build_log: pathlib.Path or None
-    :param compiler_module: LMod module spec to load around the stub
-        compile/run pair (e.g. ``"intel-compilers/2023"``).  Should match
-        the module that wrapped ``make``.  ``None`` (default) runs the
-        probe in the current environment.
-    :type compiler_module: str or None
+    :param modules: Space-separated list of LMod module specs to load
+        around the stub compile/run pair (e.g. ``"intel-compilers/2023"``).
+        Should match the modules that wrapped ``make``.  ``None`` (default)
+        runs the probe in the current environment.
+    :type modules: str or None
     :return: Dict keyed by :data:`CONST.BINARY_COMMIT_ATTR`,
         :data:`CONST.BINARY_DIRTY_ATTR`, :data:`CONST.BINARY_COMPILER_ATTR`,
         :data:`CONST.BINARY_SOURCE_ATTR`.  All values are strings;
@@ -485,7 +487,7 @@ def gather_historical_binary_provenance(
     else:
         probed = _probe_iso_fortran_env_compiler_version(
             compiler_name,
-            module_wrapper=_module_wrapper_argv(compiler_module),
+            module_wrapper=_module_wrapper_argv(modules),
         )
     return {
         CONST.BINARY_COMMIT_ATTR: resolved_sha,

@@ -92,16 +92,17 @@ def _require_gs():
 #
 # Generated scripts no longer depend on per-user dotfiles (``~/.bashrc`` /
 # ``~/lysis.sh``).  Instead, every script emits a self-contained preamble
-# that loads the Intel compiler runtime via LMod and invokes Python through
-# the project's ``uv``-managed environment.  The submitting user's repo
-# root is baked in at script-generation time from ``lysis.__file__``.
+# that loads the requested LMod modules and invokes Python through the
+# project's ``uv``-managed environment.  The submitting user's repo root is
+# baked in at script-generation time from ``lysis.__file__``.
 
-#: Default LMod module providing the Fortran binary's runtime libraries.
-#: Assumed to be available on the cluster's LMod stack for all users.
-#: Callers can override per-job via the ``compiler_module`` keyword argument
-#: on the public submit/generate functions (exposed as ``--compiler`` on the
-#: ``lysis run-micro`` and ``lysis run-macro`` CLI commands).
-DEFAULT_COMPILER_MODULE: str = "intel-compilers/2023"
+#: Default space-separated list of LMod modules providing the Fortran
+#: binary's runtime libraries.  Assumed to be available on the cluster's
+#: LMod stack for all users.  Callers can override per-job via the
+#: ``modules`` keyword argument on the public submit/generate functions
+#: (exposed as ``--modules`` on the ``lysis run-micro`` and
+#: ``lysis run-macro`` CLI commands).
+DEFAULT_MODULES: str = "intel-compilers/2023"
 
 
 def _repo_root() -> Path:
@@ -119,16 +120,17 @@ def _repo_root() -> Path:
 
 def _env_preamble(
     repo_root: Path,
-    compiler_module: str,
+    modules: str,
     *,
     pythonpath: "Path | str | None" = None,
 ) -> str:
     """Return the bash preamble that prepares a generated script's environment.
 
-    Loads the requested Fortran compiler runtime via LMod (required by the
-    Fortran binary) and puts ``~/.local/bin`` on PATH so ``uv`` is
-    discoverable on compute nodes.  Defensive against non-login shells by
-    sourcing ``lmod.sh`` when the ``module`` function isn't already defined.
+    Loads the requested LMod modules (which should include the Fortran
+    compiler runtime required by the Fortran binary) and puts
+    ``~/.local/bin`` on PATH so ``uv`` is discoverable on compute nodes.
+    Defensive against non-login shells by sourcing ``lmod.sh`` when the
+    ``module`` function isn't already defined.
 
     When *pythonpath* is supplied, an ``export PYTHONPATH=...`` line is
     appended.  ``uv run`` inherits environment variables from the calling
@@ -140,10 +142,12 @@ def _env_preamble(
         unused inside the preamble itself; included for future extensions
         like ``cd`` into the repo).
     :type repo_root: Path
-    :param compiler_module: LMod module spec to load (e.g.
-        ``"intel-compilers/2023"`` or ``"intel-compilers/2024"``).  See
-        :data:`DEFAULT_COMPILER_MODULE` for the project default.
-    :type compiler_module: str
+    :param modules: Space-separated list of LMod module specs to load (e.g.
+        ``"intel-compilers/2023"`` or
+        ``"intel-compilers/2024 SciPy-bundle/2023.07"``).  Forwarded
+        verbatim to ``module load``.  See :data:`DEFAULT_MODULES` for the
+        project default.
+    :type modules: str
     :param pythonpath: When set, exported as ``PYTHONPATH`` so generated
         scripts import ``lysis`` from that path rather than the live
         editable install (see :func:`_snapshot_lysis_src`).  ``None``
@@ -156,7 +160,7 @@ def _env_preamble(
         "# Lysis environment setup (user-independent)",
         "[ -z \"${LMOD_CMD:-}\" ] && [ -f /etc/profile.d/lmod.sh ] "
         "&& source /etc/profile.d/lmod.sh",
-        f"module purge && module load {compiler_module}",
+        f"module purge && module load {modules}",
         'export PATH="$HOME/.local/bin:$PATH"',
     ]
     if pythonpath is not None:
@@ -661,7 +665,7 @@ def generate_array_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
     pythonpath: "Path | str | None" = None,
@@ -705,10 +709,11 @@ def generate_array_script(
     :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
         ``hdf5_path.parent / ".slurm"``.
     :type slurm_log_dir: Path or str, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into each generated task script.  Defaults to
-        :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+    :param modules: Space-separated list of LMod module specs to load in
+        each generated task script (include a Fortran compiler module so
+        the binary finds its runtime).  Defaults to
+        :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the per-task ``#SBATCH``
         header, in the shape returned by :func:`parse_sbatch_tokens`.
         A ``None`` value removes the matching default; any other value
@@ -753,7 +758,7 @@ def generate_array_script(
 
     repo_root = _repo_root()
     env_preamble = _env_preamble(
-        repo_root, compiler_module, pythonpath=pythonpath
+        repo_root, modules, pythonpath=pythonpath
     )
     py = _uv_python_prefix(repo_root)
 
@@ -854,7 +859,7 @@ def submit_slurm_job(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     keep_tmpdir: bool = False,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
 ) -> int:
@@ -880,10 +885,10 @@ def submit_slurm_job(
     :type fast_tmp_root: str, optional
     :param keep_tmpdir: Preserve staging dir after the master job.
     :type keep_tmpdir: bool, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into both the master and array task scripts.
-        Defaults to :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+    :param modules: Space-separated list of LMod module specs (include a
+        Fortran compiler module so the binary finds its runtime), baked into both the master and array task scripts.
+        Defaults to :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
         applied to BOTH the master job and each array task (shape returned
         by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
@@ -967,7 +972,7 @@ def submit_slurm_job(
         spec, staging_dir, run_code, hdf5_path, executable,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
         historical_binary_attrs=historical_binary_attrs,
         pythonpath=pythonpath,
@@ -1005,7 +1010,7 @@ def submit_slurm_job(
 
     master_sh_content = gs.scripts.plain(
         [
-            _env_preamble(repo_root, compiler_module, pythonpath=pythonpath),
+            _env_preamble(repo_root, modules, pythonpath=pythonpath),
             f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
@@ -1032,7 +1037,7 @@ def generate_micro_child_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
     pythonpath: "Path | str | None" = None,
@@ -1073,10 +1078,10 @@ def generate_micro_child_script(
     :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
         ``hdf5_path.parent / ".slurm"``.
     :type slurm_log_dir: Path or str, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into the generated script.  Defaults to
-        :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+    :param modules: Space-separated list of LMod module specs (include a
+        Fortran compiler module so the binary finds its runtime), baked into the generated script.  Defaults to
+        :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the child's ``#SBATCH``
         header (shape returned by :func:`parse_sbatch_tokens`).  Defaults
         to ``None``.
@@ -1118,7 +1123,7 @@ def generate_micro_child_script(
 
     repo_root = _repo_root()
     env_preamble = _env_preamble(
-        repo_root, compiler_module, pythonpath=pythonpath
+        repo_root, modules, pythonpath=pythonpath
     )
     py = _uv_python_prefix(repo_root)
 
@@ -1283,7 +1288,7 @@ def generate_micro_array_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
 ) -> str:
@@ -1314,7 +1319,7 @@ def generate_micro_array_script(
         spec, staging_dir, run_code, hdf5_path, executable,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
         historical_binary_attrs=historical_binary_attrs,
     )
@@ -1330,7 +1335,7 @@ def submit_micro_slurm_job(
     keep_tmpdir: bool = False,
     out_code: str = "",
     num_children: Optional[int] = None,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
 ) -> int:
@@ -1384,11 +1389,11 @@ def submit_micro_slurm_job(
         across that many tasks.  ``None`` (default) selects the legacy
         single-child path.
     :type num_children: int, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into every generated script (master, array tasks,
+    :param modules: Space-separated list of LMod module specs (include a
+        Fortran compiler module so the binary finds its runtime), baked into every generated script (master, array tasks,
         and the legacy single child).  Defaults to
-        :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+        :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
         applied to BOTH the master and child/array task scripts (shape
         returned by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
@@ -1443,7 +1448,7 @@ def submit_micro_slurm_job(
             spec, hdf5_path, executable, staging_root_dir,
             partition=partition, fast_tmp_root=fast_tmp_root,
             keep_tmpdir=keep_tmpdir,
-            compiler_module=compiler_module,
+            modules=modules,
             sbatch_overrides=sbatch_overrides,
             historical_binary_attrs=historical_binary_attrs,
         )
@@ -1502,7 +1507,7 @@ def submit_micro_slurm_job(
         staging_dir, run_code, hdf5_path, executable, out_code,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
         historical_binary_attrs=historical_binary_attrs,
         pythonpath=pythonpath,
@@ -1540,7 +1545,7 @@ def submit_micro_slurm_job(
 
     master_sh_content = gs.scripts.plain(
         [
-            _env_preamble(repo_root, compiler_module, pythonpath=pythonpath),
+            _env_preamble(repo_root, modules, pythonpath=pythonpath),
             f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
@@ -1585,7 +1590,7 @@ def generate_macro_array_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
 ) -> str:
@@ -1614,7 +1619,7 @@ def generate_macro_array_script(
         spec, staging_dir, run_code, hdf5_path, executable,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
         historical_binary_attrs=historical_binary_attrs,
     )
@@ -1630,7 +1635,7 @@ def submit_macro_slurm_job(
     keep_tmpdir: bool = False,
     in_code: str = "",
     out_code: str = "",
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
 ) -> int:
@@ -1676,10 +1681,10 @@ def submit_macro_slurm_job(
     :param out_code: Output file code suffix for the Fortran binary,
         defaults to ``""``.
     :type out_code: str, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into the generated master and array task scripts.
-        Defaults to :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+    :param modules: Space-separated list of LMod module specs (include a
+        Fortran compiler module so the binary finds its runtime), baked into the generated master and array task scripts.
+        Defaults to :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
         applied to BOTH the master and array task scripts (shape returned
         by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
@@ -1720,7 +1725,7 @@ def submit_macro_slurm_job(
         spec, hdf5_path, executable, staging_root_dir,
         partition=partition, fast_tmp_root=fast_tmp_root,
         keep_tmpdir=keep_tmpdir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
         historical_binary_attrs=historical_binary_attrs,
     )
