@@ -559,10 +559,11 @@ class EdgeGrid(object):
         :type b: Tuple[int, int]
         :param metric: The metric being used to calculate the distance, defaults to "euclidian".
             Options are:
-                - "euclidian": :math:`\sqrt{(x_1-x_2)^2+(y_1-y_2)^2+(z_1-z_2)^2}`
-                - "manhattan": :math:`\lvert x_1-x_2\rvert+\lvert y_1-y_2\rvert+\lvert z_1-z_2\rvert`
-                - "taxicab": :math:`\lvert x_1-x_2\rvert+\lvert y_1-y_2\rvert+\lvert z_1-z_2\rvert`
-                - "2d_euclidian": :math:`\sqrt{(x_1-x_2)^2+(y_1-y_2)^2}`
+
+            - "euclidian": :math:`\sqrt{(x_1-x_2)^2+(y_1-y_2)^2+(z_1-z_2)^2}`
+            - "manhattan": :math:`\lvert x_1-x_2\rvert+\lvert y_1-y_2\rvert+\lvert z_1-z_2\rvert`
+            - "taxicab": :math:`\lvert x_1-x_2\rvert+\lvert y_1-y_2\rvert+\lvert z_1-z_2\rvert`
+            - "2d_euclidian": :math:`\sqrt{(x_1-x_2)^2+(y_1-y_2)^2}`
         :type metric: str, optional
         :raises AttributeError: If the metric passed is not among those implemented.
         :return: A Pint Quantity object containing the distance between the centers of the two edges.

@@ -119,6 +119,18 @@ class FortranRunner(SimulationRunner):
     #: :func:`~lysis.tools.provenance.gather_binary_provenance` path is
     #: used (queries ``<binary> --version``).
     historical_binary_attrs: "dict | None" = None
+    #: Optional pre-computed ``(commit, dirty)`` tuple for the
+    #: ``src/fortran/`` source tree, forwarded to
+    #: :func:`~lysis.tools.provenance.verify_binary_matches_source`.
+    #: Used by Slurm masters that have copied ``src/`` out to a staging
+    #: directory: the master resolves the stamp once via
+    #: :func:`~lysis.tools.provenance.gather_fortran_source_provenance`
+    #: while still inside the repo, then hands it to each child runner so
+    #: the child does not need to invoke git from outside the checkout.
+    #: ``None`` (the default) preserves the in-process git lookup, which
+    #: is the right behaviour when the runner is constructed inside the
+    #: repository (e.g. the local non-slurm path).
+    source_stamp: "tuple[str, str] | None" = None
 
     # ------------------------------------------------------------------
     # Abstract hooks (implemented by subclasses)
@@ -288,6 +300,7 @@ class FortranRunner(SimulationRunner):
             self._binary_check_info = verify_binary_matches_source(
                 self.executable,
                 allow_stale=allow_stale,
+                source_stamp=self.source_stamp,
             )
         return self._binary_check_info
 

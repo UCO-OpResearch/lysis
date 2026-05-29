@@ -307,6 +307,92 @@ def test_verify_explicit_false_overrides_env(monkeypatch):
 
 
 # ----------------------------------------------------------------------
+# verify_binary_matches_source — source_stamp override
+# ----------------------------------------------------------------------
+
+def _sentinel_source_provenance():
+    raise AssertionError(
+        "gather_fortran_source_provenance must not be called when "
+        "source_stamp is provided"
+    )
+
+
+def test_verify_source_stamp_match_skips_git_lookup(monkeypatch):
+    # When source_stamp matches the binary, we accept without calling git.
+    monkeypatch.setattr(
+        binary_mod, "query_binary_version",
+        lambda exe, **kw: ("abc123", "clean", "Intel"),
+    )
+    monkeypatch.setattr(
+        binary_mod, "gather_fortran_source_provenance",
+        _sentinel_source_provenance,
+    )
+    result = verify_binary_matches_source(
+        "/fake/bin",
+        allow_stale=False,
+        source_stamp=("abc123", "clean"),
+    )
+    assert result == {}
+
+
+def test_verify_source_stamp_mismatch_raises(monkeypatch):
+    monkeypatch.setattr(
+        binary_mod, "query_binary_version",
+        lambda exe, **kw: ("abc123", "clean", "Intel"),
+    )
+    monkeypatch.setattr(
+        binary_mod, "gather_fortran_source_provenance",
+        _sentinel_source_provenance,
+    )
+    with pytest.raises(StaleBinaryError) as excinfo:
+        verify_binary_matches_source(
+            "/fake/bin",
+            allow_stale=False,
+            source_stamp=("def456", "clean"),
+        )
+    assert "abc123" in str(excinfo.value)
+    assert "def456" in str(excinfo.value)
+
+
+def test_verify_source_stamp_none_falls_back_to_git_lookup(monkeypatch):
+    # The fallback path (source_stamp=None) must still call
+    # gather_fortran_source_provenance.
+    calls = {"n": 0}
+
+    def fake_source():
+        calls["n"] += 1
+        return ("abc123", "clean")
+
+    monkeypatch.setattr(
+        binary_mod, "query_binary_version",
+        lambda exe, **kw: ("abc123", "clean", "Intel"),
+    )
+    monkeypatch.setattr(
+        binary_mod, "gather_fortran_source_provenance", fake_source,
+    )
+    assert verify_binary_matches_source(
+        "/fake/bin", allow_stale=False, source_stamp=None,
+    ) == {}
+    assert calls["n"] == 1
+
+
+def test_verify_source_stamp_dirty_match(monkeypatch):
+    monkeypatch.setattr(
+        binary_mod, "query_binary_version",
+        lambda exe, **kw: ("abc123", "dirty", "Intel"),
+    )
+    monkeypatch.setattr(
+        binary_mod, "gather_fortran_source_provenance",
+        _sentinel_source_provenance,
+    )
+    assert verify_binary_matches_source(
+        "/fake/bin",
+        allow_stale=False,
+        source_stamp=("abc123", "dirty"),
+    ) == {}
+
+
+# ----------------------------------------------------------------------
 # gather_historical_binary_provenance
 # ----------------------------------------------------------------------
 

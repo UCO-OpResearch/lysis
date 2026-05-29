@@ -58,7 +58,32 @@ from pathlib import Path
 from string import Template
 from typing import Dict, List, Mapping, Optional
 
-import GooseSLURM as gs
+# ``GooseSLURM`` is an optional HPC dependency, only needed when actually
+# submitting or polling Slurm jobs.  Guard the import the same way the rest of
+# the package guards optional deps (cf. ``cupy`` in ``lysis/__init__.py`` and
+# ``matplotlib`` in ``lysis/tools/__init__.py``) so that ``import lysis``
+# succeeds in environments without it — e.g. the docs build.  The submission
+# helpers below check :func:`_require_gs` before using ``gs``.
+try:
+    import GooseSLURM as gs
+except ImportError:  # pragma: no cover - exercised only off-cluster
+    gs = None
+
+
+def _require_gs():
+    """Return the :mod:`GooseSLURM` module, or raise a clear error if absent.
+
+    :return: The imported ``GooseSLURM`` module.
+    :rtype: module
+    :raises ImportError: If ``GooseSLURM`` is not installed.
+    """
+    if gs is None:  # pragma: no cover - exercised only off-cluster
+        raise ImportError(
+            "GooseSLURM is required for Slurm job submission/polling but is "
+            "not installed. Install it (HPC environments only) to use the "
+            "lysis.tools.slurm submission helpers."
+        )
+    return gs
 
 
 # ---------------------------------------------------------------------------
@@ -638,6 +663,7 @@ def _runner_init_line(
     binary_path: Optional[str],
     *,
     skip_binary_verification: bool = False,
+    source_stamp: Optional[tuple] = None,
 ) -> str:
     """Build the ``from_hdf5(...)`` call used inside the array task ``python -c``.
 
@@ -649,7 +675,10 @@ def _runner_init_line(
     *skip_binary_verification* is True under the historical-build
     workflow) ``skip_binary_verification=True`` so the intentional
     binary↔source mismatch does not crash ``_verify_binary_version`` at
-    task start.
+    task start.  When *source_stamp* is provided it is baked into the
+    call as ``source_stamp=(commit, dirty)`` so the array task does not
+    have to invoke git from the staging directory (which is outside the
+    source repository on most HPC layouts).
 
     For ``spec.backend == "python"`` only ``hdf5_path`` is emitted —
     :meth:`~lysis.execution.python_macro.PythonRunner.from_hdf5` takes
@@ -676,6 +705,9 @@ def _runner_init_line(
         args.append(f"num_children={spec.num_children}")
     if skip_binary_verification:
         args.append("skip_binary_verification=True")
+    if source_stamp is not None and not skip_binary_verification:
+        commit, dirty = source_stamp
+        args.append(f"source_stamp=('{commit}', '{dirty}')")
     return f"{spec.runner_class}.from_hdf5({', '.join(args)})"
 
 
@@ -693,6 +725,7 @@ def generate_array_script(
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
     pythonpath: "Path | str | None" = None,
+    source_stamp: Optional[tuple] = None,
 ) -> str:
     """Generate a Slurm array job bash script for an array-mode dispatch.
 
@@ -774,9 +807,20 @@ def generate_array_script(
         that path rather than the live editable install.  ``None``
         (default) leaves ``PYTHONPATH`` untouched.
     :type pythonpath: Path or str, optional
+    :param source_stamp: Pre-resolved ``(commit, dirty)`` for
+        ``src/fortran/``.  Baked into the array task's ``from_hdf5``
+        call so the binary↔source check on the compute node compares
+        against the master's stamp instead of running ``git`` from the
+        staging dir (which is outside the repo and would fail).
+        Ignored when ``historical_binary_attrs`` is set (the staleness
+        check is bypassed in that workflow).  ``None`` (default)
+        preserves the in-process git lookup.
+    :type source_stamp: tuple[str, str] or None
     :return: Slurm array job bash script text.
     :rtype: str
+    :raises ImportError: If ``GooseSLURM`` is not installed.
     """
+    _require_gs()
     staging_dir = Path(staging_dir)
     hdf5_path = Path(hdf5_path)
     if executable is not None:
@@ -865,6 +909,7 @@ rm -rf "${{local_work_dir}}" """
         init = _runner_init_line(
             spec, str(hdf5_path), f"{staging_dir}/{binary_name}",
             skip_binary_verification=skip_binary_verification,
+            source_stamp=source_stamp,
         )
         execute = f"""\
 # Execute {spec.scale}scale Fortran binary via lysis
@@ -906,6 +951,7 @@ cp "{staging_dir}/{binary_name}" "${{local_work_dir}}/" """
         init = _runner_init_line(
             spec, str(hdf5_path), f"${{local_work_dir}}/{binary_name}",
             skip_binary_verification=skip_binary_verification,
+            source_stamp=source_stamp,
         )
         execute = f"""\
 # Execute {spec.scale}scale Fortran binary into local fast storage
@@ -989,7 +1035,9 @@ def submit_slurm_job(
     :type historical_binary_attrs: dict, optional
     :return: Master Slurm job ID.
     :rtype: int
+    :raises ImportError: If ``GooseSLURM`` is not installed.
     """
+    _require_gs()
     run_code = hdf5_path.stem
 
     # Sync the project venv against uv.lock before any Slurm tasks fire,
@@ -1039,6 +1087,19 @@ def submit_slurm_job(
     # job is queued or running.
     pythonpath = _snapshot_lysis_src(repo_root, staging_dir)
 
+    # Resolve src/fortran/ stamp once on the submit host (still inside the
+    # repo) and bake it into the array script so compute-node tasks compare
+    # the binary against this stamp instead of running git in the staging
+    # dir (which is outside the checkout — the lookup would fail there and
+    # raise StaleBinaryError).  Skipped under --fortran-commit, where the
+    # binary↔source mismatch is intentional and the check is bypassed.
+    source_stamp: Optional[tuple] = None
+    if historical_binary_attrs is None:
+        from lysis.tools.provenance import (  # noqa: PLC0415
+            gather_fortran_source_provenance,
+        )
+        source_stamp = gather_fortran_source_provenance()
+
     # ------------------------------------------------------------------
     # Write array job script
     # ------------------------------------------------------------------
@@ -1050,6 +1111,7 @@ def submit_slurm_job(
         sbatch_overrides=sbatch_overrides,
         historical_binary_attrs=historical_binary_attrs,
         pythonpath=pythonpath,
+        source_stamp=source_stamp,
     )
     array_path = staging_dir / f"lysis-{spec.scale}-array__{run_code}.sh"
     array_path.write_text(array_script)
@@ -1115,6 +1177,7 @@ def generate_micro_child_script(
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_binary_attrs: Optional[dict] = None,
     pythonpath: "Path | str | None" = None,
+    source_stamp: Optional[tuple] = None,
 ) -> str:
     """Generate a Slurm bash script for a single child microscale Fortran job.
 
@@ -1173,9 +1236,19 @@ def generate_micro_child_script(
         that path rather than the live editable install.  ``None``
         (default) leaves ``PYTHONPATH`` untouched.
     :type pythonpath: Path or str, optional
+    :param source_stamp: Pre-resolved ``(commit, dirty)`` for
+        ``src/fortran/``.  Baked into the child's ``from_hdf5`` call so
+        the binary↔source check on the compute node compares against the
+        master's stamp instead of running ``git`` from the staging dir
+        (which is outside the repo and would fail).  Ignored when
+        ``historical_binary_attrs`` is set.  ``None`` (default)
+        preserves the in-process git lookup.
+    :type source_stamp: tuple[str, str] or None
     :return: Slurm bash script text.
     :rtype: str
+    :raises ImportError: If ``GooseSLURM`` is not installed.
     """
+    _require_gs()
     staging_dir = Path(staging_dir)
     hdf5_path = Path(hdf5_path)
     executable = Path(executable)
@@ -1208,6 +1281,11 @@ def generate_micro_child_script(
         if historical_binary_attrs is not None
         else ""
     )
+    if source_stamp is not None and historical_binary_attrs is None:
+        commit, dirty = source_stamp
+        source_stamp_kwarg = f", source_stamp=('{commit}', '{dirty}')"
+    else:
+        source_stamp_kwarg = ""
 
     if fast_tmp_root is None:
         # ------------------------------------------------------------------
@@ -1228,7 +1306,7 @@ mkdir -p "${{staging_datadir}}" """
 {py} -c "
 from pathlib import Path
 from lysis.execution.fortran_micro import FortranMicro
-fm = FortranMicro.from_hdf5('{hdf5_path}', '{staging_dir}/{binary_name}', out_file_code='{out_code}'{skip_verify_kwarg})
+fm = FortranMicro.from_hdf5('{hdf5_path}', '{staging_dir}/{binary_name}', out_file_code='{out_code}'{skip_verify_kwarg}{source_stamp_kwarg})
 fm.exec_in_workdir(Path('{staging_dir}'))
 " """
 
@@ -1256,7 +1334,7 @@ cp "{staging_dir}/{binary_name}" "${{local_work_dir}}/" """
 {py} -c "
 from pathlib import Path
 from lysis.execution.fortran_micro import FortranMicro
-fm = FortranMicro.from_hdf5('{hdf5_path}', '${{local_work_dir}}/{binary_name}', out_file_code='{out_code}'{skip_verify_kwarg})
+fm = FortranMicro.from_hdf5('{hdf5_path}', '${{local_work_dir}}/{binary_name}', out_file_code='{out_code}'{skip_verify_kwarg}{source_stamp_kwarg})
 fm.exec_in_workdir(Path('${{local_work_dir}}'))
 " """
 
@@ -1283,6 +1361,7 @@ def submit_micro_child_job(script_text: str, script_path: "Path | str") -> int:
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
     :raises ValueError: If ``sbatch`` output cannot be parsed for a job ID.
     """
+    _require_gs()
     script_path = Path(script_path)
     script_path.write_text(script_text)
     script_path.chmod(0o755)
@@ -1302,6 +1381,7 @@ def wait_for_jobs(job_ids: List[int], poll_interval: int = 30) -> None:
     :raises RuntimeError: If any job appears in squeue with state
         ``FAILED`` or ``CANCELLED``.
     """
+    _require_gs()
     remaining = list(job_ids)
     while remaining:
         time.sleep(poll_interval)
@@ -1469,6 +1549,7 @@ def submit_micro_slurm_job(
     :raises ValueError: If ``num_children`` is set and is either less than
         1 or greater than ``micro_simulations``.
     """
+    _require_gs()
     from lysis.execution.fortran_micro import FortranMicro  # noqa: PLC0415
 
     hdf5_path = Path(hdf5_path).resolve()
@@ -1545,6 +1626,16 @@ def submit_micro_slurm_job(
     # via PYTHONPATH, immune to source edits made while the job runs.
     pythonpath = _snapshot_lysis_src(repo_root, staging_dir)
 
+    # Resolve the src/fortran/ stamp once before the child runs from
+    # outside the repo (see submit_slurm_job for the analogous comment in
+    # the array path).
+    source_stamp: Optional[tuple] = None
+    if historical_binary_attrs is None:
+        from lysis.tools.provenance import (  # noqa: PLC0415
+            gather_fortran_source_provenance,
+        )
+        source_stamp = gather_fortran_source_provenance()
+
     # ------------------------------------------------------------------
     # Write child script
     # ------------------------------------------------------------------
@@ -1556,6 +1647,7 @@ def submit_micro_slurm_job(
         sbatch_overrides=sbatch_overrides,
         historical_binary_attrs=historical_binary_attrs,
         pythonpath=pythonpath,
+        source_stamp=source_stamp,
     )
     child_path = staging_dir / f"lysis-micro-child__{run_code}.sh"
     child_path.write_text(child_script)
@@ -1746,6 +1838,7 @@ def submit_macro_slurm_job(
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
     :raises ValueError: If the HDF5 file does not contain ``macro_params``.
     """
+    _require_gs()
     from lysis.execution.fortran_macro import FortranMacro  # noqa: PLC0415
 
     hdf5_path = Path(hdf5_path).resolve()

@@ -8,7 +8,9 @@ This documentation includes both usage guides and API reference.
    :maxdepth: 2
    :caption: Usage Guide
 
+   usage/system_onboarding
    usage/ontology
+   usage/fiber_size_conventions
    usage/data_specification
    usage/experiment_init
    usage/run_microscale

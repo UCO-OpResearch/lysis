@@ -362,3 +362,59 @@ class TestSkipBinaryVerification:
         assert called == []
         # No banner attrs either.
         assert runner._binary_hdf5_attrs == {}
+
+
+# ---------------------------------------------------------------------------
+# source_stamp (Slurm-master copy-out path)
+# ---------------------------------------------------------------------------
+
+
+class TestSourceStampPlumbing:
+    """A runner constructed with a ``source_stamp`` must hand it to
+    ``verify_binary_matches_source`` so the binary check on a compute
+    node does not need to invoke git from outside the source repo.
+    """
+
+    def test_runner_forwards_source_stamp(self, monkeypatch, tmp_path):
+        import lysis.tools.provenance as prov_pkg
+        captured = {}
+
+        def fake_verify(exe, **kw):
+            captured["exe"] = exe
+            captured["kw"] = kw
+            return {}
+
+        monkeypatch.setattr(
+            prov_pkg, "verify_binary_matches_source", fake_verify,
+        )
+        r = Run(str(tmp_path))
+        r.initialize_micro_param()
+        cls = _make_stub_class()
+        runner = cls(
+            run=r,
+            executable="/bin/stub.exe",
+            source_stamp=("abc123", "clean"),
+        )
+        runner._verify_binary_version()
+        assert captured["exe"] == "/bin/stub.exe"
+        assert captured["kw"]["source_stamp"] == ("abc123", "clean")
+
+    def test_runner_default_source_stamp_is_none(
+        self, monkeypatch, tmp_path,
+    ):
+        import lysis.tools.provenance as prov_pkg
+        captured = {}
+
+        def fake_verify(exe, **kw):
+            captured["kw"] = kw
+            return {}
+
+        monkeypatch.setattr(
+            prov_pkg, "verify_binary_matches_source", fake_verify,
+        )
+        r = Run(str(tmp_path))
+        r.initialize_micro_param()
+        cls = _make_stub_class()
+        runner = cls(run=r, executable="/bin/stub.exe")
+        runner._verify_binary_version()
+        assert captured["kw"]["source_stamp"] is None

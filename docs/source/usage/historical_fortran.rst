@@ -1,6 +1,6 @@
-==========================================
+===========================================
 Running a Historical Fortran Implementation
-==========================================
+===========================================
 
 Both ``lysis run-micro`` and ``lysis run-macro`` accept a
 ``--fortran-commit <ref>`` flag that builds the Fortran binaries from an

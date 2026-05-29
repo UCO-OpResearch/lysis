@@ -29,3 +29,27 @@ jobs:
 
         - name: Run pytest
           run: uv run pytest -m "not real_data and not fortran_binary" -q
+
+  docs:
+    # Mirror the ReadTheDocs build so requirements drift is caught in PR review.
+    # Install ONLY from docs/requirements.txt (not `uv sync`) so a dependency the
+    # docs build needs but docs/requirements.txt omits surfaces here too.
+    runs-on: ubuntu-latest
+
+    steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Install uv
+          uses: astral-sh/setup-uv@v5
+
+        - name: Set up Python
+          # Match the python version pinned in .readthedocs.yaml.
+          run: uv python install 3.11
+
+        - name: Install docs requirements
+          run: uv venv && uv pip install -r docs/requirements.txt
+
+        - name: Build docs (warnings treated as errors, like RTD fail_on_warning)
+          run: uv run --no-project python -m sphinx -T -W --keep-going -b html -d _build/doctrees docs/source _build/html
+          

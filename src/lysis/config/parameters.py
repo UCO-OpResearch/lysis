@@ -47,7 +47,7 @@ Parameters with physical units use Pint Quantity objects, which provide:
 - Dimensional analysis
 - Human-readable representation
 
-The ureg (UnitRegistry) and Q_ (Quantity constructor) are imported from
+The ``ureg`` (UnitRegistry) and ``Q_`` (Quantity constructor) are imported from
 the constants module.
 
 Usage Example
@@ -896,31 +896,31 @@ class MacroParameters(Parameters):
     """The number of fibrin-free rows at the top of the grid.
 
     This represents the depth of the fibrin-free region where tPA molecules
-    enter the simulation domain. 
-    
+    enter the simulation domain.
+
     For example, if empty_rows = 28, then rows 0-27 contain no fibers, and
     row 28 is the first row with fibers.
 
     Note: In the Fortran code, there was no variable for 'The number of empty rows'.
-    Instead, the variable `Ffree` gave the 1-indexed location of the first non-empty row.
-    In 0-indexing, the number of empty rows is the same as the index of the first 
+    Instead, the variable ``Ffree`` gave the 1-indexed location of the first non-empty
+    row. In 0-indexing, the number of empty rows is the same as the index of the first
     non-empty row, but in 1-indexing, this is not the case.
-    Thus, `empty_rows` and `Ffree` are not exactly translatable, but
-    `empty_rows = Ffree - 1`
+    Thus, ``empty_rows`` and ``Ffree`` are not exactly translatable, but
+    ``empty_rows = Ffree - 1``
 
-    Here is a graphical (rotated) example with four fiber-free rows and 
-    five rows of fibrin. 
+    Here is a graphical (rotated) example with four fiber-free rows and
+    five rows of fibrin.
     In Python, this would give: rows = 9, fiber_rows = 6, and empty_rows = 3.
-    In Fortran, the equivalent would be: F = 9, Fhat = 6, and Ffree = 4
-    
-                      empty_rows
-                       ^^^^^^^
-    Python indexing:   0  1  2  3  4  5  6  7  8
-                       .  .  .  |  |  |  |  |  |
-    Fortran indexing:  1  2  3  4  5  6  7  8  9
-                                ^
-                              Ffree
-                                
+    In Fortran, the equivalent would be: F = 9, Fhat = 6, and Ffree = 4::
+
+                          empty_rows
+                           ^^^^^^^
+        Python indexing:   0  1  2  3  4  5  6  7  8
+                           .  .  .  |  |  |  |  |  |
+        Fortran indexing:  1  2  3  4  5  6  7  8  9
+                                    ^
+                                  Ffree
+
     :Units: None
     :Fortran: Ffree-1"""
 
@@ -1010,7 +1010,9 @@ class MacroParameters(Parameters):
     :Fortran: simulations"""
 
     total_time: Quantity = Q_("20 min")
-    """Total running time for model.
+    """Total simulation time the model should run for.
+    A `total_time` of zero indicates that the simulation should run until
+    all fibers are degraded, no matter the time elapsed.
      
     :Units: seconds
     :Fortran: tf"""
