@@ -739,7 +739,9 @@ def generate_array_script(
     :type source_stamp: tuple[str, str] or None
     :return: Slurm array job bash script text.
     :rtype: str
+    :raises ImportError: If ``GooseSLURM`` is not installed.
     """
+    _require_gs()
     staging_dir = Path(staging_dir)
     hdf5_path = Path(hdf5_path)
     executable = Path(executable)
@@ -1103,7 +1105,9 @@ def generate_micro_child_script(
     :type source_stamp: tuple[str, str] or None
     :return: Slurm bash script text.
     :rtype: str
+    :raises ImportError: If ``GooseSLURM`` is not installed.
     """
+    _require_gs()
     staging_dir = Path(staging_dir)
     hdf5_path = Path(hdf5_path)
     executable = Path(executable)
