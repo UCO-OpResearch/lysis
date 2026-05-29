@@ -34,7 +34,7 @@ from lysis.cli._provenance import (
     enforce_init_commit_match,
     enforce_lysis_clean,
 )
-from lysis.tools.slurm import DEFAULT_COMPILER_MODULE, parse_sbatch_tokens
+from lysis.tools.slurm import DEFAULT_MODULES, parse_sbatch_tokens
 
 
 @cli.command(name="run-micro")
@@ -115,17 +115,19 @@ from lysis.tools.slurm import DEFAULT_COMPILER_MODULE, parse_sbatch_tokens
     ),
 )
 @click.option(
-    "--compiler",
-    "compiler",
-    default=DEFAULT_COMPILER_MODULE,
+    "--modules",
+    "modules",
+    default=DEFAULT_MODULES,
     show_default=True,
-    metavar="MODULE",
+    metavar="MODULES",
     help=(
-        "LMod module spec providing the Fortran compiler runtime, loaded "
-        "by each generated Slurm script (e.g. ``intel-compilers/2024``).  "
-        "With --slurm, also wraps the historical-build ``make`` invocation "
-        "of --fortran-commit so the binary links against the same toolchain "
-        "the Slurm preamble will load.  Only meaningful with --slurm."
+        "Space-separated list of LMod module specs to ``module load`` in "
+        "each generated Slurm script (e.g. ``\"intel-compilers/2024 "
+        "SciPy-bundle/2023.07\"``).  Include a Fortran compiler module so "
+        "the simulation binary finds its runtime.  With --slurm, the same "
+        "list also wraps the historical-build ``make`` invocation of "
+        "--fortran-commit so the binary links against the matching "
+        "toolchain.  Only meaningful with --slurm."
     ),
 )
 @click.option(
@@ -176,7 +178,7 @@ from lysis.tools.slurm import DEFAULT_COMPILER_MODULE, parse_sbatch_tokens
 @allow_commit_mismatch_option
 @click.pass_context
 def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
-              fast_tmp_root, keep_tmpdir, file_code, num_children, compiler,
+              fast_tmp_root, keep_tmpdir, file_code, num_children, modules,
               fortran_commit, sbatch_tokens, allow_stale_binary, allow_dirty,
               allow_commit_mismatch):
     """Execute the Fortran microscale simulation for a Run or Experiment.
@@ -230,8 +232,8 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
 
     # --fortran-commit: build the historical binary once up front, share its
     # path across every run in this invocation, tear down at the end.  Only
-    # load the compiler module around the build when Slurm jobs (which load
-    # the same module via the preamble) will be executing the binary.
+    # load the modules around the build when Slurm jobs (which load the same
+    # modules via the preamble) will be executing the binary.
     with contextlib.ExitStack() as stack:
         if fortran_commit is not None:
             from lysis.execution.historical_build import (
@@ -243,7 +245,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
                     build_historical_binary(
                         fortran_commit,
                         executable,
-                        compiler_module=compiler if use_slurm else None,
+                        modules=modules if use_slurm else None,
                         keep_dir=keep_tmpdir,
                     )
                 )
@@ -282,7 +284,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
                         keep_tmpdir=keep_tmpdir,
                         out_code=file_code,
                         num_children=nc_arg,
-                        compiler_module=compiler,
+                        modules=modules,
                         sbatch_overrides=sbatch_overrides,
                         historical_binary_attrs=historical_provenance,
                     )

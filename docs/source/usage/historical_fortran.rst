@@ -23,7 +23,7 @@ Basic usage
     lysis run-macro data/my-experiment/ \
         --executable macro_diffuse_into_and_along__internal \
         --fortran-commit 60d200f \
-        --slurm --compiler intel-compilers/2024
+        --slurm --modules intel-compilers/2024
 
 When ``--fortran-commit`` is set:
 
@@ -72,16 +72,24 @@ Lifecycle
   returns.  Parallel ``lysis run-macro`` invocations on different folders
   never collide — each gets a distinct ``mkdtemp``.
 
-Compiler module
----------------
+LMod modules
+------------
 
-The ``--compiler`` flag (default ``intel-compilers/2023``) tells generated
-Slurm scripts which LMod module to ``module load`` before invoking the
-Fortran binary.  With ``--fortran-commit --slurm`` the build step is *also*
-wrapped in ``module purge && module load <compiler>`` so the binary links
-against the exact toolchain the Slurm preamble will load at runtime.
+The ``--modules`` flag (default ``intel-compilers/2023``) tells generated
+Slurm scripts which LMod modules to ``module load`` before invoking the
+Fortran binary.  The value is forwarded verbatim to ``module load``, which
+itself accepts a space-separated list, so you can request several modules
+at once — be sure to quote the list so the shell keeps it as one argument::
 
-Local mode (no ``--slurm``) ignores ``--compiler``: the binary is built and
+    --modules "intel-compilers/2024 SciPy-bundle/2023.07"
+
+Include a Fortran compiler module so the binary finds its runtime; add any
+other modules the job needs.  With ``--fortran-commit --slurm`` the build
+step is *also* wrapped in ``module purge && module load <modules>`` so the
+binary links against the exact toolchain the Slurm preamble will load at
+runtime.
+
+Local mode (no ``--slurm``) ignores ``--modules``: the binary is built and
 executed in the same environment the CLI was launched from, so anything you
 loaded with ``module load`` before running ``lysis`` governs both steps.
 
@@ -96,7 +104,13 @@ Examples::
     lysis run-macro data/run01.h5 \
         --executable macro_diffuse_into_and_along__internal \
         --fortran-commit 60d200f \
-        --slurm --compiler intel-compilers/2024
+        --slurm --modules intel-compilers/2024
+
+    # Slurm — load several modules at once (quote the list).
+    lysis run-macro data/run01.h5 \
+        --executable macro_diffuse_into_and_along__internal \
+        --fortran-commit 60d200f \
+        --slurm --modules "intel-compilers/2024 SciPy-bundle/2023.07"
 
 Limitations and caveats
 -----------------------

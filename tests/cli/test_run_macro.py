@@ -347,9 +347,9 @@ class TestRunMacroSlurm:
         assert call_kwargs.get("out_code") == "_out"
 
     @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
-    def test_compiler_default_is_forwarded(self, mock_submit, runner, macro_hdf5):
-        """Without --compiler, the default module spec must be forwarded."""
-        from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
+    def test_modules_default_is_forwarded(self, mock_submit, runner, macro_hdf5):
+        """Without --modules, the default module spec must be forwarded."""
+        from lysis.tools.slurm import DEFAULT_MODULES
         result = runner.invoke(
             cli,
             [
@@ -360,25 +360,25 @@ class TestRunMacroSlurm:
         )
         assert result.exit_code == 0, result.output
         assert (
-            mock_submit.call_args.kwargs.get("compiler_module")
-            == DEFAULT_COMPILER_MODULE
+            mock_submit.call_args.kwargs.get("modules")
+            == DEFAULT_MODULES
         )
 
     @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
-    def test_compiler_override_is_forwarded(self, mock_submit, runner, macro_hdf5):
-        """--compiler=foo/2024 must reach submit_macro_slurm_job."""
+    def test_modules_override_is_forwarded(self, mock_submit, runner, macro_hdf5):
+        """--modules=foo/2024 must reach submit_macro_slurm_job."""
         result = runner.invoke(
             cli,
             [
                 "run-macro", str(macro_hdf5),
                 "--executable", "/bin/macro.exe",
                 "--slurm",
-                "--compiler", "intel-compilers/2024",
+                "--modules", "intel-compilers/2024",
             ],
         )
         assert result.exit_code == 0, result.output
         assert (
-            mock_submit.call_args.kwargs.get("compiler_module")
+            mock_submit.call_args.kwargs.get("modules")
             == "intel-compilers/2024"
         )
 
@@ -558,8 +558,8 @@ class TestRunMacroFortranCommit:
 
         @contextmanager
         def fake_cm(*args, **kwargs):
-            # Local mode: compiler_module should be None.
-            assert kwargs.get("compiler_module") is None
+            # Local mode: modules should be None.
+            assert kwargs.get("modules") is None
             yield fake_binary, prov
 
         mock_build.side_effect = fake_cm
@@ -598,7 +598,7 @@ class TestRunMacroFortranCommit:
 
         @contextmanager
         def fake_cm(*args, **kwargs):
-            assert kwargs.get("compiler_module") == "intel-compilers/2024"
+            assert kwargs.get("modules") == "intel-compilers/2024"
             yield fake_binary, prov
 
         mock_build.side_effect = fake_cm
@@ -609,7 +609,7 @@ class TestRunMacroFortranCommit:
                 "--executable", "macro_diffuse_into_and_along__internal",
                 "--fortran-commit", "HEAD",
                 "--slurm",
-                "--compiler", "intel-compilers/2024",
+                "--modules", "intel-compilers/2024",
             ],
         )
         assert result.exit_code == 0, result.output
