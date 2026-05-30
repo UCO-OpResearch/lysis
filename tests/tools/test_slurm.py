@@ -2161,7 +2161,7 @@ class TestWorkerLogOutputAndHeader:
         assert 'trap \'rm -rf "${local_work_dir}"\' EXIT' in script
         # Trap must be registered before the risky mv so a set -e abort there
         # still reclaims the fast-tmp dir (no permanent node-local leak).
-        assert script.index("trap ") < script.index('mv "${local_datadir}')
+        assert script.index("trap ") < script.index("\nmv ")
         # The old unconditional post-mv ``rm -rf`` is gone (trap owns cleanup);
         # only the trap references rm -rf of the work dir.
         assert script.count('rm -rf "${local_work_dir}"') == 1
@@ -2187,6 +2187,47 @@ class TestWorkerLogOutputAndHeader:
         assert script.index('${#staged_files[@]}') < script.index(
             'cp "${staged_files[@]}"'
         )
+
+    @pytest.mark.parametrize(
+        "make_script",
+        [
+            lambda p: generate_micro_array_script(
+                p / "s", "run-01", p / "run-01.h5", "/bin/micro.exe", 5,
+                fast_tmp_root="/scratch",
+            ),
+            lambda p: generate_micro_child_script(
+                p / "s", "run-01", p / "run-01.h5", "/bin/micro.exe", "",
+                fast_tmp_root="/scratch",
+            ),
+        ],
+        ids=["micro-array", "micro-child"],
+    )
+    def test_micro_two_tier_output_mv_glob_is_guarded(self, tmp_path, make_script):
+        """Micro paths move flat ``__NN`` files via a glob — it must be guarded.
+
+        Unlike the macro per-sim ``mv`` (a single named subdir), the micro
+        output move is a ``${local_datadir}/*`` glob with the same unexpanded-
+        ``*`` hazard under ``set -e`` as the staged-files cp.
+        """
+        script = make_script(tmp_path)
+        # No bare glob mv remains.
+        assert 'mv "${local_datadir}"/*' not in script
+        # Guarded form: nullglob collection + emptiness check + array mv.
+        assert 'output_files=("${local_datadir}"/*)' in script
+        assert 'mv "${output_files[@]}" "${staging_datadir}/"' in script
+        assert script.index('${#output_files[@]}') < script.index(
+            'mv "${output_files[@]}"'
+        )
+
+    def test_macro_two_tier_mv_is_named_path_not_glob(self, tmp_path):
+        """The macro per-sim move is a named subdir — no glob, no guard needed."""
+        script = generate_macro_array_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/macro.exe",
+            n_sims=5, fast_tmp_root="/scratch",
+        )
+        assert 'mv "${local_datadir}/${SIM}" "${staging_datadir}/"' in script
+        assert 'mv "${local_datadir}"/*' not in script
+        assert "output_files=" not in script
 
 
 class TestMasterLogStaysInSlurm:
