@@ -154,6 +154,76 @@ def _load_run_params(data_root, run_code, param_specs, add_names, console):
         run.data.close()
 
 
+def _load_run_param_objects(data_root, run_code, console):
+    """Load a Run's raw Micro/Macro parameter objects (not formatted strings).
+
+    Used by the ``--csv`` export path, which needs the parameter objects to
+    serialize via :func:`~lysis.config.parameters.write_params_csv`.
+
+    :return: ``(micro_params, macro_params)`` with ``macro_params`` possibly
+        ``None``, or ``None`` if the run cannot be loaded or has no microscale
+        parameters.
+    :rtype: tuple | None
+    """
+    from lysis.config.run import Run
+
+    try:
+        run = Run(data_root, run_code)
+        run.open_data()
+        try:
+            micro_params = run.data.micro_params
+            macro_params = run.data.macro_params
+        finally:
+            run.data.close()
+    except Exception as e:
+        console.print(f"[red]Error loading {run_code}:[/red] {e}")
+        return None
+
+    if micro_params is None:
+        console.print(
+            f"[yellow]No microscale parameters for {run_code}; skipping[/yellow]"
+        )
+        return None
+    return micro_params, macro_params
+
+
+def _emit_params_csv(path, csv_out, sort_mode, console, ctx):
+    """Gather raw parameters for one file or a directory of runs and write a
+    re-feedable CSV (column-wise: one shared parameter column + one per run)."""
+    from lysis.config.parameters import write_params_csv
+    from lysis.tools.runcode_sort import smart_sort
+
+    if os.path.isfile(path):
+        data_root = os.path.dirname(path)
+        run_codes = [os.path.splitext(os.path.basename(path))[0]]
+    else:
+        h5_files = [f for f in os.listdir(path) if f.lower().endswith(".h5")]
+        if not h5_files:
+            console.print(f"[yellow]No .h5 files found in {path}[/yellow]")
+            ctx.exit(1)
+            return
+        data_root = path
+        run_codes = [os.path.splitext(f)[0] for f in h5_files]
+        run_codes = (
+            smart_sort(run_codes) if sort_mode == "smart" else sorted(run_codes)
+        )
+
+    runs = []
+    for run_code in run_codes:
+        objs = _load_run_param_objects(data_root, run_code, console)
+        if objs is not None:
+            micro_params, macro_params = objs
+            runs.append((run_code, micro_params, macro_params))
+
+    if not runs:
+        ctx.exit(1)
+        return
+
+    write_params_csv(csv_out, runs)
+    if csv_out != "-":
+        console.print(f"[green]Wrote parameters CSV:[/green] {csv_out}")
+
+
 def _macro_param_names():
     """Canonical set of macroscale-only parameter attribute names.
 
@@ -246,8 +316,24 @@ def _drop_macro_specs(param_specs):
         "Example: --markdown -, --markdown params.md"
     ),
 )
+@click.option(
+    "--csv",
+    "csv_out",
+    type=str,
+    default=None,
+    metavar="FILE",
+    help=(
+        "Export the runs' parameters as a re-feedable CSV (the format "
+        "'init-experiment'/'init-macroscale' read), one column per run.  Use "
+        "'-' for the console, or a filename.  Only parameters that differ from "
+        "their default are written; the curated display table and --add/--drop "
+        "do not apply.  Example: --csv params.csv"
+    ),
+)
 @click.pass_context
-def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markdown_out):
+def parameters(
+    ctx, path, sort_mode, no_progress, add_params, drop_params, markdown_out, csv_out
+):
     """Print parameter tables for one or more simulation Runs.
 
     PATH may be a single HDF5 file or a directory. When a directory is given,
@@ -263,6 +349,7 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
         lysis parameters data/ --drop empty_rows --add protofibril_radius
         lysis parameters data/ --markdown -
         lysis parameters data/ --markdown params.md
+        lysis parameters data/ --csv params.csv
     """
     from contextlib import nullcontext
 
@@ -272,6 +359,12 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
 
     console = ctx.obj["console"]
     path = os.path.abspath(path)
+
+    # --csv exports the raw, re-feedable parameter set and bypasses the curated
+    # display table entirely (so --add/--drop/--markdown do not apply).
+    if csv_out is not None:
+        _emit_params_csv(path, csv_out, sort_mode, console, ctx)
+        return
 
     # Suppress progress when producing structured markdown output
     if markdown_out is not None:

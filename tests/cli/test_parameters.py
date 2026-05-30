@@ -386,3 +386,64 @@ class TestDropMacroSpecs:
         assert "fiber_radius" in kept
         assert "micro_simulations" in kept
         assert "micro_seed" in kept
+
+
+class TestParametersCsv:
+    """`lysis parameters --csv` exports a re-feedable parameters CSV."""
+
+    @staticmethod
+    def _make_store(tmp_path, run_code, **micro_kwargs):
+        from lysis.config.parameters import MicroParameters
+        from lysis.dataio.datastore import DataStore
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            micro = MicroParameters(**micro_kwargs)
+        DataStore.create(run_code, str(tmp_path), micro).close()
+
+    def test_csv_single_file_round_trips(self, runner, tmp_path):
+        from lysis.config.constants import Q_
+        from lysis.config.experiment import Experiment
+
+        self._make_store(
+            tmp_path, "run-aa", micro_simulations=5, fiber_radius=Q_("75 nm")
+        )
+        out = tmp_path / "params.csv"
+        result = runner.invoke(
+            cli,
+            ["parameters", str(tmp_path / "run-aa.h5"), "--csv", str(out)],
+        )
+        assert result.exit_code == 0, result.output
+        assert out.exists()
+
+        # The exported CSV feeds straight back into init-experiment (dry-run).
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            exp = Experiment.from_csv(
+                str(out), str(tmp_path), name="rt", dry_run=True
+            )
+        assert exp.runs[0].run_code == "run-aa"
+        assert exp.runs[0].micro_params.micro_simulations == 5
+
+    def test_csv_directory_merges_runs_column_wise(self, runner, tmp_path):
+        import csv
+
+        self._make_store(tmp_path, "run-aa", micro_simulations=5)
+        self._make_store(tmp_path, "run-bb", micro_simulations=8)
+        out = tmp_path / "params.csv"
+        result = runner.invoke(
+            cli, ["parameters", str(tmp_path), "--csv", str(out)]
+        )
+        assert result.exit_code == 0, result.output
+
+        with open(out, newline="", encoding="utf-8") as fh:
+            rows = list(csv.reader(fh))
+        header = rows[0]
+        assert header[0] == "parameter"
+        assert set(header[1:]) == {"run-aa", "run-bb"}
+        body = {r[0]: r[1:] for r in rows[1:]}
+        # micro_simulations differs per run, aligned in one shared param column.
+        assert "micro_simulations" in body
+        aa, bb = header.index("run-aa") - 1, header.index("run-bb") - 1
+        assert body["micro_simulations"][aa] == "5"
+        assert body["micro_simulations"][bb] == "8"

@@ -72,8 +72,11 @@ Creating parameter sets::
 
 import inspect
 import logging
+import csv
+import math
 import pkgutil
 import re
+import sys
 import warnings
 import dataclasses
 from dataclasses import asdict, dataclass, field
@@ -1259,3 +1262,183 @@ class MacroParameters(Parameters):
                 "initialize_macroscale()."
             )
         return n_forced / total
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  CSV serialization (inverse of Experiment.from_csv)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _is_nan(x):
+    """True if *x* (or its Pint magnitude) is NaN; False for anything else."""
+    mag = getattr(x, "magnitude", x)
+    try:
+        return math.isnan(mag)
+    except (TypeError, ValueError):
+        return False
+
+
+def _equals_default(value, default):
+    """True when *value* equals the effective default value, robustly.
+
+    *default* is the attribute read off a default-constructed parameters object
+    (i.e. the value a blank CSV cell re-feeds to), so this captures the
+    *effective* default — including fields computed in ``__post_init__`` — not a
+    bare dataclass sentinel.  Comparison is:
+
+    - NaN-aware (NaN value matching a NaN default counts as equal, so
+      computed-but-unset fields like ``forced_unbind`` blank out);
+    - unit-aware and float-tolerant for Pint Quantities and floats (a value that
+      round-tripped through HDF5 in different units, e.g. ``0.03635 micron`` vs a
+      ``36.35 nanometer`` default, still compares equal);
+    - exact for ints / strings / bools.
+
+    Any comparison error is treated as "not equal" so the value is written
+    rather than silently dropped.
+    """
+    v_nan, d_nan = _is_nan(value), _is_nan(default)
+    if v_nan or d_nan:
+        return v_nan and d_nan
+
+    v_q = hasattr(value, "to_base_units")
+    d_q = hasattr(default, "to_base_units")
+    if v_q and d_q:
+        try:
+            return math.isclose(
+                value.to_base_units().magnitude,
+                default.to_base_units().magnitude,
+                rel_tol=1e-9,
+                abs_tol=0.0,
+            )
+        except Exception:
+            return False
+    if v_q != d_q:
+        return False
+    if isinstance(value, float) or isinstance(default, float):
+        try:
+            return math.isclose(float(value), float(default), rel_tol=1e-9)
+        except Exception:
+            return False
+    try:
+        return bool(value == default)
+    except Exception:
+        return False
+
+
+def _default_instance(cls, **kwargs):
+    """Construct a default parameters instance, or return ``None`` if it can't be
+    built (so callers fall back to writing every value)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            return cls(**kwargs)
+        except Exception:
+            return None
+
+
+def write_params_csv(path, runs):
+    """Write Micro/Macro parameters as a CSV in the format ``from_csv`` reads.
+
+    The value-layer inverse of
+    :meth:`~lysis.config.experiment.Experiment.from_csv`: a transposed CSV with
+    one shared parameter-name column (column 0) and one value column per Run, so
+    the result can be fed back to ``init-experiment`` / ``init-macroscale``.
+
+    Multiple Runs are merged **column-wise**, aligned by the shared parameter-name
+    column — never per-Run files concatenated row-wise.
+
+    Only **independent** parameters (``dataclasses.fields`` with ``f.init``,
+    excluding the nested ``micro_params`` container) are written, and a cell is
+    left **blank** when the Run's value equals that field's default — so the CSV
+    is sparse and round-trips identically (a blank reads back as "not provided"
+    and the resolver re-derives the default).  A row that is blank for every Run
+    is omitted entirely.
+
+    :param path: Destination — a filesystem path, an open writable text file
+        object, or ``"-"`` for stdout.
+    :type path: str or os.PathLike or typing.IO
+    :param runs: Iterable of ``(run_code, micro_params, macro_params)`` triples;
+        ``macro_params`` may be ``None`` for a microscale-only Run.
+    :type runs: Iterable[tuple[str, MicroParameters, MacroParameters or None]]
+    :raises ValueError: If *runs* is empty.
+    """
+    runs = list(runs)
+    if not runs:
+        raise ValueError("write_params_csv requires at least one run.")
+
+    run_codes = [rc for rc, _, _ in runs]
+    # to_basedict() output is deterministic per class, so a single sample fixes
+    # which field names are storable (this also excludes micro_params and any
+    # nested-object fields, which to_basedict drops).
+    micro_keys = set(runs[0][1].to_basedict())
+    micro_fields = [
+        f
+        for f in dataclasses.fields(MicroParameters)
+        if f.init and f.name in micro_keys
+    ]
+
+    sample_macro = next((m for _, _, m in runs if m is not None), None)
+    if sample_macro is not None:
+        macro_keys = set(sample_macro.to_basedict())
+        macro_fields = [
+            f
+            for f in dataclasses.fields(MacroParameters)
+            if f.init and f.name != "micro_params" and f.name in macro_keys
+        ]
+    else:
+        macro_fields = []
+
+    # Pre-compute per-run base dicts so to_basedict() is called once per object.
+    micro_bases = [m.to_basedict() for _, m, _ in runs]
+    macro_bases = [
+        macro.to_basedict() if macro is not None else None for _, _, macro in runs
+    ]
+
+    # Effective defaults — the values a blank cell re-feeds to.  Micro defaults
+    # are run-independent; macro defaults depend on that run's micro params
+    # (grid geometry), so build one per run.
+    micro_default = _default_instance(MicroParameters)
+    macro_defaults = [
+        _default_instance(MacroParameters, micro_params=m) if macro is not None else None
+        for _, m, macro in runs
+    ]
+
+    def _cell(field_, base, param, default_instance):
+        """Blank string if the param value equals the effective default, else its
+        base-dict value as a string."""
+        if param is None or base is None:
+            return ""
+        value = getattr(param, field_.name)
+        if default_instance is not None and hasattr(default_instance, field_.name):
+            if _equals_default(value, getattr(default_instance, field_.name)):
+                return ""
+        return str(base.get(field_.name, value))
+
+    data_rows = []
+    for f in micro_fields:
+        cells = [
+            _cell(f, micro_bases[i], runs[i][1], micro_default)
+            for i in range(len(runs))
+        ]
+        if any(c != "" for c in cells):
+            data_rows.append([f.name, *cells])
+    for f in macro_fields:
+        cells = [
+            _cell(f, macro_bases[i], runs[i][2], macro_defaults[i])
+            for i in range(len(runs))
+        ]
+        if any(c != "" for c in cells):
+            data_rows.append([f.name, *cells])
+
+    def _emit(fh):
+        writer = csv.writer(fh)
+        writer.writerow(["parameter", *run_codes])
+        writer.writerows(data_rows)
+
+    if hasattr(path, "write"):
+        _emit(path)
+    elif path == "-":
+        _emit(sys.stdout)
+    else:
+        with open(path, "w", newline="", encoding="utf-8") as fh:
+            _emit(fh)
