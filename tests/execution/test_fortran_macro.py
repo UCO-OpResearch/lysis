@@ -137,6 +137,23 @@ class TestFortranMacroExecCommand:
         )
         assert pytest.approx(float(cmd[idx + 1]), rel=1e-6) == expected
 
+    def test_nummicro_appended(self, fortran_macro):
+        """--nummicro from micro_params must appear in the command."""
+        cmd = fortran_macro.exec_command()
+        assert "--nummicro" in cmd
+
+    def test_nummicro_value_correct(self, fortran_macro):
+        """--nummicro must be micro_simulations // 100 (lysismat row count).
+
+        The Fortran binary defaults nummicro to 500 (for the default 50,000
+        micro simulations); a non-default micro_simulations must override it
+        or the binary reads past the end of lysismat.dat.
+        """
+        cmd = fortran_macro.exec_command()
+        idx = cmd.index("--nummicro")
+        expected = fortran_macro.run.micro_params.micro_simulations // 100
+        assert cmd[idx + 1] == str(expected)
+
     def test_seed_split_uses_macro_simulations(self, tmp_run):
         """Seed split count for FortranMacro must equal macro_simulations."""
         n_sims = tmp_run.macro_params.macro_simulations
