@@ -9,12 +9,12 @@ Backs the ``--fortran-commit <ref>`` flag on ``lysis run-micro`` and
    that SHA into a fresh temp directory (no worktree state, no
    collision with parallel CLI invocations).
 3. Run ``make`` inside the temp directory, capturing stdout/stderr to
-   ``.build_log``.  When a *compiler_module* is supplied, the build is
-   wrapped in ``bash -c 'module purge && module load <module> && …'``
+   ``.build_log``.  When *modules* is supplied, the build is
+   wrapped in ``bash -c 'module purge && module load <modules> && …'``
    so the binary links against the same toolchain that Slurm jobs will
    load at runtime.
 4. Compute a synthesised provenance dict via
-   :func:`~lysis.tools.provenance.gather_historical_binary_provenance`.
+   :func:`~lysis.tools.provenance.gather_historical_backend_provenance`.
 5. Yield ``(binary_path, provenance_dict)`` for the caller to thread
    through to :class:`~lysis.execution.fortran_macro.FortranMacro` /
    :class:`~lysis.execution.fortran_micro.FortranMicro`.
@@ -34,7 +34,7 @@ import tempfile
 from pathlib import Path
 from typing import Iterator, Optional
 
-from ..tools.provenance import gather_historical_binary_provenance
+from ..tools.provenance import gather_historical_backend_provenance
 from ..tools.provenance._git import _git, _package_repo_root
 
 __all__ = [
@@ -130,18 +130,19 @@ def _archive_into(sha: str, repo_root: Path, build_dir: Path) -> None:
         )
 
 
-def _make_argv(build_dir: Path, compiler_module: Optional[str]) -> list[str]:
+def _make_argv(build_dir: Path, modules: Optional[str]) -> list[str]:
     """Build the argv that runs ``make`` in *build_dir*, optionally module-wrapped.
 
-    When *compiler_module* is given, the build is invoked inside a
-    short bash script that loads the requested LMod module first.
+    When *modules* is given, the build is invoked inside a
+    short bash script that ``module load``s the requested
+    (space-separated) LMod modules first.
     """
-    if compiler_module is None:
+    if modules is None:
         return ["make", "-C", str(build_dir)]
     script = (
         "[ -z \"${LMOD_CMD:-}\" ] && [ -f /etc/profile.d/lmod.sh ] "
         "&& source /etc/profile.d/lmod.sh; "
-        f"module purge && module load {compiler_module} && "
+        f"module purge && module load {modules} && "
         f'make -C "{build_dir}"'
     )
     return ["bash", "-c", script]
@@ -165,14 +166,14 @@ def build_historical_binary(
     ref: str,
     executable_name: str,
     *,
-    compiler_module: Optional[str] = None,
+    modules: Optional[str] = None,
     keep_dir: bool = False,
     repo_root: Optional[Path] = None,
 ) -> Iterator[tuple[Path, dict]]:
     """Build Fortran binaries at *ref* and yield ``(binary_path, provenance_dict)``.
 
     On context entry: resolves *ref*, extracts source via ``git archive``,
-    runs ``make`` (optionally inside ``module load <compiler_module>``),
+    runs ``make`` (optionally inside ``module load <modules>``),
     and computes a synthesised provenance dict.
 
     On context exit: removes the build directory unless ``keep_dir=True``.
@@ -185,12 +186,14 @@ def build_historical_binary(
         build; the full path returned in the yielded tuple is
         ``<build_dir>/bin/<basename>``.
     :type executable_name: str
-    :param compiler_module: LMod module spec (e.g.
-        ``"intel-compilers/2023"``) to load around ``make`` and the
-        compiler-version probe.  ``None`` (default) uses the current
-        environment; appropriate for local-mode runs where the same
-        environment will execute the binary.
-    :type compiler_module: str or None
+    :param modules: Space-separated list of LMod module specs (e.g.
+        ``"intel-compilers/2023"`` or
+        ``"intel-compilers/2024 SciPy-bundle/2023.07"``) to load around
+        ``make`` and the compiler-version probe.  Include a Fortran
+        compiler module so the build succeeds.  ``None`` (default) uses
+        the current environment; appropriate for local-mode runs where the
+        same environment will execute the binary.
+    :type modules: str or None
     :param keep_dir: Preserve the build directory after the context
         exits.  Useful for debugging.  Defaults to ``False``.
     :type keep_dir: bool, optional
@@ -200,7 +203,7 @@ def build_historical_binary(
     :yields: ``(binary_path, provenance_dict)`` where *binary_path* is
         the absolute path to the requested binary inside the build dir,
         and *provenance_dict* is the result of
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`.
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`.
     :raises HistoricalBuildError: If ref resolution, source extraction,
         ``make``, or binary lookup fails.
     """
@@ -227,7 +230,7 @@ def build_historical_binary(
         build_log = build_dir / ".build_log"
         with build_log.open("w") as fh:
             result = subprocess.run(
-                _make_argv(build_dir, compiler_module),
+                _make_argv(build_dir, modules),
                 stdout=fh,
                 stderr=subprocess.STDOUT,
                 check=False,
@@ -247,11 +250,11 @@ def build_historical_binary(
                 f"{build_dir / 'bin'}; available: {available}."
             )
 
-        provenance = gather_historical_binary_provenance(
+        provenance = gather_historical_backend_provenance(
             binary_path,
             resolved_sha=resolved_sha,
             build_log=build_log,
-            compiler_module=compiler_module,
+            modules=modules,
         )
         yield binary_path, provenance
     except BaseException:

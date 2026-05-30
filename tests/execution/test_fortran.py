@@ -361,7 +361,7 @@ class TestSkipBinaryVerification:
         assert info == {}
         assert called == []
         # No banner attrs either.
-        assert runner._binary_hdf5_attrs == {}
+        assert runner._backend_hdf5_attrs == {}
 
 
 # ---------------------------------------------------------------------------

@@ -315,9 +315,9 @@ class TestRunMicroSlurm:
         assert mock_submit.call_args.kwargs.get("num_children") is None
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
-    def test_compiler_default_is_forwarded(self, mock_submit, runner, micro_hdf5):
-        """Without --compiler, the default module spec must be forwarded."""
-        from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
+    def test_modules_default_is_forwarded(self, mock_submit, runner, micro_hdf5):
+        """Without --modules, the default module spec must be forwarded."""
+        from lysis.tools.slurm import DEFAULT_MODULES
         result = runner.invoke(
             cli,
             [
@@ -328,25 +328,25 @@ class TestRunMicroSlurm:
         )
         assert result.exit_code == 0, result.output
         assert (
-            mock_submit.call_args.kwargs.get("compiler_module")
-            == DEFAULT_COMPILER_MODULE
+            mock_submit.call_args.kwargs.get("modules")
+            == DEFAULT_MODULES
         )
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
-    def test_compiler_override_is_forwarded(self, mock_submit, runner, micro_hdf5):
-        """--compiler=foo/2024 must reach submit_micro_slurm_job."""
+    def test_modules_override_is_forwarded(self, mock_submit, runner, micro_hdf5):
+        """--modules=foo/2024 must reach submit_micro_slurm_job."""
         result = runner.invoke(
             cli,
             [
                 "run-micro", str(micro_hdf5),
                 "--executable", "/bin/micro.exe",
                 "--slurm",
-                "--compiler", "intel-compilers/2024",
+                "--modules", "intel-compilers/2024",
             ],
         )
         assert result.exit_code == 0, result.output
         assert (
-            mock_submit.call_args.kwargs.get("compiler_module")
+            mock_submit.call_args.kwargs.get("modules")
             == "intel-compilers/2024"
         )
 
@@ -735,10 +735,10 @@ class TestRunMicroFortranCommit:
         fake_binary.parent.mkdir(parents=True)
         fake_binary.write_text("not a real binary")
         prov = {
-            "binary_commit": "a" * 40,
-            "binary_dirty": "clean",
-            "binary_compiler": "GCC 11.4.0",
-            "binary_source": "historical:" + "a" * 40,
+            "backend_commit": "a" * 40,
+            "backend_dirty": "clean",
+            "backend_compiler": "GCC 11.4.0",
+            "backend_historical": True,
         }
 
         @contextmanager
@@ -759,7 +759,7 @@ class TestRunMicroFortranCommit:
         )
         assert result.exit_code == 0, result.output
         call_kwargs = mock_cls.from_hdf5.call_args.kwargs
-        assert call_kwargs.get("historical_binary_attrs") == prov
+        assert call_kwargs.get("historical_backend_attrs") == prov
         assert call_kwargs.get("skip_binary_verification") is True
         # The bypass-banner must surface so users see why no staleness
         # check is happening.  Rich's console wraps long lines, so look
@@ -778,16 +778,16 @@ class TestRunMicroFortranCommit:
         fake_binary.parent.mkdir(parents=True)
         fake_binary.write_text("not a real binary")
         prov = {
-            "binary_commit": "b" * 40,
-            "binary_dirty": "clean",
-            "binary_compiler": "Intel(R) Fortran",
-            "binary_source": "historical:" + "b" * 40,
+            "backend_commit": "b" * 40,
+            "backend_dirty": "clean",
+            "backend_compiler": "Intel(R) Fortran",
+            "backend_historical": True,
         }
 
         @contextmanager
         def fake_cm(*args, **kwargs):
-            # In slurm mode we should pass compiler_module=<the --compiler value>.
-            assert kwargs.get("compiler_module") == "intel-compilers/2024"
+            # In slurm mode we should pass modules=<the --modules value>.
+            assert kwargs.get("modules") == "intel-compilers/2024"
             yield fake_binary, prov
 
         mock_build.side_effect = fake_cm
@@ -798,9 +798,9 @@ class TestRunMicroFortranCommit:
                 "--executable", "micro_rates",
                 "--fortran-commit", "HEAD",
                 "--slurm",
-                "--compiler", "intel-compilers/2024",
+                "--modules", "intel-compilers/2024",
             ],
         )
         assert result.exit_code == 0, result.output
         call_kwargs = mock_submit.call_args.kwargs
-        assert call_kwargs.get("historical_binary_attrs") == prov
+        assert call_kwargs.get("historical_backend_attrs") == prov

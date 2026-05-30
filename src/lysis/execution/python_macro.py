@@ -2,7 +2,7 @@
 
 Provides :class:`PythonRunner` — the in-process counterpart to
 :class:`~lysis.execution.fortran.FortranRunner` — and :class:`PythonMacro`,
-which runs :class:`~lysis.np_macroscale.MacroscaleSim` against an HDF5 run file
+which runs :class:`~lysis.macroscale.MacroscaleSim` against an HDF5 run file
 with no Fortran toolchain required.
 
 Execution is currently **serial**: each of the run's ``macro_simulations``
@@ -35,7 +35,7 @@ class PythonRunner(SimulationRunner):
 
     The Python counterpart to :class:`~lysis.execution.fortran.FortranRunner`:
     instead of launching a compiled binary it drives an in-process simulation
-    class (e.g. :class:`~lysis.np_macroscale.MacroscaleSim`) that writes its
+    class (e.g. :class:`~lysis.macroscale.MacroscaleSim`) that writes its
     results straight into the run's HDF5 file.
 
     Subclasses supply the scale-specific details via the abstract hooks.
@@ -144,8 +144,9 @@ class PythonRunner(SimulationRunner):
            per-simulation slot via the simulation's ``go()`` /
            ``record_data_to_disk()``.
 
-        Finally stamps execution provenance (including the ``execution_backend``
-        marker) onto the per-scale params group and closes the file.
+        Finally stamps provenance onto the per-scale params group -- the
+        ``pipeline_*`` family plus the ``backend_*`` family with
+        ``backend_type="python"`` (#77) -- then closes the file.
 
         Serial execution is a deliberate interim measure (HDF5 single-writer
         limitation); see issues #59 / #60.
@@ -171,7 +172,18 @@ class PythonRunner(SimulationRunner):
             # Restore the original (unmutated) parameters object.
             self._set_params(orig_params)
 
-            ds.stamp_provenance(self._scale(), "execution", backend="python")
+            # Stamp the v1.0.0 provenance schema: the pipeline_* family (the
+            # src/lysis wrapper) plus the backend_* family with
+            # backend_type="python" (#77).  Mirrors what import_collection
+            # stamps for the Fortran backend.
+            from ..tools.provenance import gather_python_backend_provenance
+            ds.stamp_provenance(self._scale(), "pipeline")
+            ds.stamp_provenance(
+                self._scale(),
+                "backend",
+                replace_backend_attrs=gather_python_backend_provenance(),
+                backend_type="python",
+            )
             ds._file.flush()
         finally:
             ds.close()
@@ -181,11 +193,11 @@ class PythonRunner(SimulationRunner):
 class PythonMacro(PythonRunner):
     """In-process NumPy macroscale runner.
 
-    Drives :class:`~lysis.np_macroscale.MacroscaleSim` against an HDF5 run file.
+    Drives :class:`~lysis.macroscale.MacroscaleSim` against an HDF5 run file.
     """
 
     def _simulation_class(self):
-        from ..np_macroscale import MacroscaleSim  # noqa: PLC0415
+        from ..macroscale import MacroscaleSim  # noqa: PLC0415
         return MacroscaleSim
 
     def _get_params(self):

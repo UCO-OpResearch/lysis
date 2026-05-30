@@ -69,6 +69,31 @@ Added
 Changed
 -------
 
+- Cleaned up the HDF5 provenance attribute schema stamped onto the
+  ``micro_data`` / ``macro_data`` groups. The ``execution_*`` family is renamed
+  to ``pipeline_*`` (it records the lysis Python pipeline, not the simulation
+  engine) and the ``binary_*`` family to ``backend_*`` (so it can describe a
+  future Python backend). All ``*_dirty`` fields are now the 3-state string
+  ``"clean"`` / ``"dirty"`` / ``"unknown"`` (``execution_dirty`` was previously
+  a bool that hid the ``"unknown"`` case). A new ``backend_type`` attribute
+  (``"fortran"`` / ``"python"``) self-identifies the engine, and the redundant
+  ``binary_source = "historical:<sha>"`` marker is replaced by a boolean
+  ``backend_historical`` (the SHA already lives in ``backend_commit``). This is
+  a hard break for the v2.0.0 on-disk format; existing files were migrated in
+  place with ``archive/scripts/migrate_provenance_attrs.py`` (a completed
+  one-off, kept as a template; dry-run by default, with per-dataset checksum
+  verification). (#61)
+- Renamed the macroscale simulation module ``lysis.np_macroscale`` to
+  ``lysis.macroscale``. The ``np_`` prefix distinguished it from a since-removed
+  CuPy/GPU sibling and no longer means anything. ``MacroscaleSim`` is still
+  importable from the top-level ``lysis`` namespace; only the deep import path
+  changes (``from lysis.np_macroscale import ...`` becomes
+  ``from lysis.macroscale import ...``). No compatibility shim is provided. (#63)
+- The ``--compiler`` option on ``lysis run-micro`` / ``run-macro`` has been
+  renamed to ``--modules``. Its value is passed verbatim to ``module load``,
+  so you can now request several LMod modules at once as a quoted,
+  space-separated list (e.g. ``--modules "intel-compilers/2023 hdf5"``).
+  This is a hard break: ``--compiler`` is no longer recognised. (#64)
 - The ``Makefile`` now builds the KISS RNG shared library (``lib/kiss.so``) as
   part of the default ``make`` target and creates the ``bin/`` and ``lib/``
   output directories on demand, so a fresh checkout builds with no manual

@@ -21,7 +21,7 @@ GPU / CuPy macroscale experiment (``cupy/``)
 An early (circa 2022-2023) proof-of-concept that ran the NumPy macroscale model
 on a GPU via `CuPy <https://cupy.dev/>`_. It demonstrated that the simulation
 *could* use the GPU, but was never optimized and has since diverged
-significantly from ``src/lysis/np_macroscale.py``. GPU acceleration is **not**
+significantly from ``src/lysis/macroscale.py``. GPU acceleration is **not**
 on the near- or medium-term roadmap; if it is revisited it will likely be
 redesigned rather than resumed from this code.
 
@@ -47,7 +47,7 @@ It was the only consumer of the old ``cpp`` Makefile target (now removed).
 
 Note on KISS RNG: the live build's shared random number generator is compiled
 from ``src/c/kiss.c`` (into ``bin/kiss.o`` for the Fortran binaries and
-``lib/kiss.so`` for ``np_macroscale`` via ``lysis.tools.kiss``). The
+``lib/kiss.so`` for ``macroscale`` via ``lysis.tools.kiss``). The
 ``kiss.c`` / ``kiss.h`` / ``kiss.o`` copies preserved here belong to the C++
 port and were *not* part of that shared build --- the old ``cpp`` target itself
 linked ``src/c``'s ``kiss.o`` and used only ``cpp/kiss.h`` as a header.
@@ -69,7 +69,7 @@ in the active build references it (the old ``c`` / ``c-macro`` Makefile target
 has been removed). ``old/`` holds earlier drafts, including a C++ variant.
 
 KISS RNG note: the canonical ``kiss.c`` / ``kiss.h`` -- the shared RNG compiled
-into ``bin/kiss.o`` (Fortran binaries) and ``lib/kiss.so`` (``np_macroscale``
+into ``bin/kiss.o`` (Fortran binaries) and ``lib/kiss.so`` (``macroscale``
 via ``lysis.tools.kiss``) -- **remain in** ``src/c/`` and were deliberately not
 moved. This C port ``#include``\ s ``kiss.h`` (via ``all.h``) and linked
 ``kiss.c``, so rebuilding it from the archive would need those paths adjusted.
@@ -174,9 +174,53 @@ Run scripts (formerly ``scripts/`` and the repo-root ``exec.sh``):
 Dead package module (formerly ``src/lysis/molecule.py``):
 
 - ``molecule.py`` --- an unused ``Molecule`` dataclass. It was re-exported by
-  ``lysis/__init__.py`` but never instantiated anywhere; ``np_macroscale``
+  ``lysis/__init__.py`` but never instantiated anywhere; ``macroscale``
   represents molecules with arrays instead.
 
 Note: the usage guides ``docs/source/usage/fortran_microscale.rst`` and
 ``fortran_macroscale.rst`` still walk through the archived shell scripts and
 ``micro_to_macro.py``; they should be updated to the CLI workflow.
+
+One-off data migrations (``scripts/``)
+--------------------------------------
+
+Completed, single-use scripts that performed an in-place rewrite of existing
+HDF5 data files. They are **not** part of the CLI and have already run to
+completion against every affected file; they are preserved only as worked
+**templates** for future migrations of the same shape (open each file, edit
+only attributes, verify per-dataset checksums, back up, log).
+
+**Safety valve.** Each script defines a single module-level line near the top::
+
+    _SAFETY_VALVE = True
+
+While that line is present the script refuses to write --- ``--apply`` is forced
+to a dry-run (and the SHA-backfill script refuses to run at all). This prevents
+anyone from re-running a finished migration by accident. To reuse one as a
+template, copy it out and **delete that one line** to re-enable ``--apply``.
+
+The reusable pure transform that the migration driver depends on lives in the
+package (``lysis.tools.provenance.migrate.migrate_provenance_group``), not here,
+so it stays unit-tested (``tests/tools/test_provenance_migrate.py``).
+
+Files:
+
+- ``migrate_provenance_attrs.py`` --- issue #61 provenance-attribute migration
+  (``execution_* -> pipeline_*``, ``binary_* -> backend_*``, 3-state
+  ``*_dirty``, ``backend_type``, ``backend_historical``). Dry-run by default;
+  classifies every ``*.h5`` (will-migrate / already-migrated / not-v2.0.0 /
+  not-mine / not-writable / read-error), backs each file up (``--backup-dir``),
+  edits only the provenance attrs, then reopens the file and verifies every
+  dataset's SHA-256 plus all untouched attributes are unchanged --- halting on
+  the first mismatch and naming the file. Parallel via ``-j``;
+  ``--include-other-owners`` opts in to group-writable files owned by others.
+  Typical invocation as a template (after removing the safety valve)::
+
+      python migrate_provenance_attrs.py <root> --apply \
+          --backup-dir ~/prov_backup -j 8 --report /tmp/migration.txt
+
+- ``backfill_provenance_sha.py`` --- companion that reconstructs the per-file
+  ``<flattened>.sha256.txt`` audit sidecars for files migrated before that
+  logging existed, by checksumming each backup (pre-edit) against the live file
+  (post-edit) and flagging any data difference. Reuses the sibling script's
+  manifest/checksum helpers.

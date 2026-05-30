@@ -35,8 +35,8 @@ from ._git import _git, _package_repo_root
 __all__ = [
     "StaleBinaryError",
     "query_binary_version",
-    "gather_binary_provenance",
-    "gather_historical_binary_provenance",
+    "gather_backend_provenance",
+    "gather_historical_backend_provenance",
     "gather_fortran_source_provenance",
     "allow_stale_from_env",
     "verify_binary_matches_source",
@@ -100,25 +100,26 @@ def query_binary_version(
     return (parts[1], parts[2], compiler)
 
 
-def gather_binary_provenance(executable: "Path | str") -> dict:
-    """Gather binary provenance attrs from ``<executable> --version``.
+def gather_backend_provenance(executable: "Path | str") -> dict:
+    """Gather backend provenance attrs from ``<executable> --version``.
 
     Pure data gather — never raises, no warnings.  Used by
     :meth:`~lysis.dataio.datastore.DataStore.stamp_provenance` to record
-    what binary actually produced the simulation output.  Stamped on
-    every ``run-*`` invocation, not just stale-binary overrides.
+    what backend actually produced the simulation output.  Stamped on
+    every ``run-*`` invocation, not just stale-binary overrides.  The
+    ``backend_type`` attr is stamped separately by ``stamp_provenance``.
 
     :param executable: Path to the Fortran binary.
-    :return: Dict keyed by :data:`CONST.BINARY_COMMIT_ATTR`,
-        :data:`CONST.BINARY_DIRTY_ATTR`, :data:`CONST.BINARY_COMPILER_ATTR`.
+    :return: Dict keyed by :data:`CONST.BACKEND_COMMIT_ATTR`,
+        :data:`CONST.BACKEND_DIRTY_ATTR`, :data:`CONST.BACKEND_COMPILER_ATTR`.
         Values are ``"unknown"`` on any failure mode.
     :rtype: dict
     """
     commit, dirty, compiler = query_binary_version(executable)
     return {
-        CONST.BINARY_COMMIT_ATTR: commit,
-        CONST.BINARY_DIRTY_ATTR: dirty,
-        CONST.BINARY_COMPILER_ATTR: compiler,
+        CONST.BACKEND_COMMIT_ATTR: commit,
+        CONST.BACKEND_DIRTY_ATTR: dirty,
+        CONST.BACKEND_COMPILER_ATTR: compiler,
     }
 
 
@@ -221,12 +222,12 @@ def verify_binary_matches_source(
     :type source_stamp: tuple[str, str] or None
     :return: Empty dict on match.  On overridden mismatch, a dict
         containing ``"banner"`` (text to prepend to the Fortran stdout
-        log file) and :data:`CONST.STALE_BINARY_OVERRIDE_ATTR` for
+        log file) and :data:`CONST.STALE_BACKEND_OVERRIDE_ATTR` for
         forwarding to
         :meth:`~lysis.dataio.datastore.DataStore.stamp_provenance` as
-        ``binary_override``.  The binary's commit/dirty/compiler are
+        ``backend_override``.  The binary's commit/dirty/compiler are
         no longer included here — they are gathered fresh and stamped
-        unconditionally via :func:`gather_binary_provenance`.
+        unconditionally via :func:`gather_backend_provenance`.
     :rtype: dict
     :raises StaleBinaryError: When the binary's stamp disagrees with the
         source tree and the override is not active.
@@ -269,7 +270,7 @@ def verify_binary_matches_source(
             source_commit=source_commit,
             source_dirty=source_dirty,
         ),
-        CONST.STALE_BINARY_OVERRIDE_ATTR: True,
+        CONST.STALE_BACKEND_OVERRIDE_ATTR: True,
     }
 
 
@@ -281,7 +282,7 @@ def verify_binary_matches_source(
 # from an old commit, the binary's own ``--version`` flag may not exist
 # (added later in history) or may report a commit different from what the
 # user requested.  We need a provenance dict shaped like the output of
-# :func:`gather_binary_provenance` so it can flow through the same
+# :func:`gather_backend_provenance` so it can flow through the same
 # stamping pipeline.  The two non-obvious pieces are:
 #
 # - **commit / dirty**: take from the resolved git SHA (clean by
@@ -398,54 +399,56 @@ def _probe_iso_fortran_env_compiler_version(
         return first[0].strip() or None
 
 
-def _module_wrapper_argv(compiler_module: Optional[str]) -> Optional[list[str]]:
-    """Build the bash-wrapper argv used to load an LMod module around a subprocess.
+def _module_wrapper_argv(modules: Optional[str]) -> Optional[list[str]]:
+    """Build the bash-wrapper argv used to load LMod modules around a subprocess.
 
-    :param compiler_module: LMod module spec, e.g. ``"intel-compilers/2023"``,
-        or ``None`` to skip wrapping.
-    :type compiler_module: str or None
+    :param modules: Space-separated list of LMod module specs, e.g.
+        ``"intel-compilers/2023"`` or
+        ``"intel-compilers/2024 SciPy-bundle/2023.07"``, forwarded verbatim
+        to ``module load``; or ``None`` to skip wrapping.
+    :type modules: str or None
     :return: argv list with ``"exec \"$@\""`` as the bash body so the
         wrapped command's exit status is preserved verbatim, or ``None``
-        when *compiler_module* is ``None``.
+        when *modules* is ``None``.
     :rtype: list[str] or None
     """
-    if compiler_module is None:
+    if modules is None:
         return None
     script = (
         "[ -z \"${LMOD_CMD:-}\" ] && [ -f /etc/profile.d/lmod.sh ] "
         "&& source /etc/profile.d/lmod.sh; "
-        f"module purge && module load {compiler_module} && exec \"$@\""
+        f"module purge && module load {modules} && exec \"$@\""
     )
     return ["bash", "-c", script, "--"]
 
 
-def gather_historical_binary_provenance(
+def gather_historical_backend_provenance(
     executable: "Path | str",
     *,
     resolved_sha: str,
     build_log: "Path | None" = None,
-    compiler_module: Optional[str] = None,
+    modules: Optional[str] = None,
 ) -> dict:
-    """Build a binary-provenance dict for a binary rebuilt from an older commit.
+    """Build a backend-provenance dict for a binary rebuilt from an older commit.
 
-    Drop-in alternative to :func:`gather_binary_provenance`, intended
+    Drop-in alternative to :func:`gather_backend_provenance`, intended
     for the ``lysis run-{micro,macro} --fortran-commit <ref>`` workflow.
     First tries the binary's own ``--version`` output (cheap, and if the
     binary supports it and reports the requested commit, that's already
     the authoritative answer).  Falls back to synthesising the dict when
     ``--version`` is unsupported or reports a different commit:
 
-    - ``binary_commit`` = *resolved_sha* (the SHA we extracted from git).
-    - ``binary_dirty`` = ``"clean"`` (we extracted from a clean git tree).
-    - ``binary_compiler`` = result of
+    - ``backend_commit`` = *resolved_sha* (the SHA we extracted from git).
+    - ``backend_dirty`` = ``"clean"`` (we extracted from a clean git tree).
+    - ``backend_compiler`` = result of
       :func:`_probe_iso_fortran_env_compiler_version`, identifying the
       compiler from *build_log* and running it on a tiny stub to capture
       ``iso_fortran_env.compiler_version()`` — the exact string a
       ``--version``-capable binary would have embedded.
 
-    Always sets :data:`CONST.BINARY_SOURCE_ATTR` to
-    ``f"historical:{resolved_sha}"`` so the deviation is auditable from
-    the HDF5 file alone.
+    Always sets :data:`CONST.BACKEND_HISTORICAL_ATTR` to ``True`` so the
+    deviation is auditable from the HDF5 file alone; the commit SHA itself
+    lives in ``backend_commit``.
 
     :param executable: Path to the rebuilt Fortran binary.  Used only
         for the initial ``--version`` probe; if synthesis is required,
@@ -456,27 +459,28 @@ def gather_historical_binary_provenance(
     :type resolved_sha: str
     :param build_log: Path to the captured ``make`` log used to identify
         which compiler binary actually ran.  ``None`` skips the probe
-        and the result is ``"unknown"`` for *binary_compiler* in the
+        and the result is ``"unknown"`` for *backend_compiler* in the
         synthesis path.
     :type build_log: pathlib.Path or None
-    :param compiler_module: LMod module spec to load around the stub
-        compile/run pair (e.g. ``"intel-compilers/2023"``).  Should match
-        the module that wrapped ``make``.  ``None`` (default) runs the
-        probe in the current environment.
-    :type compiler_module: str or None
-    :return: Dict keyed by :data:`CONST.BINARY_COMMIT_ATTR`,
-        :data:`CONST.BINARY_DIRTY_ATTR`, :data:`CONST.BINARY_COMPILER_ATTR`,
-        :data:`CONST.BINARY_SOURCE_ATTR`.  All values are strings;
-        unknown fields are ``"unknown"``.
+    :param modules: Space-separated list of LMod module specs to load
+        around the stub compile/run pair (e.g. ``"intel-compilers/2023"``).
+        Should match the modules that wrapped ``make``.  ``None`` (default)
+        runs the probe in the current environment.
+    :type modules: str or None
+    :return: Dict keyed by :data:`CONST.BACKEND_COMMIT_ATTR`,
+        :data:`CONST.BACKEND_DIRTY_ATTR`, :data:`CONST.BACKEND_COMPILER_ATTR`,
+        and :data:`CONST.BACKEND_HISTORICAL_ATTR` (``True``).  The
+        commit/dirty/compiler values are strings; unknown fields are
+        ``"unknown"``.
     :rtype: dict
     """
     commit, dirty, compiler = query_binary_version(executable)
     if commit == resolved_sha and commit != "unknown":
         return {
-            CONST.BINARY_COMMIT_ATTR: commit,
-            CONST.BINARY_DIRTY_ATTR: dirty,
-            CONST.BINARY_COMPILER_ATTR: compiler,
-            CONST.BINARY_SOURCE_ATTR: f"historical:{resolved_sha}",
+            CONST.BACKEND_COMMIT_ATTR: commit,
+            CONST.BACKEND_DIRTY_ATTR: dirty,
+            CONST.BACKEND_COMPILER_ATTR: compiler,
+            CONST.BACKEND_HISTORICAL_ATTR: True,
         }
 
     compiler_name = _identify_compiler_binary(build_log)
@@ -485,11 +489,11 @@ def gather_historical_binary_provenance(
     else:
         probed = _probe_iso_fortran_env_compiler_version(
             compiler_name,
-            module_wrapper=_module_wrapper_argv(compiler_module),
+            module_wrapper=_module_wrapper_argv(modules),
         )
     return {
-        CONST.BINARY_COMMIT_ATTR: resolved_sha,
-        CONST.BINARY_DIRTY_ATTR: "clean",
-        CONST.BINARY_COMPILER_ATTR: probed or "unknown",
-        CONST.BINARY_SOURCE_ATTR: f"historical:{resolved_sha}",
+        CONST.BACKEND_COMMIT_ATTR: resolved_sha,
+        CONST.BACKEND_DIRTY_ATTR: "clean",
+        CONST.BACKEND_COMPILER_ATTR: probed or "unknown",
+        CONST.BACKEND_HISTORICAL_ATTR: True,
     }

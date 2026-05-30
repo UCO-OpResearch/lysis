@@ -92,16 +92,17 @@ def _require_gs():
 #
 # Generated scripts no longer depend on per-user dotfiles (``~/.bashrc`` /
 # ``~/lysis.sh``).  Instead, every script emits a self-contained preamble
-# that loads the Intel compiler runtime via LMod and invokes Python through
-# the project's ``uv``-managed environment.  The submitting user's repo
-# root is baked in at script-generation time from ``lysis.__file__``.
+# that loads the requested LMod modules and invokes Python through the
+# project's ``uv``-managed environment.  The submitting user's repo root is
+# baked in at script-generation time from ``lysis.__file__``.
 
-#: Default LMod module providing the Fortran binary's runtime libraries.
-#: Assumed to be available on the cluster's LMod stack for all users.
-#: Callers can override per-job via the ``compiler_module`` keyword argument
-#: on the public submit/generate functions (exposed as ``--compiler`` on the
-#: ``lysis run-micro`` and ``lysis run-macro`` CLI commands).
-DEFAULT_COMPILER_MODULE: str = "intel-compilers/2023"
+#: Default space-separated list of LMod modules providing the Fortran
+#: binary's runtime libraries.  Assumed to be available on the cluster's
+#: LMod stack for all users.  Callers can override per-job via the
+#: ``modules`` keyword argument on the public submit/generate functions
+#: (exposed as ``--modules`` on the ``lysis run-micro`` and
+#: ``lysis run-macro`` CLI commands).
+DEFAULT_MODULES: str = "intel-compilers/2023"
 
 
 def _repo_root() -> Path:
@@ -119,16 +120,17 @@ def _repo_root() -> Path:
 
 def _env_preamble(
     repo_root: Path,
-    compiler_module: str,
+    modules: str,
     *,
     pythonpath: "Path | str | None" = None,
 ) -> str:
     """Return the bash preamble that prepares a generated script's environment.
 
-    Loads the requested Fortran compiler runtime via LMod (required by the
-    Fortran binary) and puts ``~/.local/bin`` on PATH so ``uv`` is
-    discoverable on compute nodes.  Defensive against non-login shells by
-    sourcing ``lmod.sh`` when the ``module`` function isn't already defined.
+    Loads the requested LMod modules (which should include the Fortran
+    compiler runtime required by the Fortran binary) and puts
+    ``~/.local/bin`` on PATH so ``uv`` is discoverable on compute nodes.
+    Defensive against non-login shells by sourcing ``lmod.sh`` when the
+    ``module`` function isn't already defined.
 
     When *pythonpath* is supplied, an ``export PYTHONPATH=...`` line is
     appended.  ``uv run`` inherits environment variables from the calling
@@ -140,10 +142,12 @@ def _env_preamble(
         unused inside the preamble itself; included for future extensions
         like ``cd`` into the repo).
     :type repo_root: Path
-    :param compiler_module: LMod module spec to load (e.g.
-        ``"intel-compilers/2023"`` or ``"intel-compilers/2024"``).  See
-        :data:`DEFAULT_COMPILER_MODULE` for the project default.
-    :type compiler_module: str
+    :param modules: Space-separated list of LMod module specs to load (e.g.
+        ``"intel-compilers/2023"`` or
+        ``"intel-compilers/2024 SciPy-bundle/2023.07"``).  Forwarded
+        verbatim to ``module load``.  See :data:`DEFAULT_MODULES` for the
+        project default.
+    :type modules: str
     :param pythonpath: When set, exported as ``PYTHONPATH`` so generated
         scripts import ``lysis`` from that path rather than the live
         editable install (see :func:`_snapshot_lysis_src`).  ``None``
@@ -156,7 +160,7 @@ def _env_preamble(
         "# Lysis environment setup (user-independent)",
         "[ -z \"${LMOD_CMD:-}\" ] && [ -f /etc/profile.d/lmod.sh ] "
         "&& source /etc/profile.d/lmod.sh",
-        f"module purge && module load {compiler_module}",
+        f"module purge && module load {modules}",
         'export PATH="$HOME/.local/bin:$PATH"',
     ]
     if pythonpath is not None:
@@ -331,7 +335,7 @@ RUN_CODE = $run_code
 FILE_CODE = $file_code
 BINARY_NAME = $binary_name
 KEEP_TMPDIR = $keep_tmpdir
-HISTORICAL_BINARY_ATTRS = $historical_binary_attrs
+HISTORICAL_BACKEND_ATTRS = $historical_backend_attrs
 
 # ---------------------------------------------------------------------------
 # Submit child jobs
@@ -373,8 +377,8 @@ fm = FortranMicro(
     run=run,
     out_file_code=FILE_CODE,
     executable=str(STAGING_DIR / BINARY_NAME),
-    skip_binary_verification=(HISTORICAL_BINARY_ATTRS is not None),
-    historical_binary_attrs=HISTORICAL_BINARY_ATTRS,
+    skip_binary_verification=(HISTORICAL_BACKEND_ATTRS is not None),
+    historical_backend_attrs=HISTORICAL_BACKEND_ATTRS,
 )
 fm.import_results(
     data_dir,
@@ -401,18 +405,18 @@ def _generate_micro_master_py(
     file_code: str,
     binary_name: str,
     keep_tmpdir: bool,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> str:
     """Return the content of the single-child micro master Python script.
 
-    :param historical_binary_attrs: Pre-computed binary-provenance dict
+    :param historical_backend_attrs: Pre-computed binary-provenance dict
         from
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
         for the historical-build workflow.  Baked into the master script
         as a literal so the master can stamp it in place of the default
         ``<binary> --version`` query.  ``None`` (default) preserves the
         normal-mode behaviour.
-    :type historical_binary_attrs: dict or None
+    :type historical_backend_attrs: dict or None
     """
     return _MICRO_MASTER_PY_TEMPLATE.substitute(
         staging_dir=repr(str(staging_dir)),
@@ -421,7 +425,7 @@ def _generate_micro_master_py(
         file_code=repr(file_code),
         binary_name=repr(binary_name),
         keep_tmpdir=repr(keep_tmpdir),
-        historical_binary_attrs=repr(historical_binary_attrs),
+        historical_backend_attrs=repr(historical_backend_attrs),
     )
 
 
@@ -571,7 +575,7 @@ def _generate_array_master_py(
     run_code: str,
     binary_name: Optional[str],
     keep_tmpdir: bool,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> str:
     """Return the master Python script for an array-mode dispatch.
 
@@ -589,14 +593,14 @@ def _generate_array_master_py(
         the staging dir.  Required for ``backend="fortran"``; ignored
         (and may be ``None``) for ``backend="python"``.
     :type binary_name: str or None
-    :param historical_binary_attrs: Pre-computed binary-provenance dict
+    :param historical_backend_attrs: Pre-computed backend-provenance dict
         from
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
         for the historical-build workflow.  Baked into the master script
         as a literal so the master can stamp it in place of the default
-        ``<binary> --version`` query.  Only meaningful for
-        ``backend="fortran"``.
-    :type historical_binary_attrs: dict or None
+        ``<binary> --version`` query.  ``None`` (default) preserves the
+        normal-mode behaviour.  Only meaningful for ``backend="fortran"``.
+    :type historical_backend_attrs: dict or None
     """
     if spec.backend == "python":
         import_block = (
@@ -624,7 +628,7 @@ def _generate_array_master_py(
             "\n"
             f"OUT_FILE_CODE = {repr(spec.out_file_code)}\n"
             f"BINARY_NAME = {repr(binary_name)}\n"
-            f"HISTORICAL_BINARY_ATTRS = {repr(historical_binary_attrs)}\n"
+            f"HISTORICAL_BACKEND_ATTRS = {repr(historical_backend_attrs)}\n"
             "\n"
             "data_dir = STAGING_DIR / \"data\" / RUN_CODE\n"
             "run = Run(str(HDF5_PATH.parent), run_code=RUN_CODE)\n"
@@ -632,8 +636,8 @@ def _generate_array_master_py(
             "    run=run,\n"
             "    out_file_code=OUT_FILE_CODE,\n"
             "    executable=str(STAGING_DIR / BINARY_NAME),\n"
-            "    skip_binary_verification=(HISTORICAL_BINARY_ATTRS is not None),\n"
-            "    historical_binary_attrs=HISTORICAL_BINARY_ATTRS,\n"
+            "    skip_binary_verification=(HISTORICAL_BACKEND_ATTRS is not None),\n"
+            "    historical_backend_attrs=HISTORICAL_BACKEND_ATTRS,\n"
             ")\n"
             f"{concat_block}\n"
             "fm.import_results(\n"
@@ -721,9 +725,9 @@ def generate_array_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
     pythonpath: "Path | str | None" = None,
     source_stamp: Optional[tuple] = None,
 ) -> str:
@@ -784,16 +788,17 @@ def generate_array_script(
     :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
         ``hdf5_path.parent / ".slurm"``.
     :type slurm_log_dir: Path or str, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into each generated task script.  Defaults to
-        :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+    :param modules: Space-separated list of LMod module specs to load in
+        each generated task script (include a Fortran compiler module so
+        the binary finds its runtime).  Defaults to
+        :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the per-task ``#SBATCH``
         header, in the shape returned by :func:`parse_sbatch_tokens`.
         A ``None`` value removes the matching default; any other value
         sets/overrides the key.  Defaults to ``None`` (no overrides).
     :type sbatch_overrides: Mapping[str, str or None], optional
-    :param historical_binary_attrs: When non-``None``, indicates the
+    :param historical_backend_attrs: When non-``None``, indicates the
         binary was built from a historical commit (see
         :func:`~lysis.execution.historical_build.build_historical_binary`).
         The generated ``from_hdf5(...)`` call receives
@@ -801,7 +806,7 @@ def generate_array_script(
         does not crash on the intentional binary↔source mismatch.  The
         dict itself is not baked into the task — the master script
         owns the actual provenance stamping.
-    :type historical_binary_attrs: dict or None
+    :type historical_backend_attrs: dict or None
     :param pythonpath: When set, baked into the generated script as
         ``export PYTHONPATH=...`` so each task imports ``lysis`` from
         that path rather than the live editable install.  ``None``
@@ -812,7 +817,7 @@ def generate_array_script(
         call so the binary↔source check on the compute node compares
         against the master's stamp instead of running ``git`` from the
         staging dir (which is outside the repo and would fail).
-        Ignored when ``historical_binary_attrs`` is set (the staleness
+        Ignored when ``historical_backend_attrs`` is set (the staleness
         check is bypassed in that workflow).  ``None`` (default)
         preserves the in-process git lookup.
     :type source_stamp: tuple[str, str] or None
@@ -831,11 +836,11 @@ def generate_array_script(
     if slurm_log_dir is None:
         slurm_log_dir = hdf5_path.parent / ".slurm"
     slurm_log_dir = Path(slurm_log_dir)
-    skip_binary_verification = historical_binary_attrs is not None
+    skip_binary_verification = historical_backend_attrs is not None
 
     repo_root = _repo_root()
     env_preamble = _env_preamble(
-        repo_root, compiler_module, pythonpath=pythonpath
+        repo_root, modules, pythonpath=pythonpath
     )
     py = _uv_python_prefix(repo_root)
 
@@ -983,9 +988,9 @@ def submit_slurm_job(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     keep_tmpdir: bool = False,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> int:
     """Stage scripts and submit a master Slurm job for an array-mode dispatch.
 
@@ -1017,22 +1022,22 @@ def submit_slurm_job(
     :type fast_tmp_root: str, optional
     :param keep_tmpdir: Preserve staging dir after the master job.
     :type keep_tmpdir: bool, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into both the master and array task scripts.
-        Defaults to :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+    :param modules: Space-separated list of LMod module specs (include a
+        Fortran compiler module so the binary finds its runtime), baked into both the master and array task scripts.
+        Defaults to :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
         applied to BOTH the master job and each array task (shape returned
         by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
     :type sbatch_overrides: Mapping[str, str or None], optional
-    :param historical_binary_attrs: Pre-computed binary-provenance dict
+    :param historical_backend_attrs: Pre-computed binary-provenance dict
         from
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
         for the historical-build workflow.  Baked into the master Python
         script so the master stamps it (with binary verification skipped)
         in place of the default ``<binary> --version`` query.  ``None``
         (default) preserves normal-mode provenance.
-    :type historical_binary_attrs: dict, optional
+    :type historical_backend_attrs: dict, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises ImportError: If ``GooseSLURM`` is not installed.
@@ -1094,7 +1099,7 @@ def submit_slurm_job(
     # raise StaleBinaryError).  Skipped under --fortran-commit, where the
     # binary↔source mismatch is intentional and the check is bypassed.
     source_stamp: Optional[tuple] = None
-    if historical_binary_attrs is None:
+    if historical_backend_attrs is None:
         from lysis.tools.provenance import (  # noqa: PLC0415
             gather_fortran_source_provenance,
         )
@@ -1107,9 +1112,9 @@ def submit_slurm_job(
         spec, staging_dir, run_code, hdf5_path, executable,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
         pythonpath=pythonpath,
         source_stamp=source_stamp,
     )
@@ -1123,7 +1128,7 @@ def submit_slurm_job(
     binary_name = executable.name if executable is not None else None
     master_py_content = _generate_array_master_py(
         spec, staging_dir, hdf5_path, run_code, binary_name, keep_tmpdir,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
     )
     master_py_path = staging_dir / f"lysis-{spec.scale}-master__{run_code}.py"
     master_py_path.write_text(master_py_content)
@@ -1146,7 +1151,7 @@ def submit_slurm_job(
 
     master_sh_content = gs.scripts.plain(
         [
-            _env_preamble(repo_root, compiler_module, pythonpath=pythonpath),
+            _env_preamble(repo_root, modules, pythonpath=pythonpath),
             f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
@@ -1173,9 +1178,9 @@ def generate_micro_child_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
     pythonpath: "Path | str | None" = None,
     source_stamp: Optional[tuple] = None,
 ) -> str:
@@ -1214,15 +1219,15 @@ def generate_micro_child_script(
     :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
         ``hdf5_path.parent / ".slurm"``.
     :type slurm_log_dir: Path or str, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into the generated script.  Defaults to
-        :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+    :param modules: Space-separated list of LMod module specs (include a
+        Fortran compiler module so the binary finds its runtime), baked into the generated script.  Defaults to
+        :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the child's ``#SBATCH``
         header (shape returned by :func:`parse_sbatch_tokens`).  Defaults
         to ``None``.
     :type sbatch_overrides: Mapping[str, str or None], optional
-    :param historical_binary_attrs: When non-``None``, indicates the
+    :param historical_backend_attrs: When non-``None``, indicates the
         binary was built from a historical commit (see
         :func:`~lysis.execution.historical_build.build_historical_binary`).
         The generated ``from_hdf5(...)`` call receives
@@ -1230,7 +1235,7 @@ def generate_micro_child_script(
         does not crash on the intentional binary↔source mismatch.  The
         dict itself is not baked into the child — the master script
         owns the actual provenance stamping.
-    :type historical_binary_attrs: dict or None
+    :type historical_backend_attrs: dict or None
     :param pythonpath: When set, baked into the generated script as
         ``export PYTHONPATH=...`` so the child imports ``lysis`` from
         that path rather than the live editable install.  ``None``
@@ -1241,7 +1246,7 @@ def generate_micro_child_script(
         the binary↔source check on the compute node compares against the
         master's stamp instead of running ``git`` from the staging dir
         (which is outside the repo and would fail).  Ignored when
-        ``historical_binary_attrs`` is set.  ``None`` (default)
+        ``historical_backend_attrs`` is set.  ``None`` (default)
         preserves the in-process git lookup.
     :type source_stamp: tuple[str, str] or None
     :return: Slurm bash script text.
@@ -1259,7 +1264,7 @@ def generate_micro_child_script(
 
     repo_root = _repo_root()
     env_preamble = _env_preamble(
-        repo_root, compiler_module, pythonpath=pythonpath
+        repo_root, modules, pythonpath=pythonpath
     )
     py = _uv_python_prefix(repo_root)
 
@@ -1278,10 +1283,10 @@ def generate_micro_child_script(
 
     skip_verify_kwarg = (
         ", skip_binary_verification=True"
-        if historical_binary_attrs is not None
+        if historical_backend_attrs is not None
         else ""
     )
-    if source_stamp is not None and historical_binary_attrs is None:
+    if source_stamp is not None and historical_backend_attrs is None:
         commit, dirty = source_stamp
         source_stamp_kwarg = f", source_stamp=('{commit}', '{dirty}')"
     else:
@@ -1424,9 +1429,9 @@ def generate_micro_array_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> str:
     """Generate a Slurm array job script for the microscale Fortran simulation.
 
@@ -1455,9 +1460,9 @@ def generate_micro_array_script(
         spec, staging_dir, run_code, hdf5_path, executable,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
     )
 
 
@@ -1471,9 +1476,9 @@ def submit_micro_slurm_job(
     keep_tmpdir: bool = False,
     out_code: str = "",
     num_children: Optional[int] = None,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> int:
     """Submit the full HDF5-integrated microscale workflow as a Slurm master job.
 
@@ -1525,24 +1530,24 @@ def submit_micro_slurm_job(
         across that many tasks.  ``None`` (default) selects the legacy
         single-child path.
     :type num_children: int, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into every generated script (master, array tasks,
+    :param modules: Space-separated list of LMod module specs (include a
+        Fortran compiler module so the binary finds its runtime), baked into every generated script (master, array tasks,
         and the legacy single child).  Defaults to
-        :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+        :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
         applied to BOTH the master and child/array task scripts (shape
         returned by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
     :type sbatch_overrides: Mapping[str, str or None], optional
-    :param historical_binary_attrs: Pre-computed binary-provenance dict
+    :param historical_backend_attrs: Pre-computed binary-provenance dict
         from
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
         for the historical-build workflow.  Threaded through to the
         master Python script (in both array and legacy single-child
         paths) so the master stamps it in place of the default
         ``<binary> --version`` query.  ``None`` (default) preserves
         normal-mode provenance.
-    :type historical_binary_attrs: dict, optional
+    :type historical_backend_attrs: dict, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
@@ -1584,9 +1589,9 @@ def submit_micro_slurm_job(
             spec, hdf5_path, executable, staging_root_dir,
             partition=partition, fast_tmp_root=fast_tmp_root,
             keep_tmpdir=keep_tmpdir,
-            compiler_module=compiler_module,
+            modules=modules,
             sbatch_overrides=sbatch_overrides,
-            historical_binary_attrs=historical_binary_attrs,
+            historical_backend_attrs=historical_backend_attrs,
         )
 
     # ------------------------------------------------------------------
@@ -1630,7 +1635,7 @@ def submit_micro_slurm_job(
     # outside the repo (see submit_slurm_job for the analogous comment in
     # the array path).
     source_stamp: Optional[tuple] = None
-    if historical_binary_attrs is None:
+    if historical_backend_attrs is None:
         from lysis.tools.provenance import (  # noqa: PLC0415
             gather_fortran_source_provenance,
         )
@@ -1643,9 +1648,9 @@ def submit_micro_slurm_job(
         staging_dir, run_code, hdf5_path, executable, out_code,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
         pythonpath=pythonpath,
         source_stamp=source_stamp,
     )
@@ -1658,7 +1663,7 @@ def submit_micro_slurm_job(
     # ------------------------------------------------------------------
     master_py_content = _generate_micro_master_py(
         staging_dir, hdf5_path, run_code, out_code, executable.name, keep_tmpdir,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
     )
     master_py_path = staging_dir / f"lysis-micro-master__{run_code}.py"
     master_py_path.write_text(master_py_content)
@@ -1681,7 +1686,7 @@ def submit_micro_slurm_job(
 
     master_sh_content = gs.scripts.plain(
         [
-            _env_preamble(repo_root, compiler_module, pythonpath=pythonpath),
+            _env_preamble(repo_root, modules, pythonpath=pythonpath),
             f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
@@ -1726,9 +1731,9 @@ def generate_macro_array_script(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     slurm_log_dir: Optional["Path | str"] = None,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> str:
     """Generate a Slurm array job script for the macroscale Fortran simulation.
 
@@ -1755,9 +1760,9 @@ def generate_macro_array_script(
         spec, staging_dir, run_code, hdf5_path, executable,
         partition=partition, fast_tmp_root=fast_tmp_root,
         slurm_log_dir=slurm_log_dir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
     )
 
 
@@ -1771,9 +1776,9 @@ def submit_macro_slurm_job(
     keep_tmpdir: bool = False,
     in_code: str = "",
     out_code: str = "",
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> int:
     """Submit the full HDF5-integrated macroscale workflow as a Slurm master job.
 
@@ -1817,22 +1822,22 @@ def submit_macro_slurm_job(
     :param out_code: Output file code suffix for the Fortran binary,
         defaults to ``""``.
     :type out_code: str, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into the generated master and array task scripts.
-        Defaults to :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+    :param modules: Space-separated list of LMod module specs (include a
+        Fortran compiler module so the binary finds its runtime), baked into the generated master and array task scripts.
+        Defaults to :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
         applied to BOTH the master and array task scripts (shape returned
         by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
     :type sbatch_overrides: Mapping[str, str or None], optional
-    :param historical_binary_attrs: Pre-computed binary-provenance dict
+    :param historical_backend_attrs: Pre-computed binary-provenance dict
         from
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
         for the historical-build workflow.  Threaded through to the
         master Python script so the master stamps it in place of the
         default ``<binary> --version`` query.  ``None`` (default)
         preserves normal-mode provenance.
-    :type historical_binary_attrs: dict, optional
+    :type historical_backend_attrs: dict, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
@@ -1861,9 +1866,9 @@ def submit_macro_slurm_job(
         spec, hdf5_path, executable, staging_root_dir,
         partition=partition, fast_tmp_root=fast_tmp_root,
         keep_tmpdir=keep_tmpdir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
     )
 
 
@@ -1903,7 +1908,7 @@ def submit_python_macro_slurm_job(
     partition: Optional[str] = None,
     fast_tmp_root: Optional[str] = None,
     keep_tmpdir: bool = False,
-    compiler_module: str = DEFAULT_COMPILER_MODULE,
+    modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
 ) -> int:
     """Submit the Python-backend macroscale workflow as a Slurm master job.
@@ -1950,12 +1955,12 @@ def submit_python_macro_slurm_job(
     :param keep_tmpdir: If ``True``, preserve the staging directory
         after the master job completes (useful for debugging).
     :type keep_tmpdir: bool, optional
-    :param compiler_module: LMod module spec for the Fortran compiler
-        runtime, baked into the generated master and array task scripts
-        — also exported by the Python-only path so the preamble matches
-        the Fortran path verbatim and node module state remains
-        predictable.  Defaults to :data:`DEFAULT_COMPILER_MODULE`.
-    :type compiler_module: str, optional
+    :param modules: Space-separated list of LMod module specs loaded by the
+        generated master and array task scripts — exported by the
+        Python-only path too so the preamble matches the Fortran path
+        verbatim and node module state remains predictable.  Defaults to
+        :data:`DEFAULT_MODULES`.
+    :type modules: str, optional
     :param sbatch_overrides: User overrides for the ``#SBATCH`` header,
         applied to BOTH the master and array task scripts (shape returned
         by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
@@ -1975,6 +1980,6 @@ def submit_python_macro_slurm_job(
         spec, hdf5_path, None, staging_root_dir,
         partition=partition, fast_tmp_root=fast_tmp_root,
         keep_tmpdir=keep_tmpdir,
-        compiler_module=compiler_module,
+        modules=modules,
         sbatch_overrides=sbatch_overrides,
     )

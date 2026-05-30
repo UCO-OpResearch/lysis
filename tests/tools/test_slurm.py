@@ -232,26 +232,38 @@ class TestGenerateMicroChildScript:
         assert "lysis.execution.fortran_micro" in script
         assert "codeutil" not in script
 
-    def test_default_compiler_module_in_preamble(self, tmp_path):
-        """Without compiler_module, the default LMod spec is loaded."""
-        from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
+    def test_default_modules_in_preamble(self, tmp_path):
+        """Without modules, the default LMod spec is loaded."""
+        from lysis.tools.slurm import DEFAULT_MODULES
         staging = tmp_path / "staging"
         script = generate_micro_child_script(
             staging, "run-01", tmp_path / "run-01.h5",
             "/bin/micro.exe", "",
         )
-        assert f"module load {DEFAULT_COMPILER_MODULE}" in script
+        assert f"module load {DEFAULT_MODULES}" in script
 
-    def test_custom_compiler_module_in_preamble(self, tmp_path):
-        """compiler_module override must appear in the module-load line."""
+    def test_custom_modules_in_preamble(self, tmp_path):
+        """modules override must appear in the module-load line."""
         staging = tmp_path / "staging"
         script = generate_micro_child_script(
             staging, "run-01", tmp_path / "run-01.h5",
             "/bin/micro.exe", "",
-            compiler_module="intel-compilers/2024.2.0",
+            modules="intel-compilers/2024.2.0",
         )
         assert "module load intel-compilers/2024.2.0" in script
         assert "module load intel-compilers/2023" not in script
+
+    def test_space_separated_modules_in_preamble(self, tmp_path):
+        """A space-separated module list is forwarded verbatim to module load."""
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+            modules="intel-compilers/2024 SciPy-bundle/2023.07",
+        )
+        assert (
+            "module load intel-compilers/2024 SciPy-bundle/2023.07" in script
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -519,41 +531,41 @@ class TestSubmitMicroSlurmJob:
     def test_master_py_historical_attrs_absent_by_default(
         self, mock_sbatch, micro_hdf5, tmp_path
     ):
-        """Without --fortran-commit, the master script keeps HISTORICAL_BINARY_ATTRS = None."""
+        """Without --fortran-commit, the master script keeps HISTORICAL_BACKEND_ATTRS = None."""
         staging_root = tmp_path / "staging_root"
         staging_root.mkdir()
         submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe",
                                staging_root=staging_root)
         staging_dir = list(staging_root.iterdir())[0]
         master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
-        assert "HISTORICAL_BINARY_ATTRS = None" in master_content
+        assert "HISTORICAL_BACKEND_ATTRS = None" in master_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_master_py_bakes_historical_attrs(
         self, mock_sbatch, micro_hdf5, tmp_path
     ):
-        """When historical_binary_attrs is given, the dict is repr'd into the master script."""
+        """When historical_backend_attrs is given, the dict is repr'd into the master script."""
         staging_root = tmp_path / "staging_root"
         staging_root.mkdir()
         prov = {
-            "binary_commit": "a" * 40,
-            "binary_dirty": "clean",
-            "binary_compiler": "GCC 11.4.0",
-            "binary_source": "historical:" + "a" * 40,
+            "backend_commit": "a" * 40,
+            "backend_dirty": "clean",
+            "backend_compiler": "GCC 11.4.0",
+            "backend_historical": True,
         }
         submit_micro_slurm_job(
             micro_hdf5, "/bin/micro.exe",
             staging_root=staging_root,
-            historical_binary_attrs=prov,
+            historical_backend_attrs=prov,
         )
         staging_dir = list(staging_root.iterdir())[0]
         master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
         # The literal dict must round-trip through repr() into the script.
-        assert "HISTORICAL_BINARY_ATTRS = {" in master_content
-        assert "'binary_source': 'historical:" + "a" * 40 + "'" in master_content
+        assert "HISTORICAL_BACKEND_ATTRS = {" in master_content
+        assert "'backend_historical': True" in master_content
         # And the runner construction must opt in to skip_binary_verification.
         assert (
-            "skip_binary_verification=(HISTORICAL_BINARY_ATTRS is not None)"
+            "skip_binary_verification=(HISTORICAL_BACKEND_ATTRS is not None)"
             in master_content
         )
 
@@ -893,26 +905,26 @@ class TestSubmitMacroSlurmJob:
     def test_master_py_bakes_historical_attrs(
         self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
     ):
-        """Macro slurm path: historical_binary_attrs dict gets repr'd into the master script."""
+        """Macro slurm path: historical_backend_attrs dict gets repr'd into the master script."""
         staging_root = tmp_path / "staging_root"
         staging_root.mkdir()
         prov = {
-            "binary_commit": "b" * 40,
-            "binary_dirty": "clean",
-            "binary_compiler": "Intel(R) Fortran 2023.0",
-            "binary_source": "historical:" + "b" * 40,
+            "backend_commit": "b" * 40,
+            "backend_dirty": "clean",
+            "backend_compiler": "Intel(R) Fortran 2023.0",
+            "backend_historical": True,
         }
         submit_macro_slurm_job(
             macro_hdf5, "/bin/macro.exe",
             staging_root=staging_root,
-            historical_binary_attrs=prov,
+            historical_backend_attrs=prov,
         )
         staging_dir = list(staging_root.iterdir())[0]
         master_content = (staging_dir / "lysis-macro-master__run-01.py").read_text()
-        assert "HISTORICAL_BINARY_ATTRS = {" in master_content
-        assert "'binary_source': 'historical:" + "b" * 40 + "'" in master_content
+        assert "HISTORICAL_BACKEND_ATTRS = {" in master_content
+        assert "'backend_historical': True" in master_content
         assert (
-            "skip_binary_verification=(HISTORICAL_BINARY_ATTRS is not None)"
+            "skip_binary_verification=(HISTORICAL_BACKEND_ATTRS is not None)"
             in master_content
         )
 
@@ -1547,9 +1559,9 @@ class TestHistoricalBinaryAttrsInChildAndArrayScripts:
     """
 
     _HIST = {
-        "binary_commit": "a" * 40,
-        "binary_dirty": False,
-        "binary_source": "historical:" + "a" * 40,
+        "backend_commit": "a" * 40,
+        "backend_dirty": False,
+        "backend_historical": True,
     }
 
     # -- generate_micro_child_script (legacy single-child path) ------------
@@ -1559,7 +1571,7 @@ class TestHistoricalBinaryAttrsInChildAndArrayScripts:
         script = generate_micro_child_script(
             tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
             "/build/bin/micro_rates", "",
-            historical_binary_attrs=self._HIST,
+            historical_backend_attrs=self._HIST,
         )
         assert "/build/bin/micro_rates" not in script
         assert "cp " not in script
@@ -1568,7 +1580,7 @@ class TestHistoricalBinaryAttrsInChildAndArrayScripts:
         script = generate_micro_child_script(
             tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
             "/build/bin/micro_rates", "",
-            historical_binary_attrs=self._HIST,
+            historical_backend_attrs=self._HIST,
         )
         assert "skip_binary_verification=True" in script
 
@@ -1579,7 +1591,7 @@ class TestHistoricalBinaryAttrsInChildAndArrayScripts:
             staging, "run-01", tmp_path / "run-01.h5",
             "/build/bin/micro_rates", "",
             fast_tmp_root="/nvme/scratch",
-            historical_binary_attrs=self._HIST,
+            historical_backend_attrs=self._HIST,
         )
         assert "/build/bin/micro_rates" not in script
         assert f'cp "{staging}/micro_rates" "${{local_work_dir}}/"' in script
@@ -1589,7 +1601,7 @@ class TestHistoricalBinaryAttrsInChildAndArrayScripts:
             tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
             "/build/bin/micro_rates", "",
             fast_tmp_root="/nvme/scratch",
-            historical_binary_attrs=self._HIST,
+            historical_backend_attrs=self._HIST,
         )
         assert "skip_binary_verification=True" in script
 
@@ -1607,7 +1619,7 @@ class TestHistoricalBinaryAttrsInChildAndArrayScripts:
         script = generate_micro_array_script(
             tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
             "/build/bin/micro_rates", num_children=4,
-            historical_binary_attrs=self._HIST,
+            historical_backend_attrs=self._HIST,
         )
         assert "skip_binary_verification=True" in script
 
@@ -1617,7 +1629,7 @@ class TestHistoricalBinaryAttrsInChildAndArrayScripts:
             staging, "run-01", tmp_path / "run-01.h5",
             "/build/bin/micro_rates", num_children=4,
             fast_tmp_root="/nvme/scratch",
-            historical_binary_attrs=self._HIST,
+            historical_backend_attrs=self._HIST,
         )
         assert "/build/bin/micro_rates" not in script
         assert f'cp "{staging}/micro_rates" "${{local_work_dir}}/"' in script
@@ -1629,7 +1641,7 @@ class TestHistoricalBinaryAttrsInChildAndArrayScripts:
         script = generate_macro_array_script(
             tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
             "/build/bin/macro.exe", n_sims=3,
-            historical_binary_attrs=self._HIST,
+            historical_backend_attrs=self._HIST,
         )
         assert "skip_binary_verification=True" in script
 
@@ -1639,7 +1651,7 @@ class TestHistoricalBinaryAttrsInChildAndArrayScripts:
             staging, "run-01", tmp_path / "run-01.h5",
             "/build/bin/macro.exe", n_sims=3,
             fast_tmp_root="/nvme/scratch",
-            historical_binary_attrs=self._HIST,
+            historical_backend_attrs=self._HIST,
         )
         assert "/build/bin/macro.exe" not in script
         assert f'cp "{staging}/macro.exe" "${{local_work_dir}}/"' in script
@@ -1714,7 +1726,7 @@ class TestSourceStampInGeneratedScripts:
         script = generate_micro_child_script(
             tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
             "/bin/micro.exe", "",
-            historical_binary_attrs={"binary_commit": "h" * 40},
+            historical_backend_attrs={"backend_commit": "h" * 40},
             source_stamp=self._STAMP,
         )
         assert "source_stamp=" not in script
@@ -1749,7 +1761,7 @@ class TestSourceStampInGeneratedScripts:
         script = generate_array_script(
             spec, tmp_path / "stage", "run-01", tmp_path / "run-01.h5",
             "/bin/micro.exe",
-            historical_binary_attrs={"binary_commit": "h" * 40},
+            historical_backend_attrs={"backend_commit": "h" * 40},
             source_stamp=self._STAMP,
         )
         assert "source_stamp=" not in script
@@ -1762,14 +1774,14 @@ class TestSourceStampInGeneratedScripts:
 
 
 class TestSubmitWithHistoricalBinaryAttrsEndToEnd:
-    """End-to-end: submit_*_slurm_job threads historical_binary_attrs into
+    """End-to-end: submit_*_slurm_job threads historical_backend_attrs into
     every generated child/array script.
     """
 
     _HIST = {
-        "binary_commit": "b" * 40,
-        "binary_dirty": False,
-        "binary_source": "historical:" + "b" * 40,
+        "backend_commit": "b" * 40,
+        "backend_dirty": False,
+        "backend_historical": True,
     }
 
     @pytest.fixture(autouse=True)
@@ -1787,7 +1799,7 @@ class TestSubmitWithHistoricalBinaryAttrsEndToEnd:
         submit_micro_slurm_job(
             micro_hdf5, "/build/bin/micro_rates",
             staging_root=staging_root,
-            historical_binary_attrs=self._HIST,
+            historical_backend_attrs=self._HIST,
         )
         staging_dir = list(staging_root.iterdir())[0]
         child = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
@@ -1810,7 +1822,7 @@ class TestSubmitWithHistoricalBinaryAttrsEndToEnd:
                 micro_hdf5, "/build/bin/micro_rates",
                 staging_root=staging_root,
                 num_children=4,
-                historical_binary_attrs=self._HIST,
+                historical_backend_attrs=self._HIST,
             )
         staging_dir = list(staging_root.iterdir())[0]
         array = (staging_dir / "lysis-micro-array__run-01.sh").read_text()

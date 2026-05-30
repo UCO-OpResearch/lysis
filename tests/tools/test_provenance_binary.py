@@ -98,30 +98,30 @@ def test_query_binary_version_timeout_is_unknown(monkeypatch):
 
 
 # ----------------------------------------------------------------------
-# gather_binary_provenance
+# gather_backend_provenance
 # ----------------------------------------------------------------------
 
-def test_gather_binary_provenance_keys(monkeypatch):
-    from lysis.tools.provenance import gather_binary_provenance
+def test_gather_backend_provenance_keys(monkeypatch):
+    from lysis.tools.provenance import gather_backend_provenance
 
     _patch_run(monkeypatch, stdout="v0.3.0 abc123 clean Intel\n")
-    result = gather_binary_provenance("/fake/bin")
+    result = gather_backend_provenance("/fake/bin")
     assert result == {
-        CONST.BINARY_COMMIT_ATTR: "abc123",
-        CONST.BINARY_DIRTY_ATTR: "clean",
-        CONST.BINARY_COMPILER_ATTR: "Intel",
+        CONST.BACKEND_COMMIT_ATTR: "abc123",
+        CONST.BACKEND_DIRTY_ATTR: "clean",
+        CONST.BACKEND_COMPILER_ATTR: "Intel",
     }
 
 
-def test_gather_binary_provenance_failure_yields_unknown(monkeypatch):
-    from lysis.tools.provenance import gather_binary_provenance
+def test_gather_backend_provenance_failure_yields_unknown(monkeypatch):
+    from lysis.tools.provenance import gather_backend_provenance
 
     _patch_run(monkeypatch, raises=FileNotFoundError())
-    result = gather_binary_provenance("/fake/bin")
+    result = gather_backend_provenance("/fake/bin")
     assert result == {
-        CONST.BINARY_COMMIT_ATTR: "unknown",
-        CONST.BINARY_DIRTY_ATTR: "unknown",
-        CONST.BINARY_COMPILER_ATTR: "unknown",
+        CONST.BACKEND_COMMIT_ATTR: "unknown",
+        CONST.BACKEND_DIRTY_ATTR: "unknown",
+        CONST.BACKEND_COMPILER_ATTR: "unknown",
     }
 
 
@@ -275,10 +275,10 @@ def test_verify_override_warns_and_returns_dict(monkeypatch):
     assert "STALE FORTRAN BINARY" in info["banner"]
     # Only the override flag is forwarded as an HDF5 attr — the binary's
     # commit/dirty/compiler are now stamped unconditionally by
-    # gather_binary_provenance(), not via this return value.
-    assert info[CONST.STALE_BINARY_OVERRIDE_ATTR] is True
-    assert CONST.BINARY_COMMIT_ATTR not in info
-    assert CONST.BINARY_DIRTY_ATTR not in info
+    # gather_backend_provenance(), not via this return value.
+    assert info[CONST.STALE_BACKEND_OVERRIDE_ATTR] is True
+    assert CONST.BACKEND_COMMIT_ATTR not in info
+    assert CONST.BACKEND_DIRTY_ATTR not in info
 
 
 def test_verify_env_var_acts_as_override(monkeypatch):
@@ -291,7 +291,7 @@ def test_verify_env_var_acts_as_override(monkeypatch):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         info = verify_binary_matches_source("/fake/bin", allow_stale=None)
-    assert info[CONST.STALE_BINARY_OVERRIDE_ATTR] is True
+    assert info[CONST.STALE_BACKEND_OVERRIDE_ATTR] is True
 
 
 def test_verify_explicit_false_overrides_env(monkeypatch):
@@ -393,10 +393,10 @@ def test_verify_source_stamp_dirty_match(monkeypatch):
 
 
 # ----------------------------------------------------------------------
-# gather_historical_binary_provenance
+# gather_historical_backend_provenance
 # ----------------------------------------------------------------------
 
-from lysis.tools.provenance import gather_historical_binary_provenance
+from lysis.tools.provenance import gather_historical_backend_provenance
 from lysis.tools.provenance.binary import (
     _identify_compiler_binary,
     _probe_iso_fortran_env_compiler_version,
@@ -441,14 +441,14 @@ def test_identify_compiler_missing_file_returns_none(tmp_path):
 def test_historical_provenance_uses_binary_version_on_sha_match(monkeypatch):
     sha = "a" * 40
     _patch_run(monkeypatch, stdout=f"v0.3.0 {sha} clean Intel(R) 2021.9\n")
-    result = gather_historical_binary_provenance(
+    result = gather_historical_backend_provenance(
         "/fake/bin", resolved_sha=sha
     )
     assert result == {
-        CONST.BINARY_COMMIT_ATTR: sha,
-        CONST.BINARY_DIRTY_ATTR: "clean",
-        CONST.BINARY_COMPILER_ATTR: "Intel(R) 2021.9",
-        CONST.BINARY_SOURCE_ATTR: f"historical:{sha}",
+        CONST.BACKEND_COMMIT_ATTR: sha,
+        CONST.BACKEND_DIRTY_ATTR: "clean",
+        CONST.BACKEND_COMPILER_ATTR: "Intel(R) 2021.9",
+        CONST.BACKEND_HISTORICAL_ATTR: True,
     }
 
 
@@ -465,13 +465,13 @@ def test_historical_provenance_synthesises_when_version_missing(
         "_probe_iso_fortran_env_compiler_version",
         lambda compiler, **kw: "GCC version 11.4.0",
     )
-    result = gather_historical_binary_provenance(
+    result = gather_historical_backend_provenance(
         "/fake/bin", resolved_sha=sha, build_log=log
     )
-    assert result[CONST.BINARY_COMMIT_ATTR] == sha
-    assert result[CONST.BINARY_DIRTY_ATTR] == "clean"
-    assert result[CONST.BINARY_COMPILER_ATTR] == "GCC version 11.4.0"
-    assert result[CONST.BINARY_SOURCE_ATTR] == f"historical:{sha}"
+    assert result[CONST.BACKEND_COMMIT_ATTR] == sha
+    assert result[CONST.BACKEND_DIRTY_ATTR] == "clean"
+    assert result[CONST.BACKEND_COMPILER_ATTR] == "GCC version 11.4.0"
+    assert result[CONST.BACKEND_HISTORICAL_ATTR] is True
 
 
 def test_historical_provenance_synthesises_when_sha_mismatches(
@@ -487,23 +487,23 @@ def test_historical_provenance_synthesises_when_sha_mismatches(
         "_probe_iso_fortran_env_compiler_version",
         lambda compiler, **kw: "Intel(R) Fortran 2023.0",
     )
-    result = gather_historical_binary_provenance(
+    result = gather_historical_backend_provenance(
         "/fake/bin", resolved_sha=requested, build_log=log
     )
     # Synthesised values, not the embedded ones.
-    assert result[CONST.BINARY_COMMIT_ATTR] == requested
-    assert result[CONST.BINARY_COMPILER_ATTR] == "Intel(R) Fortran 2023.0"
-    assert result[CONST.BINARY_SOURCE_ATTR] == f"historical:{requested}"
+    assert result[CONST.BACKEND_COMMIT_ATTR] == requested
+    assert result[CONST.BACKEND_COMPILER_ATTR] == "Intel(R) Fortran 2023.0"
+    assert result[CONST.BACKEND_HISTORICAL_ATTR] is True
 
 
 def test_historical_provenance_compiler_unknown_when_log_absent(monkeypatch):
     sha = "e" * 40
     _patch_run(monkeypatch, raises=FileNotFoundError())
-    result = gather_historical_binary_provenance(
+    result = gather_historical_backend_provenance(
         "/fake/bin", resolved_sha=sha, build_log=None
     )
-    assert result[CONST.BINARY_COMPILER_ATTR] == "unknown"
-    assert result[CONST.BINARY_SOURCE_ATTR] == f"historical:{sha}"
+    assert result[CONST.BACKEND_COMPILER_ATTR] == "unknown"
+    assert result[CONST.BACKEND_HISTORICAL_ATTR] is True
 
 
 def test_historical_provenance_compiler_unknown_when_probe_fails(
@@ -518,10 +518,10 @@ def test_historical_provenance_compiler_unknown_when_probe_fails(
         "_probe_iso_fortran_env_compiler_version",
         lambda compiler, **kw: None,
     )
-    result = gather_historical_binary_provenance(
+    result = gather_historical_backend_provenance(
         "/fake/bin", resolved_sha=sha, build_log=log
     )
-    assert result[CONST.BINARY_COMPILER_ATTR] == "unknown"
+    assert result[CONST.BACKEND_COMPILER_ATTR] == "unknown"
 
 
 @pytest.mark.fortran_binary
