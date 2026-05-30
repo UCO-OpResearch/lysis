@@ -13,10 +13,27 @@ from lysis.cli import cli
 from lysis.config.constants import CONST
 from lysis.config.parameters import MicroParameters
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
+
+def _stamp_test_init_provenance(group) -> None:
+    """Stamp init_* provenance so the run-* commit-match gate stays silent (#44).
+
+    Records the *live* ``src/lysis/`` commit via the same resolver the gate uses
+    (``_resolve_version``) rather than a frozen string: the gate compares the
+    recorded ``init_version`` against ``_resolve_version()`` at run time, so both
+    sides match on a clean checkout, a dirty worktree, or a detached HEAD.
+    ``init_dirty``/``init_timestamp``/``init_hostname`` are never compared, so
+    they can be deterministic.
+    """
+    from lysis.tools.provenance.execution import _resolve_version
+
+    group.attrs[CONST.INIT_VERSION_ATTR] = _resolve_version()
+    group.attrs[CONST.INIT_DIRTY_ATTR] = "clean"
+    group.attrs[CONST.INIT_TIMESTAMP_ATTR] = "2026-01-01T00:00:00"
+    group.attrs[CONST.INIT_HOSTNAME_ATTR] = "test-host"
 
 
 def _write_micro_hdf5(path: Path) -> None:
@@ -27,6 +44,7 @@ def _write_micro_hdf5(path: Path) -> None:
         grp = f.require_group("micro_data")
         for k, v in mp.to_basedict().items():
             grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+        _stamp_test_init_provenance(grp)
 
 
 @pytest.fixture
@@ -76,9 +94,7 @@ class TestRunMicroMissingArgs:
         assert result.exit_code != 0
 
     def test_missing_hdf5_path_exits_nonzero(self, runner, tmp_path):
-        result = runner.invoke(
-            cli, ["run-micro", "--executable", "/bin/micro.exe"]
-        )
+        result = runner.invoke(cli, ["run-micro", "--executable", "/bin/micro.exe"])
         assert result.exit_code != 0
 
 
@@ -123,8 +139,10 @@ class TestRunMicroLocal:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--keep-tmpdir",
             ],
         )
@@ -140,9 +158,12 @@ class TestRunMicroLocal:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
-                "--file-code", "_code",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
+                "--file-code",
+                "_code",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -167,7 +188,9 @@ class TestRunMicroLocal:
         self, mock_cls, runner, micro_hdf5
     ):
         """A ValueError from from_hdf5 (e.g. wrong HDF5 state) must exit non-zero."""
-        mock_cls.from_hdf5.side_effect = ValueError("microscale simulation has already been run")
+        mock_cls.from_hdf5.side_effect = ValueError(
+            "microscale simulation has already been run"
+        )
         result = runner.invoke(
             cli,
             ["run-micro", str(micro_hdf5), "--executable", "/bin/micro.exe"],
@@ -179,7 +202,9 @@ class TestRunMicroLocal:
         self, mock_cls, runner, micro_hdf5
     ):
         """Error message from ValueError must appear in CLI output."""
-        mock_cls.from_hdf5.side_effect = ValueError("microscale simulation has already been run")
+        mock_cls.from_hdf5.side_effect = ValueError(
+            "microscale simulation has already been run"
+        )
         result = runner.invoke(
             cli,
             ["run-micro", str(micro_hdf5), "--executable", "/bin/micro.exe"],
@@ -198,8 +223,10 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
             ],
         )
@@ -211,8 +238,10 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
             ],
         )
@@ -224,10 +253,13 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--partition", "long",
+                "--partition",
+                "long",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -241,10 +273,13 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--staging-root", str(staging),
+                "--staging-root",
+                str(staging),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -256,10 +291,13 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--fast-tmp-root", "/nvme/scratch",
+                "--fast-tmp-root",
+                "/nvme/scratch",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -271,8 +309,10 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
                 "--keep-tmpdir",
             ],
@@ -282,15 +322,15 @@ class TestRunMicroSlurm:
         assert call_kwargs.get("keep_tmpdir") is True
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
-    def test_num_children_default_is_10(
-        self, mock_submit, runner, micro_hdf5
-    ):
+    def test_num_children_default_is_10(self, mock_submit, runner, micro_hdf5):
         """Without --num-children, the default 10 must be forwarded."""
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
             ],
         )
@@ -305,10 +345,13 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--num-children", "0",
+                "--num-children",
+                "0",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -318,19 +361,19 @@ class TestRunMicroSlurm:
     def test_modules_default_is_forwarded(self, mock_submit, runner, micro_hdf5):
         """Without --modules, the default module spec must be forwarded."""
         from lysis.tools.slurm import DEFAULT_MODULES
+
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
             ],
         )
         assert result.exit_code == 0, result.output
-        assert (
-            mock_submit.call_args.kwargs.get("modules")
-            == DEFAULT_MODULES
-        )
+        assert mock_submit.call_args.kwargs.get("modules") == DEFAULT_MODULES
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
     def test_modules_override_is_forwarded(self, mock_submit, runner, micro_hdf5):
@@ -338,30 +381,31 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--modules", "intel-compilers/2024",
+                "--modules",
+                "intel-compilers/2024",
             ],
         )
         assert result.exit_code == 0, result.output
-        assert (
-            mock_submit.call_args.kwargs.get("modules")
-            == "intel-compilers/2024"
-        )
+        assert mock_submit.call_args.kwargs.get("modules") == "intel-compilers/2024"
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
-    def test_num_children_positive_is_forwarded(
-        self, mock_submit, runner, micro_hdf5
-    ):
+    def test_num_children_positive_is_forwarded(self, mock_submit, runner, micro_hdf5):
         """A positive ``--num-children`` is forwarded as-is."""
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--num-children", "25",
+                "--num-children",
+                "25",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -372,10 +416,13 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--num-children", "-1",
+                "--num-children",
+                "-1",
             ],
         )
         assert result.exit_code != 0
@@ -394,10 +441,13 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--num-children", "999",
+                "--num-children",
+                "999",
             ],
         )
         assert result.exit_code != 0
@@ -419,9 +469,12 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
-                "--num-children", "5",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
+                "--num-children",
+                "5",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -436,9 +489,12 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
-                "--partition", "long",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
+                "--partition",
+                "long",
             ],
         )
         # Should succeed (partition is silently ignored in non-slurm mode)
@@ -446,15 +502,15 @@ class TestRunMicroSlurm:
         mock_fm.run_full.assert_called_once()
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
-    def test_sbatch_default_is_empty_overrides(
-        self, mock_submit, runner, micro_hdf5
-    ):
+    def test_sbatch_default_is_empty_overrides(self, mock_submit, runner, micro_hdf5):
         """Without --sbatch, sbatch_overrides must be an empty dict."""
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
             ],
         )
@@ -462,19 +518,22 @@ class TestRunMicroSlurm:
         assert mock_submit.call_args.kwargs.get("sbatch_overrides") == {}
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
-    def test_sbatch_tokens_parsed_and_forwarded(
-        self, mock_submit, runner, micro_hdf5
-    ):
+    def test_sbatch_tokens_parsed_and_forwarded(self, mock_submit, runner, micro_hdf5):
         """Repeated --sbatch tokens parse into the documented overrides dict."""
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--sbatch", "mem=4G",
-                "--sbatch", "hold",
-                "--sbatch", "^exclusive=user",
+                "--sbatch",
+                "mem=4G",
+                "--sbatch",
+                "hold",
+                "--sbatch",
+                "^exclusive=user",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -489,10 +548,13 @@ class TestRunMicroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--sbatch", "^",
+                "--sbatch",
+                "^",
             ],
         )
         assert result.exit_code != 0
@@ -580,9 +642,7 @@ class TestRunMicroExperimentLocal:
         assert mock_fm.run_full.call_count == 2
 
     @patch("lysis.execution.fortran_micro.FortranMicro")
-    def test_batch_glob_calls_from_hdf5_for_each_run(
-        self, mock_cls, runner, hdf5_dir
-    ):
+    def test_batch_glob_calls_from_hdf5_for_each_run(self, mock_cls, runner, hdf5_dir):
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
 
@@ -594,9 +654,7 @@ class TestRunMicroExperimentLocal:
         assert mock_cls.from_hdf5.call_count == 2
 
     @patch("lysis.execution.fortran_micro.FortranMicro")
-    def test_batch_output_mentions_run_codes(
-        self, mock_cls, runner, experiment_dir
-    ):
+    def test_batch_output_mentions_run_codes(self, mock_cls, runner, experiment_dir):
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
 
@@ -614,13 +672,18 @@ class TestRunMicroExperimentLocal:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(experiment_dir),
-                "--executable", "/bin/micro.exe",
-                "--file-code", "_x",
+                "run-micro",
+                str(experiment_dir),
+                "--executable",
+                "/bin/micro.exe",
+                "--file-code",
+                "_x",
             ],
         )
         assert result.exit_code != 0
-        assert "file-code" in result.output.lower() or "directory" in result.output.lower()
+        assert (
+            "file-code" in result.output.lower() or "directory" in result.output.lower()
+        )
 
     def test_empty_directory_raises_error(self, runner, tmp_path):
         empty = tmp_path / "empty"
@@ -645,8 +708,10 @@ class TestRunMicroExperimentSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(experiment_dir),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(experiment_dir),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
             ],
         )
@@ -654,14 +719,14 @@ class TestRunMicroExperimentSlurm:
         assert mock_submit.call_count == 2
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", side_effect=[10001, 10002])
-    def test_batch_slurm_prints_all_job_ids(
-        self, mock_submit, runner, experiment_dir
-    ):
+    def test_batch_slurm_prints_all_job_ids(self, mock_submit, runner, experiment_dir):
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(experiment_dir),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(experiment_dir),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
             ],
         )
@@ -676,10 +741,13 @@ class TestRunMicroExperimentSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(experiment_dir),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(experiment_dir),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
-                "--partition", "long",
+                "--partition",
+                "long",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -687,14 +755,14 @@ class TestRunMicroExperimentSlurm:
             assert c.kwargs.get("partition") == "long"
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", side_effect=[20001, 20002])
-    def test_batch_glob_slurm_submits_for_each_h5(
-        self, mock_submit, runner, hdf5_dir
-    ):
+    def test_batch_glob_slurm_submits_for_each_h5(self, mock_submit, runner, hdf5_dir):
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(hdf5_dir),
-                "--executable", "/bin/micro.exe",
+                "run-micro",
+                str(hdf5_dir),
+                "--executable",
+                "/bin/micro.exe",
                 "--slurm",
             ],
         )
@@ -713,17 +781,23 @@ class TestRunMicroFortranCommit:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "micro_rates",
-                "--fortran-commit", "this-ref-does-not-exist-deadbeef",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "micro_rates",
+                "--fortran-commit",
+                "this-ref-does-not-exist-deadbeef",
             ],
         )
         assert result.exit_code != 0
         assert "does not resolve" in result.output
 
     @patch("lysis.execution.fortran_micro.FortranMicro")
-    @patch("lysis.cli.run_micro.build_historical_binary"
-           if False else "lysis.execution.historical_build.build_historical_binary")
+    @patch(
+        "lysis.cli.run_micro.build_historical_binary"
+        if False
+        else "lysis.execution.historical_build.build_historical_binary"
+    )
     def test_historical_attrs_threaded_to_runner(
         self, mock_build, mock_cls, runner, micro_hdf5, tmp_path
     ):
@@ -752,9 +826,12 @@ class TestRunMicroFortranCommit:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "micro_rates",
-                "--fortran-commit", "HEAD",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "micro_rates",
+                "--fortran-commit",
+                "HEAD",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -794,11 +871,15 @@ class TestRunMicroFortranCommit:
         result = runner.invoke(
             cli,
             [
-                "run-micro", str(micro_hdf5),
-                "--executable", "micro_rates",
-                "--fortran-commit", "HEAD",
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "micro_rates",
+                "--fortran-commit",
+                "HEAD",
                 "--slurm",
-                "--modules", "intel-compilers/2024",
+                "--modules",
+                "intel-compilers/2024",
             ],
         )
         assert result.exit_code == 0, result.output
