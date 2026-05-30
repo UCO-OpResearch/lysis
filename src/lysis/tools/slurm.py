@@ -168,6 +168,92 @@ def _env_preamble(
     return "\n".join(lines)
 
 
+def _log_header(
+    *,
+    scale: str,
+    role: str,
+    run_code: str,
+    experiment: Optional[str] = None,
+    pythonpath: "Path | str | None" = None,
+) -> str:
+    """Return the bash block that prints a job header, then enables strict tracing.
+
+    Emitted in every generated Slurm script (master, array task, legacy
+    single child) immediately *after* :func:`_env_preamble`.  The block has
+    two parts:
+
+    1. A fenced **identifying header** written to stdout (so it lands in the
+       job's ``.out`` log) that mixes *submit-time* fields baked in here
+       (*scale*, *role*, *run_code*, *experiment*, the generator's
+       ``lysis.__version__``, and the pinned *pythonpath* snapshot) with
+       *runtime* ``${SLURM_*}`` expansions evaluated on the compute node
+       (cluster, host, partition, node list, job/array ids, allocated
+       cpus/mem, submit dir, start time).
+    2. ``set -euo pipefail`` followed by ``set -x``.
+
+    The header is printed **before** strict mode is enabled so its optional
+    ``${SLURM_*}`` reads cannot trip ``set -u`` (each is additionally guarded
+    with a ``${VAR:-…}`` default for readable output); ``set -x`` then traces
+    every subsequent command into the same log.
+
+    :param scale: ``"micro"`` or ``"macro"``.
+    :type scale: str
+    :param role: Job role for the header, e.g. ``"master"``,
+        ``"array task"``, ``"micro child"``.
+    :type role: str
+    :param run_code: Run identifier (HDF5 file stem).
+    :type run_code: str
+    :param experiment: Best-effort experiment identifier; ``None`` (default)
+        renders as ``(unknown)`` (no first-class experiment concept yet).
+    :type experiment: str, optional
+    :param pythonpath: The pinned ``python_src`` snapshot directory baked
+        onto ``PYTHONPATH``; ``None`` (default) renders as
+        ``(editable install)``.
+    :type pythonpath: Path or str, optional
+    :return: Bash snippet (header + strict-mode lines), no trailing newline.
+    :rtype: str
+    """
+    import lysis  # noqa: PLC0415 — avoids pulling lysis at module import
+
+    version = getattr(lysis, "__version__", "(unknown)")
+    experiment_field = experiment if experiment else "(unknown)"
+    pythonpath_field = (
+        str(pythonpath) if pythonpath is not None else "(editable install)"
+    )
+    return f"""\
+# Identifying header (to stdout) printed BEFORE strict mode so its optional
+# ${{SLURM_*}} reads can't abort the job under ``set -u``; ``set -x`` then
+# traces every subsequent command into the same .out log.
+cat <<HEADER
+============================================================
+lysis slurm task
+------------------------------------------------------------
+scale       : {scale}
+role        : {role}
+run         : {run_code}
+experiment  : {experiment_field}
+generator   : lysis {version}
+pythonpath  : {pythonpath_field}
+job name    : ${{SLURM_JOB_NAME:-(unknown)}}
+cluster     : ${{SLURM_CLUSTER_NAME:-(unknown)}}
+partition   : ${{SLURM_JOB_PARTITION:-(unknown)}}
+host        : $(hostname -f 2>/dev/null || hostname)
+node list   : ${{SLURM_JOB_NODELIST:-(unknown)}}
+user        : ${{USER:-$(id -un)}}
+submit dir  : ${{SLURM_SUBMIT_DIR:-(unknown)}}
+job id      : ${{SLURM_JOB_ID:-(unknown)}}
+array       : ${{SLURM_ARRAY_JOB_ID:-n/a}}_${{SLURM_ARRAY_TASK_ID:-n/a}}
+cpus        : ${{SLURM_CPUS_ON_NODE:-(unknown)}}
+mem (MB)    : ${{SLURM_MEM_PER_NODE:-(unknown)}}
+started     : $(date -Iseconds)
+============================================================
+HEADER
+
+# Strict mode + command tracing for the remainder of the script.
+set -euo pipefail
+set -x"""
+
+
 def _snapshot_lysis_src(repo_root: Path, staging_dir: Path) -> Path:
     """Copy ``src/lysis/`` into the staging dir and return the importable root.
 
@@ -670,11 +756,19 @@ def generate_array_script(
     historical_backend_attrs: Optional[dict] = None,
     pythonpath: "Path | str | None" = None,
     source_stamp: Optional[tuple] = None,
+    experiment: Optional[str] = None,
 ) -> str:
     """Generate a Slurm array job bash script for an array-mode dispatch.
 
     Each array task indexed by ``SLURM_ARRAY_TASK_ID`` calls
     ``{spec.runner_class}.from_hdf5(...).exec_in_workdir(...)``.
+
+    Every generated task begins with an identifying header (see
+    :func:`_log_header`) and then enables ``set -euo pipefail`` + ``set -x``,
+    so the per-task ``.out`` log records which job/host/allocation ran and
+    traces each shell step.  Because Slurm does not substitute ``%a`` in
+    ``--job-name`` (only in ``--output``), the array shares a single job
+    name and the per-task index is surfaced via that header.
 
     For the *macroscale* path each task isolates its output in a
     per-simulation subdirectory ``data/{run_code}/{sim:02}/`` (managed by
@@ -706,8 +800,12 @@ def generate_array_script(
     :type partition: str, optional
     :param fast_tmp_root: Root directory for fast node-local scratch.
     :type fast_tmp_root: str, optional
-    :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
-        ``hdf5_path.parent / ".slurm"``.
+    :param slurm_log_dir: Retained for API compatibility; no longer used
+        by this generator.  The array task's ``--output`` now writes into
+        *staging_dir* (alongside the generated scripts), so worker
+        stdout/stderr — including the identifying header and ``set -x``
+        trace — is co-located with the run's scripts and data rather than
+        in ``hdf5_path.parent / ".slurm"``.
     :type slurm_log_dir: Path or str, optional
     :param modules: Space-separated list of LMod module specs to load in
         each generated task script (include a Fortran compiler module so
@@ -742,6 +840,9 @@ def generate_array_script(
         check is bypassed in that workflow).  ``None`` (default)
         preserves the in-process git lookup.
     :type source_stamp: tuple[str, str] or None
+    :param experiment: Best-effort experiment identifier shown in the log
+        header; ``None`` (default) renders as ``(unknown)``.
+    :type experiment: str, optional
     :return: Slurm array job bash script text.
     :rtype: str
     :raises ImportError: If ``GooseSLURM`` is not installed.
@@ -751,21 +852,29 @@ def generate_array_script(
     hdf5_path = Path(hdf5_path)
     executable = Path(executable)
     binary_name = executable.name
-    if slurm_log_dir is None:
-        slurm_log_dir = hdf5_path.parent / ".slurm"
-    slurm_log_dir = Path(slurm_log_dir)
     skip_binary_verification = historical_backend_attrs is not None
 
     repo_root = _repo_root()
-    env_preamble = _env_preamble(
-        repo_root, modules, pythonpath=pythonpath
+    # Leading section: env setup (module/PATH/PYTHONPATH) runs first, then the
+    # header prints and strict mode + tracing engage for the rest of the task.
+    lead = "{}\n{}".format(
+        _env_preamble(repo_root, modules, pythonpath=pythonpath),
+        _log_header(
+            scale=spec.scale, role="array task", run_code=run_code,
+            experiment=experiment, pythonpath=pythonpath,
+        ),
     )
     py = _uv_python_prefix(repo_root)
 
     sbatch_opts = {
         "array": f"0-{spec.num_array_tasks - 1}",
-        "job-name": f"lysis-{spec.scale}-array__{run_code}__%a",
-        "out": str(slurm_log_dir / f"lysis-{spec.scale}-array__{run_code}__%a.out"),
+        # Slurm does not substitute ``%a`` in ``--job-name`` (only in
+        # ``--output``/``--error``), so the whole array shares one name; the
+        # per-task index is surfaced via the log header instead.
+        "job-name": f"lysis-{spec.scale}-array__{run_code}",
+        # Worker stdout/stderr (incl. the header + ``set -x`` trace) lands in
+        # the staging dir alongside the generated scripts — not in ``.slurm``.
+        "out": str(staging_dir / f"lysis-{spec.scale}-array__{run_code}__%a.out"),
         "nodes": 1,
         "mem": 3096,
         "ntasks": 1,
@@ -789,7 +898,6 @@ def generate_array_script(
         )
         execute = f"""\
 # Execute {spec.scale}scale Fortran binary via lysis
-{env_preamble}
 {py} -c "
 import os
 from pathlib import Path
@@ -798,7 +906,7 @@ fm = {init}
 fm.exec_in_workdir(Path('{staging_dir}'))
 " """
 
-        sections = [execute]
+        sections = [lead, execute]
 
     else:
         # ------------------------------------------------------------------
@@ -831,7 +939,6 @@ cp "{staging_dir}/{binary_name}" "${{local_work_dir}}/" """
         )
         execute = f"""\
 # Execute {spec.scale}scale Fortran binary into local fast storage
-{env_preamble}
 {py} -c "
 import os
 from pathlib import Path
@@ -845,7 +952,7 @@ fm.exec_in_workdir(Path('${{local_work_dir}}'))
 {mv_section}
 rm -rf "${{local_work_dir}}" """
 
-        sections = [setup, execute, move]
+        sections = [lead, setup, execute, move]
 
     return gs.scripts.plain(sections, **sbatch_opts)
 
@@ -862,6 +969,7 @@ def submit_slurm_job(
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_backend_attrs: Optional[dict] = None,
+    experiment: Optional[str] = None,
 ) -> int:
     """Stage scripts and submit a master Slurm job for an array-mode dispatch.
 
@@ -901,6 +1009,10 @@ def submit_slurm_job(
         in place of the default ``<binary> --version`` query.  ``None``
         (default) preserves normal-mode provenance.
     :type historical_backend_attrs: dict, optional
+    :param experiment: Best-effort experiment identifier shown in the log
+        header of the master and array-task scripts; ``None`` (default)
+        renders as ``(unknown)``.
+    :type experiment: str, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises ImportError: If ``GooseSLURM`` is not installed.
@@ -977,6 +1089,7 @@ def submit_slurm_job(
         historical_backend_attrs=historical_backend_attrs,
         pythonpath=pythonpath,
         source_stamp=source_stamp,
+        experiment=experiment,
     )
     array_path = staging_dir / f"lysis-{spec.scale}-array__{run_code}.sh"
     array_path.write_text(array_script)
@@ -1011,6 +1124,10 @@ def submit_slurm_job(
     master_sh_content = gs.scripts.plain(
         [
             _env_preamble(repo_root, modules, pythonpath=pythonpath),
+            _log_header(
+                scale=spec.scale, role="master", run_code=run_code,
+                experiment=experiment, pythonpath=pythonpath,
+            ),
             f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
@@ -1042,6 +1159,7 @@ def generate_micro_child_script(
     historical_backend_attrs: Optional[dict] = None,
     pythonpath: "Path | str | None" = None,
     source_stamp: Optional[tuple] = None,
+    experiment: Optional[str] = None,
 ) -> str:
     """Generate a Slurm bash script for a single child microscale Fortran job.
 
@@ -1051,7 +1169,9 @@ def generate_micro_child_script(
     The child script sources the user's shell environment, copies the
     executable into the working directory, and calls
     :meth:`~lysis.execution.fortran_micro.FortranMicro.exec_in_workdir` via
-    ``python -c``.
+    ``python -c``.  It begins with an identifying header (see
+    :func:`_log_header`) and then enables ``set -euo pipefail`` + ``set -x``
+    so the ``.out`` log records the job context and traces each shell step.
 
     **Single-tier** (default, ``fast_tmp_root=None``): Fortran writes its
     output directly to ``{staging_dir}/data/{run_code}/``.
@@ -1075,8 +1195,12 @@ def generate_micro_child_script(
     :type partition: str, optional
     :param fast_tmp_root: Root directory for fast node-local scratch.
     :type fast_tmp_root: str, optional
-    :param slurm_log_dir: Directory for Slurm ``.out`` logs.  Defaults to
-        ``hdf5_path.parent / ".slurm"``.
+    :param slurm_log_dir: Retained for API compatibility; no longer used
+        by this generator.  The child's ``--output`` now writes into
+        *staging_dir* (alongside the generated scripts), so worker
+        stdout/stderr — including the identifying header and ``set -x``
+        trace — is co-located with the run's scripts and data rather than
+        in ``hdf5_path.parent / ".slurm"``.
     :type slurm_log_dir: Path or str, optional
     :param modules: Space-separated list of LMod module specs (include a
         Fortran compiler module so the binary finds its runtime), baked into the generated script.  Defaults to
@@ -1108,6 +1232,9 @@ def generate_micro_child_script(
         ``historical_backend_attrs`` is set.  ``None`` (default)
         preserves the in-process git lookup.
     :type source_stamp: tuple[str, str] or None
+    :param experiment: Best-effort experiment identifier shown in the log
+        header; ``None`` (default) renders as ``(unknown)``.
+    :type experiment: str, optional
     :return: Slurm bash script text.
     :rtype: str
     :raises ImportError: If ``GooseSLURM`` is not installed.
@@ -1117,19 +1244,24 @@ def generate_micro_child_script(
     hdf5_path = Path(hdf5_path)
     executable = Path(executable)
     binary_name = executable.name
-    if slurm_log_dir is None:
-        slurm_log_dir = hdf5_path.parent / ".slurm"
-    slurm_log_dir = Path(slurm_log_dir)
 
     repo_root = _repo_root()
-    env_preamble = _env_preamble(
-        repo_root, modules, pythonpath=pythonpath
+    # Leading section: env setup runs first, then the header prints and strict
+    # mode + tracing engage for the rest of the child script.
+    lead = "{}\n{}".format(
+        _env_preamble(repo_root, modules, pythonpath=pythonpath),
+        _log_header(
+            scale="micro", role="micro child", run_code=run_code,
+            experiment=experiment, pythonpath=pythonpath,
+        ),
     )
     py = _uv_python_prefix(repo_root)
 
     sbatch_opts = {
         "job-name": f"lysis-micro-child__{run_code}",
-        "out": str(slurm_log_dir / f"lysis-micro-child__{run_code}.out"),
+        # Worker stdout/stderr (incl. the header + ``set -x`` trace) lands in
+        # the staging dir alongside the generated scripts — not in ``.slurm``.
+        "out": str(staging_dir / f"lysis-micro-child__{run_code}.out"),
         "nodes": 1,
         "mem": 3096,
         "ntasks": 1,
@@ -1166,7 +1298,6 @@ mkdir -p "${{staging_datadir}}" """
 
         execute = f"""\
 # Execute Fortran binary via lysis
-{env_preamble}
 {py} -c "
 from pathlib import Path
 from lysis.execution.fortran_micro import FortranMicro
@@ -1174,7 +1305,7 @@ fm = FortranMicro.from_hdf5('{hdf5_path}', '{staging_dir}/{binary_name}', out_fi
 fm.exec_in_workdir(Path('{staging_dir}'))
 " """
 
-        sections = [setup, execute]
+        sections = [lead, setup, execute]
 
     else:
         # ------------------------------------------------------------------
@@ -1194,7 +1325,6 @@ cp "{staging_dir}/{binary_name}" "${{local_work_dir}}/" """
 
         execute = f"""\
 # Execute Fortran binary into local fast storage
-{env_preamble}
 {py} -c "
 from pathlib import Path
 from lysis.execution.fortran_micro import FortranMicro
@@ -1207,7 +1337,7 @@ fm.exec_in_workdir(Path('${{local_work_dir}}'))
 mv "${local_datadir}"/* "${staging_datadir}/"
 rm -rf "${local_work_dir}" """
 
-        sections = [setup, execute, move]
+        sections = [lead, setup, execute, move]
 
     return gs.scripts.plain(sections, **sbatch_opts)
 
@@ -1291,6 +1421,7 @@ def generate_micro_array_script(
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_backend_attrs: Optional[dict] = None,
+    experiment: Optional[str] = None,
 ) -> str:
     """Generate a Slurm array job script for the microscale Fortran simulation.
 
@@ -1322,6 +1453,7 @@ def generate_micro_array_script(
         modules=modules,
         sbatch_overrides=sbatch_overrides,
         historical_backend_attrs=historical_backend_attrs,
+        experiment=experiment,
     )
 
 
@@ -1338,6 +1470,7 @@ def submit_micro_slurm_job(
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_backend_attrs: Optional[dict] = None,
+    experiment: Optional[str] = None,
 ) -> int:
     """Submit the full HDF5-integrated microscale workflow as a Slurm master job.
 
@@ -1407,6 +1540,10 @@ def submit_micro_slurm_job(
         ``<binary> --version`` query.  ``None`` (default) preserves
         normal-mode provenance.
     :type historical_backend_attrs: dict, optional
+    :param experiment: Best-effort experiment identifier shown in the log
+        header of every generated script; ``None`` (default) renders as
+        ``(unknown)``.
+    :type experiment: str, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
@@ -1451,6 +1588,7 @@ def submit_micro_slurm_job(
             modules=modules,
             sbatch_overrides=sbatch_overrides,
             historical_backend_attrs=historical_backend_attrs,
+            experiment=experiment,
         )
 
     # ------------------------------------------------------------------
@@ -1512,6 +1650,7 @@ def submit_micro_slurm_job(
         historical_backend_attrs=historical_backend_attrs,
         pythonpath=pythonpath,
         source_stamp=source_stamp,
+        experiment=experiment,
     )
     child_path = staging_dir / f"lysis-micro-child__{run_code}.sh"
     child_path.write_text(child_script)
@@ -1546,6 +1685,10 @@ def submit_micro_slurm_job(
     master_sh_content = gs.scripts.plain(
         [
             _env_preamble(repo_root, modules, pythonpath=pythonpath),
+            _log_header(
+                scale="micro", role="master", run_code=run_code,
+                experiment=experiment, pythonpath=pythonpath,
+            ),
             f'{_uv_python_prefix(repo_root)} "{master_py_path}"',
         ],
         **sbatch_opts,
@@ -1593,6 +1736,7 @@ def generate_macro_array_script(
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_backend_attrs: Optional[dict] = None,
+    experiment: Optional[str] = None,
 ) -> str:
     """Generate a Slurm array job script for the macroscale Fortran simulation.
 
@@ -1622,6 +1766,7 @@ def generate_macro_array_script(
         modules=modules,
         sbatch_overrides=sbatch_overrides,
         historical_backend_attrs=historical_backend_attrs,
+        experiment=experiment,
     )
 
 
@@ -1638,6 +1783,7 @@ def submit_macro_slurm_job(
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_backend_attrs: Optional[dict] = None,
+    experiment: Optional[str] = None,
 ) -> int:
     """Submit the full HDF5-integrated macroscale workflow as a Slurm master job.
 
@@ -1697,6 +1843,10 @@ def submit_macro_slurm_job(
         default ``<binary> --version`` query.  ``None`` (default)
         preserves normal-mode provenance.
     :type historical_backend_attrs: dict, optional
+    :param experiment: Best-effort experiment identifier shown in the log
+        header of the master and array-task scripts; ``None`` (default)
+        renders as ``(unknown)``.
+    :type experiment: str, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
@@ -1728,4 +1878,5 @@ def submit_macro_slurm_job(
         modules=modules,
         sbatch_overrides=sbatch_overrides,
         historical_backend_attrs=historical_backend_attrs,
+        experiment=experiment,
     )

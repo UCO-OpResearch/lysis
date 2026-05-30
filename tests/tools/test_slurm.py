@@ -9,6 +9,7 @@ Tests cover:
 """
 
 import os
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -1995,3 +1996,172 @@ class TestSourcePinningInGeneratedScripts:
             pythonpath="/snap/python_src",
         )
         assert 'export PYTHONPATH="/snap/python_src"' in script
+
+
+# ---------------------------------------------------------------------------
+# Worker log relocation (#84) + identifying header & shell tracing (#81)
+# ---------------------------------------------------------------------------
+
+
+def _sbatch_value_line(script: str, flag: str) -> str:
+    """Return the ``#SBATCH {flag} ...`` line from a generated script."""
+    for line in script.splitlines():
+        s = line.strip()
+        if s.startswith(f"#SBATCH {flag} "):
+            return s
+    raise AssertionError(f"no '#SBATCH {flag}' directive in script")
+
+
+class TestWorkerLogOutputAndHeader:
+    """#84: worker ``--output`` → staging dir. #81: header + ``set -x`` tracing."""
+
+    # ---- #84: worker --output lands in the staging dir, NOT in .slurm -----
+
+    def test_child_output_in_staging_not_slurm(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", "",
+        )
+        out_line = _sbatch_value_line(script, "--out")
+        assert str(staging / "lysis-micro-child__run-01.out") in out_line
+        assert ".slurm" not in out_line
+
+    def test_micro_array_output_in_staging_not_slurm(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_array_script(
+            staging, "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", 5,
+        )
+        out_line = _sbatch_value_line(script, "--out")
+        assert str(staging / "lysis-micro-array__run-01__%a.out") in out_line
+        assert ".slurm" not in out_line
+
+    def test_macro_array_output_in_staging_not_slurm(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_macro_array_script(
+            staging, "run-01", tmp_path / "run-01.h5", "/bin/macro.exe", n_sims=5,
+        )
+        out_line = _sbatch_value_line(script, "--out")
+        assert str(staging / "lysis-macro-array__run-01__%a.out") in out_line
+        assert ".slurm" not in out_line
+
+    # ---- #81 comment: array --job-name carries no literal %a --------------
+
+    def test_micro_array_job_name_has_no_literal_percent_a(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", 5,
+        )
+        name_line = _sbatch_value_line(script, "--job-name")
+        assert name_line.endswith("lysis-micro-array__run-01")
+        assert "%a" not in name_line
+
+    def test_macro_array_job_name_has_no_literal_percent_a(self, tmp_path):
+        script = generate_macro_array_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/macro.exe",
+            n_sims=5,
+        )
+        name_line = _sbatch_value_line(script, "--job-name")
+        assert name_line.endswith("lysis-macro-array__run-01")
+        assert "%a" not in name_line
+
+    # ---- #81: identifying header content ----------------------------------
+
+    def test_header_present_with_baked_and_runtime_fields(self, tmp_path):
+        script = generate_micro_array_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", 5,
+        )
+        assert "lysis slurm task" in script
+        # Baked submit-time fields.
+        assert re.search(r"^run\s+: run-01$", script, re.M)
+        assert re.search(r"^scale\s+: micro$", script, re.M)
+        assert re.search(r"^role\s+: array task$", script, re.M)
+        # Runtime ${SLURM_*} expansions (evaluated on the compute node).
+        assert "${SLURM_JOB_ID" in script
+        assert "${SLURM_ARRAY_TASK_ID" in script
+
+    def test_child_header_role_is_micro_child(self, tmp_path):
+        script = generate_micro_child_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", "",
+        )
+        assert re.search(r"^role\s+: micro child$", script, re.M)
+
+    def test_experiment_field_default_unknown(self, tmp_path):
+        script = generate_micro_child_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", "",
+        )
+        assert re.search(r"^experiment\s+: \(unknown\)$", script, re.M)
+
+    def test_experiment_field_threaded(self, tmp_path):
+        script = generate_micro_child_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", "",
+            experiment="EXP-42",
+        )
+        assert re.search(r"^experiment\s+: EXP-42$", script, re.M)
+
+    # ---- #81: strict mode + tracing, enabled AFTER the header -------------
+
+    def test_strict_mode_and_trace_enabled_after_header(self, tmp_path):
+        script = generate_micro_child_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", "",
+        )
+        assert "set -euo pipefail" in script
+        assert "\nset -x" in script
+        header_pos = script.index("lysis slurm task")
+        # Strict mode (incl. nounset) is enabled only after the header prints,
+        # so the header's optional ${SLURM_*} reads can't trip ``set -u``.
+        assert header_pos < script.index("set -euo pipefail")
+        assert header_pos < script.index("\nset -x")
+
+    def test_two_tier_setup_runs_under_trace(self, tmp_path):
+        """SIM/cp/mv setup must come AFTER ``set -x`` so it is traced."""
+        script = generate_macro_array_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/macro.exe",
+            n_sims=5, fast_tmp_root="/scratch",
+        )
+        assert script.index("\nset -x") < script.index("SIM=")
+
+
+class TestMasterLogStaysInSlurm:
+    """#84 scope: master ``--output`` stays in ``.slurm`` (worker-only move)."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_copy2(self):
+        with patch("lysis.tools.slurm.shutil.copy2"):
+            yield
+
+    def _staging_dir(self, root):
+        return next(
+            p for p in root.iterdir() if p.is_dir() and "lysis-micro" in p.name
+        )
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_legacy_master_output_in_slurm_with_header(
+        self, mock_sbatch, micro_hdf5, tmp_path
+    ):
+        submit_micro_slurm_job(micro_hdf5, "/bin/micro.exe", staging_root=tmp_path)
+        master = (
+            self._staging_dir(tmp_path) / "lysis-micro-master__run-01.sh"
+        ).read_text()
+        out_line = _sbatch_value_line(master, "--out")
+        assert ".slurm" in out_line
+        # The master also gets the identifying header + tracing.
+        assert "lysis slurm task" in master
+        assert re.search(r"^role\s+: master$", master, re.M)
+        assert "set -x" in master
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_array_master_output_in_slurm_with_header(
+        self, mock_sbatch, micro_hdf5, tmp_path
+    ):
+        with patch(
+            "lysis.execution.fortran_micro.FortranMicro._write_setup_files"
+        ):
+            submit_micro_slurm_job(
+                micro_hdf5, "/bin/micro.exe",
+                staging_root=tmp_path, num_children=5,
+            )
+        master = (
+            self._staging_dir(tmp_path) / "lysis-micro-master__run-01.sh"
+        ).read_text()
+        out_line = _sbatch_value_line(master, "--out")
+        assert ".slurm" in out_line
+        assert re.search(r"^role\s+: master$", master, re.M)
