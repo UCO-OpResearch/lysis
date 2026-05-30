@@ -12,8 +12,10 @@ Guardrails
 * **Idempotent.**  Files with no old attrs are classified ``already-migrated``
   and skipped; re-running after a successful pass is a no-op.
 * **Scope-limited.**  Only ``dataspec_version == "v2.0.0"`` files that carry old
-  provenance attrs *and* are writable by the current user are migrated.  Files
-  owned by other users (not writable) are reported, never touched.
+  provenance attrs *and* are writable are migrated.  By default a file must be
+  OWNED by the current user; pass ``--include-other-owners`` to also migrate
+  files merely made writable via group permissions (use only when the owner has
+  agreed).  Everything skipped for ownership/permission reasons is reported.
 * **Per-file integrity verification.**  Before editing, a manifest is built of
   every root/group attribute *and a SHA-256 checksum of every dataset's bytes*.
   After the attr edits the file is closed, reopened read-only, and every dataset
@@ -21,16 +23,18 @@ Guardrails
   ``dataspec_version`` changed, the script **halts immediately**, prints the
   offending file, and exits non-zero — so you know exactly which file to restore
   from backup.  (Datasets are never accessed for writing; this is belt-and-braces.)
-* **Backups.**  ``--backup-dir`` copies each file before editing.  Required under
-  ``--apply`` unless ``--no-backup`` is given explicitly.
+* **Backups + SHA log.**  ``--backup-dir`` copies each file before editing and
+  writes a ``<flattened>.sha256.txt`` sidecar listing every dataset's pre- and
+  post-edit checksum.  A backup dir is required under ``--apply`` unless
+  ``--no-backup`` is given explicitly.
 
 Usage
 -----
     # Dry-run (default) over the standard roots, write a report:
     python scripts/migrate_provenance_attrs.py --report /tmp/prov_migration.txt
 
-    # Apply, backing up every edited file first:
-    python scripts/migrate_provenance_attrs.py --apply --backup-dir ~/prov_backup
+    # Apply, backing up every edited file first, 8 workers:
+    python scripts/migrate_provenance_attrs.py --apply --backup-dir ~/prov_backup -j 8
 
     # Restrict to one root:
     python scripts/migrate_provenance_attrs.py ~/git/UCO-OpResearch/lysis/data --apply ...
@@ -154,10 +158,46 @@ def _iter_h5(roots):
                     yield os.path.join(dirpath, name)
 
 
+def _backup_basename(path) -> str:
+    """Flattened backup name for *path* (collision-free across roots)."""
+    return path.lstrip(os.sep).replace(os.sep, "__")
+
+
+def _write_sha_log(backup_dir, path, pre, post) -> str:
+    """Write a per-file SHA-256 audit log next to the backup.
+
+    Two sections — every dataset's pre-edit checksum, then every dataset's
+    post-edit checksum — so the lists line up for a quick diff without having
+    to interleave per line.  Written *before* the integrity check raises, so
+    the record survives even on a verification failure.
+
+    :return: The path of the written ``.sha256.txt`` file.
+    """
+    log_path = os.path.join(backup_dir, _backup_basename(path) + ".sha256.txt")
+    names = sorted(set(pre["datasets"]) | set(post["datasets"]))
+
+    def _sha(manifest, name):
+        entry = manifest["datasets"].get(name)
+        return entry[2] if entry else "MISSING"
+
+    lines = [
+        f"# file: {path}",
+        f"# datasets: {len(names)}    (column: dataset_name  sha256)",
+        "",
+        "[pre-edit]",
+    ]
+    lines += [f"{name}  {_sha(pre, name)}" for name in names]
+    lines += ["", "[post-edit]"]
+    lines += [f"{name}  {_sha(post, name)}" for name in names]
+    with open(log_path, "w") as fh:
+        fh.write("\n".join(lines) + "\n")
+    return log_path
+
+
 # --------------------------------------------------------------------------- #
 # Classification
 # --------------------------------------------------------------------------- #
-def classify(path) -> str:
+def classify(path, *, include_other_owners=False) -> str:
     """Return one of the migration categories for *path* (read-only)."""
     try:
         with h5py.File(path, "r") as f:
@@ -171,14 +211,16 @@ def classify(path) -> str:
         return "read-error"
     if not has_old:
         return "already-migrated"
-    # Only ever modify files the current user OWNS — never another user's data,
-    # even when the shared group makes them writable (the owner runs the tool on
-    # their own files).  Also skip anything not writable for any other reason.
     try:
         st = os.stat(path)
     except OSError:
         return "read-error"
-    if st.st_uid != os.getuid() or not os.access(path, os.W_OK):
+    if not os.access(path, os.W_OK):
+        return "not-writable"
+    # By default only ever modify files the current user OWNS — never another
+    # user's data, even when the shared group makes them writable.  The owner
+    # opts in to group-writable files via --include-other-owners.
+    if st.st_uid != os.getuid() and not include_other_owners:
         return "not-mine"
     return "will-migrate"
 
@@ -208,9 +250,7 @@ def migrate_file(path, *, backup_dir=None):
 
     if backup_dir is not None:
         os.makedirs(backup_dir, exist_ok=True)
-        # Flatten the path into the backup name to avoid collisions across roots.
-        flat = path.lstrip(os.sep).replace(os.sep, "__")
-        shutil.copy2(path, os.path.join(backup_dir, flat))
+        shutil.copy2(path, os.path.join(backup_dir, _backup_basename(path)))
 
     # Compute the planned changes per group and the expected post-state.
     plan = {}
@@ -236,6 +276,11 @@ def migrate_file(path, *, backup_dir=None):
 
     # Verify: reopen read-only, rebuild manifest, compare exhaustively.
     post = _build_manifest(path)
+
+    # Persist the pre/post SHA audit log next to the backup BEFORE the integrity
+    # check below can raise, so the record survives a verification failure.
+    if backup_dir is not None:
+        _write_sha_log(backup_dir, path, pre, post)
 
     problems = []
     if post["root_attrs"] != pre["root_attrs"]:
@@ -288,6 +333,11 @@ def main(argv=None):
         "--no-backup", action="store_true",
         help="Proceed under --apply without a backup dir (NOT recommended).",
     )
+    parser.add_argument(
+        "--include-other-owners", action="store_true",
+        help="Also migrate files owned by another user but writable to you "
+        "(e.g. group-writable shared files). Use only with the owner's consent.",
+    )
     parser.add_argument("--report", default=None, help="Write the full report to this path too.")
     parser.add_argument(
         "--jobs", "-j", type=int, default=1,
@@ -307,10 +357,10 @@ def main(argv=None):
 
     buckets = {
         "will-migrate": [], "already-migrated": [], "not-v2.0.0": [],
-        "not-mine": [], "read-error": [],
+        "not-mine": [], "not-writable": [], "read-error": [],
     }
     for path in _iter_h5(roots):
-        buckets[classify(path)].append(path)
+        buckets[classify(path, include_other_owners=args.include_other_owners)].append(path)
 
     out = []
 
@@ -321,16 +371,19 @@ def main(argv=None):
     stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
     emit(f"# Provenance attr migration — {'APPLY' if args.apply else 'DRY-RUN'} — {stamp}")
     emit(f"# roots: {roots}")
+    if args.include_other_owners:
+        emit("# include-other-owners: ON (migrating group-writable files you do not own)")
     emit("")
     for cat, files in buckets.items():
         emit(f"{cat}: {len(files)}")
     emit("")
 
-    if buckets["not-mine"]:
-        emit("## not-mine (owned by another user or not writable — reported, NOT touched):")
-        for p in sorted(buckets["not-mine"]):
-            emit(f"  [{_file_owner(p)}] {p}")
-        emit("")
+    for cat in ("not-mine", "not-writable"):
+        if buckets[cat]:
+            emit(f"## {cat} (reported, NOT touched):")
+            for p in sorted(buckets[cat]):
+                emit(f"  [{_file_owner(p)}] {p}")
+            emit("")
 
     migrated, failed = 0, None
     will = sorted(buckets["will-migrate"])
@@ -408,7 +461,7 @@ def main(argv=None):
     elif args.apply:
         emit(f"DONE. Migrated {migrated} file(s).")
     else:
-        emit(f"DRY-RUN complete. {len(buckets['will-migrate'])} file(s) would be migrated.")
+        emit(f"DRY-RUN complete. {len(will)} file(s) would be migrated.")
 
     if args.report:
         with open(args.report, "w") as fh:
