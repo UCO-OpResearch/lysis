@@ -31,7 +31,7 @@ Group Structure
   Contains log files for all executions of code
 
 Provenance attributes
---------------------
+---------------------
 
 Each per-scale params group (``micro_data`` / ``macro_data``) carries
 provenance attributes recording *when*, *where*, and *with what code* the
