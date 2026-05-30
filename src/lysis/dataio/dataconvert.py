@@ -369,7 +369,8 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     This function transforms microscale simulation results into the input format
     required by the Fortran macroscale model. It performs several key operations:
 
-    1. Bins microscale simulations (typically 50,000) into 100 groups based on
+    1. Bins microscale simulations (typically 50,000) into
+       :data:`~lysis.config.constants.CONST.TPA_LEAVE_TIME_BINS` groups based on
        tPA leaving time distribution
     2. Computes the cumulative distribution function (CDF) of tPA leaving times
     3. Organizes fiber degradation times by bin and simulation outcome
@@ -405,7 +406,8 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
 
     Notes
     -----
-    - Microscale simulations will always be divided into 100 bins
+    - Microscale simulations are divided into
+      :data:`~lysis.config.constants.CONST.TPA_LEAVE_TIME_BINS` bins
     - Uses infinity as marker for incomplete fiber degradation
     - Preserves all parameters from input data in the output
 
@@ -418,14 +420,18 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     # TODO: Add code to check that `in_data` meets the "current" data specification
     out_data = in_data.copy()
 
-    # Determine bin size: divide microscale simulations into 100 bins
-    # Typically 50,000 microscale runs → 500 simulations per bin
-    bin_size = in_data["pli_first_time"].size // 100
+    # Determine bin size: divide microscale simulations into
+    # CONST.TPA_LEAVE_TIME_BINS bins by tPA leaving time.
+    # Typically 50,000 microscale runs → 500 simulations per bin (at 100 bins)
+    bin_size = in_data["pli_first_time"].size // CONST.TPA_LEAVE_TIME_BINS
 
     # Create the CDF of tPA leaving time distribution
-    # bin_edge_proportions = [0.00, 0.01, 0.02, ..., 0.99, 1.00] (101 values)
+    # bin_edge_proportions = [0.00, 0.01, 0.02, ..., 0.99, 1.00]
+    # (CONST.TPA_LEAVE_TIME_BINS + 1 values)
     # These represent cumulative proportions: 0%, 1%, 2%, ..., 100% of tPA have left
-    out_data["bin_edge_proportions"] = np.append(np.arange(0, 1, 0.01), [1.0])
+    out_data["bin_edge_proportions"] = np.append(
+        np.arange(0, 1, 1 / CONST.TPA_LEAVE_TIME_BINS), [1.0]
+    )
 
     # Sort microscale simulations by tPA leaving time
     # This ordering will be used to assign simulations to bins
@@ -448,7 +454,8 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     # This allows incomplete simulations to be identified and handled separately
     lysis_time[~lysis_complete] = float("inf")
 
-    # Organize fiber degradation times into 100 bins (columns)
+    # Organize fiber degradation times into CONST.TPA_LEAVE_TIME_BINS bins
+    # (columns), one per tPA-leaving-time quantile:
     # 1. Split simulations into bins using the sorted ordering (indices)
     # 2. Sort lysis times within each bin (fastest to slowest degradation)
     # 3. Stack bins as rows, then transpose so bins become columns
@@ -456,7 +463,7 @@ def generate_macroscale_in(in_data: DataCollectionType) -> DataCollectionType:
     out_data["binned_fiber_degrade_time"] = np.stack(
         [
             np.sort(lysis_time[indices[i * bin_size : (i + 1) * bin_size]])
-            for i in range(100)
+            for i in range(CONST.TPA_LEAVE_TIME_BINS)
         ]
     ).T
 
