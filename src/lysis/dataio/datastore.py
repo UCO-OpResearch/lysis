@@ -1011,59 +1011,59 @@ class DataStore:
         kind,
         *,
         executable=None,
-        binary_override=None,
-        replace_binary_attrs=None,
+        backend_override=None,
+        replace_backend_attrs=None,
     ):
         """Stamp provenance attributes onto the per-scale params group.
 
-        Writes the ``init_*``, ``execution_*``, or ``binary_*`` attribute
+        Writes the ``init_*``, ``pipeline_*``, or ``backend_*`` attribute
         family to the HDF5 group at ``{scale}_data`` (the params group
         for the named scale).
 
         :param scale: ``"micro"`` (targets ``micro_data``) or ``"macro"``
             (targets ``macro_data``).
         :type scale: str
-        :param kind: One of ``"init"``, ``"execution"``, ``"binary"``.
+        :param kind: One of ``"init"``, ``"pipeline"``, ``"backend"``.
 
             * ``"init"`` calls
               :func:`~lysis.tools.provenance.gather_init_provenance`.
-            * ``"execution"`` calls
-              :func:`~lysis.tools.provenance.gather_execution_provenance`.
-            * ``"binary"`` calls
-              :func:`~lysis.tools.provenance.gather_binary_provenance`
-              against *executable* and additionally writes any keys in
-              *binary_override*.
+            * ``"pipeline"`` calls
+              :func:`~lysis.tools.provenance.gather_pipeline_provenance`.
+            * ``"backend"`` calls
+              :func:`~lysis.tools.provenance.gather_backend_provenance`
+              against *executable*, stamps ``backend_type = "fortran"``,
+              and additionally writes any keys in *backend_override*.
         :type kind: str
-        :param executable: Required when ``kind="binary"`` — path to the
+        :param executable: Required when ``kind="backend"`` — path to the
             Fortran binary whose ``--version`` output supplies commit /
             dirty / compiler stamps.  May be ``None`` when
-            *replace_binary_attrs* is supplied (historical-build mode,
+            *replace_backend_attrs* is supplied (historical-build mode,
             where the binary's commit/dirty/compiler are synthesised
             externally rather than queried).  Ignored for other kinds.
         :type executable: pathlib.Path or str, optional
-        :param binary_override: Optional dict of extra attrs to merge in
+        :param backend_override: Optional dict of extra attrs to merge in
             *on top of* the gathered (or replaced) attrs — typically
-            ``{stale_binary_override: True}`` from
+            ``{stale_backend_override: True}`` from
             :func:`~lysis.tools.provenance.verify_binary_matches_source`
             when the staleness check was overridden.  Ignored when
-            ``kind != "binary"``.
-        :type binary_override: dict, optional
-        :param replace_binary_attrs: Optional pre-computed dict that
+            ``kind != "backend"``.
+        :type backend_override: dict, optional
+        :param replace_backend_attrs: Optional pre-computed dict that
             *replaces* the default
-            :func:`~lysis.tools.provenance.gather_binary_provenance`
-            call when ``kind="binary"``.  Used by the historical-build
+            :func:`~lysis.tools.provenance.gather_backend_provenance`
+            call when ``kind="backend"``.  Used by the historical-build
             workflow to ship a synthesised provenance dict (commit SHA,
             ``iso_fortran_env`` compiler probe output, and the
-            ``binary_source = "historical:<sha>"`` marker) for a binary
-            whose own ``--version`` may not match — or be absent.  When
-            supplied, *executable* may be ``None`` and no subprocess is
-            spawned against the binary.  ``binary_override`` (if also
-            supplied) is merged on top.  Ignored for other kinds.
-        :type replace_binary_attrs: dict, optional
+            ``backend_historical = True`` marker) for a binary whose own
+            ``--version`` may not match — or be absent.  When supplied,
+            *executable* may be ``None`` and no subprocess is spawned
+            against the binary.  ``backend_override`` (if also supplied)
+            is merged on top.  Ignored for other kinds.
+        :type replace_backend_attrs: dict, optional
         :raises IOError: If the DataStore is in read-only mode.
         :raises ValueError: For an unknown *scale*/*kind*, a missing
-            target group, or ``kind="binary"`` with neither
-            *executable* nor *replace_binary_attrs*.
+            target group, or ``kind="backend"`` with neither
+            *executable* nor *replace_backend_attrs*.
         """
         if self._mode == "r":
             raise IOError(
@@ -1082,25 +1082,28 @@ class DataStore:
         if kind == "init":
             from ..tools.provenance import gather_init_provenance  # noqa: PLC0415
             attrs = gather_init_provenance()
-        elif kind == "execution":
-            from ..tools.provenance import gather_execution_provenance  # noqa: PLC0415
-            attrs = gather_execution_provenance()
-        elif kind == "binary":
-            if replace_binary_attrs is not None:
-                attrs = dict(replace_binary_attrs)
+        elif kind == "pipeline":
+            from ..tools.provenance import gather_pipeline_provenance  # noqa: PLC0415
+            attrs = gather_pipeline_provenance()
+        elif kind == "backend":
+            if replace_backend_attrs is not None:
+                attrs = dict(replace_backend_attrs)
             else:
                 if executable is None:
                     raise ValueError(
-                        "stamp_provenance(kind='binary') requires either "
-                        "an 'executable' argument or 'replace_binary_attrs'."
+                        "stamp_provenance(kind='backend') requires either "
+                        "an 'executable' argument or 'replace_backend_attrs'."
                     )
-                from ..tools.provenance import gather_binary_provenance  # noqa: PLC0415
-                attrs = gather_binary_provenance(executable)
-            if binary_override:
-                attrs = {**attrs, **binary_override}
+                from ..tools.provenance import gather_backend_provenance  # noqa: PLC0415
+                attrs = gather_backend_provenance(executable)
+            # Every current run is Fortran; the future Python backend will
+            # stamp "python" here once wired into run-* (see #35).
+            attrs = {**attrs, CONST.BACKEND_TYPE_ATTR: "fortran"}
+            if backend_override:
+                attrs = {**attrs, **backend_override}
         else:
             raise ValueError(
-                f"kind must be 'init', 'execution', or 'binary'; "
+                f"kind must be 'init', 'pipeline', or 'backend'; "
                 f"got {kind!r}"
             )
 
@@ -1193,9 +1196,9 @@ class DataStore:
         file_codes,
         param_overrides=None,
         param_aliases=None,
-        binary_executable=None,
-        binary_override=None,
-        replace_binary_attrs=None,
+        backend_executable=None,
+        backend_override=None,
+        replace_backend_attrs=None,
     ):
         """Import a data collection from an external source into this DataStore.
 
@@ -1244,29 +1247,29 @@ class DataStore:
             example, ``{"micro_simulations": "runs"}`` renames the ``runs``
             key produced by v1.90.0 log parsing.
         :type param_aliases: dict, optional
-        :param binary_executable: Path to the Fortran binary that produced
-            the source data.  When provided, the binary's commit/dirty/
+        :param backend_executable: Path to the Fortran binary that produced
+            the source data.  When provided, the backend's commit/dirty/
             compiler stamps (from ``<executable> --version``) are written
             to the per-scale params group via
             :meth:`stamp_provenance`.  ``None`` (the default) skips the
-            binary stamp — appropriate for HDF5→HDF5 conversions and tests.
-        :type binary_executable: pathlib.Path or str, optional
-        :param binary_override: Optional dict of override-only attrs from
+            backend stamp — appropriate for HDF5→HDF5 conversions and tests.
+        :type backend_executable: pathlib.Path or str, optional
+        :param backend_override: Optional dict of override-only attrs from
             :func:`~lysis.tools.provenance.verify_binary_matches_source`
-            (typically ``{stale_binary_override: True}``) when the binary
-            preflight check was bypassed.  Merged into the binary-stamp
-            group attrs.  Ignored when neither ``binary_executable`` nor
-            ``replace_binary_attrs`` is provided.
-        :type binary_override: dict, optional
-        :param replace_binary_attrs: Optional pre-computed binary-provenance
+            (typically ``{stale_backend_override: True}``) when the binary
+            preflight check was bypassed.  Merged into the backend-stamp
+            group attrs.  Ignored when neither ``backend_executable`` nor
+            ``replace_backend_attrs`` is provided.
+        :type backend_override: dict, optional
+        :param replace_backend_attrs: Optional pre-computed backend-provenance
             dict from
-            :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
-            (historical-build workflow).  When supplied, the binary stamp
+            :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
+            (historical-build workflow).  When supplied, the backend stamp
             is written from this dict instead of querying
-            ``<binary_executable> --version``; ``binary_executable`` may
+            ``<backend_executable> --version``; ``backend_executable`` may
             be ``None`` in that case.  See
             :meth:`stamp_provenance` for details.
-        :type replace_binary_attrs: dict, optional
+        :type replace_backend_attrs: dict, optional
         :raises IOError: If the DataStore is in read-only mode.
         :raises ValueError: If *collection_name* is not ``"microscale_out"``
             or ``"macroscale_out"``, if the target collection does not yet
@@ -1398,19 +1401,19 @@ class DataStore:
                 converted["params"][CONST.CONVERTED_FROM_ATTR]
             )
 
-        # Stamp execution provenance on the per-scale params group, plus
-        # unconditional binary provenance (commit/dirty/compiler) when an
-        # executable path is known.  Both stamps go onto the same params
+        # Stamp pipeline provenance on the per-scale params group, plus
+        # unconditional backend provenance (commit/dirty/compiler/type) when
+        # an executable path is known.  Both stamps go onto the same params
         # group via the shared :meth:`stamp_provenance` helper.
         scale = "micro" if collection_name == "microscale_out" else "macro"
-        self.stamp_provenance(scale, "execution")
-        if binary_executable is not None or replace_binary_attrs is not None:
+        self.stamp_provenance(scale, "pipeline")
+        if backend_executable is not None or replace_backend_attrs is not None:
             self.stamp_provenance(
                 scale,
-                "binary",
-                executable=binary_executable,
-                binary_override=binary_override,
-                replace_binary_attrs=replace_binary_attrs,
+                "backend",
+                executable=backend_executable,
+                backend_override=backend_override,
+                replace_backend_attrs=replace_backend_attrs,
             )
 
         # Re-initialize in place (reloads all collections, params, etc.)

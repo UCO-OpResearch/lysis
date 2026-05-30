@@ -142,9 +142,10 @@ from lysis.tools.slurm import DEFAULT_MODULES, parse_sbatch_tokens
         "binary name (with or without a leading 'bin/') to pick from the "
         "historical build's bin/ directory; the binary↔src/fortran "
         "staleness check is bypassed because the mismatch is intentional.  "
-        "Synthesised provenance (resolved SHA, ``iso_fortran_env`` compiler "
-        "string, ``binary_source = 'historical:<sha>'``) is stamped into "
-        "the HDF5 file in place of the binary's own --version output."
+        "Synthesised provenance (resolved SHA in ``backend_commit``, "
+        "``iso_fortran_env`` compiler string, and ``backend_historical = "
+        "True``) is stamped into the HDF5 file in place of the binary's "
+        "own --version output."
     ),
 )
 @click.option(
@@ -252,7 +253,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
             except HistoricalBuildError as e:
                 raise click.ClickException(str(e))
             executable = str(resolved_exe)
-            sha = historical_provenance.get("binary_commit", "?")
+            sha = historical_provenance.get("backend_commit", "?")
             console.print(
                 f"[yellow]Using Fortran built from {sha[:7]} "
                 f"(--fortran-commit {fortran_commit}); "
@@ -286,7 +287,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
                         num_children=nc_arg,
                         modules=modules,
                         sbatch_overrides=sbatch_overrides,
-                        historical_binary_attrs=historical_provenance,
+                        historical_backend_attrs=historical_provenance,
                     )
                 except ValueError as e:
                     raise click.ClickException(str(e))
@@ -316,7 +317,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
                         skip_binary_verification=(
                             historical_provenance is not None
                         ),
-                        historical_binary_attrs=historical_provenance,
+                        historical_backend_attrs=historical_provenance,
                     )
                 except ValueError as e:
                     raise click.ClickException(str(e))

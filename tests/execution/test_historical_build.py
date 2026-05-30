@@ -222,7 +222,7 @@ def test_build_head_as_historical_end_to_end():
         binary_path, provenance
     ):
         assert binary_path.is_file()
-        assert provenance["binary_source"].startswith("historical:")
-        # binary_compiler may come from --version (if HEAD's binary supports
+        assert provenance["backend_historical"] is True
+        # backend_compiler may come from --version (if HEAD's binary supports
         # it) OR from the iso_fortran_env probe — either is acceptable.
-        assert provenance["binary_compiler"] != "unknown"
+        assert provenance["backend_compiler"] != "unknown"

@@ -58,7 +58,7 @@ def cli(ctx, verbose):
             highlight=False,
         )
         # Suppress the redundant inline warnings.warn() inside subsequent
-        # gather_execution_provenance() / gather_init_provenance() calls
+        # gather_pipeline_provenance() / gather_init_provenance() calls
         # in this process.  Non-CLI callers (notebooks, scripts) never
         # call this, so they still receive the warning naturally.
         mark_dirty_warning_emitted()

@@ -30,6 +30,46 @@ Group Structure
 ``log_files``
   Contains log files for all executions of code
 
+Provenance attributes
+--------------------
+
+Each per-scale params group (``micro_data`` / ``macro_data``) carries
+provenance attributes recording *when*, *where*, and *with what code* the
+data was produced.  Three families are stamped, plus the root
+``dataspec_version`` attribute.  All three ``*_dirty`` fields use the same
+3-state string — ``"clean"``, ``"dirty"``, or ``"unknown"`` (git unavailable
+or repo root not found) — so the unknown case is never collapsed into clean.
+
+``init_*`` — the ``src/lysis/`` Python layer at **init** time (stamped by
+``init-experiment`` / ``init-macroscale``):
+
+  ``init_version``, ``init_dirty``, ``init_timestamp``, ``init_hostname``
+
+``pipeline_*`` — the ``src/lysis/`` Python **pipeline** that orchestrated
+init/import at HDF5-import time (stamped by ``run-micro`` / ``run-macro``).
+This is the wrapper that ran the simulation, *not* the engine that executed
+it:
+
+  ``pipeline_version``, ``pipeline_dirty``, ``pipeline_timestamp``,
+  ``pipeline_hostname``
+
+``backend_*`` — the simulation **engine** that actually produced the output.
+For Fortran runs these come from the binary's ``--version`` output:
+
+  ``backend_type``
+    ``"fortran"`` (or ``"python"`` for the future Python backend).
+  ``backend_commit``, ``backend_dirty``, ``backend_compiler``
+    The ``src/fortran/`` commit, dirty bit, and compiler string the binary
+    was built from/with.
+  ``backend_historical``
+    ``True`` only when the binary was rebuilt from an older commit via
+    ``run-{micro,macro} --fortran-commit <ref>``; absent otherwise.  The SHA
+    itself is in ``backend_commit``.
+  ``stale_backend_override``
+    ``True`` only when a binary↔source staleness mismatch was explicitly
+    overridden (``--allow-stale-binary`` / ``LYSIS_ALLOW_STALE_BINARY=1``);
+    absent otherwise.
+
 Microscale datasets
 ++++++++++++++++++++++++++++++++
 
