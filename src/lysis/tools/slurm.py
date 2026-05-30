@@ -49,6 +49,7 @@ dependencies still come from ``.venv`` and are pinned separately by
    for ``/tmp`` that is too small for simulation data.
 """
 
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -183,12 +184,16 @@ def _log_header(
     two parts:
 
     1. A fenced **identifying header** written to stdout (so it lands in the
-       job's ``.out`` log) that mixes *submit-time* fields baked in here
-       (*scale*, *role*, *run_code*, *experiment*, the generator's
-       ``lysis.__version__``, and the pinned *pythonpath* snapshot) with
-       *runtime* ``${SLURM_*}`` expansions evaluated on the compute node
-       (cluster, host, partition, node list, job/array ids, allocated
-       cpus/mem, submit dir, start time).
+       job's ``.out`` log).  *Submit-time* fields baked in here (*scale*,
+       *role*, *run_code*, *experiment*, the generator's ``lysis.__version__``,
+       and the pinned *pythonpath* snapshot) are emitted via ``printf`` with
+       each line passed as a ``shlex.quote``-escaped shell literal, so bash
+       performs **no** parameter/command substitution on them — a
+       caller-controlled value such as ``experiment="EXP-$(cmd)"`` is printed
+       verbatim, never executed.  *Runtime* fields are emitted via a separate
+       heredoc whose body contains only our own ``${SLURM_*}``/``$(...)``
+       expansions (cluster, host, partition, node list, job/array ids,
+       allocated cpus/mem, submit dir, start time) — no caller input.
     2. ``set -euo pipefail`` followed by ``set -x``.
 
     The header is printed **before** strict mode is enabled so its optional
@@ -220,38 +225,56 @@ def _log_header(
     pythonpath_field = (
         str(pythonpath) if pythonpath is not None else "(editable install)"
     )
-    return f"""\
-# Identifying header (to stdout) printed BEFORE strict mode so its optional
-# ${{SLURM_*}} reads can't abort the job under ``set -u``; ``set -x`` then
-# traces every subsequent command into the same .out log.
-cat <<HEADER
-============================================================
-lysis slurm task
-------------------------------------------------------------
-scale       : {scale}
-role        : {role}
-run         : {run_code}
-experiment  : {experiment_field}
-generator   : lysis {version}
-pythonpath  : {pythonpath_field}
-job name    : ${{SLURM_JOB_NAME:-(unknown)}}
-cluster     : ${{SLURM_CLUSTER_NAME:-(unknown)}}
-partition   : ${{SLURM_JOB_PARTITION:-(unknown)}}
-host        : $(hostname -f 2>/dev/null || hostname)
-node list   : ${{SLURM_JOB_NODELIST:-(unknown)}}
-user        : ${{USER:-$(id -un)}}
-submit dir  : ${{SLURM_SUBMIT_DIR:-(unknown)}}
-job id      : ${{SLURM_JOB_ID:-(unknown)}}
-array       : ${{SLURM_ARRAY_JOB_ID:-n/a}}_${{SLURM_ARRAY_TASK_ID:-n/a}}
-cpus        : ${{SLURM_CPUS_ON_NODE:-(unknown)}}
-mem (MB)    : ${{SLURM_MEM_PER_NODE:-(unknown)}}
-started     : $(date -Iseconds)
-============================================================
-HEADER
-
-# Strict mode + command tracing for the remainder of the script.
-set -euo pipefail
-set -x"""
+    # Submit-time fields: emitted via ``printf`` with each line shell-quoted,
+    # so caller-controlled values (e.g. *experiment*) cannot inject command or
+    # parameter substitution into the unprivileged-looking header.
+    baked_lines = [
+        "============================================================",
+        "lysis slurm task",
+        "------------------------------------------------------------",
+        f"scale       : {scale}",
+        f"role        : {role}",
+        f"run         : {run_code}",
+        f"experiment  : {experiment_field}",
+        f"generator   : lysis {version}",
+        f"pythonpath  : {pythonpath_field}",
+    ]
+    baked_block = "printf '%s\\n' \\\n" + " \\\n".join(
+        "    " + shlex.quote(line) for line in baked_lines
+    )
+    # Runtime fields: intentionally expanded by bash on the compute node.  The
+    # heredoc body contains only our own ${SLURM_*}/$(...) — never caller input.
+    runtime_block = (
+        "cat <<RUNTIME\n"
+        "job name    : ${SLURM_JOB_NAME:-(unknown)}\n"
+        "cluster     : ${SLURM_CLUSTER_NAME:-(unknown)}\n"
+        "partition   : ${SLURM_JOB_PARTITION:-(unknown)}\n"
+        "host        : $(hostname -f 2>/dev/null || hostname)\n"
+        "node list   : ${SLURM_JOB_NODELIST:-(unknown)}\n"
+        "user        : ${USER:-$(id -un)}\n"
+        "submit dir  : ${SLURM_SUBMIT_DIR:-(unknown)}\n"
+        "job id      : ${SLURM_JOB_ID:-(unknown)}\n"
+        "array       : ${SLURM_ARRAY_JOB_ID:-n/a}_${SLURM_ARRAY_TASK_ID:-n/a}\n"
+        "cpus        : ${SLURM_CPUS_ON_NODE:-(unknown)}\n"
+        "mem (MB)    : ${SLURM_MEM_PER_NODE:-(unknown)}\n"
+        "started     : $(date -Iseconds)\n"
+        "============================================================\n"
+        "RUNTIME"
+    )
+    return (
+        "# Identifying header (to stdout) printed BEFORE strict mode so its\n"
+        "# optional ${SLURM_*} reads can't abort the job under ``set -u``;\n"
+        "# ``set -x`` then traces the rest of the script into the same .out\n"
+        "# log.  Submit-time fields are shell-quoted (printf) to prevent\n"
+        "# command injection; runtime ${SLURM_*} fields are expanded on the\n"
+        "# compute node (cat heredoc).\n"
+        f"{baked_block}\n"
+        f"{runtime_block}\n"
+        "\n"
+        "# Strict mode + command tracing for the remainder of the script.\n"
+        "set -euo pipefail\n"
+        "set -x"
+    )
 
 
 def _snapshot_lysis_src(repo_root: Path, staging_dir: Path) -> Path:
@@ -926,6 +949,9 @@ fm.exec_in_workdir(Path('{staging_dir}'))
 # Setup — create local fast dir, copy setup files and binary
 SIM=$(printf "%02d" ${{SLURM_ARRAY_TASK_ID}})
 local_work_dir=$(mktemp -d -p "{fast_tmp_root}")
+# Always reclaim node-local scratch on exit — including a ``set -e`` abort in
+# the mv below — so a failed move never leaks the fast-tmp work dir.
+trap 'rm -rf "${{local_work_dir}}"' EXIT
 local_datadir="${{local_work_dir}}/data/{run_code}"
 staging_datadir="{staging_dir}/data/{run_code}"
 mkdir -p "${{local_datadir}}"
@@ -948,9 +974,8 @@ fm.exec_in_workdir(Path('${{local_work_dir}}'))
 " """
 
         move = f"""\
-# Move per-task output to shared staging, then clean up local dir
-{mv_section}
-rm -rf "${{local_work_dir}}" """
+# Move per-task output to shared staging (local dir reclaimed by EXIT trap)
+{mv_section}"""
 
         sections = [lead, setup, execute, move]
 
@@ -1317,6 +1342,9 @@ fm.exec_in_workdir(Path('{staging_dir}'))
         setup = f"""\
 # Setup — create local fast dir and shared staging dir
 local_work_dir=$(mktemp -d -p "{fast_tmp_root}")
+# Always reclaim node-local scratch on exit — including a ``set -e`` abort in
+# the mv below — so a failed move never leaks the fast-tmp work dir.
+trap 'rm -rf "${{local_work_dir}}"' EXIT
 local_datadir="${{local_work_dir}}/data/{run_code}"
 staging_datadir="{staging_dir}/data/{run_code}"
 mkdir -p "${{local_datadir}}"
@@ -1333,9 +1361,8 @@ fm.exec_in_workdir(Path('${{local_work_dir}}'))
 " """
 
         move = """\
-# Move output to shared staging, then remove local fast dir
-mv "${local_datadir}"/* "${staging_datadir}/"
-rm -rf "${local_work_dir}" """
+# Move output to shared staging (local fast dir reclaimed by EXIT trap)
+mv "${local_datadir}"/* "${staging_datadir}/" """
 
         sections = [lead, setup, execute, move]
 

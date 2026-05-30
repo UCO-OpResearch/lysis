@@ -2070,10 +2070,10 @@ class TestWorkerLogOutputAndHeader:
             tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", 5,
         )
         assert "lysis slurm task" in script
-        # Baked submit-time fields.
-        assert re.search(r"^run\s+: run-01$", script, re.M)
-        assert re.search(r"^scale\s+: micro$", script, re.M)
-        assert re.search(r"^role\s+: array task$", script, re.M)
+        # Baked submit-time fields (emitted via printf, hence not line-anchored).
+        assert re.search(r"run\s+: run-01", script)
+        assert re.search(r"scale\s+: micro", script)
+        assert re.search(r"role\s+: array task", script)
         # Runtime ${SLURM_*} expansions (evaluated on the compute node).
         assert "${SLURM_JOB_ID" in script
         assert "${SLURM_ARRAY_TASK_ID" in script
@@ -2082,20 +2082,37 @@ class TestWorkerLogOutputAndHeader:
         script = generate_micro_child_script(
             tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", "",
         )
-        assert re.search(r"^role\s+: micro child$", script, re.M)
+        assert re.search(r"role\s+: micro child", script)
 
     def test_experiment_field_default_unknown(self, tmp_path):
         script = generate_micro_child_script(
             tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", "",
         )
-        assert re.search(r"^experiment\s+: \(unknown\)$", script, re.M)
+        assert re.search(r"experiment\s+: \(unknown\)", script)
 
     def test_experiment_field_threaded(self, tmp_path):
         script = generate_micro_child_script(
             tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", "",
             experiment="EXP-42",
         )
-        assert re.search(r"^experiment\s+: EXP-42$", script, re.M)
+        assert re.search(r"experiment\s+: EXP-42", script)
+
+    def test_experiment_value_is_shell_quoted_against_injection(self, tmp_path):
+        """A caller-controlled experiment with $(...) must be baked verbatim.
+
+        The header's submit-time fields are emitted via ``printf`` with each
+        line shell-quoted, so bash never performs command/parameter
+        substitution on them.  The malicious sequence must appear inside a
+        single-quoted printf argument, where ``$(...)`` is inert.
+        """
+        script = generate_micro_child_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/micro.exe", "",
+            experiment="EXP-$(touch /tmp/pwned)",
+        )
+        # The whole header line is a single-quoted printf literal — $() inert.
+        assert "'experiment  : EXP-$(touch /tmp/pwned)'" in script
+        # And it is NOT emitted via the unquoted runtime heredoc.
+        assert "cat <<HEADER" not in script
 
     # ---- #81: strict mode + tracing, enabled AFTER the header -------------
 
@@ -2118,6 +2135,36 @@ class TestWorkerLogOutputAndHeader:
             n_sims=5, fast_tmp_root="/scratch",
         )
         assert script.index("\nset -x") < script.index("SIM=")
+
+    # ---- B: two-tier fast-scratch is reclaimed on any exit (set -e safe) ---
+
+    @pytest.mark.parametrize(
+        "make_script",
+        [
+            lambda p: generate_micro_array_script(
+                p / "s", "run-01", p / "run-01.h5", "/bin/micro.exe", 5,
+                fast_tmp_root="/scratch",
+            ),
+            lambda p: generate_macro_array_script(
+                p / "s", "run-01", p / "run-01.h5", "/bin/macro.exe",
+                n_sims=5, fast_tmp_root="/scratch",
+            ),
+            lambda p: generate_micro_child_script(
+                p / "s", "run-01", p / "run-01.h5", "/bin/micro.exe", "",
+                fast_tmp_root="/scratch",
+            ),
+        ],
+        ids=["micro-array", "macro-array", "micro-child"],
+    )
+    def test_two_tier_registers_cleanup_trap_before_mv(self, tmp_path, make_script):
+        script = make_script(tmp_path)
+        assert 'trap \'rm -rf "${local_work_dir}"\' EXIT' in script
+        # Trap must be registered before the risky mv so a set -e abort there
+        # still reclaims the fast-tmp dir (no permanent node-local leak).
+        assert script.index("trap ") < script.index('mv "${local_datadir}')
+        # The old unconditional post-mv ``rm -rf`` is gone (trap owns cleanup);
+        # only the trap references rm -rf of the work dir.
+        assert script.count('rm -rf "${local_work_dir}"') == 1
 
 
 class TestMasterLogStaysInSlurm:
@@ -2145,7 +2192,7 @@ class TestMasterLogStaysInSlurm:
         assert ".slurm" in out_line
         # The master also gets the identifying header + tracing.
         assert "lysis slurm task" in master
-        assert re.search(r"^role\s+: master$", master, re.M)
+        assert re.search(r"role\s+: master", master)
         assert "set -x" in master
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
@@ -2164,4 +2211,4 @@ class TestMasterLogStaysInSlurm:
         ).read_text()
         out_line = _sbatch_value_line(master, "--out")
         assert ".slurm" in out_line
-        assert re.search(r"^role\s+: master$", master, re.M)
+        assert re.search(r"role\s+: master", master)
