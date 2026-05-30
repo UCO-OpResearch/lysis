@@ -98,7 +98,7 @@ class Const:
         self.BACKEND_DIRTY_ATTR = "backend_dirty"
         self.BACKEND_COMPILER_ATTR = "backend_compiler"
         self.BACKEND_TYPE_ATTR = "backend_type"
-        self.STALE_BINARY_OVERRIDE_ATTR = "stale_backend_override"
+        self.STALE_BACKEND_OVERRIDE_ATTR = "stale_backend_override"
         # Boolean marker stamped (``True``) by the historical-build workflow
         # (``lysis run-{micro,macro} --fortran-commit <ref>``); absent on every
         # other run.  Lets a reader of the HDF5 file see at a glance that this

@@ -276,7 +276,7 @@ def test_verify_override_warns_and_returns_dict(monkeypatch):
     # Only the override flag is forwarded as an HDF5 attr — the binary's
     # commit/dirty/compiler are now stamped unconditionally by
     # gather_backend_provenance(), not via this return value.
-    assert info[CONST.STALE_BINARY_OVERRIDE_ATTR] is True
+    assert info[CONST.STALE_BACKEND_OVERRIDE_ATTR] is True
     assert CONST.BACKEND_COMMIT_ATTR not in info
     assert CONST.BACKEND_DIRTY_ATTR not in info
 
@@ -291,7 +291,7 @@ def test_verify_env_var_acts_as_override(monkeypatch):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         info = verify_binary_matches_source("/fake/bin", allow_stale=None)
-    assert info[CONST.STALE_BINARY_OVERRIDE_ATTR] is True
+    assert info[CONST.STALE_BACKEND_OVERRIDE_ATTR] is True
 
 
 def test_verify_explicit_false_overrides_env(monkeypatch):
