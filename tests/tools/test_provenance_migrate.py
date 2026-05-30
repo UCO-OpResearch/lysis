@@ -12,10 +12,14 @@ from lysis.tools.provenance.migrate import migrate_provenance_group
 
 
 # --------------------------------------------------------------------------- #
-# Load the standalone migration script as a module (it lives under scripts/).
+# Load the standalone migration script as a module.  It is an archived one-off
+# (archive/scripts/), kept as a template; we still test it so the template keeps
+# working.  Its `migrate_file()` is exercised directly, bypassing the CLI safety
+# valve (which only gates the `--apply` path in main()).
 # --------------------------------------------------------------------------- #
 _SCRIPT = (
-    Path(__file__).resolve().parents[2] / "scripts" / "migrate_provenance_attrs.py"
+    Path(__file__).resolve().parents[2]
+    / "archive" / "scripts" / "migrate_provenance_attrs.py"
 )
 _spec = importlib.util.spec_from_file_location("migrate_provenance_attrs", _SCRIPT)
 migrate_script = importlib.util.module_from_spec(_spec)
