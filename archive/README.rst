@@ -180,3 +180,47 @@ Dead package module (formerly ``src/lysis/molecule.py``):
 Note: the usage guides ``docs/source/usage/fortran_microscale.rst`` and
 ``fortran_macroscale.rst`` still walk through the archived shell scripts and
 ``micro_to_macro.py``; they should be updated to the CLI workflow.
+
+One-off data migrations (``scripts/``)
+--------------------------------------
+
+Completed, single-use scripts that performed an in-place rewrite of existing
+HDF5 data files. They are **not** part of the CLI and have already run to
+completion against every affected file; they are preserved only as worked
+**templates** for future migrations of the same shape (open each file, edit
+only attributes, verify per-dataset checksums, back up, log).
+
+**Safety valve.** Each script defines a single module-level line near the top::
+
+    _SAFETY_VALVE = True
+
+While that line is present the script refuses to write --- ``--apply`` is forced
+to a dry-run (and the SHA-backfill script refuses to run at all). This prevents
+anyone from re-running a finished migration by accident. To reuse one as a
+template, copy it out and **delete that one line** to re-enable ``--apply``.
+
+The reusable pure transform that the migration driver depends on lives in the
+package (``lysis.tools.provenance.migrate.migrate_provenance_group``), not here,
+so it stays unit-tested (``tests/tools/test_provenance_migrate.py``).
+
+Files:
+
+- ``migrate_provenance_attrs.py`` --- issue #61 provenance-attribute migration
+  (``execution_* -> pipeline_*``, ``binary_* -> backend_*``, 3-state
+  ``*_dirty``, ``backend_type``, ``backend_historical``). Dry-run by default;
+  classifies every ``*.h5`` (will-migrate / already-migrated / not-v2.0.0 /
+  not-mine / not-writable / read-error), backs each file up (``--backup-dir``),
+  edits only the provenance attrs, then reopens the file and verifies every
+  dataset's SHA-256 plus all untouched attributes are unchanged --- halting on
+  the first mismatch and naming the file. Parallel via ``-j``;
+  ``--include-other-owners`` opts in to group-writable files owned by others.
+  Typical invocation as a template (after removing the safety valve)::
+
+      python migrate_provenance_attrs.py <root> --apply \
+          --backup-dir ~/prov_backup -j 8 --report /tmp/migration.txt
+
+- ``backfill_provenance_sha.py`` --- companion that reconstructs the per-file
+  ``<flattened>.sha256.txt`` audit sidecars for files migrated before that
+  logging existed, by checksumming each backup (pre-edit) against the live file
+  (post-edit) and flagging any data difference. Reuses the sibling script's
+  manifest/checksum helpers.

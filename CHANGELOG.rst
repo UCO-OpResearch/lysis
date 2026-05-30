@@ -50,9 +50,10 @@ Changed
   (``"fortran"`` / ``"python"``) self-identifies the engine, and the redundant
   ``binary_source = "historical:<sha>"`` marker is replaced by a boolean
   ``backend_historical`` (the SHA already lives in ``backend_commit``). This is
-  a hard break for the v2.0.0 on-disk format; existing files can be migrated in
-  place with ``scripts/migrate_provenance_attrs.py`` (dry-run by default, with
-  per-dataset checksum verification). (#61)
+  a hard break for the v2.0.0 on-disk format; existing files were migrated in
+  place with ``archive/scripts/migrate_provenance_attrs.py`` (a completed
+  one-off, kept as a template; dry-run by default, with per-dataset checksum
+  verification). (#61)
 - Renamed the macroscale simulation module ``lysis.np_macroscale`` to
   ``lysis.macroscale``. The ``np_`` prefix distinguished it from a since-removed
   CuPy/GPU sibling and no longer means anything. ``MacroscaleSim`` is still

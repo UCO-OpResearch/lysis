@@ -24,8 +24,10 @@ Old attr                      New attr                           Note
 
 This module exposes a single **pure** function, :func:`migrate_provenance_group`,
 which operates on a plain ``dict`` snapshot of a group's ``attrs`` (no h5py, no
-I/O) so it is trivially unit-testable and shared by
-``scripts/migrate_provenance_attrs.py``.
+I/O) so it is trivially unit-testable and shared by the (now archived) one-off
+driver ``archive/scripts/migrate_provenance_attrs.py``.  The pure transform is
+kept in the package (not archived) so the logic stays unit-tested and reusable
+as a reference for any future attribute migration.
 """
 
 # Old attribute names (literals — the CONST constants no longer define them).

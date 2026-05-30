@@ -62,6 +62,20 @@ SCALE_GROUPS = ("micro_data", "macro_data")
 EXPECTED_VERSION = "v2.0.0"
 _HASH_ROWS = 4096  # rows of the leading axis read per chunk when checksumming
 
+# ===========================================================================
+# SAFETY VALVE  (archived one-off migration — issue #61)
+# ---------------------------------------------------------------------------
+# This script already performed its single, completed migration.  It lives in
+# archive/ only as a worked template for future in-place HDF5 attribute
+# migrations.  To stop anyone re-running it by accident, the line below pins it
+# to dry-run: ``--apply`` is silently downgraded to a dry-run while it is present.
+#
+# To actually run a migration (i.e. when adapting this as a template), DELETE
+# the single line below.  Removing it makes the guard default to off, so
+# ``--apply`` works normally again.
+_SAFETY_VALVE = True
+# ===========================================================================
+
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -347,6 +361,18 @@ def main(argv=None):
         "(not threads) give real speed-up. Has no effect on a dry-run.",
     )
     args = parser.parse_args(argv)
+
+    # SAFETY VALVE: while the `_SAFETY_VALVE` line near the top of this file is
+    # present, refuse to write — force dry-run.  Delete that line to enable --apply.
+    if globals().get("_SAFETY_VALVE", False) and args.apply:
+        print(
+            "SAFETY VALVE ENGAGED: this is an archived one-off migration; "
+            "refusing --apply and running in DRY-RUN mode instead.\n"
+            "To enable --apply, delete the `_SAFETY_VALVE = True` line near the "
+            "top of this script (see archive/README.rst).",
+            flush=True,
+        )
+        args.apply = False
 
     roots = args.roots if args.roots else DEFAULT_ROOTS
     if args.apply and args.backup_dir is None and not args.no_backup:
