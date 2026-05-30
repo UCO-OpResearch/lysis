@@ -277,6 +277,59 @@ def _log_header(
     )
 
 
+def _guarded_glob_xfer(
+    verb: str,
+    glob: str,
+    dest: str,
+    *,
+    array_name: str,
+    empty_msg: str,
+) -> str:
+    """Return a bash block that ``cp``/``mv``-es a glob's matches, or fails loud.
+
+    Generated Slurm scripts run under ``set -euo pipefail``.  A bare
+    ``cp``/``mv`` of ``${dir}/*`` is unsafe there: with ``nullglob`` off an
+    empty *dir* leaves the ``*`` unexpanded, so the command aborts the task
+    with a cryptic ``cannot stat '…/*'``.  This helper collects the matches
+    into an array under ``nullglob``, then either prints a clear,
+    lysis-branded error and exits non-zero when there are none (so an
+    unexpectedly empty source is never *silently* skipped), or runs *verb* on
+    the collected files.
+
+    Used for every glob-based transfer in the two-tier (fast-tmp) paths — the
+    staged-setup-file copy and the micro per-task output move.  Named-path
+    transfers (the macro per-sim ``mv`` and the single-file binary ``cp``) do
+    not need it: they already fail clearly on a missing operand.
+
+    :param verb: ``"cp"`` or ``"mv"``.
+    :type verb: str
+    :param glob: Source glob, already quoted for bash (e.g.
+        ``'"${local_datadir}"/*'``).
+    :type glob: str
+    :param dest: Destination, already quoted for bash (e.g.
+        ``'"${staging_datadir}/"'``).
+    :type dest: str
+    :param array_name: Bash array variable to collect matches into; must be
+        unique within the script (e.g. ``"staged_files"``, ``"output_files"``).
+    :type array_name: str
+    :param empty_msg: Reason shown in the "nothing matched" error; may
+        reference bash vars (e.g. ``"no output in ${local_datadir}"``).
+    :type empty_msg: str
+    :return: Multi-line bash snippet, no trailing newline.
+    :rtype: str
+    """
+    return (
+        "shopt -s nullglob\n"
+        f"{array_name}=({glob})\n"
+        "shopt -u nullglob\n"
+        f'if [ "${{#{array_name}[@]}}" -eq 0 ]; then\n'
+        f'    echo "lysis: {empty_msg}" >&2\n'
+        "    exit 1\n"
+        "fi\n"
+        f'{verb} "${{{array_name}[@]}}" {dest}'
+    )
+
+
 def _snapshot_lysis_src(repo_root: Path, staging_dir: Path) -> Path:
     """Copy ``src/lysis/`` into the staging dir and return the importable root.
 
@@ -936,11 +989,25 @@ fm.exec_in_workdir(Path('{staging_dir}'))
         # Two-tier: copy setup files → local fast dir, run, then mv to staging
         # ------------------------------------------------------------------
         if spec.scale == "macro":
-            # Macro tasks write per-sim subdirs; mv just the one this task owns.
+            # Macro tasks write a single named per-sim subdir — mv by name
+            # (no glob, so it fails clearly on a missing operand).
             mv_section = 'mv "${local_datadir}/${SIM}" "${staging_datadir}/"'
         else:
-            # Micro array tasks write flat __NN-suffixed files; mv all of them.
-            mv_section = 'mv "${local_datadir}"/* "${staging_datadir}/"'
+            # Micro array tasks write flat __NN-suffixed files; guard the glob
+            # mv so an empty local dir fails loud instead of choking on ``*``.
+            mv_section = _guarded_glob_xfer(
+                "mv", '"${local_datadir}"/*', '"${staging_datadir}/"',
+                array_name="output_files",
+                empty_msg="no per-task output in ${local_datadir} to move",
+            )
+
+        # Guarded copy of the staged setup files into the local fast dir (the
+        # ``*`` would otherwise choke under ``set -e`` on an empty staging dir).
+        guarded_setup_cp = _guarded_glob_xfer(
+            "cp", '"${staging_datadir}"/*', '"${local_datadir}/"',
+            array_name="staged_files",
+            empty_msg="no staged setup files in ${staging_datadir}",
+        )
 
         # Source the binary from the pre-staged staging-dir copy, not the
         # caller's --executable path: under --fortran-commit the build dir
@@ -955,18 +1022,8 @@ trap 'rm -rf "${{local_work_dir}}"' EXIT
 local_datadir="${{local_work_dir}}/data/{run_code}"
 staging_datadir="{staging_dir}/data/{run_code}"
 mkdir -p "${{local_datadir}}"
-# Copy staged setup files into the local fast dir.  Guard the glob: under
-# ``set -e`` an empty staging dir would make cp choke on an unexpanded ``*``;
-# instead collect matches with nullglob and fail loudly with a clear message
-# (so a missing/empty staging dir never silently skips setup either).
-shopt -s nullglob
-staged_files=("${{staging_datadir}}"/*)
-shopt -u nullglob
-if [ "${{#staged_files[@]}}" -eq 0 ]; then
-    echo "lysis: no staged setup files in ${{staging_datadir}}" >&2
-    exit 1
-fi
-cp "${{staged_files[@]}}" "${{local_datadir}}/"
+# Copy staged setup files into the local fast dir (glob guarded).
+{guarded_setup_cp}
 cp "{staging_dir}/{binary_name}" "${{local_work_dir}}/" """
 
         init = _runner_init_line(
@@ -1371,9 +1428,17 @@ fm = FortranMicro.from_hdf5('{hdf5_path}', '${{local_work_dir}}/{binary_name}', 
 fm.exec_in_workdir(Path('${{local_work_dir}}'))
 " """
 
-        move = """\
+        # Guard the glob mv so an empty local dir fails loud (clear lysis
+        # message + non-zero exit) instead of choking on an unexpanded ``*``
+        # under ``set -e``; the EXIT trap still reclaims the fast-tmp dir.
+        guarded_move = _guarded_glob_xfer(
+            "mv", '"${local_datadir}"/*', '"${staging_datadir}/"',
+            array_name="output_files",
+            empty_msg="no output in ${local_datadir} to move",
+        )
+        move = f"""\
 # Move output to shared staging (local fast dir reclaimed by EXIT trap)
-mv "${local_datadir}"/* "${staging_datadir}/" """
+{guarded_move}"""
 
         sections = [lead, setup, execute, move]
 
