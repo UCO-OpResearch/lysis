@@ -774,6 +774,10 @@ class DataStore:
             delete it and recreate from scratch.  Any previous execution
             provenance attributes on the file are lost along with the file.
         :type force: bool
+        Microscale ``init_*`` provenance is stamped on the ``micro_data``
+        params group before returning (via :meth:`stamp_provenance`), so the
+        returned file already presents a clean "initialized" state.
+
         :return: A new DataStore opened in ``"a"`` (read/write) mode with
             microscale_out collection.
         :rtype: DataStore
@@ -808,7 +812,12 @@ class DataStore:
         params_dict = {"micro_params": micro_params.to_basedict()}
         cls._create_empty_datasets(hdf5_path, micro_spec, params=params_dict)
 
-        return cls(run_code, path, mode="a")
+        # Stamp microscale init provenance so the freshly-created file already
+        # presents a clean "initialized" state.  Both the init-experiment CLI
+        # and the import-failure rollback reach the stamp through this path.
+        ds = cls(run_code, path, mode="a")
+        ds.stamp_provenance("micro", "init")
+        return ds
 
     @classmethod
     def rename(cls, old_run_code, new_run_code, path):
@@ -877,6 +886,12 @@ class DataStore:
         The value of ``macro_params.forced_unbind`` is silently replaced
         with the value computed from microscale data; do not rely on
         whatever value was passed in.
+
+        Macroscale ``init_*`` provenance is stamped on the ``macro_data``
+        params group once the empty structure is in place (via
+        :meth:`stamp_provenance`), so the file presents a clean macroscale
+        "initialized" state.  Both the init-macroscale CLI and the
+        import-failure rollback reach the stamp through this path.
 
         Modifies the DataStore **in place** and returns ``None``.
         Requires the DataStore to be opened in a writable mode
@@ -983,6 +998,10 @@ class DataStore:
 
         # Re-initialize in place (reloads all collections, params, etc.)
         self.__init__(self._run_code, self._path, mode=self._mode)
+
+        # Stamp macroscale init provenance now that the empty structure is in
+        # place, mirroring create()'s micro stamp.
+        self.stamp_provenance("macro", "init")
 
     # ------------------------------------------------------------------
     #  Provenance stamping

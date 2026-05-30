@@ -107,8 +107,10 @@ class TestStampInit:
         h5_path = tmp_path / "run-02.h5"
         micro_and_macro_ds.close()
         with h5py.File(str(h5_path), "r") as f:
+            # The explicit macro stamp lands on macro_data; micro_data already
+            # carries its own init stamp from DataStore.create().
             assert CONST.INIT_VERSION_ATTR in f["macro_data"].attrs
-            assert CONST.INIT_VERSION_ATTR not in f["micro_data"].attrs
+            assert CONST.INIT_VERSION_ATTR in f["micro_data"].attrs
 
 
 # ----------------------------------------------------------------------
@@ -288,7 +290,17 @@ class TestStampBinary:
 
 class TestReadInitProvenance:
     def test_returns_none_when_not_stamped(self, micro_only_ds):
-        # Newly-created DataStore.create() does not auto-stamp init.
+        # DataStore.create() auto-stamps init provenance, so simulate a file
+        # that pre-dates the init-stamp feature by stripping the init_* attrs.
+        attrs = micro_only_ds._file["micro_data"].attrs
+        for key in (
+            CONST.INIT_VERSION_ATTR,
+            CONST.INIT_DIRTY_ATTR,
+            CONST.INIT_TIMESTAMP_ATTR,
+            CONST.INIT_HOSTNAME_ATTR,
+        ):
+            if key in attrs:
+                del attrs[key]
         assert micro_only_ds.read_init_provenance("micro") is None
 
     def test_returns_dict_after_stamping(self, micro_only_ds):
