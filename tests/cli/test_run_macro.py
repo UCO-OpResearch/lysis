@@ -629,7 +629,7 @@ class TestRunMacroFortranCommit:
 def _fill_microscale_data(ds, n_sims=100, seed=42):
     """Fill microscale_out datasets in an open DataStore with synthetic data.
 
-    Mirrors the helper in ``tests/test_np_macroscale.py`` so the python backend
+    Mirrors the helper in ``tests/test_macroscale.py`` so the python backend
     can run end-to-end against plausible microscale output.
     """
     rng = np.random.default_rng(seed)

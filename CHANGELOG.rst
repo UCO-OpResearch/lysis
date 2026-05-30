@@ -43,17 +43,20 @@ Added
 - ``lysis run-macro`` gained a ``--backend {fortran,python}`` option (default
   ``fortran``). ``--backend python`` runs the pure-Python NumPy macroscale
   model in-process, requiring no Fortran toolchain, and writes results straight
-  into the run's HDF5 file (stamped with ``execution_backend = "python"``).
+  into the run's HDF5 file.  The run is stamped with the v1.0.0 provenance
+  schema — ``backend_type = "python"`` plus full ``backend_*`` provenance (the
+  ``src/lysis/`` commit and dirty bit, and the interpreter + NumPy version as
+  ``backend_compiler``) — not the legacy ``execution_backend`` attribute (#77).
   Simulations currently run in series (one HDF5 writer); a dispatch-collect
   step (#59) and MPI4Py parallel execution (#60) are planned. ``--executable``
   is now required only for the Fortran backend, and the Fortran-/Slurm-specific
   options raise a clear error when combined with ``--backend python``.
   ``total_time = 0`` runs the simulation to completion (until every fiber
   degrades) rather than for a fixed duration; the snapshot buffers grow on
-  demand to accommodate the unknown number of save points. (#35)
+  demand to accommodate the unknown number of save points. (#35, #77)
 - ``lysis run-macro --backend python`` now accepts ``--slurm`` and the
   storage-redirection flags (``--staging-root``, ``--fast-tmp-root``,
-  ``--keep-tmpdir``, ``--partition``, ``--compiler``, ``--sbatch``). With
+  ``--keep-tmpdir``, ``--partition``, ``--modules``, ``--sbatch``). With
   ``--slurm`` each Run is submitted as one Slurm job (no array — HDF5's
   single-writer constraint requires every simulation for a Run to execute
   in series within one job); in batch mode the existing CLI loop submits one

@@ -54,21 +54,27 @@ it:
   ``pipeline_hostname``
 
 ``backend_*`` — the simulation **engine** that actually produced the output.
-For Fortran runs these come from the binary's ``--version`` output:
+The same family describes both backends; ``backend_type`` says which one:
 
   ``backend_type``
-    ``"fortran"`` (or ``"python"`` for the future Python backend).
+    ``"fortran"`` for the compiled binary, or ``"python"`` for the in-process
+    NumPy backend (``lysis run-macro --backend python``).
   ``backend_commit``, ``backend_dirty``, ``backend_compiler``
-    The ``src/fortran/`` commit, dirty bit, and compiler string the binary
-    was built from/with.
+    For the **Fortran** backend these come from the binary's ``--version``
+    output: the ``src/fortran/`` commit, dirty bit, and compiler string the
+    binary was built from/with.  For the **Python** backend the engine *is*
+    the ``src/lysis/`` package, so ``backend_commit`` / ``backend_dirty``
+    record that package's git state (mirroring ``pipeline_*``) and
+    ``backend_compiler`` holds the interpreter and NumPy version that ran the
+    model (e.g. ``"CPython 3.11.15; NumPy 2.4.4"``).
   ``backend_historical``
-    ``True`` only when the binary was rebuilt from an older commit via
-    ``run-{micro,macro} --fortran-commit <ref>``; absent otherwise.  The SHA
-    itself is in ``backend_commit``.
+    Fortran-only.  ``True`` only when the binary was rebuilt from an older
+    commit via ``run-{micro,macro} --fortran-commit <ref>``; absent
+    otherwise.  The SHA itself is in ``backend_commit``.
   ``stale_backend_override``
-    ``True`` only when a binary↔source staleness mismatch was explicitly
-    overridden (``--allow-stale-binary`` / ``LYSIS_ALLOW_STALE_BINARY=1``);
-    absent otherwise.
+    Fortran-only.  ``True`` only when a binary↔source staleness mismatch was
+    explicitly overridden (``--allow-stale-binary`` /
+    ``LYSIS_ALLOW_STALE_BINARY=1``); absent otherwise.
 
 Microscale datasets
 ++++++++++++++++++++++++++++++++
