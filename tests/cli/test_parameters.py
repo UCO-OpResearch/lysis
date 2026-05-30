@@ -353,6 +353,50 @@ class TestParametersMicroOnly:
         assert result.exit_code == 0
         assert "N/A" not in result.output
 
+    def test_new_micro_params_real_values(self, tmp_path):
+        """The five micro Fortran-CLI inputs added in #91 show real values."""
+        run_code = _make_micro_only_run(tmp_path)
+        from rich.console import Console
+
+        values, _has_macro = _load_run_params(
+            str(tmp_path), run_code, _DEFAULT_PARAMS, [], Console()
+        )
+
+        assert values["nodes_in_micro_row"] == "7"
+        assert values["snap_proportion"] == "0.6667"
+        assert values["unbind_rate_PLi"] == "57.60"
+        assert values["activation_rate_PLG"] == "0.100"
+        assert values["exposure_rate_binding_site"] == "5.00"
+
+    def test_micro_params_broad_coverage_not_na(self, tmp_path):
+        """Every microscale entry in the default table resolves (issue #91)."""
+        run_code = _make_micro_only_run(tmp_path)
+        from rich.console import Console
+
+        values, _has_macro = _load_run_params(
+            str(tmp_path), run_code, _DEFAULT_PARAMS, [], Console()
+        )
+
+        micro_attrs = [attr for attr, src, *_ in _DEFAULT_PARAMS if src == "micro"]
+        na = [a for a in micro_attrs if values[a] == "N/A"]
+        assert na == [], f"micro params unexpectedly N/A: {na}"
+
+    def test_add_micro_fallback_not_in_defaults(self, tmp_path):
+        """``--add`` of a micro attr absent from the defaults still resolves.
+
+        ``protofibril_radius`` is a microscale parameter that is not part of
+        ``_DEFAULT_PARAMS``; pulling it via ``--add`` on a micro-only file
+        exercises the ``_get_raw`` microscale fallback that issue #91 targets.
+        """
+        run_code = _make_micro_only_run(tmp_path)
+        from rich.console import Console
+
+        values, _has_macro = _load_run_params(
+            str(tmp_path), run_code, _DEFAULT_PARAMS, ["protofibril_radius"], Console()
+        )
+
+        assert values["protofibril_radius"] != "N/A"
+
 
 # ---------------------------------------------------------------------------
 # Macro-spec dropping (canonical source)
