@@ -80,6 +80,7 @@ COMPATIBLE_DATASPEC_VERSION
     ``"hdf5"`` tag points to a different version.
 """
 import dataclasses
+import json
 import os
 import warnings
 
@@ -106,6 +107,17 @@ if dataspec["hdf5"].version != COMPATIBLE_DATASPEC_VERSION:
         UserWarning,
         stacklevel=1,
     )
+
+
+class ImportCollectionError(RuntimeError):
+    """Raised when :meth:`DataStore.import_collection` fails during the write
+    phase.
+
+    Signals that an import failed *after* HDF5 mutation began and that the
+    target collection has been rolled back to its empty, freshly-initialized
+    state (``MICRO_EMPTY`` / ``MACRO_EMPTY``).  The original failure is chained
+    as the exception's ``__cause__``.
+    """
 
 
 @unique
@@ -763,6 +775,10 @@ class DataStore:
         group, and creates zero-length datasets for all microscale_out
         datasets defined in the v2.0.0 specification.
 
+        Microscale ``init_*`` provenance is stamped on the ``micro_data``
+        params group before returning (via :meth:`stamp_provenance`), so the
+        returned file already presents a clean "initialized" state.
+
         :param run_code: The Run identifier (used to construct the HDF5
             filename as ``{run_code}.h5``).
         :type run_code: str
@@ -808,7 +824,12 @@ class DataStore:
         params_dict = {"micro_params": micro_params.to_basedict()}
         cls._create_empty_datasets(hdf5_path, micro_spec, params=params_dict)
 
-        return cls(run_code, path, mode="a")
+        # Stamp microscale init provenance so the freshly-created file already
+        # presents a clean "initialized" state.  Both the init-experiment CLI
+        # and the import-failure rollback reach the stamp through this path.
+        ds = cls(run_code, path, mode="a")
+        ds.stamp_provenance("micro", "init")
+        return ds
 
     @classmethod
     def rename(cls, old_run_code, new_run_code, path):
@@ -877,6 +898,12 @@ class DataStore:
         The value of ``macro_params.forced_unbind`` is silently replaced
         with the value computed from microscale data; do not rely on
         whatever value was passed in.
+
+        Macroscale ``init_*`` provenance is stamped on the ``macro_data``
+        params group once the empty structure is in place (via
+        :meth:`stamp_provenance`), so the file presents a clean macroscale
+        "initialized" state.  Both the init-macroscale CLI and the
+        import-failure rollback reach the stamp through this path.
 
         Modifies the DataStore **in place** and returns ``None``.
         Requires the DataStore to be opened in a writable mode
@@ -983,6 +1010,10 @@ class DataStore:
 
         # Re-initialize in place (reloads all collections, params, etc.)
         self.__init__(self._run_code, self._path, mode=self._mode)
+
+        # Stamp macroscale init provenance now that the empty structure is in
+        # place, mirroring create()'s micro stamp.
+        self.stamp_provenance("macro", "init")
 
     # ------------------------------------------------------------------
     #  Provenance stamping
@@ -1286,6 +1317,24 @@ class DataStore:
             if any target dataset already contains data, or if the number of
             simulations in the source does not match
             ``macro_params.macro_simulations`` (for ``"macroscale_out"``).
+        :raises ImportCollectionError: If the import fails *after* HDF5
+            mutation has begun (e.g. a dataset write errors).  Before
+            re-raising, the target collection is rolled back to its empty,
+            freshly-initialized state (``MICRO_EMPTY`` / ``MACRO_EMPTY``) so
+            the file never presents half-ingested data as filled; the original
+            failure is chained as ``__cause__``.  If the rollback *itself*
+            fails, an ``ImportCollectionError`` is still raised (never the raw
+            rollback error): the in-memory parameters are dumped to a recovery
+            file next to the HDF5 (re-feedable CSV, falling back to JSON, then
+            an inline dump), and the rollback error becomes ``__cause__`` with
+            the original import error as its ``__context__``.
+
+        .. note::
+
+           On failure during the write phase the target collection is reverted
+           to empty via the same machinery as the ``init-*`` pathway, so
+           downstream code never processes a partially-imported collection.
+           Any on-disk source (Fortran output / logs) is left uningested.
         """
         # ------------------------------------------------------------------
         # Precondition checks
@@ -1391,44 +1440,187 @@ class DataStore:
                 break  # one dataset is enough to confirm the count
 
         # ------------------------------------------------------------------
-        # Write converted arrays directly into the existing HDF5 datasets
+        # Write converted arrays into the HDF5, stamp provenance, and reload.
+        #
+        # Everything below mutates the file.  If any step fails, roll the
+        # target collection back to its empty, freshly-initialized state so the
+        # file never presents half-ingested data as "filled", then re-raise
+        # loudly as ImportCollectionError.  Reads/conversion/validation above
+        # do not touch the HDF5, so they need no rollback.
         # ------------------------------------------------------------------
-        for ds_name, ds_spec in target_spec.data.items():
-            if ds_spec.data_location is None:
-                continue  # derived dataset — not stored on disk
-            if ds_name not in converted:
-                continue  # optional dataset not produced by this converter
-            if target_spec.simulations_combined:
-                self._write_array_to_dataset(ds_spec, converted[ds_name])
-            else:
-                for sim_idx, arr in enumerate(converted[ds_name]):
-                    self._write_array_to_dataset(ds_spec, arr, sim=sim_idx)
-
-        # Record provenance if conversion happened
-        if CONST.CONVERTED_FROM_ATTR in converted.get("params", {}):
-            self._file.attrs[CONST.CONVERTED_FROM_ATTR] = (
-                converted["params"][CONST.CONVERTED_FROM_ATTR]
-            )
-
-        # Stamp pipeline provenance on the per-scale params group, plus
-        # unconditional backend provenance (commit/dirty/compiler/type) when
-        # an executable path is known.  Both stamps go onto the same params
-        # group via the shared :meth:`stamp_provenance` helper.
         scale = "micro" if collection_name == "microscale_out" else "macro"
-        self.stamp_provenance(scale, "pipeline")
-        if backend_executable is not None or replace_backend_attrs is not None:
-            self.stamp_provenance(
-                scale,
-                "backend",
-                executable=backend_executable,
-                backend_override=backend_override,
-                replace_backend_attrs=replace_backend_attrs,
-            )
+        try:
+            for ds_name, ds_spec in target_spec.data.items():
+                if ds_spec.data_location is None:
+                    continue  # derived dataset — not stored on disk
+                if ds_name not in converted:
+                    continue  # optional dataset not produced by this converter
+                if target_spec.simulations_combined:
+                    self._write_array_to_dataset(ds_spec, converted[ds_name])
+                else:
+                    for sim_idx, arr in enumerate(converted[ds_name]):
+                        self._write_array_to_dataset(ds_spec, arr, sim=sim_idx)
 
-        # Re-initialize in place (reloads all collections, params, etc.)
-        self._file.flush()
-        self._file.close()
-        self.__init__(self._run_code, self._path, mode=self._mode)
+            # Record provenance if conversion happened
+            if CONST.CONVERTED_FROM_ATTR in converted.get("params", {}):
+                self._file.attrs[CONST.CONVERTED_FROM_ATTR] = (
+                    converted["params"][CONST.CONVERTED_FROM_ATTR]
+                )
+
+            # Stamp pipeline provenance on the per-scale params group, plus
+            # unconditional backend provenance (commit/dirty/compiler/type)
+            # when an executable path is known.  Both stamps go onto the same
+            # params group via the shared :meth:`stamp_provenance` helper.
+            self.stamp_provenance(scale, "pipeline")
+            if backend_executable is not None or replace_backend_attrs is not None:
+                self.stamp_provenance(
+                    scale,
+                    "backend",
+                    executable=backend_executable,
+                    backend_override=backend_override,
+                    replace_backend_attrs=replace_backend_attrs,
+                )
+
+            # Re-initialize in place (reloads all collections, params, etc.)
+            self._file.flush()
+            self._file.close()
+            self.__init__(self._run_code, self._path, mode=self._mode)
+        except Exception as exc:
+            empty_state = "MICRO_EMPTY" if scale == "micro" else "MACRO_EMPTY"
+            try:
+                self._revert_collection_to_empty(collection_name)
+            except Exception as rollback_exc:
+                # The rollback itself failed (e.g. the same disk-full/I/O error
+                # that killed the write also kills create()/initialize_macroscale,
+                # and the micro rollback already removed the file).  The in-memory
+                # params are now the last copy — dump them for recovery, and STILL
+                # raise ImportCollectionError so callers catching it are not
+                # surprised by the raw rollback error.
+                note = self._dump_params_for_recovery()
+                raise ImportCollectionError(
+                    f"Import of '{collection_name}' failed AND the rollback to "
+                    f"{empty_state} also failed; the HDF5 file may be left in an "
+                    f"unrecoverable state and should be re-initialized "
+                    f"(init-experiment / init-macroscale). Parameters were dumped "
+                    f"{note}. Original import error: {exc!r}. "
+                    f"Rollback error: {rollback_exc!r}"
+                ) from rollback_exc
+            raise ImportCollectionError(
+                f"Import of '{collection_name}' failed during the write phase "
+                f"and was rolled back to {empty_state}; the HDF5 file holds no "
+                f"partial data and the on-disk source is left uningested. "
+                f"Original error: {exc}"
+            ) from exc
+
+    def _dump_params_for_recovery(self):
+        """Best-effort dump of the in-memory parameters when a rollback fails.
+
+        Called only from :meth:`import_collection`'s rollback-failure path, where
+        the on-disk file (and thus the only persisted copy of the parameters) may
+        already be gone.  Writes whatever is in memory — ``self._micro_params``
+        always, ``self._macro_params`` when present — preferring a re-feedable
+        CSV, then JSON, then an inline ``asdict`` dump.  **Never raises**; returns
+        a short human-readable note (woven into the
+        :class:`ImportCollectionError` message) describing what was dumped and
+        where.
+
+        :return: A note such as ``"to <path> (CSV)"`` or
+            ``"(no in-memory parameters to dump)"``.
+        :rtype: str
+        """
+        micro = self._micro_params
+        macro = self._macro_params
+        if micro is None and macro is None:
+            return "(no in-memory parameters to dump)"
+
+        base = os.path.join(self._path, f"{self._run_code}_param_recovery")
+
+        # 1. Preferred: a CSV that can be fed back to init-experiment /
+        #    init-macroscale.  Requires micro params (the CSV's anchor scale).
+        if micro is not None:
+            try:
+                from ..config.parameters import write_params_csv  # noqa: PLC0415
+
+                csv_path = f"{base}.csv"
+                write_params_csv(csv_path, [(self._run_code, micro, macro)])
+                warnings.warn(
+                    f"Parameters dumped to {csv_path} for recovery.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                return f"to {csv_path} (re-feedable CSV)"
+            except Exception:
+                pass
+
+        # 2. Fallback: JSON.
+        try:
+            from .fileops import _params_json_default  # noqa: PLC0415
+
+            payload = {}
+            if micro is not None:
+                payload["micro_params"] = micro.to_basedict()
+            if macro is not None:
+                payload["macro_params"] = macro.to_basedict()
+            json_path = f"{base}.json"
+            with open(json_path, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, default=_params_json_default)
+            warnings.warn(
+                f"Parameters dumped to {json_path} for recovery.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return f"to {json_path} (JSON)"
+        except Exception:
+            pass
+
+        # 3. Last resort: inline the asdict text (rides along in the exception
+        #    message and the warning, even if every file write failed).
+        try:
+            dump = {}
+            if micro is not None:
+                dump["micro_params"] = dataclasses.asdict(micro)
+            if macro is not None:
+                dump["macro_params"] = dataclasses.asdict(macro)
+            warnings.warn(
+                f"Could not write a parameter recovery file; parameters: {dump}",
+                UserWarning,
+                stacklevel=2,
+            )
+            return f"inline (file writes failed): {dump}"
+        except Exception:
+            return "(parameter dump failed entirely)"
+
+    def _revert_collection_to_empty(self, collection_name):
+        """Roll a partially-imported collection back to its empty state.
+
+        Reuses the same machinery the ``init-*`` pathway uses, so the reverted
+        file is equivalent to a freshly-initialized one — including the
+        re-stamped ``init_*`` provenance:
+
+        - ``microscale_out``: re-run :meth:`create` with ``force=True`` from
+          the in-memory micro params.  No macroscale stage exists yet at
+          micro-import time, so wiping and recreating the file is the correct
+          reset.
+        - ``macroscale_out``: re-run :meth:`initialize_macroscale` with
+          ``force=True`` from the in-memory macro params, which wipes only the
+          macroscale group and leaves the filled microscale data intact.
+
+        The parameters come from the in-memory ``self._micro_params`` /
+        ``self._macro_params`` (loaded from the HDF5 attributes at open time),
+        which survive a failed write — no external file is needed.
+
+        :param collection_name: ``"microscale_out"`` or ``"macroscale_out"``.
+        :type collection_name: str
+        """
+        if collection_name == "microscale_out":
+            micro = self._micro_params
+            run_code, path, mode = self._run_code, self._path, self._mode
+            if self._file:
+                self._file.close()
+            type(self).create(run_code, path, micro, force=True).close()
+            self.__init__(run_code, path, mode=mode)
+        else:  # macroscale_out
+            self.initialize_macroscale(self._macro_params, force=True)
 
     # ------------------------------------------------------------------
     #  Derived collection helpers

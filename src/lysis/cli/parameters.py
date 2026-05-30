@@ -46,8 +46,13 @@ _DEFAULT_PARAMS = [
     ("diss_const_PLG_intact", "micro",   None,         "{:.2f}"),
     ("diss_const_PLG_nicked", "micro",   None,         "{:.2f}"),
     ("deg_rate_fibrin",       "micro",   None,          "{:.2f}"),
+    ("unbind_rate_PLi",       "micro",   None,          "{:.2f}"),
+    ("activation_rate_PLG",   "micro",   None,          "{:.3f}"),
+    ("exposure_rate_binding_site", "micro", None,       "{:.2f}"),
     ("fiber_radius",          "micro",   "nanometers",  "{:.4f}"),
     ("binding_sites",         "micro",   None,          "{:.6f}"),
+    ("nodes_in_micro_row",    "micro",   None,          "{:,}"),
+    ("snap_proportion",       "micro",   None,          "{:.4f}"),
     # ---- Micro run controls -------------------------------------------
     ("micro_simulations",     "micro",   None,          "{:,}"),
     ("micro_seed",            "micro",   None,          "{:,}"),
@@ -103,6 +108,55 @@ def _auto_format(raw):
     return str(raw)
 
 
+def _default_formatted(param_specs, add_names):
+    """Formatted values for freshly-constructed default parameter objects.
+
+    Renders default :class:`~lysis.config.parameters.MicroParameters` and
+    :class:`~lysis.config.parameters.MacroParameters` through the same
+    formatting path as :func:`_load_run_params`, so a run's formatted value can
+    be compared against the model default to decide whether to highlight it.
+
+    :param param_specs: Effective ``(attr_name, source, units, fmt)`` specs.
+    :param add_names: Extra attribute names added via ``--add``.
+    :return: ``{attr_name: formatted_str}`` for every spec row and add name.
+    :rtype: dict[str, str]
+    """
+    import warnings
+
+    from lysis.config.parameters import MacroParameters, MicroParameters
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        micro = MicroParameters()
+        macro = MacroParameters(micro_params=micro)
+
+    defaults = {}
+    for attr_name, _src, display_units, fmt in param_specs:
+        defaults[attr_name] = _format_value(
+            _get_raw(macro, micro, attr_name), display_units, fmt
+        )
+    for attr_name in add_names:
+        defaults[attr_name] = _auto_format(_get_raw(macro, micro, attr_name))
+    return defaults
+
+
+def _nondefault_flags(values, defaults):
+    """Map ``{attr_name: bool}`` marking values that differ from the default.
+
+    A value is non-default when its formatted string differs from the default's
+    and is not ``"N/A"`` (absent macroscale data renders as ``"N/A"`` and is
+    never highlighted).
+
+    :param values: ``{attr_name: formatted_str}`` for one run.
+    :param defaults: ``{attr_name: formatted_str}`` from :func:`_default_formatted`.
+    :rtype: dict[str, bool]
+    """
+    return {
+        attr: val != "N/A" and val != defaults.get(attr)
+        for attr, val in values.items()
+    }
+
+
 def _param_header(attr_name, display_units, natural_units):
     """Build a single-line row label with units in parentheses."""
     units = display_units or natural_units.get(attr_name)
@@ -152,6 +206,76 @@ def _load_run_params(data_root, run_code, param_specs, add_names, console):
         return None, has_macro
     finally:
         run.data.close()
+
+
+def _load_run_param_objects(data_root, run_code, console):
+    """Load a Run's raw Micro/Macro parameter objects (not formatted strings).
+
+    Used by the ``--csv`` export path, which needs the parameter objects to
+    serialize via :func:`~lysis.config.parameters.write_params_csv`.
+
+    :return: ``(micro_params, macro_params)`` with ``macro_params`` possibly
+        ``None``, or ``None`` if the run cannot be loaded or has no microscale
+        parameters.
+    :rtype: tuple | None
+    """
+    from lysis.config.run import Run
+
+    try:
+        run = Run(data_root, run_code)
+        run.open_data()
+        try:
+            micro_params = run.data.micro_params
+            macro_params = run.data.macro_params
+        finally:
+            run.data.close()
+    except Exception as e:
+        console.print(f"[red]Error loading {run_code}:[/red] {e}")
+        return None
+
+    if micro_params is None:
+        console.print(
+            f"[yellow]No microscale parameters for {run_code}; skipping[/yellow]"
+        )
+        return None
+    return micro_params, macro_params
+
+
+def _emit_params_csv(path, csv_out, sort_mode, console, ctx):
+    """Gather raw parameters for one file or a directory of runs and write a
+    re-feedable CSV (column-wise: one shared parameter column + one per run)."""
+    from lysis.config.parameters import write_params_csv
+    from lysis.tools.runcode_sort import smart_sort
+
+    if os.path.isfile(path):
+        data_root = os.path.dirname(path)
+        run_codes = [os.path.splitext(os.path.basename(path))[0]]
+    else:
+        h5_files = [f for f in os.listdir(path) if f.lower().endswith(".h5")]
+        if not h5_files:
+            console.print(f"[yellow]No .h5 files found in {path}[/yellow]")
+            ctx.exit(1)
+            return
+        data_root = path
+        run_codes = [os.path.splitext(f)[0] for f in h5_files]
+        run_codes = (
+            smart_sort(run_codes) if sort_mode == "smart" else sorted(run_codes)
+        )
+
+    runs = []
+    for run_code in run_codes:
+        objs = _load_run_param_objects(data_root, run_code, console)
+        if objs is not None:
+            micro_params, macro_params = objs
+            runs.append((run_code, micro_params, macro_params))
+
+    if not runs:
+        ctx.exit(1)
+        return
+
+    write_params_csv(csv_out, runs)
+    if csv_out != "-":
+        console.print(f"[green]Wrote parameters CSV:[/green] {csv_out}")
 
 
 def _macro_param_names():
@@ -246,14 +370,34 @@ def _drop_macro_specs(param_specs):
         "Example: --markdown -, --markdown params.md"
     ),
 )
+@click.option(
+    "--csv",
+    "csv_out",
+    type=str,
+    default=None,
+    metavar="FILE",
+    help=(
+        "Export the runs' parameters as a re-feedable CSV (the format "
+        "'init-experiment'/'init-macroscale' read), one column per run.  Use "
+        "'-' for the console, or a filename.  Only parameters that differ from "
+        "their default are written; the curated display table and --add/--drop "
+        "do not apply.  Example: --csv params.csv"
+    ),
+)
 @click.pass_context
-def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markdown_out):
+def parameters(
+    ctx, path, sort_mode, no_progress, add_params, drop_params, markdown_out, csv_out
+):
     """Print parameter tables for one or more simulation Runs.
 
     PATH may be a single HDF5 file or a directory. When a directory is given,
     parameters for every .h5 file are printed as a table with one column per
     Run and one row per parameter. Parameters are grouped into macro and micro
     sections, separated by a divider.
+
+    In the terminal (Rich) output, values that differ from the model defaults
+    are highlighted in a distinct color, making non-default runs easy to spot.
+    Markdown output (--markdown) is unstyled.
 
     \b
     Examples:
@@ -263,6 +407,7 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
         lysis parameters data/ --drop empty_rows --add protofibril_radius
         lysis parameters data/ --markdown -
         lysis parameters data/ --markdown params.md
+        lysis parameters data/ --csv params.csv
     """
     from contextlib import nullcontext
 
@@ -272,6 +417,12 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
 
     console = ctx.obj["console"]
     path = os.path.abspath(path)
+
+    # --csv exports the raw, re-feedable parameter set and bypasses the curated
+    # display table entirely (so --add/--drop/--markdown do not apply).
+    if csv_out is not None:
+        _emit_params_csv(path, csv_out, sort_mode, console, ctx)
+        return
 
     # Suppress progress when producing structured markdown output
     if markdown_out is not None:
@@ -284,6 +435,12 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
 
     # Pre-build natural-units dict for column headers (no run needed)
     natural_units = MacroParameters.units()
+
+    # Formatted default values, for highlighting cells that differ from them.
+    # Only the Rich output highlights, so skip this work for Markdown output.
+    defaults = None if markdown_out is not None else _default_formatted(
+        param_specs, add_names
+    )
 
     if os.path.isfile(path):
         # --- single-file mode ---
@@ -306,8 +463,18 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
 
         # Drop macroscale rows when this file has no macroscale collection.
         effective_specs = param_specs if has_macro else _drop_macro_specs(param_specs)
+        nondefault_by_run = (
+            None
+            if defaults is None
+            else {run_code: _nondefault_flags(values, defaults)}
+        )
         df = parameters_table(
-            {run_code: values}, effective_specs, add_names, natural_units, [run_code]
+            {run_code: values},
+            effective_specs,
+            add_names,
+            natural_units,
+            [run_code],
+            nondefault_by_run=nondefault_by_run,
         )
 
         if markdown_out is not None:
@@ -382,7 +549,19 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
         # columns still line up when the set is mixed.
         ordered = [rc for rc in run_codes if rc in rows]
         effective_specs = param_specs if any_macro else _drop_macro_specs(param_specs)
-        df = parameters_table(rows, effective_specs, add_names, natural_units, ordered)
+        nondefault_by_run = (
+            None
+            if defaults is None
+            else {rc: _nondefault_flags(vals, defaults) for rc, vals in rows.items()}
+        )
+        df = parameters_table(
+            rows,
+            effective_specs,
+            add_names,
+            natural_units,
+            ordered,
+            nondefault_by_run=nondefault_by_run,
+        )
 
         if markdown_out is not None:
             emit_markdown(

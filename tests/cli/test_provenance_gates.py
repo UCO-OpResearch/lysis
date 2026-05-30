@@ -201,9 +201,20 @@ class TestRunMicroCommitMatch:
         self, mock_cls, runner, force_clean, tmp_path
     ):
         """HDF5 without init_version → warning, but run continues."""
-        # Build a minimal valid v2.0.0 HDF5 without any init_version stamp.
+        # Build a minimal valid v2.0.0 HDF5, then strip the init_* attrs that
+        # DataStore.create() auto-stamps to simulate a file that pre-dates the
+        # init-stamp feature.
         mp = MicroParameters()
         ds = DataStore.create("legacy", str(tmp_path), mp)
+        attrs = ds._file["micro_data"].attrs
+        for key in (
+            CONST.INIT_VERSION_ATTR,
+            CONST.INIT_DIRTY_ATTR,
+            CONST.INIT_TIMESTAMP_ATTR,
+            CONST.INIT_HOSTNAME_ATTR,
+        ):
+            if key in attrs:
+                del attrs[key]
         ds.close()
 
         mock_fm = MagicMock()

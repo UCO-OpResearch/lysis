@@ -353,6 +353,50 @@ class TestParametersMicroOnly:
         assert result.exit_code == 0
         assert "N/A" not in result.output
 
+    def test_new_micro_params_real_values(self, tmp_path):
+        """The five micro Fortran-CLI inputs added in #91 show real values."""
+        run_code = _make_micro_only_run(tmp_path)
+        from rich.console import Console
+
+        values, _has_macro = _load_run_params(
+            str(tmp_path), run_code, _DEFAULT_PARAMS, [], Console()
+        )
+
+        assert values["nodes_in_micro_row"] == "7"
+        assert values["snap_proportion"] == "0.6667"
+        assert values["unbind_rate_PLi"] == "57.60"
+        assert values["activation_rate_PLG"] == "0.100"
+        assert values["exposure_rate_binding_site"] == "5.00"
+
+    def test_micro_params_broad_coverage_not_na(self, tmp_path):
+        """Every microscale entry in the default table resolves (issue #91)."""
+        run_code = _make_micro_only_run(tmp_path)
+        from rich.console import Console
+
+        values, _has_macro = _load_run_params(
+            str(tmp_path), run_code, _DEFAULT_PARAMS, [], Console()
+        )
+
+        micro_attrs = [attr for attr, src, *_ in _DEFAULT_PARAMS if src == "micro"]
+        na = [a for a in micro_attrs if values[a] == "N/A"]
+        assert na == [], f"micro params unexpectedly N/A: {na}"
+
+    def test_add_micro_fallback_not_in_defaults(self, tmp_path):
+        """``--add`` of a micro attr absent from the defaults still resolves.
+
+        ``protofibril_radius`` is a microscale parameter that is not part of
+        ``_DEFAULT_PARAMS``; pulling it via ``--add`` on a micro-only file
+        exercises the ``_get_raw`` microscale fallback that issue #91 targets.
+        """
+        run_code = _make_micro_only_run(tmp_path)
+        from rich.console import Console
+
+        values, _has_macro = _load_run_params(
+            str(tmp_path), run_code, _DEFAULT_PARAMS, ["protofibril_radius"], Console()
+        )
+
+        assert values["protofibril_radius"] != "N/A"
+
 
 # ---------------------------------------------------------------------------
 # Macro-spec dropping (canonical source)
@@ -386,3 +430,184 @@ class TestDropMacroSpecs:
         assert "fiber_radius" in kept
         assert "micro_simulations" in kept
         assert "micro_seed" in kept
+
+
+class TestParametersCsv:
+    """`lysis parameters --csv` exports a re-feedable parameters CSV."""
+
+    @staticmethod
+    def _make_store(tmp_path, run_code, **micro_kwargs):
+        from lysis.config.parameters import MicroParameters
+        from lysis.dataio.datastore import DataStore
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            micro = MicroParameters(**micro_kwargs)
+        DataStore.create(run_code, str(tmp_path), micro).close()
+
+    def test_csv_single_file_round_trips(self, runner, tmp_path):
+        from lysis.config.constants import Q_
+        from lysis.config.experiment import Experiment
+
+        self._make_store(
+            tmp_path, "run-aa", micro_simulations=5, fiber_radius=Q_("75 nm")
+        )
+        out = tmp_path / "params.csv"
+        result = runner.invoke(
+            cli,
+            ["parameters", str(tmp_path / "run-aa.h5"), "--csv", str(out)],
+        )
+        assert result.exit_code == 0, result.output
+        assert out.exists()
+
+        # The exported CSV feeds straight back into init-experiment (dry-run).
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            exp = Experiment.from_csv(
+                str(out), str(tmp_path), name="rt", dry_run=True
+            )
+        assert exp.runs[0].run_code == "run-aa"
+        assert exp.runs[0].micro_params.micro_simulations == 5
+
+    def test_csv_directory_merges_runs_column_wise(self, runner, tmp_path):
+        import csv
+
+        self._make_store(tmp_path, "run-aa", micro_simulations=5)
+        self._make_store(tmp_path, "run-bb", micro_simulations=8)
+        out = tmp_path / "params.csv"
+        result = runner.invoke(
+            cli, ["parameters", str(tmp_path), "--csv", str(out)]
+        )
+        assert result.exit_code == 0, result.output
+
+        with open(out, newline="", encoding="utf-8") as fh:
+            rows = list(csv.reader(fh))
+        header = rows[0]
+        assert header[0] == "parameter"
+        assert set(header[1:]) == {"run-aa", "run-bb"}
+        body = {r[0]: r[1:] for r in rows[1:]}
+        # micro_simulations differs per run, aligned in one shared param column.
+        assert "micro_simulations" in body
+        aa, bb = header.index("run-aa") - 1, header.index("run-bb") - 1
+        assert body["micro_simulations"][aa] == "5"
+        assert body["micro_simulations"][bb] == "8"
+
+
+# ---------------------------------------------------------------------------
+# Non-default value highlighting (rich terminal only)
+# ---------------------------------------------------------------------------
+
+
+def _render_rich(df):
+    """Render a parameters DataFrame to an ANSI string via a forced terminal."""
+    import io
+
+    from rich.console import Console
+
+    from lysis.tools.display import params_df_to_rich
+
+    buf = io.StringIO()
+    console = Console(
+        file=buf, force_terminal=True, width=120, color_system="standard"
+    )
+    console.print(params_df_to_rich(df))
+    return buf.getvalue()
+
+
+class TestNonDefaultHighlight:
+    """Values differing from the model defaults are highlighted in rich output."""
+
+    def _flags_for(self, tmp_path, **micro_kwargs):
+        from rich.console import Console
+
+        from lysis.cli.parameters import _default_formatted, _nondefault_flags
+
+        run_code = _make_micro_only_run(tmp_path, **micro_kwargs)
+        values, _has_macro = _load_run_params(
+            str(tmp_path), run_code, _DEFAULT_PARAMS, [], Console()
+        )
+        flags = _nondefault_flags(values, _default_formatted(_DEFAULT_PARAMS, []))
+        return run_code, values, flags
+
+    def _df_for(self, tmp_path, **micro_kwargs):
+        from lysis.analysis.summary import parameters_table
+        from lysis.cli.parameters import _drop_macro_specs
+        from lysis.config.parameters import MacroParameters
+
+        run_code, values, flags = self._flags_for(tmp_path, **micro_kwargs)
+        specs = _drop_macro_specs(_DEFAULT_PARAMS)
+        return parameters_table(
+            {run_code: values},
+            specs,
+            [],
+            MacroParameters.units(),
+            [run_code],
+            nondefault_by_run={run_code: flags},
+        )
+
+    def test_nondefault_flags_mark_changed_only(self, tmp_path):
+        # micro_simulations default is 50000; 42 is non-default.
+        _run_code, _values, flags = self._flags_for(tmp_path, micro_simulations=42)
+
+        assert flags["micro_simulations"] is True
+        # Left at their defaults:
+        assert flags["bind_rate_tPA"] is False
+        assert flags["snap_proportion"] is False
+        assert flags["nodes_in_micro_row"] is False
+
+    def test_na_cells_never_flagged(self, tmp_path):
+        """Macro params (absent here, rendered N/A) are never marked non-default."""
+        _run_code, values, flags = self._flags_for(tmp_path)
+
+        assert values["pore_size"] == "N/A"
+        assert flags["pore_size"] is False
+
+    def test_table_attaches_aligned_nondefault_frame(self, tmp_path):
+        df = self._df_for(tmp_path, micro_simulations=42)
+
+        flags_df = df.attrs.get("nondefault")
+        assert flags_df is not None
+        assert list(flags_df.index) == list(df.index)
+        assert list(flags_df.columns) == list(df.columns)
+
+    def test_rich_render_colors_nondefault_cell(self, tmp_path):
+        out = _render_rich(self._df_for(tmp_path, micro_simulations=42))
+
+        # The non-default micro_simulations row carries the yellow escape; a
+        # left-at-default row (bind_rate_tPA) does not.  Assert on \x1b[33m
+        # specifically: every row's bold "Parameter" cell already emits \x1b[,
+        # so a bare \x1b[ check would pass even with highlighting removed.
+        nondefault_line = next(
+            l for l in out.splitlines() if "micro_simulations" in l
+        )
+        default_line = next(l for l in out.splitlines() if "bind_rate_tPA" in l)
+        assert "\x1b[33m" in nondefault_line
+        assert "\x1b[33m" not in default_line
+
+    def test_no_attrs_means_no_color(self, tmp_path):
+        """Without a nondefault frame, the rich table is rendered plain."""
+        from rich.console import Console
+
+        from lysis.analysis.summary import parameters_table
+        from lysis.cli.parameters import _drop_macro_specs
+        from lysis.config.parameters import MacroParameters
+
+        run_code = _make_micro_only_run(tmp_path, micro_simulations=42)
+        values, _ = _load_run_params(
+            str(tmp_path), run_code, _DEFAULT_PARAMS, [], Console()
+        )
+        specs = _drop_macro_specs(_DEFAULT_PARAMS)
+        df = parameters_table(
+            {run_code: values}, specs, [], MacroParameters.units(), [run_code]
+        )  # no nondefault_by_run
+
+        assert "\x1b[33m" not in _render_rich(df)
+
+    def test_markdown_output_is_unstyled(self, runner, tmp_path):
+        run_code = _make_micro_only_run(tmp_path, micro_simulations=42)
+        h5 = tmp_path / f"{run_code}.h5"
+
+        result = runner.invoke(cli, ["parameters", str(h5), "--markdown", "-"])
+
+        assert result.exit_code == 0
+        assert "\x1b[" not in result.output

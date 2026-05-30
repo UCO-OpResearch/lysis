@@ -147,11 +147,8 @@ def init_experiment(
         ctx.exit(1)
         return
 
-    # Stamp init provenance onto each Run's HDF5 file.
-    from lysis.dataio.datastore import DataStore  # noqa: PLC0415
-    for run in exp.runs:
-        with DataStore(run.run_code, exp.path, mode="a") as ds:
-            ds.stamp_provenance("micro", "init")
+    # Microscale init provenance is stamped inside DataStore.create()
+    # (reached via Experiment.from_csv), so no separate stamp is needed here.
 
     console.print(
         f"[bold green]Experiment created:[/bold green] {exp.path}"
