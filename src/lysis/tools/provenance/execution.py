@@ -40,14 +40,11 @@ warning; non-CLI callers (notebooks, ad-hoc scripts) still see the
 warning naturally.
 """
 
-import platform
 import socket
 import subprocess
 import warnings
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
-
-import numpy as np
 
 from ...config.constants import CONST
 from ._git import _git, _package_repo_root
@@ -236,10 +233,22 @@ def gather_python_backend_provenance() -> dict:
         ``backend_dirty`` is the 3-state string
         ``"clean"|"dirty"|"unknown"``.
     :rtype: dict
+
+    Emits a :class:`UserWarning` once per process if ``src/lysis/`` is
+    dirty, just like :func:`gather_pipeline_provenance` /
+    :func:`gather_init_provenance` — so a direct caller still sees the
+    warning even when no pipeline/init gather ran first.
     """
+    # Lazy imports: keep numpy/platform off the hot init/pipeline paths,
+    # which import this module but never touch the Python backend.
+    import platform  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
+
+    dirty_str = _resolve_dirty()
+    _emit_dirty_warning_if_needed(dirty_str)
     return {
         CONST.BACKEND_COMMIT_ATTR: _resolve_version(),
-        CONST.BACKEND_DIRTY_ATTR: _resolve_dirty(),
+        CONST.BACKEND_DIRTY_ATTR: dirty_str,
         CONST.BACKEND_COMPILER_ATTR: (
             f"{platform.python_implementation()} "
             f"{platform.python_version()}; NumPy {np.__version__}"
