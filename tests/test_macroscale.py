@@ -1,4 +1,4 @@
-"""Unit tests for the lysis.np_macroscale module.
+"""Unit tests for the lysis.macroscale module.
 
 Tests cover:
 - MacroscaleSim initialization with DataStore
@@ -19,7 +19,7 @@ from lysis.config.parameters import MicroParameters, MacroParameters
 from lysis.config.run import Run
 from lysis.dataio.datastore import DataStore
 from lysis.dataio.dataspec import dataspec
-from lysis.np_macroscale import MacroscaleSim, _BIND_EVENT_DTYPE, _FIBER_DEGRADE_DTYPE
+from lysis.macroscale import MacroscaleSim, _BIND_EVENT_DTYPE, _FIBER_DEGRADE_DTYPE
 
 
 # ---------------------------------------------------------------------------

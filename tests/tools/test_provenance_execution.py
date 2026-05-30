@@ -1,6 +1,6 @@
 """Unit tests for :mod:`lysis.tools.provenance.execution`.
 
-Covers :func:`gather_execution_provenance`, :func:`gather_init_provenance`,
+Covers :func:`gather_pipeline_provenance`, :func:`gather_init_provenance`,
 the once-per-process dirty-warning machinery, and the path-scoped
 ``src/lysis/`` resolvers:
 
@@ -20,7 +20,7 @@ import pytest
 from lysis.config.constants import CONST
 from lysis.tools.provenance import (
     execution,
-    gather_execution_provenance,
+    gather_pipeline_provenance,
     gather_init_provenance,
     mark_dirty_warning_emitted,
 )
@@ -43,12 +43,12 @@ def reset_dirty_warning_flag():
 def test_gather_returns_expected_keys():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
-        result = gather_execution_provenance()
+        result = gather_pipeline_provenance()
     assert set(result.keys()) == {
-        CONST.EXECUTION_VERSION_ATTR,
-        CONST.EXECUTION_DIRTY_ATTR,
-        CONST.EXECUTION_TIMESTAMP_ATTR,
-        CONST.EXECUTION_HOSTNAME_ATTR,
+        CONST.PIPELINE_VERSION_ATTR,
+        CONST.PIPELINE_DIRTY_ATTR,
+        CONST.PIPELINE_TIMESTAMP_ATTR,
+        CONST.PIPELINE_HOSTNAME_ATTR,
     }
 
 
@@ -119,28 +119,28 @@ def test_hostname_is_nonempty():
 def test_dirty_emits_warning(monkeypatch):
     monkeypatch.setattr(execution, "_resolve_dirty", lambda: "dirty")
     with pytest.warns(UserWarning, match="uncommitted changes"):
-        result = gather_execution_provenance()
-    # Stored as bool on the execution attrs for back-compat.
-    assert result[CONST.EXECUTION_DIRTY_ATTR] is True
+        result = gather_pipeline_provenance()
+    # Stored as the 3-state string (matches init_* and backend_*).
+    assert result[CONST.PIPELINE_DIRTY_ATTR] == "dirty"
 
 
 def test_clean_tree_does_not_warn(monkeypatch):
     monkeypatch.setattr(execution, "_resolve_dirty", lambda: "clean")
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
-        result = gather_execution_provenance()
-    assert result[CONST.EXECUTION_DIRTY_ATTR] is False
+        result = gather_pipeline_provenance()
+    assert result[CONST.PIPELINE_DIRTY_ATTR] == "clean"
 
 
 def test_dirty_warning_fires_once_per_process(monkeypatch):
     """Second consecutive dirty gather is silent."""
     monkeypatch.setattr(execution, "_resolve_dirty", lambda: "dirty")
     with pytest.warns(UserWarning, match="uncommitted changes"):
-        gather_execution_provenance()
+        gather_pipeline_provenance()
     # No warning on the second call.
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
-        gather_execution_provenance()
+        gather_pipeline_provenance()
 
 
 def test_mark_dirty_warning_emitted_suppresses_subsequent(monkeypatch):
@@ -149,7 +149,7 @@ def test_mark_dirty_warning_emitted_suppresses_subsequent(monkeypatch):
     mark_dirty_warning_emitted()
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
-        gather_execution_provenance()
+        gather_pipeline_provenance()
         gather_init_provenance()
 
 
@@ -169,7 +169,7 @@ def test_init_and_execution_share_dedup_flag(monkeypatch):
         gather_init_provenance()
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
-        gather_execution_provenance()
+        gather_pipeline_provenance()
 
 
 def test_allow_dirty_env_truthy(monkeypatch):

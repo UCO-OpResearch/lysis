@@ -17,10 +17,10 @@ Subpackages
 Submodules
 ----------
 
-lysis.np\_macroscale module
----------------------------
+lysis.macroscale module
+------------------------
 
-.. automodule:: lysis.np_macroscale
+.. automodule:: lysis.macroscale
    :members:
    :show-inheritance:
    :undoc-members:

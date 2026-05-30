@@ -61,15 +61,19 @@ _COMPUTED = {
 }
 
 
-def _get_raw(macro_params, attr_name):
-    """Return the raw value of a parameter (Pint Quantity or scalar), or None."""
+def _get_raw(macro_params, micro_params, attr_name):
+    """Return the raw value of a parameter (Pint Quantity or scalar), or None.
+
+    Either ``macro_params`` or ``micro_params`` may be ``None`` when the
+    corresponding data collection is absent from the file.  Macroscale and
+    computed parameters resolve to ``None`` when no macroscale data is present.
+    """
     if attr_name in _COMPUTED:
-        return _COMPUTED[attr_name](macro_params)
-    if hasattr(macro_params, attr_name):
+        return _COMPUTED[attr_name](macro_params) if macro_params is not None else None
+    if macro_params is not None and hasattr(macro_params, attr_name):
         return getattr(macro_params, attr_name)
-    micro = getattr(macro_params, "micro_params", None)
-    if micro is not None and hasattr(micro, attr_name):
-        return getattr(micro, attr_name)
+    if micro_params is not None and hasattr(micro_params, attr_name):
+        return getattr(micro_params, attr_name)
     return None
 
 
@@ -106,32 +110,86 @@ def _param_header(attr_name, display_units, natural_units):
 
 
 def _load_run_params(data_root, run_code, param_specs, add_names, console):
-    """Load a Run and return a dict of formatted parameter values, or None on error."""
+    """Load a Run and read its formatted parameter values.
+
+    :return: ``(values, has_macro)`` where ``values`` is a
+        ``{attr_name: formatted_str}`` dict (or ``None`` on error) and
+        ``has_macro`` is ``True`` when the file contains a macroscale data
+        collection.
+    :rtype: tuple[dict | None, bool]
+    """
     from lysis.config.run import Run
 
     try:
         run = Run(data_root, run_code)
         run.open_data()
-        run.macro_params = run.data.macro_params
-        macro_params = run.macro_params
+        # Detect which data collections are present before reading parameters:
+        # a microscale-only file has no macroscale parameters (issue #22).
+        macro_params = run.data.macro_params
+        micro_params = run.data.micro_params
     except Exception as e:
         console.print(f"[red]Error loading {run_code}:[/red] {e}")
-        return None
+        return None, False
+
+    has_macro = macro_params is not None
+
+    if macro_params is None and micro_params is None:
+        console.print(f"[yellow]No parameters found for {run_code}[/yellow]")
+        run.data.close()
+        return None, False
 
     try:
         values = {}
         for attr_name, _src, display_units, fmt in param_specs:
-            raw = _get_raw(macro_params, attr_name)
+            raw = _get_raw(macro_params, micro_params, attr_name)
             values[attr_name] = _format_value(raw, display_units, fmt)
         for attr_name in add_names:
-            raw = _get_raw(macro_params, attr_name)
+            raw = _get_raw(macro_params, micro_params, attr_name)
             values[attr_name] = _auto_format(raw)
-        return values
+        return values, has_macro
     except Exception as e:
         console.print(f"[red]Error reading parameters for {run_code}:[/red] {e}")
-        return None
+        return None, has_macro
     finally:
         run.data.close()
+
+
+def _macro_param_names():
+    """Canonical set of macroscale-only parameter attribute names.
+
+    Derived from the dataclass definitions: a parameter defined on
+    :class:`~lysis.config.parameters.MacroParameters` but not on
+    :class:`~lysis.config.parameters.MicroParameters` is macroscale-only.  The
+    nested ``micro_params`` container is excluded.
+
+    :rtype: set[str]
+    """
+    import dataclasses
+
+    from lysis.config.parameters import MacroParameters, MicroParameters
+
+    macro = {f.name for f in dataclasses.fields(MacroParameters)}
+    micro = {f.name for f in dataclasses.fields(MicroParameters)}
+    return (macro - micro) - {"micro_params"}
+
+
+def _drop_macro_specs(param_specs):
+    """Remove macroscale and computed parameter rows from the spec list.
+
+    Used when no run in the table has a macroscale data collection (issue #22),
+    so those rows could never carry data.  The macroscale parameters are
+    identified from the canonical :class:`MacroParameters` dataclass rather than
+    inferred from missing values, so a *microscale* parameter that is
+    unexpectedly absent still renders as ``N/A`` and is never silently dropped.
+
+    :param param_specs: Effective ``(attr_name, source, units, fmt)`` specs.
+    :return: ``param_specs`` filtered to non-macroscale, non-computed rows.
+    """
+    macro_names = _macro_param_names()
+    return [
+        p for p in param_specs
+        if p[0] not in macro_names and p[0] not in _COMPUTED
+    ]
 
 
 @cli.command()
@@ -234,11 +292,11 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
 
         if not no_progress:
             with console.status(f"Loading parameters for {run_code}..."):
-                values = _load_run_params(
+                values, has_macro = _load_run_params(
                     data_root, run_code, param_specs, add_names, console
                 )
         else:
-            values = _load_run_params(
+            values, has_macro = _load_run_params(
                 data_root, run_code, param_specs, add_names, console
             )
 
@@ -246,8 +304,10 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
             ctx.exit(1)
             return
 
+        # Drop macroscale rows when this file has no macroscale collection.
+        effective_specs = param_specs if has_macro else _drop_macro_specs(param_specs)
         df = parameters_table(
-            {run_code: values}, param_specs, add_names, natural_units, [run_code]
+            {run_code: values}, effective_specs, add_names, natural_units, [run_code]
         )
 
         if markdown_out is not None:
@@ -283,6 +343,7 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
             run_codes = sorted(run_codes)
 
         rows = {}
+        any_macro = False
 
         _pctx = (
             Progress(
@@ -303,21 +364,25 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
                 else None
             )
             for run_code in run_codes:
-                vals = _load_run_params(
+                vals, has_macro = _load_run_params(
                     path, run_code, param_specs, add_names, console
                 )
                 if prog is not None:
                     prog.advance(_task)
                 if vals is not None:
                     rows[run_code] = vals
+                    any_macro = any_macro or has_macro
 
         if not rows:
             ctx.exit(1)
             return
 
-        # Preserve sort order, skipping any failed runs
+        # Preserve sort order, skipping any failed runs.  Drop macroscale rows
+        # only when no run in the directory has a macroscale collection, so
+        # columns still line up when the set is mixed.
         ordered = [rc for rc in run_codes if rc in rows]
-        df = parameters_table(rows, param_specs, add_names, natural_units, ordered)
+        effective_specs = param_specs if any_macro else _drop_macro_specs(param_specs)
+        df = parameters_table(rows, effective_specs, add_names, natural_units, ordered)
 
         if markdown_out is not None:
             emit_markdown(

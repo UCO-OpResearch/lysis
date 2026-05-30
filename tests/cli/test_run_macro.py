@@ -351,9 +351,9 @@ class TestRunMacroSlurm:
         assert call_kwargs.get("out_code") == "_out"
 
     @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
-    def test_compiler_default_is_forwarded(self, mock_submit, runner, macro_hdf5):
-        """Without --compiler, the default module spec must be forwarded."""
-        from lysis.tools.slurm import DEFAULT_COMPILER_MODULE
+    def test_modules_default_is_forwarded(self, mock_submit, runner, macro_hdf5):
+        """Without --modules, the default module spec must be forwarded."""
+        from lysis.tools.slurm import DEFAULT_MODULES
         result = runner.invoke(
             cli,
             [
@@ -364,25 +364,25 @@ class TestRunMacroSlurm:
         )
         assert result.exit_code == 0, result.output
         assert (
-            mock_submit.call_args.kwargs.get("compiler_module")
-            == DEFAULT_COMPILER_MODULE
+            mock_submit.call_args.kwargs.get("modules")
+            == DEFAULT_MODULES
         )
 
     @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
-    def test_compiler_override_is_forwarded(self, mock_submit, runner, macro_hdf5):
-        """--compiler=foo/2024 must reach submit_macro_slurm_job."""
+    def test_modules_override_is_forwarded(self, mock_submit, runner, macro_hdf5):
+        """--modules=foo/2024 must reach submit_macro_slurm_job."""
         result = runner.invoke(
             cli,
             [
                 "run-macro", str(macro_hdf5),
                 "--executable", "/bin/macro.exe",
                 "--slurm",
-                "--compiler", "intel-compilers/2024",
+                "--modules", "intel-compilers/2024",
             ],
         )
         assert result.exit_code == 0, result.output
         assert (
-            mock_submit.call_args.kwargs.get("compiler_module")
+            mock_submit.call_args.kwargs.get("modules")
             == "intel-compilers/2024"
         )
 
@@ -554,16 +554,16 @@ class TestRunMacroFortranCommit:
         fake_binary.parent.mkdir(parents=True)
         fake_binary.write_text("not a real binary")
         prov = {
-            "binary_commit": "c" * 40,
-            "binary_dirty": "clean",
-            "binary_compiler": "GCC 11.4.0",
-            "binary_source": "historical:" + "c" * 40,
+            "backend_commit": "c" * 40,
+            "backend_dirty": "clean",
+            "backend_compiler": "GCC 11.4.0",
+            "backend_historical": True,
         }
 
         @contextmanager
         def fake_cm(*args, **kwargs):
-            # Local mode: compiler_module should be None.
-            assert kwargs.get("compiler_module") is None
+            # Local mode: modules should be None.
+            assert kwargs.get("modules") is None
             yield fake_binary, prov
 
         mock_build.side_effect = fake_cm
@@ -580,7 +580,7 @@ class TestRunMacroFortranCommit:
         )
         assert result.exit_code == 0, result.output
         call_kwargs = mock_cls.from_hdf5.call_args.kwargs
-        assert call_kwargs.get("historical_binary_attrs") == prov
+        assert call_kwargs.get("historical_backend_attrs") == prov
         assert call_kwargs.get("skip_binary_verification") is True
 
     @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=99)
@@ -594,15 +594,15 @@ class TestRunMacroFortranCommit:
         fake_binary.parent.mkdir(parents=True)
         fake_binary.write_text("not a real binary")
         prov = {
-            "binary_commit": "d" * 40,
-            "binary_dirty": "clean",
-            "binary_compiler": "Intel(R) Fortran",
-            "binary_source": "historical:" + "d" * 40,
+            "backend_commit": "d" * 40,
+            "backend_dirty": "clean",
+            "backend_compiler": "Intel(R) Fortran",
+            "backend_historical": True,
         }
 
         @contextmanager
         def fake_cm(*args, **kwargs):
-            assert kwargs.get("compiler_module") == "intel-compilers/2024"
+            assert kwargs.get("modules") == "intel-compilers/2024"
             yield fake_binary, prov
 
         mock_build.side_effect = fake_cm
@@ -613,12 +613,12 @@ class TestRunMacroFortranCommit:
                 "--executable", "macro_diffuse_into_and_along__internal",
                 "--fortran-commit", "HEAD",
                 "--slurm",
-                "--compiler", "intel-compilers/2024",
+                "--modules", "intel-compilers/2024",
             ],
         )
         assert result.exit_code == 0, result.output
         call_kwargs = mock_submit.call_args.kwargs
-        assert call_kwargs.get("historical_binary_attrs") == prov
+        assert call_kwargs.get("historical_backend_attrs") == prov
 
 
 # ---------------------------------------------------------------------------
@@ -629,7 +629,7 @@ class TestRunMacroFortranCommit:
 def _fill_microscale_data(ds, n_sims=100, seed=42):
     """Fill microscale_out datasets in an open DataStore with synthetic data.
 
-    Mirrors the helper in ``tests/test_np_macroscale.py`` so the python backend
+    Mirrors the helper in ``tests/test_macroscale.py`` so the python backend
     can run end-to-end against plausible microscale output.
     """
     rng = np.random.default_rng(seed)
@@ -767,18 +767,32 @@ class TestRunMacroPythonExecution:
         assert result.exit_code == 0, result.output
         assert _state(macro_ready_hdf5) == HDF5State.MACRO_FILLED
 
-    def test_stamps_execution_backend(self, runner, macro_ready_hdf5):
+    def test_stamps_backend_type_python(self, runner, macro_ready_hdf5):
         result = runner.invoke(
             cli,
             ["run-macro", str(macro_ready_hdf5), "--backend", "python",
              "--allow-dirty", "--allow-commit-mismatch"],
         )
         assert result.exit_code == 0, result.output
+
+        def _str(value):
+            return value.decode("utf-8") if isinstance(value, bytes) else value
+
         with h5py.File(str(macro_ready_hdf5), "r") as f:
-            backend = f["macro_data"].attrs[CONST.EXECUTION_BACKEND_ATTR]
-            if isinstance(backend, bytes):
-                backend = backend.decode("utf-8")
-        assert backend == "python"
+            attrs = dict(f["macro_data"].attrs)
+
+        # The python backend records backend_type="python" via the v1.0.0
+        # backend_* schema -- the legacy execution_backend attr is gone (#77).
+        assert _str(attrs[CONST.BACKEND_TYPE_ATTR]) == "python"
+        assert "execution_backend" not in attrs
+        # Full-parity backend_* provenance: src/lysis git state + interpreter.
+        assert CONST.BACKEND_COMMIT_ATTR in attrs
+        assert _str(attrs[CONST.BACKEND_DIRTY_ATTR]) in {
+            "clean", "dirty", "unknown"
+        }
+        assert "NumPy" in _str(attrs[CONST.BACKEND_COMPILER_ATTR])
+        # Pipeline provenance is still stamped alongside the backend family.
+        assert CONST.PIPELINE_VERSION_ATTR in attrs
 
     def test_series_two_simulations_independent(self, runner, tmp_path):
         """Two simulations both fill, with distinct (seed-split) snapshots."""
@@ -916,7 +930,7 @@ class TestRunMacroPythonSlurmDispatch:
                  "--staging-root", str(staging),
                  "--fast-tmp-root", str(fast),
                  "--keep-tmpdir",
-                 "--compiler", "intel-compilers/2024",
+                 "--modules", "intel-compilers/2024",
                  "--sbatch", "mem=8GB",
                  "--allow-dirty", "--allow-commit-mismatch"],
             )
@@ -926,7 +940,7 @@ class TestRunMacroPythonSlurmDispatch:
         assert kwargs["staging_root"] == str(staging)
         assert kwargs["fast_tmp_root"] == str(fast)
         assert kwargs["keep_tmpdir"] is True
-        assert kwargs["compiler_module"] == "intel-compilers/2024"
+        assert kwargs["modules"] == "intel-compilers/2024"
         assert kwargs["sbatch_overrides"] == {"mem": "8GB"}
 
     def test_batch_dispatches_one_submit_per_file(

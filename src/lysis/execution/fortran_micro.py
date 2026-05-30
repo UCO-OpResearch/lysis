@@ -128,7 +128,7 @@ class FortranMicro(FortranRunner):
         num_children: "int | None" = None,
         allow_stale_binary: bool = False,
         skip_binary_verification: bool = False,
-        historical_binary_attrs: "dict | None" = None,
+        historical_backend_attrs: "dict | None" = None,
         source_stamp: "tuple[str, str] | None" = None,
     ) -> "FortranMicro":
         """Construct a :class:`FortranMicro` from an existing HDF5 run file.
@@ -164,12 +164,12 @@ class FortranMicro(FortranRunner):
             workflow where the mismatch is intentional and the binary
             may not implement ``--version``.  Defaults to ``False``.
         :type skip_binary_verification: bool, optional
-        :param historical_binary_attrs: Pre-computed binary provenance
+        :param historical_backend_attrs: Pre-computed binary provenance
             dict (from
-            :func:`~lysis.tools.provenance.gather_historical_binary_provenance`)
+            :func:`~lysis.tools.provenance.gather_historical_backend_provenance`)
             stamped into the HDF5 file in place of the default
             ``<binary> --version`` query.  Defaults to ``None``.
-        :type historical_binary_attrs: dict, optional
+        :type historical_backend_attrs: dict, optional
         :param source_stamp: Optional pre-computed ``(commit, dirty)``
             tuple for ``src/fortran/``, forwarded to
             :func:`~lysis.tools.provenance.verify_binary_matches_source`.
@@ -213,7 +213,7 @@ class FortranMicro(FortranRunner):
             num_children=num_children,
             allow_stale_binary=allow_stale_binary,
             skip_binary_verification=skip_binary_verification,
-            historical_binary_attrs=historical_binary_attrs,
+            historical_backend_attrs=historical_backend_attrs,
             source_stamp=source_stamp,
         )
 

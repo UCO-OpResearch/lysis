@@ -1,15 +1,18 @@
-"""Execution-time and init-time provenance stamps for HDF5 outputs.
+"""Pipeline-time and init-time provenance stamps for HDF5 outputs.
 
-Captures *when*, *where*, and *with what code* a microscale or macroscale
-simulation was initialised or executed, so the resulting HDF5 file is
-self-describing for future reproducibility checks.
+Captures *when*, *where*, and *with what code* the ``src/lysis/`` Python
+pipeline initialised or orchestrated a microscale or macroscale simulation,
+so the resulting HDF5 file is self-describing for future reproducibility
+checks.  (The simulation *engine* that produced the output is recorded
+separately as the backend; see
+:mod:`lysis.tools.provenance.binary`.)
 
 Two public gather functions are exposed:
 
 - :func:`gather_init_provenance` — written by ``init-experiment`` /
   ``init-macroscale``, keyed by ``CONST.INIT_*_ATTR``.
-- :func:`gather_execution_provenance` — written by ``run-micro`` /
-  ``run-macro`` at HDF5 import time, keyed by ``CONST.EXECUTION_*_ATTR``.
+- :func:`gather_pipeline_provenance` — written by ``run-micro`` /
+  ``run-macro`` at HDF5 import time, keyed by ``CONST.PIPELINE_*_ATTR``.
 
 Both functions scope their version/dirty check to the ``src/lysis/``
 subtree only (mirroring how :func:`~lysis.tools.provenance.binary.
@@ -47,8 +50,9 @@ from ...config.constants import CONST
 from ._git import _git, _package_repo_root
 
 __all__ = [
-    "gather_execution_provenance",
+    "gather_pipeline_provenance",
     "gather_init_provenance",
+    "gather_python_backend_provenance",
     "allow_dirty_from_env",
     "allow_commit_mismatch_from_env",
     "mark_dirty_warning_emitted",
@@ -149,7 +153,7 @@ def mark_dirty_warning_emitted() -> None:
 
     Called by the lysis CLI top-level callback after it prints its own
     coloured warning, so the inline :func:`warnings.warn` inside
-    :func:`gather_execution_provenance` / :func:`gather_init_provenance`
+    :func:`gather_pipeline_provenance` / :func:`gather_init_provenance`
     does not re-fire for the same invocation.  Non-CLI callers
     (notebooks, scripts) never call this and therefore receive the
     inline warning normally.
@@ -158,13 +162,15 @@ def mark_dirty_warning_emitted() -> None:
     _dirty_warning_emitted = True
 
 
-def gather_execution_provenance() -> dict:
-    """Collect execution-time provenance stamps for ``src/lysis/``.
+def gather_pipeline_provenance() -> dict:
+    """Collect pipeline-time provenance stamps for ``src/lysis/``.
 
-    :return: Dict keyed by the ``EXECUTION_*_ATTR`` names in
+    :return: Dict keyed by the ``PIPELINE_*_ATTR`` names in
         :data:`lysis.config.constants.CONST`, ready to write as HDF5 attrs.
-        ``EXECUTION_DIRTY_ATTR`` is a bool (``True`` iff dirty) to preserve
-        backward compatibility with HDF5 files already in the wild.
+        ``PIPELINE_DIRTY_ATTR`` is the 3-state string
+        ``"clean"|"dirty"|"unknown"`` (matching ``INIT_DIRTY_ATTR`` and
+        ``BACKEND_DIRTY_ATTR``), so the ``"unknown"`` case (git unavailable
+        / repo root not found) is never collapsed into ``"clean"``.
     :rtype: dict
 
     Emits a :class:`UserWarning` the first time a dirty ``src/lysis/``
@@ -174,17 +180,17 @@ def gather_execution_provenance() -> dict:
     dirty_str = _resolve_dirty()
     _emit_dirty_warning_if_needed(dirty_str)
     return {
-        CONST.EXECUTION_VERSION_ATTR: _resolve_version(),
-        CONST.EXECUTION_DIRTY_ATTR: dirty_str == "dirty",
-        CONST.EXECUTION_TIMESTAMP_ATTR: _resolve_timestamp(),
-        CONST.EXECUTION_HOSTNAME_ATTR: _resolve_hostname(),
+        CONST.PIPELINE_VERSION_ATTR: _resolve_version(),
+        CONST.PIPELINE_DIRTY_ATTR: dirty_str,
+        CONST.PIPELINE_TIMESTAMP_ATTR: _resolve_timestamp(),
+        CONST.PIPELINE_HOSTNAME_ATTR: _resolve_hostname(),
     }
 
 
 def gather_init_provenance() -> dict:
     """Collect init-time provenance stamps for ``src/lysis/``.
 
-    Same shape as :func:`gather_execution_provenance` but keyed by
+    Same shape as :func:`gather_pipeline_provenance` but keyed by
     ``CONST.INIT_*_ATTR`` and stores the dirty value as the 3-state
     string ``"clean"|"dirty"|"unknown"`` (matches
     :func:`~lysis.tools.provenance.binary.gather_fortran_source_provenance`).
@@ -195,7 +201,7 @@ def gather_init_provenance() -> dict:
     :rtype: dict
 
     Emits a :class:`UserWarning` once per process if ``src/lysis/`` is
-    dirty, just like :func:`gather_execution_provenance`.
+    dirty, just like :func:`gather_pipeline_provenance`.
     """
     dirty_str = _resolve_dirty()
     _emit_dirty_warning_if_needed(dirty_str)
@@ -204,6 +210,49 @@ def gather_init_provenance() -> dict:
         CONST.INIT_DIRTY_ATTR: dirty_str,
         CONST.INIT_TIMESTAMP_ATTR: _resolve_timestamp(),
         CONST.INIT_HOSTNAME_ATTR: _resolve_hostname(),
+    }
+
+
+def gather_python_backend_provenance() -> dict:
+    """Collect ``backend_*`` provenance for the in-process Python backend.
+
+    The Python backend's "engine" is the ``src/lysis/`` package itself
+    (``lysis.macroscale``), so ``backend_commit`` / ``backend_dirty`` mirror
+    the ``src/lysis/`` git state recorded by
+    :func:`gather_pipeline_provenance` (full parity with the Fortran
+    backend, where these come from the binary's ``--version``).  In place of
+    a Fortran ``backend_compiler`` string, ``backend_compiler`` records the
+    Python interpreter and NumPy version that actually executed the model.
+
+    ``backend_type`` is **not** included here — it is supplied by
+    :meth:`~lysis.dataio.datastore.DataStore.stamp_provenance` via its
+    ``backend_type`` argument (``"python"`` for this backend).
+
+    :return: Dict keyed by ``CONST.BACKEND_COMMIT_ATTR``,
+        ``CONST.BACKEND_DIRTY_ATTR``, ``CONST.BACKEND_COMPILER_ATTR``.
+        ``backend_dirty`` is the 3-state string
+        ``"clean"|"dirty"|"unknown"``.
+    :rtype: dict
+
+    Emits a :class:`UserWarning` once per process if ``src/lysis/`` is
+    dirty, just like :func:`gather_pipeline_provenance` /
+    :func:`gather_init_provenance` — so a direct caller still sees the
+    warning even when no pipeline/init gather ran first.
+    """
+    # Lazy imports: keep numpy/platform off the hot init/pipeline paths,
+    # which import this module but never touch the Python backend.
+    import platform  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
+
+    dirty_str = _resolve_dirty()
+    _emit_dirty_warning_if_needed(dirty_str)
+    return {
+        CONST.BACKEND_COMMIT_ATTR: _resolve_version(),
+        CONST.BACKEND_DIRTY_ATTR: dirty_str,
+        CONST.BACKEND_COMPILER_ATTR: (
+            f"{platform.python_implementation()} "
+            f"{platform.python_version()}; NumPy {np.__version__}"
+        ),
     }
 
 
