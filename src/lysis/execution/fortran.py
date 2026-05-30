@@ -107,18 +107,18 @@ class FortranRunner(SimulationRunner):
     #: (``lysis run-{micro,macro} --fortran-commit ...``) where the
     #: binary↔``src/fortran/`` mismatch is intentional and the historical
     #: binary may not implement ``--version`` at all.  Pair with
-    #: :attr:`historical_binary_attrs` so the synthesised binary
+    #: :attr:`historical_backend_attrs` so the synthesised binary
     #: provenance is still stamped into the HDF5 file.
     skip_binary_verification: bool = False
     #: Optional pre-computed binary-provenance dict shipped to
     #: :meth:`~lysis.dataio.datastore.DataStore.import_collection` as
-    #: ``replace_binary_attrs``.  Populated by the historical-build
+    #: ``replace_backend_attrs``.  Populated by the historical-build
     #: workflow from
-    #: :func:`~lysis.tools.provenance.gather_historical_binary_provenance`.
+    #: :func:`~lysis.tools.provenance.gather_historical_backend_provenance`.
     #: When ``None``, the default
-    #: :func:`~lysis.tools.provenance.gather_binary_provenance` path is
+    #: :func:`~lysis.tools.provenance.gather_backend_provenance` path is
     #: used (queries ``<binary> --version``).
-    historical_binary_attrs: "dict | None" = None
+    historical_backend_attrs: "dict | None" = None
     #: Optional pre-computed ``(commit, dirty)`` tuple for the
     #: ``src/fortran/`` source tree, forwarded to
     #: :func:`~lysis.tools.provenance.verify_binary_matches_source`.
@@ -270,14 +270,14 @@ class FortranRunner(SimulationRunner):
         workflow), this is a no-op — no subprocess is spawned, no
         warning banner is generated.  The caller has independently
         synthesised the binary provenance and will pass it through
-        :attr:`historical_binary_attrs`.
+        :attr:`historical_backend_attrs`.
 
         :return: The verify dict — empty on match or when skipped; on
             overridden mismatch contains ``"banner"`` (text to prepend
-            to the Fortran stdout log) plus the ``stale_binary_override``
+            to the Fortran stdout log) plus the ``stale_backend_override``
             flag forwarded to
             :meth:`~lysis.dataio.datastore.DataStore.import_collection`
-            via :meth:`_binary_hdf5_attrs`.  The binary's
+            via :meth:`_backend_hdf5_attrs`.  The binary's
             commit/dirty/compiler stamps are no longer included here —
             they are gathered fresh and stamped unconditionally by
             :meth:`~lysis.dataio.datastore.DataStore.stamp_provenance`
@@ -305,7 +305,7 @@ class FortranRunner(SimulationRunner):
         return self._binary_check_info
 
     @property
-    def _binary_hdf5_attrs(self) -> dict:
+    def _backend_hdf5_attrs(self) -> dict:
         """Override-only attrs from :meth:`_verify_binary_version` to merge
         into the binary stamp; ``{}`` when the binary matched the source.
 
@@ -523,9 +523,9 @@ class FortranRunner(SimulationRunner):
                     self._fortran_dataspec_version(),
                     str(data_dir),
                     [self.out_file_code],
-                    binary_executable=self.executable,
-                    binary_override=self._binary_hdf5_attrs,
-                    replace_binary_attrs=self.historical_binary_attrs,
+                    backend_executable=self.executable,
+                    backend_override=self._backend_hdf5_attrs,
+                    replace_backend_attrs=self.historical_backend_attrs,
                 )
 
             if not keep_tmpdir:

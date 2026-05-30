@@ -735,10 +735,10 @@ class TestRunMicroFortranCommit:
         fake_binary.parent.mkdir(parents=True)
         fake_binary.write_text("not a real binary")
         prov = {
-            "binary_commit": "a" * 40,
-            "binary_dirty": "clean",
-            "binary_compiler": "GCC 11.4.0",
-            "binary_source": "historical:" + "a" * 40,
+            "backend_commit": "a" * 40,
+            "backend_dirty": "clean",
+            "backend_compiler": "GCC 11.4.0",
+            "backend_historical": True,
         }
 
         @contextmanager
@@ -759,7 +759,7 @@ class TestRunMicroFortranCommit:
         )
         assert result.exit_code == 0, result.output
         call_kwargs = mock_cls.from_hdf5.call_args.kwargs
-        assert call_kwargs.get("historical_binary_attrs") == prov
+        assert call_kwargs.get("historical_backend_attrs") == prov
         assert call_kwargs.get("skip_binary_verification") is True
         # The bypass-banner must surface so users see why no staleness
         # check is happening.  Rich's console wraps long lines, so look
@@ -778,10 +778,10 @@ class TestRunMicroFortranCommit:
         fake_binary.parent.mkdir(parents=True)
         fake_binary.write_text("not a real binary")
         prov = {
-            "binary_commit": "b" * 40,
-            "binary_dirty": "clean",
-            "binary_compiler": "Intel(R) Fortran",
-            "binary_source": "historical:" + "b" * 40,
+            "backend_commit": "b" * 40,
+            "backend_dirty": "clean",
+            "backend_compiler": "Intel(R) Fortran",
+            "backend_historical": True,
         }
 
         @contextmanager
@@ -803,4 +803,4 @@ class TestRunMicroFortranCommit:
         )
         assert result.exit_code == 0, result.output
         call_kwargs = mock_submit.call_args.kwargs
-        assert call_kwargs.get("historical_binary_attrs") == prov
+        assert call_kwargs.get("historical_backend_attrs") == prov

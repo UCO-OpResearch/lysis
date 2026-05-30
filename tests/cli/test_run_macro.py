@@ -550,10 +550,10 @@ class TestRunMacroFortranCommit:
         fake_binary.parent.mkdir(parents=True)
         fake_binary.write_text("not a real binary")
         prov = {
-            "binary_commit": "c" * 40,
-            "binary_dirty": "clean",
-            "binary_compiler": "GCC 11.4.0",
-            "binary_source": "historical:" + "c" * 40,
+            "backend_commit": "c" * 40,
+            "backend_dirty": "clean",
+            "backend_compiler": "GCC 11.4.0",
+            "backend_historical": True,
         }
 
         @contextmanager
@@ -576,7 +576,7 @@ class TestRunMacroFortranCommit:
         )
         assert result.exit_code == 0, result.output
         call_kwargs = mock_cls.from_hdf5.call_args.kwargs
-        assert call_kwargs.get("historical_binary_attrs") == prov
+        assert call_kwargs.get("historical_backend_attrs") == prov
         assert call_kwargs.get("skip_binary_verification") is True
 
     @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=99)
@@ -590,10 +590,10 @@ class TestRunMacroFortranCommit:
         fake_binary.parent.mkdir(parents=True)
         fake_binary.write_text("not a real binary")
         prov = {
-            "binary_commit": "d" * 40,
-            "binary_dirty": "clean",
-            "binary_compiler": "Intel(R) Fortran",
-            "binary_source": "historical:" + "d" * 40,
+            "backend_commit": "d" * 40,
+            "backend_dirty": "clean",
+            "backend_compiler": "Intel(R) Fortran",
+            "backend_historical": True,
         }
 
         @contextmanager
@@ -614,4 +614,4 @@ class TestRunMacroFortranCommit:
         )
         assert result.exit_code == 0, result.output
         call_kwargs = mock_submit.call_args.kwargs
-        assert call_kwargs.get("historical_binary_attrs") == prov
+        assert call_kwargs.get("historical_backend_attrs") == prov

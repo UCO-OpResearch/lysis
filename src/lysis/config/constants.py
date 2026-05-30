@@ -68,33 +68,44 @@ class Const:
         self.DATASPEC_VERSION_ATTR = "dataspec_version"
         self.CONVERTED_FROM_ATTR = "converted_from"
         self.RENAMED_FROM_ATTR = "renamed_from"
-        # Init-time provenance (stamped by init-experiment / init-macroscale)
+        # Init-time provenance (stamped by init-experiment / init-macroscale).
+        # Records the ``src/lysis/`` Python layer at init time.  ``init_dirty``
+        # is the 3-state string ``"clean"`` / ``"dirty"`` / ``"unknown"``.
         self.INIT_VERSION_ATTR = "init_version"
         self.INIT_DIRTY_ATTR = "init_dirty"
         self.INIT_TIMESTAMP_ATTR = "init_timestamp"
         self.INIT_HOSTNAME_ATTR = "init_hostname"
-        # Execution-time provenance (stamped by run-micro / run-macro)
-        self.EXECUTION_VERSION_ATTR = "execution_version"
-        self.EXECUTION_DIRTY_ATTR = "execution_dirty"
-        self.EXECUTION_TIMESTAMP_ATTR = "execution_timestamp"
-        self.EXECUTION_HOSTNAME_ATTR = "execution_hostname"
-        # Self-reported provenance from the Fortran binary's --version output.
-        # ``binary_commit`` / ``binary_dirty`` / ``binary_compiler`` are
-        # stamped unconditionally by ``run-*`` commands.
-        # ``stale_binary_override`` is set only when the binary's stamp
+        # Pipeline-time provenance (stamped by run-micro / run-macro at HDF5
+        # import).  Records the ``src/lysis/`` Python pipeline that orchestrated
+        # init/import -- NOT the engine that executes the simulation (that is
+        # the backend, below).  ``pipeline_dirty`` is the 3-state string
+        # ``"clean"`` / ``"dirty"`` / ``"unknown"``.
+        self.PIPELINE_VERSION_ATTR = "pipeline_version"
+        self.PIPELINE_DIRTY_ATTR = "pipeline_dirty"
+        self.PIPELINE_TIMESTAMP_ATTR = "pipeline_timestamp"
+        self.PIPELINE_HOSTNAME_ATTR = "pipeline_hostname"
+        # Backend provenance -- the simulation engine that actually produced
+        # the output.  For Fortran runs these come from the binary's
+        # ``--version`` output; ``backend_commit`` / ``backend_dirty`` /
+        # ``backend_compiler`` / ``backend_type`` are stamped unconditionally
+        # by ``run-*`` commands.  ``backend_dirty`` is the 3-state string
+        # ``"clean"`` / ``"dirty"`` / ``"unknown"``.  ``backend_type`` is
+        # ``"fortran"`` (or ``"python"`` for a future Python backend).
+        # ``stale_backend_override`` is set only when the binary's stamp
         # disagrees with the source tree and the user has explicitly
         # overridden the preflight check.
-        self.BINARY_COMMIT_ATTR = "binary_commit"
-        self.BINARY_DIRTY_ATTR = "binary_dirty"
-        self.BINARY_COMPILER_ATTR = "binary_compiler"
-        self.STALE_BINARY_OVERRIDE_ATTR = "stale_binary_override"
-        # Marker stamped by the historical-build workflow
-        # (``lysis run-{micro,macro} --fortran-commit <ref>``).  Value is
-        # ``f"historical:{resolved_sha}"``; the field is absent on every
-        # other run.  Lets a reader of the HDF5 file see at a glance that
-        # this run's binary was rebuilt from an earlier commit rather
-        # than being the build that matches the current source tree.
-        self.BINARY_SOURCE_ATTR = "binary_source"
+        self.BACKEND_COMMIT_ATTR = "backend_commit"
+        self.BACKEND_DIRTY_ATTR = "backend_dirty"
+        self.BACKEND_COMPILER_ATTR = "backend_compiler"
+        self.BACKEND_TYPE_ATTR = "backend_type"
+        self.STALE_BINARY_OVERRIDE_ATTR = "stale_backend_override"
+        # Boolean marker stamped (``True``) by the historical-build workflow
+        # (``lysis run-{micro,macro} --fortran-commit <ref>``); absent on every
+        # other run.  Lets a reader of the HDF5 file see at a glance that this
+        # run's binary was rebuilt from an earlier commit rather than being the
+        # build that matches the current source tree.  The commit SHA itself
+        # lives in ``backend_commit``.
+        self.BACKEND_HISTORICAL_ATTR = "backend_historical"
         self.LYSIS_ALLOW_STALE_BINARY_ENV = "LYSIS_ALLOW_STALE_BINARY"
         self.LYSIS_ALLOW_DIRTY_ENV = "LYSIS_ALLOW_DIRTY"
         self.LYSIS_ALLOW_COMMIT_MISMATCH_ENV = "LYSIS_ALLOW_COMMIT_MISMATCH"

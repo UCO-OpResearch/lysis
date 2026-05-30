@@ -57,7 +57,7 @@ class TestStampValidation:
         with pytest.raises(
             ValueError, match="requires either an 'executable'"
         ):
-            micro_only_ds.stamp_provenance("micro", "binary")
+            micro_only_ds.stamp_provenance("micro", "backend")
 
     def test_missing_macro_group_raises(self, micro_only_ds):
         # Only micro_data exists in this fixture.
@@ -121,17 +121,21 @@ class TestStampExecution:
         import warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            micro_only_ds.stamp_provenance("micro", "execution")
+            micro_only_ds.stamp_provenance("micro", "pipeline")
         h5_path = tmp_path / "run-01.h5"
         micro_only_ds.close()
         with h5py.File(str(h5_path), "r") as f:
             attrs = f["micro_data"].attrs
-            assert CONST.EXECUTION_VERSION_ATTR in attrs
-            assert CONST.EXECUTION_DIRTY_ATTR in attrs
-            assert CONST.EXECUTION_TIMESTAMP_ATTR in attrs
-            assert CONST.EXECUTION_HOSTNAME_ATTR in attrs
-            # Execution dirty stays a bool for backward compat.
-            assert isinstance(attrs[CONST.EXECUTION_DIRTY_ATTR], (bool, np.bool_))
+            assert CONST.PIPELINE_VERSION_ATTR in attrs
+            assert CONST.PIPELINE_DIRTY_ATTR in attrs
+            assert CONST.PIPELINE_TIMESTAMP_ATTR in attrs
+            assert CONST.PIPELINE_HOSTNAME_ATTR in attrs
+            # Pipeline dirty is the 3-state string (clean/dirty/unknown),
+            # matching init_* and backend_* — never a bool.
+            dirty = attrs[CONST.PIPELINE_DIRTY_ATTR]
+            if isinstance(dirty, bytes):
+                dirty = dirty.decode()
+            assert dirty in {"clean", "dirty", "unknown"}
 
 
 # ----------------------------------------------------------------------
@@ -141,7 +145,7 @@ class TestStampExecution:
 
 class TestStampBinary:
     def test_binary_writes_three_attrs(self, micro_only_ds, tmp_path, monkeypatch):
-        # Stub gather_binary_provenance via the binary module so we don't
+        # Stub gather_backend_provenance via the binary module so we don't
         # actually need a working executable on disk.
         from lysis.tools.provenance import binary as binary_mod
         monkeypatch.setattr(
@@ -150,17 +154,19 @@ class TestStampBinary:
             lambda exe, **kw: ("abc123", "clean", "Intel"),
         )
         micro_only_ds.stamp_provenance(
-            "micro", "binary", executable="/fake/bin"
+            "micro", "backend", executable="/fake/bin"
         )
         h5_path = tmp_path / "run-01.h5"
         micro_only_ds.close()
         with h5py.File(str(h5_path), "r") as f:
             attrs = f["micro_data"].attrs
-            assert attrs[CONST.BINARY_COMMIT_ATTR].decode() == "abc123" \
-                if isinstance(attrs[CONST.BINARY_COMMIT_ATTR], bytes) \
-                else attrs[CONST.BINARY_COMMIT_ATTR] == "abc123"
-            assert attrs[CONST.BINARY_DIRTY_ATTR] in (b"clean", "clean")
-            assert attrs[CONST.BINARY_COMPILER_ATTR] in (b"Intel", "Intel")
+            assert attrs[CONST.BACKEND_COMMIT_ATTR].decode() == "abc123" \
+                if isinstance(attrs[CONST.BACKEND_COMMIT_ATTR], bytes) \
+                else attrs[CONST.BACKEND_COMMIT_ATTR] == "abc123"
+            assert attrs[CONST.BACKEND_DIRTY_ATTR] in (b"clean", "clean")
+            assert attrs[CONST.BACKEND_COMPILER_ATTR] in (b"Intel", "Intel")
+            # Every Fortran run self-identifies its backend type.
+            assert attrs[CONST.BACKEND_TYPE_ATTR] in (b"fortran", "fortran")
             # No override flag when not provided.
             assert CONST.STALE_BINARY_OVERRIDE_ATTR not in attrs
 
@@ -175,9 +181,9 @@ class TestStampBinary:
         )
         micro_only_ds.stamp_provenance(
             "micro",
-            "binary",
+            "backend",
             executable="/fake/bin",
-            binary_override={CONST.STALE_BINARY_OVERRIDE_ATTR: True},
+            backend_override={CONST.STALE_BINARY_OVERRIDE_ATTR: True},
         )
         h5_path = tmp_path / "run-01.h5"
         micro_only_ds.close()
@@ -185,10 +191,10 @@ class TestStampBinary:
             attrs = f["micro_data"].attrs
             assert bool(attrs[CONST.STALE_BINARY_OVERRIDE_ATTR]) is True
 
-    def test_replace_binary_attrs_skips_gather(
+    def test_replace_backend_attrs_skips_gather(
         self, micro_only_ds, tmp_path, monkeypatch
     ):
-        # When replace_binary_attrs is supplied, gather_binary_provenance
+        # When replace_backend_attrs is supplied, gather_backend_provenance
         # must NOT be called — the historical-build path ships the dict
         # itself (and the binary may not even support --version).
         from lysis.tools.provenance import binary as binary_mod
@@ -199,57 +205,56 @@ class TestStampBinary:
             lambda exe, **kw: sentinel_called.append(exe) or ("X", "X", "X"),
         )
         replacement = {
-            CONST.BINARY_COMMIT_ATTR: "deadbeef" * 5,
-            CONST.BINARY_DIRTY_ATTR: "clean",
-            CONST.BINARY_COMPILER_ATTR: "GCC version 11.4.0",
-            CONST.BINARY_SOURCE_ATTR: f"historical:{'deadbeef' * 5}",
+            CONST.BACKEND_COMMIT_ATTR: "deadbeef" * 5,
+            CONST.BACKEND_DIRTY_ATTR: "clean",
+            CONST.BACKEND_COMPILER_ATTR: "GCC version 11.4.0",
+            CONST.BACKEND_HISTORICAL_ATTR: True,
         }
         micro_only_ds.stamp_provenance(
-            "micro", "binary", replace_binary_attrs=replacement
+            "micro", "backend", replace_backend_attrs=replacement
         )
         assert sentinel_called == []
         h5_path = tmp_path / "run-01.h5"
         micro_only_ds.close()
         with h5py.File(str(h5_path), "r") as f:
             attrs = f["micro_data"].attrs
-            assert attrs[CONST.BINARY_SOURCE_ATTR] in (
-                b"historical:" + b"deadbeef" * 5,
-                f"historical:{'deadbeef' * 5}",
-            )
-            assert attrs[CONST.BINARY_COMPILER_ATTR] in (
+            assert bool(attrs[CONST.BACKEND_HISTORICAL_ATTR]) is True
+            assert attrs[CONST.BACKEND_COMPILER_ATTR] in (
                 b"GCC version 11.4.0", "GCC version 11.4.0",
             )
+            # backend_type is stamped even on the replace path.
+            assert attrs[CONST.BACKEND_TYPE_ATTR] in (b"fortran", "fortran")
 
-    def test_replace_binary_attrs_allows_none_executable(
+    def test_replace_backend_attrs_allows_none_executable(
         self, micro_only_ds, tmp_path
     ):
         # The historical-build workflow does not always have an
-        # executable on hand to query; replace_binary_attrs alone must
+        # executable on hand to query; replace_backend_attrs alone must
         # be sufficient.
         replacement = {
-            CONST.BINARY_COMMIT_ATTR: "f" * 40,
-            CONST.BINARY_DIRTY_ATTR: "clean",
-            CONST.BINARY_COMPILER_ATTR: "unknown",
-            CONST.BINARY_SOURCE_ATTR: f"historical:{'f' * 40}",
+            CONST.BACKEND_COMMIT_ATTR: "f" * 40,
+            CONST.BACKEND_DIRTY_ATTR: "clean",
+            CONST.BACKEND_COMPILER_ATTR: "unknown",
+            CONST.BACKEND_HISTORICAL_ATTR: True,
         }
         # Should not raise.
         micro_only_ds.stamp_provenance(
-            "micro", "binary", executable=None, replace_binary_attrs=replacement
+            "micro", "backend", executable=None, replace_backend_attrs=replacement
         )
 
     def test_binary_kind_without_executable_or_replace_raises(
         self, micro_only_ds
     ):
         import pytest
-        with pytest.raises(ValueError, match="executable.*replace_binary_attrs"):
-            micro_only_ds.stamp_provenance("micro", "binary")
+        with pytest.raises(ValueError, match="executable.*replace_backend_attrs"):
+            micro_only_ds.stamp_provenance("micro", "backend")
 
     def test_replace_and_override_compose(
         self, micro_only_ds, tmp_path, monkeypatch
     ):
-        # When both are given, binary_override merges on top of
-        # replace_binary_attrs (override wins on collision).  Important
-        # so we can still surface stale_binary_override alongside a
+        # When both are given, backend_override merges on top of
+        # replace_backend_attrs (override wins on collision).  Important
+        # so we can still surface stale_backend_override alongside a
         # historical synthesis if some future caller wants that.
         from lysis.tools.provenance import binary as binary_mod
         monkeypatch.setattr(
@@ -258,24 +263,22 @@ class TestStampBinary:
             lambda exe, **kw: ("SHOULD_NOT_BE_CALLED", "x", "x"),
         )
         replacement = {
-            CONST.BINARY_COMMIT_ATTR: "a" * 40,
-            CONST.BINARY_DIRTY_ATTR: "clean",
-            CONST.BINARY_COMPILER_ATTR: "GCC",
-            CONST.BINARY_SOURCE_ATTR: "historical:" + "a" * 40,
+            CONST.BACKEND_COMMIT_ATTR: "a" * 40,
+            CONST.BACKEND_DIRTY_ATTR: "clean",
+            CONST.BACKEND_COMPILER_ATTR: "GCC",
+            CONST.BACKEND_HISTORICAL_ATTR: True,
         }
         micro_only_ds.stamp_provenance(
-            "micro", "binary",
-            replace_binary_attrs=replacement,
-            binary_override={CONST.STALE_BINARY_OVERRIDE_ATTR: True},
+            "micro", "backend",
+            replace_backend_attrs=replacement,
+            backend_override={CONST.STALE_BINARY_OVERRIDE_ATTR: True},
         )
         h5_path = tmp_path / "run-01.h5"
         micro_only_ds.close()
         with h5py.File(str(h5_path), "r") as f:
             attrs = f["micro_data"].attrs
             assert bool(attrs[CONST.STALE_BINARY_OVERRIDE_ATTR]) is True
-            assert attrs[CONST.BINARY_SOURCE_ATTR] in (
-                b"historical:" + b"a" * 40, "historical:" + "a" * 40,
-            )
+            assert bool(attrs[CONST.BACKEND_HISTORICAL_ATTR]) is True
 
 
 # ----------------------------------------------------------------------

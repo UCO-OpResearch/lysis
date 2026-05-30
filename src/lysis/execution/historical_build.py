@@ -14,7 +14,7 @@ Backs the ``--fortran-commit <ref>`` flag on ``lysis run-micro`` and
    so the binary links against the same toolchain that Slurm jobs will
    load at runtime.
 4. Compute a synthesised provenance dict via
-   :func:`~lysis.tools.provenance.gather_historical_binary_provenance`.
+   :func:`~lysis.tools.provenance.gather_historical_backend_provenance`.
 5. Yield ``(binary_path, provenance_dict)`` for the caller to thread
    through to :class:`~lysis.execution.fortran_macro.FortranMacro` /
    :class:`~lysis.execution.fortran_micro.FortranMicro`.
@@ -34,7 +34,7 @@ import tempfile
 from pathlib import Path
 from typing import Iterator, Optional
 
-from ..tools.provenance import gather_historical_binary_provenance
+from ..tools.provenance import gather_historical_backend_provenance
 from ..tools.provenance._git import _git, _package_repo_root
 
 __all__ = [
@@ -203,7 +203,7 @@ def build_historical_binary(
     :yields: ``(binary_path, provenance_dict)`` where *binary_path* is
         the absolute path to the requested binary inside the build dir,
         and *provenance_dict* is the result of
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`.
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`.
     :raises HistoricalBuildError: If ref resolution, source extraction,
         ``make``, or binary lookup fails.
     """
@@ -250,7 +250,7 @@ def build_historical_binary(
                 f"{build_dir / 'bin'}; available: {available}."
             )
 
-        provenance = gather_historical_binary_provenance(
+        provenance = gather_historical_backend_provenance(
             binary_path,
             resolved_sha=resolved_sha,
             build_log=build_log,

@@ -335,7 +335,7 @@ RUN_CODE = $run_code
 FILE_CODE = $file_code
 BINARY_NAME = $binary_name
 KEEP_TMPDIR = $keep_tmpdir
-HISTORICAL_BINARY_ATTRS = $historical_binary_attrs
+HISTORICAL_BACKEND_ATTRS = $historical_backend_attrs
 
 # ---------------------------------------------------------------------------
 # Submit child jobs
@@ -377,8 +377,8 @@ fm = FortranMicro(
     run=run,
     out_file_code=FILE_CODE,
     executable=str(STAGING_DIR / BINARY_NAME),
-    skip_binary_verification=(HISTORICAL_BINARY_ATTRS is not None),
-    historical_binary_attrs=HISTORICAL_BINARY_ATTRS,
+    skip_binary_verification=(HISTORICAL_BACKEND_ATTRS is not None),
+    historical_backend_attrs=HISTORICAL_BACKEND_ATTRS,
 )
 fm.import_results(
     data_dir,
@@ -405,18 +405,18 @@ def _generate_micro_master_py(
     file_code: str,
     binary_name: str,
     keep_tmpdir: bool,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> str:
     """Return the content of the single-child micro master Python script.
 
-    :param historical_binary_attrs: Pre-computed binary-provenance dict
+    :param historical_backend_attrs: Pre-computed binary-provenance dict
         from
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
         for the historical-build workflow.  Baked into the master script
         as a literal so the master can stamp it in place of the default
         ``<binary> --version`` query.  ``None`` (default) preserves the
         normal-mode behaviour.
-    :type historical_binary_attrs: dict or None
+    :type historical_backend_attrs: dict or None
     """
     return _MICRO_MASTER_PY_TEMPLATE.substitute(
         staging_dir=repr(str(staging_dir)),
@@ -425,7 +425,7 @@ def _generate_micro_master_py(
         file_code=repr(file_code),
         binary_name=repr(binary_name),
         keep_tmpdir=repr(keep_tmpdir),
-        historical_binary_attrs=repr(historical_binary_attrs),
+        historical_backend_attrs=repr(historical_backend_attrs),
     )
 
 
@@ -508,7 +508,7 @@ BINARY_NAME = $binary_name
 KEEP_TMPDIR = $keep_tmpdir
 NUM_ARRAY_TASKS = $num_array_tasks
 NFS_WAIT_SECONDS = $nfs_wait_seconds
-HISTORICAL_BINARY_ATTRS = $historical_binary_attrs
+HISTORICAL_BACKEND_ATTRS = $historical_backend_attrs
 
 # ---------------------------------------------------------------------------
 # Submit array job
@@ -552,8 +552,8 @@ fm = $runner_class(
     run=run,
     out_file_code=OUT_FILE_CODE,
     executable=str(STAGING_DIR / BINARY_NAME),
-    skip_binary_verification=(HISTORICAL_BINARY_ATTRS is not None),
-    historical_binary_attrs=HISTORICAL_BINARY_ATTRS,
+    skip_binary_verification=(HISTORICAL_BACKEND_ATTRS is not None),
+    historical_backend_attrs=HISTORICAL_BACKEND_ATTRS,
 )
 $concat_block
 fm.import_results(
@@ -581,18 +581,18 @@ def _generate_array_master_py(
     run_code: str,
     binary_name: str,
     keep_tmpdir: bool,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> str:
     """Return the master Python script for an array-mode dispatch.
 
-    :param historical_binary_attrs: Pre-computed binary-provenance dict
+    :param historical_backend_attrs: Pre-computed binary-provenance dict
         from
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
         for the historical-build workflow.  Baked into the master script
         as a literal so the master can stamp it in place of the default
         ``<binary> --version`` query.  ``None`` (default) preserves the
         normal-mode behaviour.
-    :type historical_binary_attrs: dict or None
+    :type historical_backend_attrs: dict or None
     """
     if spec.needs_concat_step:
         concat_block = (
@@ -617,7 +617,7 @@ def _generate_array_master_py(
         nfs_wait_seconds=spec.nfs_wait_seconds,
         concat_block=concat_block,
         concat_blurb=concat_blurb,
-        historical_binary_attrs=repr(historical_binary_attrs),
+        historical_backend_attrs=repr(historical_backend_attrs),
     )
 
 
@@ -667,7 +667,7 @@ def generate_array_script(
     slurm_log_dir: Optional["Path | str"] = None,
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
     pythonpath: "Path | str | None" = None,
     source_stamp: Optional[tuple] = None,
 ) -> str:
@@ -719,7 +719,7 @@ def generate_array_script(
         A ``None`` value removes the matching default; any other value
         sets/overrides the key.  Defaults to ``None`` (no overrides).
     :type sbatch_overrides: Mapping[str, str or None], optional
-    :param historical_binary_attrs: When non-``None``, indicates the
+    :param historical_backend_attrs: When non-``None``, indicates the
         binary was built from a historical commit (see
         :func:`~lysis.execution.historical_build.build_historical_binary`).
         The generated ``from_hdf5(...)`` call receives
@@ -727,7 +727,7 @@ def generate_array_script(
         does not crash on the intentional binary↔source mismatch.  The
         dict itself is not baked into the task — the master script
         owns the actual provenance stamping.
-    :type historical_binary_attrs: dict or None
+    :type historical_backend_attrs: dict or None
     :param pythonpath: When set, baked into the generated script as
         ``export PYTHONPATH=...`` so each task imports ``lysis`` from
         that path rather than the live editable install.  ``None``
@@ -738,7 +738,7 @@ def generate_array_script(
         call so the binary↔source check on the compute node compares
         against the master's stamp instead of running ``git`` from the
         staging dir (which is outside the repo and would fail).
-        Ignored when ``historical_binary_attrs`` is set (the staleness
+        Ignored when ``historical_backend_attrs`` is set (the staleness
         check is bypassed in that workflow).  ``None`` (default)
         preserves the in-process git lookup.
     :type source_stamp: tuple[str, str] or None
@@ -754,7 +754,7 @@ def generate_array_script(
     if slurm_log_dir is None:
         slurm_log_dir = hdf5_path.parent / ".slurm"
     slurm_log_dir = Path(slurm_log_dir)
-    skip_binary_verification = historical_binary_attrs is not None
+    skip_binary_verification = historical_backend_attrs is not None
 
     repo_root = _repo_root()
     env_preamble = _env_preamble(
@@ -861,7 +861,7 @@ def submit_slurm_job(
     keep_tmpdir: bool = False,
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> int:
     """Stage scripts and submit a master Slurm job for an array-mode dispatch.
 
@@ -893,14 +893,14 @@ def submit_slurm_job(
         applied to BOTH the master job and each array task (shape returned
         by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
     :type sbatch_overrides: Mapping[str, str or None], optional
-    :param historical_binary_attrs: Pre-computed binary-provenance dict
+    :param historical_backend_attrs: Pre-computed binary-provenance dict
         from
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
         for the historical-build workflow.  Baked into the master Python
         script so the master stamps it (with binary verification skipped)
         in place of the default ``<binary> --version`` query.  ``None``
         (default) preserves normal-mode provenance.
-    :type historical_binary_attrs: dict, optional
+    :type historical_backend_attrs: dict, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises ImportError: If ``GooseSLURM`` is not installed.
@@ -959,7 +959,7 @@ def submit_slurm_job(
     # raise StaleBinaryError).  Skipped under --fortran-commit, where the
     # binary↔source mismatch is intentional and the check is bypassed.
     source_stamp: Optional[tuple] = None
-    if historical_binary_attrs is None:
+    if historical_backend_attrs is None:
         from lysis.tools.provenance import (  # noqa: PLC0415
             gather_fortran_source_provenance,
         )
@@ -974,7 +974,7 @@ def submit_slurm_job(
         slurm_log_dir=slurm_log_dir,
         modules=modules,
         sbatch_overrides=sbatch_overrides,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
         pythonpath=pythonpath,
         source_stamp=source_stamp,
     )
@@ -987,7 +987,7 @@ def submit_slurm_job(
     # ------------------------------------------------------------------
     master_py_content = _generate_array_master_py(
         spec, staging_dir, hdf5_path, run_code, executable.name, keep_tmpdir,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
     )
     master_py_path = staging_dir / f"lysis-{spec.scale}-master__{run_code}.py"
     master_py_path.write_text(master_py_content)
@@ -1039,7 +1039,7 @@ def generate_micro_child_script(
     slurm_log_dir: Optional["Path | str"] = None,
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
     pythonpath: "Path | str | None" = None,
     source_stamp: Optional[tuple] = None,
 ) -> str:
@@ -1086,7 +1086,7 @@ def generate_micro_child_script(
         header (shape returned by :func:`parse_sbatch_tokens`).  Defaults
         to ``None``.
     :type sbatch_overrides: Mapping[str, str or None], optional
-    :param historical_binary_attrs: When non-``None``, indicates the
+    :param historical_backend_attrs: When non-``None``, indicates the
         binary was built from a historical commit (see
         :func:`~lysis.execution.historical_build.build_historical_binary`).
         The generated ``from_hdf5(...)`` call receives
@@ -1094,7 +1094,7 @@ def generate_micro_child_script(
         does not crash on the intentional binary↔source mismatch.  The
         dict itself is not baked into the child — the master script
         owns the actual provenance stamping.
-    :type historical_binary_attrs: dict or None
+    :type historical_backend_attrs: dict or None
     :param pythonpath: When set, baked into the generated script as
         ``export PYTHONPATH=...`` so the child imports ``lysis`` from
         that path rather than the live editable install.  ``None``
@@ -1105,7 +1105,7 @@ def generate_micro_child_script(
         the binary↔source check on the compute node compares against the
         master's stamp instead of running ``git`` from the staging dir
         (which is outside the repo and would fail).  Ignored when
-        ``historical_binary_attrs`` is set.  ``None`` (default)
+        ``historical_backend_attrs`` is set.  ``None`` (default)
         preserves the in-process git lookup.
     :type source_stamp: tuple[str, str] or None
     :return: Slurm bash script text.
@@ -1142,10 +1142,10 @@ def generate_micro_child_script(
 
     skip_verify_kwarg = (
         ", skip_binary_verification=True"
-        if historical_binary_attrs is not None
+        if historical_backend_attrs is not None
         else ""
     )
-    if source_stamp is not None and historical_binary_attrs is None:
+    if source_stamp is not None and historical_backend_attrs is None:
         commit, dirty = source_stamp
         source_stamp_kwarg = f", source_stamp=('{commit}', '{dirty}')"
     else:
@@ -1290,7 +1290,7 @@ def generate_micro_array_script(
     slurm_log_dir: Optional["Path | str"] = None,
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> str:
     """Generate a Slurm array job script for the microscale Fortran simulation.
 
@@ -1321,7 +1321,7 @@ def generate_micro_array_script(
         slurm_log_dir=slurm_log_dir,
         modules=modules,
         sbatch_overrides=sbatch_overrides,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
     )
 
 
@@ -1337,7 +1337,7 @@ def submit_micro_slurm_job(
     num_children: Optional[int] = None,
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> int:
     """Submit the full HDF5-integrated microscale workflow as a Slurm master job.
 
@@ -1398,15 +1398,15 @@ def submit_micro_slurm_job(
         applied to BOTH the master and child/array task scripts (shape
         returned by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
     :type sbatch_overrides: Mapping[str, str or None], optional
-    :param historical_binary_attrs: Pre-computed binary-provenance dict
+    :param historical_backend_attrs: Pre-computed binary-provenance dict
         from
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
         for the historical-build workflow.  Threaded through to the
         master Python script (in both array and legacy single-child
         paths) so the master stamps it in place of the default
         ``<binary> --version`` query.  ``None`` (default) preserves
         normal-mode provenance.
-    :type historical_binary_attrs: dict, optional
+    :type historical_backend_attrs: dict, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
@@ -1450,7 +1450,7 @@ def submit_micro_slurm_job(
             keep_tmpdir=keep_tmpdir,
             modules=modules,
             sbatch_overrides=sbatch_overrides,
-            historical_binary_attrs=historical_binary_attrs,
+            historical_backend_attrs=historical_backend_attrs,
         )
 
     # ------------------------------------------------------------------
@@ -1494,7 +1494,7 @@ def submit_micro_slurm_job(
     # outside the repo (see submit_slurm_job for the analogous comment in
     # the array path).
     source_stamp: Optional[tuple] = None
-    if historical_binary_attrs is None:
+    if historical_backend_attrs is None:
         from lysis.tools.provenance import (  # noqa: PLC0415
             gather_fortran_source_provenance,
         )
@@ -1509,7 +1509,7 @@ def submit_micro_slurm_job(
         slurm_log_dir=slurm_log_dir,
         modules=modules,
         sbatch_overrides=sbatch_overrides,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
         pythonpath=pythonpath,
         source_stamp=source_stamp,
     )
@@ -1522,7 +1522,7 @@ def submit_micro_slurm_job(
     # ------------------------------------------------------------------
     master_py_content = _generate_micro_master_py(
         staging_dir, hdf5_path, run_code, out_code, executable.name, keep_tmpdir,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
     )
     master_py_path = staging_dir / f"lysis-micro-master__{run_code}.py"
     master_py_path.write_text(master_py_content)
@@ -1592,7 +1592,7 @@ def generate_macro_array_script(
     slurm_log_dir: Optional["Path | str"] = None,
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> str:
     """Generate a Slurm array job script for the macroscale Fortran simulation.
 
@@ -1621,7 +1621,7 @@ def generate_macro_array_script(
         slurm_log_dir=slurm_log_dir,
         modules=modules,
         sbatch_overrides=sbatch_overrides,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
     )
 
 
@@ -1637,7 +1637,7 @@ def submit_macro_slurm_job(
     out_code: str = "",
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
-    historical_binary_attrs: Optional[dict] = None,
+    historical_backend_attrs: Optional[dict] = None,
 ) -> int:
     """Submit the full HDF5-integrated macroscale workflow as a Slurm master job.
 
@@ -1689,14 +1689,14 @@ def submit_macro_slurm_job(
         applied to BOTH the master and array task scripts (shape returned
         by :func:`parse_sbatch_tokens`).  Defaults to ``None``.
     :type sbatch_overrides: Mapping[str, str or None], optional
-    :param historical_binary_attrs: Pre-computed binary-provenance dict
+    :param historical_backend_attrs: Pre-computed binary-provenance dict
         from
-        :func:`~lysis.tools.provenance.gather_historical_binary_provenance`
+        :func:`~lysis.tools.provenance.gather_historical_backend_provenance`
         for the historical-build workflow.  Threaded through to the
         master Python script so the master stamps it in place of the
         default ``<binary> --version`` query.  ``None`` (default)
         preserves normal-mode provenance.
-    :type historical_binary_attrs: dict, optional
+    :type historical_backend_attrs: dict, optional
     :return: Master Slurm job ID.
     :rtype: int
     :raises subprocess.CalledProcessError: If ``sbatch`` fails.
@@ -1727,5 +1727,5 @@ def submit_macro_slurm_job(
         keep_tmpdir=keep_tmpdir,
         modules=modules,
         sbatch_overrides=sbatch_overrides,
-        historical_binary_attrs=historical_binary_attrs,
+        historical_backend_attrs=historical_backend_attrs,
     )
