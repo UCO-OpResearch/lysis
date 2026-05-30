@@ -512,13 +512,15 @@ class TestNonDefaultHighlight:
     def test_rich_render_colors_nondefault_cell(self, tmp_path):
         out = _render_rich(self._df_for(tmp_path, micro_simulations=42))
 
-        # The non-default micro_simulations row carries a color escape; a
-        # left-at-default row (bind_rate_tPA) does not.
+        # The non-default micro_simulations row carries the yellow escape; a
+        # left-at-default row (bind_rate_tPA) does not.  Assert on \x1b[33m
+        # specifically: every row's bold "Parameter" cell already emits \x1b[,
+        # so a bare \x1b[ check would pass even with highlighting removed.
         nondefault_line = next(
             l for l in out.splitlines() if "micro_simulations" in l
         )
         default_line = next(l for l in out.splitlines() if "bind_rate_tPA" in l)
-        assert "\x1b[" in nondefault_line
+        assert "\x1b[33m" in nondefault_line
         assert "\x1b[33m" not in default_line
 
     def test_no_attrs_means_no_color(self, tmp_path):

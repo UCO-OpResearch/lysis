@@ -344,7 +344,10 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
     natural_units = MacroParameters.units()
 
     # Formatted default values, for highlighting cells that differ from them.
-    defaults = _default_formatted(param_specs, add_names)
+    # Only the Rich output highlights, so skip this work for Markdown output.
+    defaults = None if markdown_out is not None else _default_formatted(
+        param_specs, add_names
+    )
 
     if os.path.isfile(path):
         # --- single-file mode ---
@@ -367,7 +370,11 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
 
         # Drop macroscale rows when this file has no macroscale collection.
         effective_specs = param_specs if has_macro else _drop_macro_specs(param_specs)
-        nondefault_by_run = {run_code: _nondefault_flags(values, defaults)}
+        nondefault_by_run = (
+            None
+            if defaults is None
+            else {run_code: _nondefault_flags(values, defaults)}
+        )
         df = parameters_table(
             {run_code: values},
             effective_specs,
@@ -449,9 +456,11 @@ def parameters(ctx, path, sort_mode, no_progress, add_params, drop_params, markd
         # columns still line up when the set is mixed.
         ordered = [rc for rc in run_codes if rc in rows]
         effective_specs = param_specs if any_macro else _drop_macro_specs(param_specs)
-        nondefault_by_run = {
-            rc: _nondefault_flags(vals, defaults) for rc, vals in rows.items()
-        }
+        nondefault_by_run = (
+            None
+            if defaults is None
+            else {rc: _nondefault_flags(vals, defaults) for rc, vals in rows.items()}
+        )
         df = parameters_table(
             rows,
             effective_specs,
