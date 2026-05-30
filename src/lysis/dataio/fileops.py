@@ -813,8 +813,10 @@ def read_data_collection(
                             file_code=file_code,
                         )
                     except (FileNotFoundError, KeyError) as e:
-                        # If the first simulation file doesn't exist, that's an error
-                        if sim == 0:
+                        # If the first simulation file doesn't exist, that's an
+                        # error -- unless the dataset is optional, in which case
+                        # an entirely absent dataset reads back as an empty list.
+                        if sim == 0 and not spec.optional:
                             raise e
                         # Otherwise, we've simply read all available simulations
                         else:
@@ -1250,6 +1252,11 @@ def write_data_collection(
 
         # Write each dataset in the collection
         for name, spec in collection.data.items():
+            # An optional dataset may be entirely absent from the data dict;
+            # skip it rather than raising a KeyError. A required dataset that
+            # is missing still raises (via the data[name] lookup below).
+            if spec.optional and name not in data:
+                continue
             if collection.simulations_combined is True:
                 # All simulations in a single file/dataset
                 write_dataset(
