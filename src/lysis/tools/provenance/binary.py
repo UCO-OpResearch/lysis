@@ -222,7 +222,7 @@ def verify_binary_matches_source(
     :type source_stamp: tuple[str, str] or None
     :return: Empty dict on match.  On overridden mismatch, a dict
         containing ``"banner"`` (text to prepend to the Fortran stdout
-        log file) and :data:`CONST.STALE_BINARY_OVERRIDE_ATTR` for
+        log file) and :data:`CONST.STALE_BACKEND_OVERRIDE_ATTR` for
         forwarding to
         :meth:`~lysis.dataio.datastore.DataStore.stamp_provenance` as
         ``backend_override``.  The binary's commit/dirty/compiler are
@@ -270,7 +270,7 @@ def verify_binary_matches_source(
             source_commit=source_commit,
             source_dirty=source_dirty,
         ),
-        CONST.STALE_BINARY_OVERRIDE_ATTR: True,
+        CONST.STALE_BACKEND_OVERRIDE_ATTR: True,
     }
 
 

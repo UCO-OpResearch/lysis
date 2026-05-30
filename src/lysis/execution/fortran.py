@@ -309,7 +309,7 @@ class FortranRunner(SimulationRunner):
         """Override-only attrs from :meth:`_verify_binary_version` to merge
         into the binary stamp; ``{}`` when the binary matched the source.
 
-        Today this carries only :data:`CONST.STALE_BINARY_OVERRIDE_ATTR`
+        Today this carries only :data:`CONST.STALE_BACKEND_OVERRIDE_ATTR`
         when the staleness check was overridden.  The binary's commit /
         dirty / compiler stamps are written unconditionally by
         :meth:`~lysis.dataio.datastore.DataStore.stamp_provenance` —

@@ -168,7 +168,7 @@ class TestStampBinary:
             # Every Fortran run self-identifies its backend type.
             assert attrs[CONST.BACKEND_TYPE_ATTR] in (b"fortran", "fortran")
             # No override flag when not provided.
-            assert CONST.STALE_BINARY_OVERRIDE_ATTR not in attrs
+            assert CONST.STALE_BACKEND_OVERRIDE_ATTR not in attrs
 
     def test_binary_merges_override_attrs(
         self, micro_only_ds, tmp_path, monkeypatch
@@ -183,13 +183,13 @@ class TestStampBinary:
             "micro",
             "backend",
             executable="/fake/bin",
-            backend_override={CONST.STALE_BINARY_OVERRIDE_ATTR: True},
+            backend_override={CONST.STALE_BACKEND_OVERRIDE_ATTR: True},
         )
         h5_path = tmp_path / "run-01.h5"
         micro_only_ds.close()
         with h5py.File(str(h5_path), "r") as f:
             attrs = f["micro_data"].attrs
-            assert bool(attrs[CONST.STALE_BINARY_OVERRIDE_ATTR]) is True
+            assert bool(attrs[CONST.STALE_BACKEND_OVERRIDE_ATTR]) is True
 
     def test_replace_backend_attrs_skips_gather(
         self, micro_only_ds, tmp_path, monkeypatch
@@ -271,13 +271,13 @@ class TestStampBinary:
         micro_only_ds.stamp_provenance(
             "micro", "backend",
             replace_backend_attrs=replacement,
-            backend_override={CONST.STALE_BINARY_OVERRIDE_ATTR: True},
+            backend_override={CONST.STALE_BACKEND_OVERRIDE_ATTR: True},
         )
         h5_path = tmp_path / "run-01.h5"
         micro_only_ds.close()
         with h5py.File(str(h5_path), "r") as f:
             attrs = f["micro_data"].attrs
-            assert bool(attrs[CONST.STALE_BINARY_OVERRIDE_ATTR]) is True
+            assert bool(attrs[CONST.STALE_BACKEND_OVERRIDE_ATTR]) is True
             assert bool(attrs[CONST.BACKEND_HISTORICAL_ATTR]) is True
 
 
