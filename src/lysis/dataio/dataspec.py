@@ -638,33 +638,34 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
             simulations_combined=True,
             params=None,  # Uses parameters from microscale output
             data={
-                # Bin boundaries of CDF for tPA leaving time distribution (100 bins, 101 edges)
+                # Bin boundaries of CDF for tPA leaving time distribution
+                # (TPA_LEAVE_TIME_BINS bins, TPA_LEAVE_TIME_BINS + 1 edges)
                 "tPAleave": DataSetSpec(
                     data_location="tPAleave{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
                     dtype=np.float64,
-                    shape=(101,),
+                    shape=(CONST.TPA_LEAVE_TIME_BINS + 1,),
                 ),
                 # Times at bin boundaries: i% of simulations have tPA leave by tsectPA[i]
                 "tsectPA": DataSetSpec(
                     data_location="tsectPA{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
                     dtype=np.float64,
-                    shape=(101,),
+                    shape=(CONST.TPA_LEAVE_TIME_BINS + 1,),
                 ),
                 # Fiber degrade times, binned by tPA leaving time, sorted within each bin
                 "lysismat": DataSetSpec(
                     data_location="lysismat{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
                     dtype=np.float64,
-                    shape=(-1, 100),
+                    shape=(-1, CONST.TPA_LEAVE_TIME_BINS),
                 ),
                 # Count of simulations per bin where full fiber lysis occurred
                 "lenlysisvect": DataSetSpec(
                     data_location="lenlysisvect{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
                     dtype=np.float64,
-                    shape=(100,),
+                    shape=(CONST.TPA_LEAVE_TIME_BINS,),
                 ),
                 # 1-indexed Fortran locations of neighboring fibers for each edge in grid
                 "neighbors": DataSetSpec(
@@ -841,33 +842,34 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
             simulations_combined=True,
             params=None,  # Uses parameters from microscale output
             data={
-                # Bin boundaries of CDF for tPA leaving time distribution (100 bins, 101 edges)
+                # Bin boundaries of CDF for tPA leaving time distribution
+                # (TPA_LEAVE_TIME_BINS bins, TPA_LEAVE_TIME_BINS + 1 edges)
                 "bin_edge_proportions": DataSetSpec(
                     data_location=None,  # Derived dataset, not stored
                     dataset_storage_type=None,
                     dtype=np.float64,
-                    shape=(101,),
+                    shape=(CONST.TPA_LEAVE_TIME_BINS + 1,),
                 ),
                 # Times at bin boundaries: i% of simulations have tPA leave by this time
                 "bin_edge_tpa_leaving_time": DataSetSpec(
                     data_location=None,  # Derived dataset, not stored
                     dataset_storage_type=None,
                     dtype=np.float64,
-                    shape=(101,),
+                    shape=(CONST.TPA_LEAVE_TIME_BINS + 1,),
                 ),
                 # Fiber degrade times, binned by tPA leaving time, sorted within each bin
                 "binned_fiber_degrade_time": DataSetSpec(
                     data_location=None,  # Derived dataset, not stored
                     dataset_storage_type=None,
                     dtype=np.float64,
-                    shape=(-1, 100),
+                    shape=(-1, CONST.TPA_LEAVE_TIME_BINS),
                 ),
                 # Count of simulations per bin where full fiber lysis occurred
                 "binned_fiber_degraded": DataSetSpec(
                     data_location=None,  # Derived dataset, not stored
                     dataset_storage_type=None,
                     dtype=np.uint16,
-                    shape=(100,),
+                    shape=(CONST.TPA_LEAVE_TIME_BINS,),
                 ),
                 # 0-indexed locations of neighboring edges for each edge in grid (8 neighbors each)
                 "edge_grid_neighbors": DataSetSpec(

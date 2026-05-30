@@ -186,7 +186,7 @@ from functools import partial
 import numpy as np
 from tqdm.auto import tqdm
 
-from .config.constants import MolStatus, RandomDraw
+from .config.constants import CONST, MolStatus, RandomDraw
 from .config.run import Run
 from .dataio.dataspec import dataspec
 from .geometry.edge_grid import EdgeGrid, from_fortran_edge_index, to_fortran_edge_index
@@ -370,8 +370,9 @@ class MacroscaleSim:
         self.reached_back_row = np.full(
             run.macro_params.total_molecules, False, dtype=np.bool_
         )
-        # X-axis values [0, 1, 2, ..., 100] for interpolating microscale data
-        self.xp = np.arange(101)
+        # X-axis values [0, 1, 2, ..., TPA_LEAVE_TIME_BINS] for interpolating
+        # microscale data (one node per tPA-leaving-time bin edge)
+        self.xp = np.arange(CONST.TPA_LEAVE_TIME_BINS + 1)
         # Storage for pre-generated random numbers (Fortran mode only)
         self.random_numbers = None
 
@@ -856,9 +857,10 @@ class MacroscaleSim:
             lysis_time_bin = self.random_numbers[RandomDraw.LYSIS_TIME][m]
         else:
             lysis_time_bin = self.rng.random(count)
-        # Scale to match the number of microscale simulation runs
+        # Scale to match the number of microscale simulation runs per bin
         lysis_time_bin = lysis_time_bin * (
-            self.run.macro_params.micro_params.micro_simulations / 100
+            self.run.macro_params.micro_params.micro_simulations
+            / CONST.TPA_LEAVE_TIME_BINS
         )
         # Initialize all lysis times to infinity (no lysis by default)
         interp = np.full(count, float("inf"), dtype=np.double)
@@ -910,9 +912,12 @@ class MacroscaleSim:
         self.total_binds += count
 
         if self.run.macro_params.duplicate_fortran:
-            unbinding_time_bin = self.random_numbers[RandomDraw.UNBINDING_TIME][m] * 100
+            unbinding_time_bin = (
+                self.random_numbers[RandomDraw.UNBINDING_TIME][m]
+                * CONST.TPA_LEAVE_TIME_BINS
+            )
         else:
-            unbinding_time_bin = self.rng.random(count) * 100
+            unbinding_time_bin = self.rng.random(count) * CONST.TPA_LEAVE_TIME_BINS
         self.binding_time[m] = self.find_unbinding_time(
             unbinding_time_bin, current_time
         )
