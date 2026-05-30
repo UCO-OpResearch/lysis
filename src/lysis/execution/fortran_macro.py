@@ -19,6 +19,7 @@ from typing import AnyStr
 
 import numpy as np
 
+from ..config.constants import CONST
 from ..config.parameters import MacroParameters, MicroParameters
 from ..config.run import Run
 from ..dataio.dataspec import dataspec
@@ -87,15 +88,30 @@ class FortranMacro(FortranRunner):
         ]
 
     def _post_arguments(self, params: dict) -> list:
-        """Append ``--radius`` and ``--bs`` from micro_params.
+        """Append ``--radius``, ``--bs`` and ``--nummicro`` from micro_params.
 
-        The macroscale binary needs two microscale-level parameters
-        (fiber radius and binding sites) that are not part of
-        :class:`~lysis.config.parameters.MacroParameters` itself.
+        The macroscale binary needs three microscale-level parameters that
+        are not part of :class:`~lysis.config.parameters.MacroParameters`
+        itself:
+
+        - ``--radius`` (fiber radius) and ``--bs`` (binding sites).
+        - ``--nummicro``: the number of rows in the microscale lysis-time
+          table (``lysismat``), which the Fortran binary reads as
+          ``micro_simulations / CONST.TPA_LEAVE_TIME_BINS`` (the
+          per-tPA-leaving-time-bin simulation count).  It defaults to ``500``
+          inside the binary (the value for the default ``micro_simulations``
+          of 50,000 at 100 bins), so it MUST be passed for any other
+          microscale-simulation count or the binary reads past the end of
+          ``lysismat.dat`` and dies with an end-of-file error.
+
+        ``--nummicro`` is needed because ``micro_simulations`` lives on
+        :class:`~lysis.config.parameters.MicroParameters` and so is never
+        visited by the :class:`~lysis.config.parameters.MacroParameters`
+        argument loop.
 
         :param params: Unused; present for interface conformance.
         :type params: dict
-        :return: CLI arguments for radius and binding sites.
+        :return: CLI arguments for radius, binding sites, and nummicro.
         :rtype: list[str]
         """
         micro_units = MicroParameters.units()
@@ -108,6 +124,8 @@ class FortranMacro(FortranRunner):
             str(self.run.micro_params.binding_sites.m_as(
                 micro_units["binding_sites"]
             )),
+            "--nummicro",
+            str(self.run.micro_params.micro_simulations // CONST.TPA_LEAVE_TIME_BINS),
         ]
 
     def _log_prefix(self) -> str:

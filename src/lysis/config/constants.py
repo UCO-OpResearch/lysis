@@ -48,6 +48,9 @@ class Const:
     :vartype MOL_STATUS: MolStatus
     :ivar DATASET_STORAGE_TYPE: Enumeration of data storage formats
     :vartype DATASET_STORAGE_TYPE: DataSetStorageType
+    :ivar TPA_LEAVE_TIME_BINS: Number of tPA-leaving-time quantile bins the
+        micro->macro conversion builds degradation-time distributions for (100)
+    :vartype TPA_LEAVE_TIME_BINS: int
     :ivar NUMPY_SAVETXT_FORMATS: Format strings for numpy.savetxt by dtype
     :vartype NUMPY_SAVETXT_FORMATS: dict
 
@@ -65,6 +68,19 @@ class Const:
         self.NEIGHBORHOOD = Neighbors()
         self.MOL_STATUS = MolStatus
         self.DATASET_STORAGE_TYPE = DataSetStorageType
+        # Number of bins the micro->macro conversion carves the tPA
+        # leaving-time distribution into.  generate_macroscale_in() sorts the
+        # microscale simulations by tPA leaving time and splits them into this
+        # many equal-count quantile bins; each bin yields one sorted
+        # distribution of fiber degradation times (one column of lysismat /
+        # binned_fiber_degrade_time).  The macroscale model later draws a
+        # uniform r in [0, 1] and multiplies by this value to pick which bin's
+        # degradation distribution to sample.  Consequently:
+        #   * lysismat / binned_fiber_degrade_time have this many columns,
+        #   * lenlysisvect / binned_fiber_degraded have this many entries,
+        #   * tPAleave / tsectPA / bin_edge_* have this many + 1 (the bin edges),
+        #   * the Fortran macro binary's --nummicro is micro_simulations // this.
+        self.TPA_LEAVE_TIME_BINS = 100
         self.DATASPEC_VERSION_ATTR = "dataspec_version"
         self.CONVERTED_FROM_ATTR = "converted_from"
         self.RENAMED_FROM_ATTR = "renamed_from"

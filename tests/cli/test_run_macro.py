@@ -16,10 +16,27 @@ from lysis.config.run import Run
 from lysis.dataio.datastore import DataStore, HDF5State
 from lysis.dataio.dataspec import dataspec
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
+
+def _stamp_test_init_provenance(group) -> None:
+    """Stamp init_* provenance so the run-* commit-match gate stays silent (#44).
+
+    Records the *live* ``src/lysis/`` commit via the same resolver the gate uses
+    (``_resolve_version``) rather than a frozen string: the gate compares the
+    recorded ``init_version`` against ``_resolve_version()`` at run time, so both
+    sides match on a clean checkout, a dirty worktree, or a detached HEAD.
+    ``init_dirty``/``init_timestamp``/``init_hostname`` are never compared, so
+    they can be deterministic.
+    """
+    from lysis.tools.provenance.execution import _resolve_version
+
+    group.attrs[CONST.INIT_VERSION_ATTR] = _resolve_version()
+    group.attrs[CONST.INIT_DIRTY_ATTR] = "clean"
+    group.attrs[CONST.INIT_TIMESTAMP_ATTR] = "2026-01-01T00:00:00"
+    group.attrs[CONST.INIT_HOSTNAME_ATTR] = "test-host"
 
 
 def _write_macro_hdf5(path: Path) -> None:
@@ -34,6 +51,8 @@ def _write_macro_hdf5(path: Path) -> None:
         macro_grp = f.require_group("macro_data")
         for k, v in mcp.to_basedict().items():
             macro_grp.attrs[k] = str(v) if not isinstance(v, (int, float, bool)) else v
+        _stamp_test_init_provenance(micro_grp)
+        _stamp_test_init_provenance(macro_grp)
 
 
 @pytest.fixture
@@ -117,9 +136,7 @@ class TestRunMacroMissingArgs:
         assert result.exit_code != 0
 
     def test_missing_hdf5_path_exits_nonzero(self, runner, tmp_path):
-        result = runner.invoke(
-            cli, ["run-macro", "--executable", "/bin/macro.exe"]
-        )
+        result = runner.invoke(cli, ["run-macro", "--executable", "/bin/macro.exe"])
         assert result.exit_code != 0
 
 
@@ -161,8 +178,10 @@ class TestRunMacroLocal:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--keep-tmpdir",
             ],
         )
@@ -178,9 +197,12 @@ class TestRunMacroLocal:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
-                "--out-file-code", "_out",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
+                "--out-file-code",
+                "_out",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -195,9 +217,12 @@ class TestRunMacroLocal:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
-                "--in-file-code", "_in",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
+                "--in-file-code",
+                "_in",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -221,7 +246,9 @@ class TestRunMacroLocal:
         self, mock_cls, runner, macro_hdf5
     ):
         """A ValueError from from_hdf5 (e.g. wrong HDF5 state) must exit non-zero."""
-        mock_cls.from_hdf5.side_effect = ValueError("macroscale simulation has already been run")
+        mock_cls.from_hdf5.side_effect = ValueError(
+            "macroscale simulation has already been run"
+        )
         result = runner.invoke(
             cli,
             ["run-macro", str(macro_hdf5), "--executable", "/bin/macro.exe"],
@@ -233,7 +260,9 @@ class TestRunMacroLocal:
         self, mock_cls, runner, macro_hdf5
     ):
         """Error message from ValueError must appear in CLI output."""
-        mock_cls.from_hdf5.side_effect = ValueError("macroscale simulation has already been run")
+        mock_cls.from_hdf5.side_effect = ValueError(
+            "macroscale simulation has already been run"
+        )
         result = runner.invoke(
             cli,
             ["run-macro", str(macro_hdf5), "--executable", "/bin/macro.exe"],
@@ -252,8 +281,10 @@ class TestRunMacroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
             ],
         )
@@ -265,8 +296,10 @@ class TestRunMacroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
             ],
         )
@@ -278,10 +311,13 @@ class TestRunMacroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
-                "--partition", "long",
+                "--partition",
+                "long",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -295,10 +331,13 @@ class TestRunMacroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
-                "--staging-root", str(staging),
+                "--staging-root",
+                str(staging),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -310,10 +349,13 @@ class TestRunMacroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
-                "--fast-tmp-root", "/nvme/scratch",
+                "--fast-tmp-root",
+                "/nvme/scratch",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -325,10 +367,13 @@ class TestRunMacroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
-                "--in-file-code", "_in",
+                "--in-file-code",
+                "_in",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -340,10 +385,13 @@ class TestRunMacroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
-                "--out-file-code", "_out",
+                "--out-file-code",
+                "_out",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -354,19 +402,19 @@ class TestRunMacroSlurm:
     def test_modules_default_is_forwarded(self, mock_submit, runner, macro_hdf5):
         """Without --modules, the default module spec must be forwarded."""
         from lysis.tools.slurm import DEFAULT_MODULES
+
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
             ],
         )
         assert result.exit_code == 0, result.output
-        assert (
-            mock_submit.call_args.kwargs.get("modules")
-            == DEFAULT_MODULES
-        )
+        assert mock_submit.call_args.kwargs.get("modules") == DEFAULT_MODULES
 
     @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
     def test_modules_override_is_forwarded(self, mock_submit, runner, macro_hdf5):
@@ -374,27 +422,27 @@ class TestRunMacroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
-                "--modules", "intel-compilers/2024",
+                "--modules",
+                "intel-compilers/2024",
             ],
         )
         assert result.exit_code == 0, result.output
-        assert (
-            mock_submit.call_args.kwargs.get("modules")
-            == "intel-compilers/2024"
-        )
+        assert mock_submit.call_args.kwargs.get("modules") == "intel-compilers/2024"
 
     @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
-    def test_sbatch_default_is_empty_overrides(
-        self, mock_submit, runner, macro_hdf5
-    ):
+    def test_sbatch_default_is_empty_overrides(self, mock_submit, runner, macro_hdf5):
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
             ],
         )
@@ -402,18 +450,21 @@ class TestRunMacroSlurm:
         assert mock_submit.call_args.kwargs.get("sbatch_overrides") == {}
 
     @patch("lysis.tools.slurm.submit_macro_slurm_job", return_value=1)
-    def test_sbatch_tokens_parsed_and_forwarded(
-        self, mock_submit, runner, macro_hdf5
-    ):
+    def test_sbatch_tokens_parsed_and_forwarded(self, mock_submit, runner, macro_hdf5):
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
-                "--sbatch", "mem=4G",
-                "--sbatch", "hold",
-                "--sbatch", "^exclusive=user",
+                "--sbatch",
+                "mem=4G",
+                "--sbatch",
+                "hold",
+                "--sbatch",
+                "^exclusive=user",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -427,10 +478,13 @@ class TestRunMacroSlurm:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
-                "--sbatch", "^",
+                "--sbatch",
+                "^",
             ],
         )
         assert result.exit_code != 0
@@ -449,9 +503,7 @@ class TestRunMacroSlurm:
 
 class TestRunMacroExperiment:
     @patch("lysis.execution.fortran_macro.FortranMacro")
-    def test_batch_calls_from_hdf5_for_each_run(
-        self, mock_cls, runner, experiment_dir
-    ):
+    def test_batch_calls_from_hdf5_for_each_run(self, mock_cls, runner, experiment_dir):
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
 
@@ -463,9 +515,7 @@ class TestRunMacroExperiment:
         assert mock_cls.from_hdf5.call_count == 2
 
     @patch("lysis.execution.fortran_macro.FortranMacro")
-    def test_batch_calls_run_full_for_each_run(
-        self, mock_cls, runner, experiment_dir
-    ):
+    def test_batch_calls_run_full_for_each_run(self, mock_cls, runner, experiment_dir):
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
 
@@ -477,9 +527,7 @@ class TestRunMacroExperiment:
         assert mock_fm.run_full.call_count == 2
 
     @patch("lysis.execution.fortran_macro.FortranMacro")
-    def test_batch_output_mentions_run_codes(
-        self, mock_cls, runner, experiment_dir
-    ):
+    def test_batch_output_mentions_run_codes(self, mock_cls, runner, experiment_dir):
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
 
@@ -492,15 +540,16 @@ class TestRunMacroExperiment:
         assert "run-01" in flat
         assert "run-02" in flat
 
-    def test_out_file_code_with_directory_raises_error(
-        self, runner, experiment_dir
-    ):
+    def test_out_file_code_with_directory_raises_error(self, runner, experiment_dir):
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(experiment_dir),
-                "--executable", "/bin/macro.exe",
-                "--out-file-code", "_x",
+                "run-macro",
+                str(experiment_dir),
+                "--executable",
+                "/bin/macro.exe",
+                "--out-file-code",
+                "_x",
             ],
         )
         assert result.exit_code != 0
@@ -516,8 +565,10 @@ class TestRunMacroExperiment:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(experiment_dir),
-                "--executable", "/bin/macro.exe",
+                "run-macro",
+                str(experiment_dir),
+                "--executable",
+                "/bin/macro.exe",
                 "--slurm",
             ],
         )
@@ -535,9 +586,12 @@ class TestRunMacroFortranCommit:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "macro_diffuse_into_and_along__internal",
-                "--fortran-commit", "this-ref-does-not-exist-deadbeef",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "macro_diffuse_into_and_along__internal",
+                "--fortran-commit",
+                "this-ref-does-not-exist-deadbeef",
             ],
         )
         assert result.exit_code != 0
@@ -573,9 +627,12 @@ class TestRunMacroFortranCommit:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "macro_diffuse_into_and_along__internal",
-                "--fortran-commit", "HEAD",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "macro_diffuse_into_and_along__internal",
+                "--fortran-commit",
+                "HEAD",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -609,11 +666,15 @@ class TestRunMacroFortranCommit:
         result = runner.invoke(
             cli,
             [
-                "run-macro", str(macro_hdf5),
-                "--executable", "macro_diffuse_into_and_along__internal",
-                "--fortran-commit", "HEAD",
+                "run-macro",
+                str(macro_hdf5),
+                "--executable",
+                "macro_diffuse_into_and_along__internal",
+                "--fortran-commit",
+                "HEAD",
                 "--slurm",
-                "--modules", "intel-compilers/2024",
+                "--modules",
+                "intel-compilers/2024",
             ],
         )
         assert result.exit_code == 0, result.output
