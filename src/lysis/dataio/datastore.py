@@ -108,6 +108,17 @@ if dataspec["hdf5"].version != COMPATIBLE_DATASPEC_VERSION:
     )
 
 
+class ImportCollectionError(RuntimeError):
+    """Raised when :meth:`DataStore.import_collection` fails during the write
+    phase.
+
+    Signals that an import failed *after* HDF5 mutation began and that the
+    target collection has been rolled back to its empty, freshly-initialized
+    state (``MICRO_EMPTY`` / ``MACRO_EMPTY``).  The original failure is chained
+    as the exception's ``__cause__``.
+    """
+
+
 @unique
 class DataStatus(Flag):
     NONE = 0
@@ -1296,6 +1307,19 @@ class DataStore:
             if any target dataset already contains data, or if the number of
             simulations in the source does not match
             ``macro_params.macro_simulations`` (for ``"macroscale_out"``).
+        :raises ImportCollectionError: If the import fails *after* HDF5
+            mutation has begun (e.g. a dataset write errors).  Before
+            re-raising, the target collection is rolled back to its empty,
+            freshly-initialized state (``MICRO_EMPTY`` / ``MACRO_EMPTY``) so
+            the file never presents half-ingested data as filled; the original
+            failure is chained as ``__cause__``.
+
+        .. note::
+
+           On failure during the write phase the target collection is reverted
+           to empty via the same machinery as the ``init-*`` pathway, so
+           downstream code never processes a partially-imported collection.
+           Any on-disk source (Fortran output / logs) is left uningested.
         """
         # ------------------------------------------------------------------
         # Precondition checks
@@ -1401,44 +1425,94 @@ class DataStore:
                 break  # one dataset is enough to confirm the count
 
         # ------------------------------------------------------------------
-        # Write converted arrays directly into the existing HDF5 datasets
+        # Write converted arrays into the HDF5, stamp provenance, and reload.
+        #
+        # Everything below mutates the file.  If any step fails, roll the
+        # target collection back to its empty, freshly-initialized state so the
+        # file never presents half-ingested data as "filled", then re-raise
+        # loudly as ImportCollectionError.  Reads/conversion/validation above
+        # do not touch the HDF5, so they need no rollback.
         # ------------------------------------------------------------------
-        for ds_name, ds_spec in target_spec.data.items():
-            if ds_spec.data_location is None:
-                continue  # derived dataset — not stored on disk
-            if ds_name not in converted:
-                continue  # optional dataset not produced by this converter
-            if target_spec.simulations_combined:
-                self._write_array_to_dataset(ds_spec, converted[ds_name])
-            else:
-                for sim_idx, arr in enumerate(converted[ds_name]):
-                    self._write_array_to_dataset(ds_spec, arr, sim=sim_idx)
-
-        # Record provenance if conversion happened
-        if CONST.CONVERTED_FROM_ATTR in converted.get("params", {}):
-            self._file.attrs[CONST.CONVERTED_FROM_ATTR] = (
-                converted["params"][CONST.CONVERTED_FROM_ATTR]
-            )
-
-        # Stamp pipeline provenance on the per-scale params group, plus
-        # unconditional backend provenance (commit/dirty/compiler/type) when
-        # an executable path is known.  Both stamps go onto the same params
-        # group via the shared :meth:`stamp_provenance` helper.
         scale = "micro" if collection_name == "microscale_out" else "macro"
-        self.stamp_provenance(scale, "pipeline")
-        if backend_executable is not None or replace_backend_attrs is not None:
-            self.stamp_provenance(
-                scale,
-                "backend",
-                executable=backend_executable,
-                backend_override=backend_override,
-                replace_backend_attrs=replace_backend_attrs,
-            )
+        try:
+            for ds_name, ds_spec in target_spec.data.items():
+                if ds_spec.data_location is None:
+                    continue  # derived dataset — not stored on disk
+                if ds_name not in converted:
+                    continue  # optional dataset not produced by this converter
+                if target_spec.simulations_combined:
+                    self._write_array_to_dataset(ds_spec, converted[ds_name])
+                else:
+                    for sim_idx, arr in enumerate(converted[ds_name]):
+                        self._write_array_to_dataset(ds_spec, arr, sim=sim_idx)
 
-        # Re-initialize in place (reloads all collections, params, etc.)
-        self._file.flush()
-        self._file.close()
-        self.__init__(self._run_code, self._path, mode=self._mode)
+            # Record provenance if conversion happened
+            if CONST.CONVERTED_FROM_ATTR in converted.get("params", {}):
+                self._file.attrs[CONST.CONVERTED_FROM_ATTR] = (
+                    converted["params"][CONST.CONVERTED_FROM_ATTR]
+                )
+
+            # Stamp pipeline provenance on the per-scale params group, plus
+            # unconditional backend provenance (commit/dirty/compiler/type)
+            # when an executable path is known.  Both stamps go onto the same
+            # params group via the shared :meth:`stamp_provenance` helper.
+            self.stamp_provenance(scale, "pipeline")
+            if backend_executable is not None or replace_backend_attrs is not None:
+                self.stamp_provenance(
+                    scale,
+                    "backend",
+                    executable=backend_executable,
+                    backend_override=backend_override,
+                    replace_backend_attrs=replace_backend_attrs,
+                )
+
+            # Re-initialize in place (reloads all collections, params, etc.)
+            self._file.flush()
+            self._file.close()
+            self.__init__(self._run_code, self._path, mode=self._mode)
+        except Exception as exc:
+            self._revert_collection_to_empty(collection_name)
+            empty_state = (
+                "MICRO_EMPTY" if scale == "micro" else "MACRO_EMPTY"
+            )
+            raise ImportCollectionError(
+                f"Import of '{collection_name}' failed during the write phase "
+                f"and was rolled back to {empty_state}; the HDF5 file holds no "
+                f"partial data and the on-disk source is left uningested. "
+                f"Original error: {exc}"
+            ) from exc
+
+    def _revert_collection_to_empty(self, collection_name):
+        """Roll a partially-imported collection back to its empty state.
+
+        Reuses the same machinery the ``init-*`` pathway uses, so the reverted
+        file is equivalent to a freshly-initialized one — including the
+        re-stamped ``init_*`` provenance:
+
+        - ``microscale_out``: re-run :meth:`create` with ``force=True`` from
+          the in-memory micro params.  No macroscale stage exists yet at
+          micro-import time, so wiping and recreating the file is the correct
+          reset.
+        - ``macroscale_out``: re-run :meth:`initialize_macroscale` with
+          ``force=True`` from the in-memory macro params, which wipes only the
+          macroscale group and leaves the filled microscale data intact.
+
+        The parameters come from the in-memory ``self._micro_params`` /
+        ``self._macro_params`` (loaded from the HDF5 attributes at open time),
+        which survive a failed write — no external file is needed.
+
+        :param collection_name: ``"microscale_out"`` or ``"macroscale_out"``.
+        :type collection_name: str
+        """
+        if collection_name == "microscale_out":
+            micro = self._micro_params
+            run_code, path, mode = self._run_code, self._path, self._mode
+            if self._file:
+                self._file.close()
+            type(self).create(run_code, path, micro, force=True).close()
+            self.__init__(run_code, path, mode=mode)
+        else:  # macroscale_out
+            self.initialize_macroscale(self._macro_params, force=True)
 
     # ------------------------------------------------------------------
     #  Derived collection helpers
