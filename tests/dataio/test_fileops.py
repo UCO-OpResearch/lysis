@@ -504,6 +504,145 @@ class TestReadDataCollectionPerSim:
             )
 
 
+class TestDataCollectionOptional:
+    """Tests that the ``optional`` DataSetSpec flag is honored end-to-end.
+
+    Covers both a combined (``simulations_combined=True``, like the existing
+    ``neighbors`` dataset) and a per-simulation optional dataset, on both the
+    read and write paths. See GitHub issue #83.
+    """
+
+    def _optional_combined_spec(self, json_spec):
+        """Combined collection with a required ``arr`` and an optional ``opt``."""
+        required = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
+            dtype=np.float64,
+            data_location="arr{file_code}.dat",
+            shape=(-1,),
+        )
+        optional = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
+            dtype=np.float64,
+            data_location="opt{file_code}.dat",
+            shape=(-1,),
+            optional=True,
+        )
+        return DataCollectionSpec(
+            simulations_combined=True,
+            params=json_spec,
+            data={"arr": required, "opt": optional},
+        )
+
+    def _optional_per_sim_spec(self, json_spec):
+        """Per-sim collection with a required ``arr`` and an optional ``opt``."""
+        required = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
+            dtype=np.float64,
+            data_location="{sim:02}/arr{file_code}.dat",
+            shape=(-1,),
+        )
+        optional = DataSetSpec(
+            dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
+            dtype=np.float64,
+            data_location="{sim:02}/opt{file_code}.dat",
+            shape=(-1,),
+            optional=True,
+        )
+        return DataCollectionSpec(
+            simulations_combined=False,
+            params=json_spec,
+            data={"arr": required, "opt": optional},
+        )
+
+    def test_combined_optional_absent_no_raise(self, tmp_path, json_spec):
+        """Combined: an absent optional dataset does not raise (unchanged)."""
+        spec = self._optional_combined_spec(json_spec)
+        with open(tmp_path / "params.json", "w") as fh:
+            json.dump({"micro_params": {"micro_simulations": 10}}, fh)
+        # Write only the required dataset; the optional one is absent on disk.
+        np.savetxt(tmp_path / "arr.dat", np.array([1.0, 2.0, 3.0]))
+
+        data = read_data_collection(
+            str(tmp_path),
+            collections=[spec],
+            file_codes=[""],
+        )
+        np.testing.assert_array_almost_equal(data["arr"], [1.0, 2.0, 3.0])
+        assert "opt" not in data
+
+    def test_per_sim_optional_absent_returns_empty(self, tmp_path, json_spec):
+        """Per-sim: an entirely absent optional dataset reads as an empty list."""
+        spec = self._optional_per_sim_spec(json_spec)
+        with open(tmp_path / "params.json", "w") as fh:
+            json.dump({"micro_params": {"micro_simulations": 10}}, fh)
+        # Write the required dataset for 2 sims; never write the optional one.
+        for i in range(2):
+            sim_dir = tmp_path / f"{i:02}"
+            sim_dir.mkdir(exist_ok=True)
+            (np.arange(5, dtype=np.float64) + i * 10.0).tofile(sim_dir / "arr.dat")
+
+        data = read_data_collection(
+            str(tmp_path),
+            collections=[spec],
+            file_codes=[""],
+        )
+        assert len(data["arr"]) == 2
+        assert data["opt"] == []
+
+    def test_write_optional_absent_skipped(self, tmp_path, json_spec):
+        """write_data_collection skips an optional key absent from the data dict."""
+        spec = self._optional_per_sim_spec(json_spec)
+        arrays = [np.arange(5, dtype=np.float64) + i * 100.0 for i in range(2)]
+        # Note: no "opt" key in the data dict at all.
+        data = {
+            "params": {"micro_params": {"micro_simulations": 10}},
+            "arr": arrays,
+        }
+        for i in range(2):
+            (tmp_path / f"{i:02}").mkdir(exist_ok=True)
+
+        # Must not raise (previously a KeyError on the absent "opt" key).
+        write_data_collection(
+            data=data,
+            path=str(tmp_path),
+            collections=[spec],
+            file_codes=[""],
+        )
+
+        # The optional dataset was skipped, the required one written.
+        for i in range(2):
+            assert (tmp_path / f"{i:02}" / "arr.dat").exists()
+            assert not (tmp_path / f"{i:02}" / "opt.dat").exists()
+
+    def test_per_sim_optional_round_trip(self, tmp_path, json_spec):
+        """Per-sim: an optional dataset that IS present round-trips normally."""
+        spec = self._optional_per_sim_spec(json_spec)
+        arrs = [np.arange(5, dtype=np.float64) + i * 100.0 for i in range(2)]
+        opts = [np.arange(3, dtype=np.float64) + i for i in range(2)]
+        data = {
+            "params": {"micro_params": {"micro_simulations": 10}},
+            "arr": arrs,
+            "opt": opts,
+        }
+        for i in range(2):
+            (tmp_path / f"{i:02}").mkdir(exist_ok=True)
+
+        write_data_collection(
+            data=data,
+            path=str(tmp_path),
+            collections=[spec],
+            file_codes=[""],
+        )
+        loaded = read_data_collection(
+            str(tmp_path),
+            collections=[spec],
+            file_codes=[""],
+        )
+        assert len(loaded["opt"]) == 2
+        for i in range(2):
+            np.testing.assert_array_equal(loaded["opt"][i], opts[i])
+
+
 class TestWriteCollectionParamsRequired:
     """Tests that write_data_collection requires parameters."""
 
