@@ -2166,6 +2166,28 @@ class TestWorkerLogOutputAndHeader:
         # only the trap references rm -rf of the work dir.
         assert script.count('rm -rf "${local_work_dir}"') == 1
 
+    def test_two_tier_setup_cp_glob_is_guarded(self, tmp_path):
+        """The staged-files copy must not use a bare glob under ``set -e``.
+
+        A bare ``cp "${staging_datadir}/"*`` aborts on an unexpanded ``*`` when
+        the staging dir is empty.  The guarded form collects matches via
+        nullglob and fails loudly with a clear message instead.
+        """
+        script = generate_macro_array_script(
+            tmp_path / "s", "run-01", tmp_path / "run-01.h5", "/bin/macro.exe",
+            n_sims=5, fast_tmp_root="/scratch",
+        )
+        # No bare glob copy remains.
+        assert 'cp "${staging_datadir}/"*' not in script
+        # Guarded form: nullglob collection + emptiness check + array copy.
+        assert "shopt -s nullglob" in script
+        assert 'staged_files=("${staging_datadir}"/*)' in script
+        assert 'cp "${staged_files[@]}" "${local_datadir}/"' in script
+        # The emptiness guard precedes the cp (fail loud, don't skip setup).
+        assert script.index('${#staged_files[@]}') < script.index(
+            'cp "${staged_files[@]}"'
+        )
+
 
 class TestMasterLogStaysInSlurm:
     """#84 scope: master ``--output`` stays in ``.slurm`` (worker-only move)."""

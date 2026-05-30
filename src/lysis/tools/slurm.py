@@ -955,7 +955,18 @@ trap 'rm -rf "${{local_work_dir}}"' EXIT
 local_datadir="${{local_work_dir}}/data/{run_code}"
 staging_datadir="{staging_dir}/data/{run_code}"
 mkdir -p "${{local_datadir}}"
-cp "${{staging_datadir}}/"* "${{local_datadir}}/"
+# Copy staged setup files into the local fast dir.  Guard the glob: under
+# ``set -e`` an empty staging dir would make cp choke on an unexpanded ``*``;
+# instead collect matches with nullglob and fail loudly with a clear message
+# (so a missing/empty staging dir never silently skips setup either).
+shopt -s nullglob
+staged_files=("${{staging_datadir}}"/*)
+shopt -u nullglob
+if [ "${{#staged_files[@]}}" -eq 0 ]; then
+    echo "lysis: no staged setup files in ${{staging_datadir}}" >&2
+    exit 1
+fi
+cp "${{staged_files[@]}}" "${{local_datadir}}/"
 cp "{staging_dir}/{binary_name}" "${{local_work_dir}}/" """
 
         init = _runner_init_line(
