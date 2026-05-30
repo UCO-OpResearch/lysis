@@ -164,6 +164,30 @@ def test_migrate_file_idempotent(tmp_path):
     assert migrate_script.migrate_file(path, backup_dir=str(tmp_path / "bak2")) == {}
 
 
+def test_migrate_file_writes_sha_log(tmp_path):
+    path = str(tmp_path / "old.h5")
+    _make_old_file(path)
+    bak = str(tmp_path / "bak")
+    migrate_script.migrate_file(path, backup_dir=bak)
+
+    # A per-file .sha256.txt sits next to the backup copy.
+    flat = migrate_script._backup_basename(path)
+    log = Path(bak) / (flat + ".sha256.txt")
+    assert log.is_file()
+    text = log.read_text()
+
+    assert "[pre-edit]" in text and "[post-edit]" in text
+    pre_block, post_block = text.split("[post-edit]")
+    # Every dataset appears in both sections, and (since datasets are untouched)
+    # each dataset's pre and post sha are identical.
+    for ds in ("micro_data/ints", "micro_data/strings"):
+        assert ds in pre_block and ds in post_block
+        pre_sha = [l for l in pre_block.splitlines() if l.startswith(ds + "  ")][0].split()[1]
+        post_sha = [l for l in post_block.splitlines() if l.startswith(ds + "  ")][0].split()[1]
+        assert pre_sha == post_sha
+        assert len(pre_sha) == 64  # sha256 hexdigest
+
+
 def test_migrate_file_halts_on_dataset_change(tmp_path, monkeypatch):
     """If a dataset checksum differs post-edit, migrate_file raises (halt)."""
     path = str(tmp_path / "old.h5")
