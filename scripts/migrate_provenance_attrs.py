@@ -171,8 +171,15 @@ def classify(path) -> str:
         return "read-error"
     if not has_old:
         return "already-migrated"
-    if not os.access(path, os.W_OK):
-        return "not-writable"
+    # Only ever modify files the current user OWNS — never another user's data,
+    # even when the shared group makes them writable (the owner runs the tool on
+    # their own files).  Also skip anything not writable for any other reason.
+    try:
+        st = os.stat(path)
+    except OSError:
+        return "read-error"
+    if st.st_uid != os.getuid() or not os.access(path, os.W_OK):
+        return "not-mine"
     return "will-migrate"
 
 
@@ -282,6 +289,13 @@ def main(argv=None):
         help="Proceed under --apply without a backup dir (NOT recommended).",
     )
     parser.add_argument("--report", default=None, help="Write the full report to this path too.")
+    parser.add_argument(
+        "--jobs", "-j", type=int, default=1,
+        help="Parallel worker processes for --apply (default 1). Each worker "
+        "migrates whole files independently — safe because no two workers ever "
+        "touch the same file. SHA-256 verification is CPU-bound, so processes "
+        "(not threads) give real speed-up. Has no effect on a dry-run.",
+    )
     args = parser.parse_args(argv)
 
     roots = args.roots if args.roots else DEFAULT_ROOTS
@@ -293,7 +307,7 @@ def main(argv=None):
 
     buckets = {
         "will-migrate": [], "already-migrated": [], "not-v2.0.0": [],
-        "not-writable": [], "read-error": [],
+        "not-mine": [], "read-error": [],
     }
     for path in _iter_h5(roots):
         buckets[classify(path)].append(path)
@@ -302,7 +316,7 @@ def main(argv=None):
 
     def emit(line=""):
         out.append(line)
-        print(line)
+        print(line, flush=True)  # flush so `| tee` follows progress live
 
     stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
     emit(f"# Provenance attr migration — {'APPLY' if args.apply else 'DRY-RUN'} — {stamp}")
@@ -312,41 +326,81 @@ def main(argv=None):
         emit(f"{cat}: {len(files)}")
     emit("")
 
-    if buckets["not-writable"]:
-        emit("## not-writable (owned by another user — reported, NOT touched):")
-        for p in sorted(buckets["not-writable"]):
+    if buckets["not-mine"]:
+        emit("## not-mine (owned by another user or not writable — reported, NOT touched):")
+        for p in sorted(buckets["not-mine"]):
             emit(f"  [{_file_owner(p)}] {p}")
         emit("")
 
     migrated, failed = 0, None
+    will = sorted(buckets["will-migrate"])
     emit("## will-migrate:")
-    for path in sorted(buckets["will-migrate"]):
-        if not args.apply:
-            # Show the planned diff without writing.
+
+    if not args.apply:
+        # Dry-run: show the planned diff without writing — read group attrs
+        # only (no dataset checksums; those are an --apply-time integrity check).
+        for path in will:
             try:
-                manifest = _build_manifest(path)
+                with h5py.File(path, "r") as f:
+                    group_attrs = {
+                        g: _norm_attrs(f[g].attrs) for g in SCALE_GROUPS if g in f
+                    }
             except Exception as e:  # noqa: BLE001
                 emit(f"  READ-ERROR {path}: {e}")
                 continue
             plan = {}
-            for g, pre_attrs in manifest["group_attrs"].items():
+            for g, pre_attrs in group_attrs.items():
                 sets, deletes = migrate_provenance_group(dict(pre_attrs))
                 if sets or deletes:
                     plan[g] = (sets, deletes)
             emit(f"  WOULD MIGRATE {path}")
             emit(_format_plan(plan))
-        else:
+
+    elif max(1, args.jobs) == 1:
+        # Serial apply.
+        for i, path in enumerate(will, 1):
             try:
                 plan = migrate_file(path, backup_dir=args.backup_dir)
-            except IntegrityError as e:
+            except Exception as e:  # noqa: BLE001 — halt on ANY failure
                 emit("")
-                emit("!!! HALTING — integrity verification failed !!!")
+                emit("!!! HALTING — verification failed !!!")
                 emit(str(e))
                 failed = path
                 break
             migrated += 1
-            emit(f"  MIGRATED {path}")
+            emit(f"  MIGRATED [{i}/{len(will)}] {path}")
             emit(_format_plan(plan))
+
+    else:
+        # Parallel apply: one whole file per worker process.  No two workers
+        # touch the same file, so there is no HDF5 race.  Halt on the first
+        # failure — stop scheduling new work and name the offending file.
+        import concurrent.futures as _cf  # noqa: PLC0415
+
+        jobs = max(1, args.jobs)
+        emit(f"  (running {len(will)} file(s) across {jobs} worker processes)")
+        ex = _cf.ProcessPoolExecutor(max_workers=jobs)
+        futs = {
+            ex.submit(migrate_file, p, backup_dir=args.backup_dir): p for p in will
+        }
+        try:
+            for fut in _cf.as_completed(futs):
+                path = futs[fut]
+                try:
+                    plan = fut.result()
+                except Exception as e:  # noqa: BLE001 — halt on ANY failure
+                    emit("")
+                    emit("!!! HALTING — verification failed !!!")
+                    emit(str(e))
+                    failed = path
+                    break
+                migrated += 1
+                emit(f"  MIGRATED [{migrated}/{len(will)}] {path}")
+                emit(_format_plan(plan))
+        finally:
+            # cancel_futures stops not-yet-started tasks; in-flight files (≤ jobs)
+            # finish on their own.  Either way no new file is begun after a halt.
+            ex.shutdown(wait=True, cancel_futures=bool(failed))
 
     emit("")
     if failed:
