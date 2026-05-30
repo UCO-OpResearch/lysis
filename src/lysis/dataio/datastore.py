@@ -774,6 +774,10 @@ class DataStore:
         group, and creates zero-length datasets for all microscale_out
         datasets defined in the v2.0.0 specification.
 
+        Microscale ``init_*`` provenance is stamped on the ``micro_data``
+        params group before returning (via :meth:`stamp_provenance`), so the
+        returned file already presents a clean "initialized" state.
+
         :param run_code: The Run identifier (used to construct the HDF5
             filename as ``{run_code}.h5``).
         :type run_code: str
@@ -785,10 +789,6 @@ class DataStore:
             delete it and recreate from scratch.  Any previous execution
             provenance attributes on the file are lost along with the file.
         :type force: bool
-        Microscale ``init_*`` provenance is stamped on the ``micro_data``
-        params group before returning (via :meth:`stamp_provenance`), so the
-        returned file already presents a clean "initialized" state.
-
         :return: A new DataStore opened in ``"a"`` (read/write) mode with
             microscale_out collection.
         :rtype: DataStore
