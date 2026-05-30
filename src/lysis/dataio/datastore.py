@@ -80,6 +80,7 @@ COMPATIBLE_DATASPEC_VERSION
     ``"hdf5"`` tag points to a different version.
 """
 import dataclasses
+import json
 import os
 import warnings
 
@@ -1312,7 +1313,12 @@ class DataStore:
             re-raising, the target collection is rolled back to its empty,
             freshly-initialized state (``MICRO_EMPTY`` / ``MACRO_EMPTY``) so
             the file never presents half-ingested data as filled; the original
-            failure is chained as ``__cause__``.
+            failure is chained as ``__cause__``.  If the rollback *itself*
+            fails, an ``ImportCollectionError`` is still raised (never the raw
+            rollback error): the in-memory parameters are dumped to a recovery
+            file next to the HDF5 (re-feedable CSV, falling back to JSON, then
+            an inline dump), and the rollback error becomes ``__cause__`` with
+            the original import error as its ``__context__``.
 
         .. note::
 
@@ -1471,16 +1477,109 @@ class DataStore:
             self._file.close()
             self.__init__(self._run_code, self._path, mode=self._mode)
         except Exception as exc:
-            self._revert_collection_to_empty(collection_name)
-            empty_state = (
-                "MICRO_EMPTY" if scale == "micro" else "MACRO_EMPTY"
-            )
+            empty_state = "MICRO_EMPTY" if scale == "micro" else "MACRO_EMPTY"
+            try:
+                self._revert_collection_to_empty(collection_name)
+            except Exception as rollback_exc:
+                # The rollback itself failed (e.g. the same disk-full/I/O error
+                # that killed the write also kills create()/initialize_macroscale,
+                # and the micro rollback already removed the file).  The in-memory
+                # params are now the last copy — dump them for recovery, and STILL
+                # raise ImportCollectionError so callers catching it are not
+                # surprised by the raw rollback error.
+                note = self._dump_params_for_recovery()
+                raise ImportCollectionError(
+                    f"Import of '{collection_name}' failed AND the rollback to "
+                    f"{empty_state} also failed; the HDF5 file may be left in an "
+                    f"unrecoverable state and should be re-initialized "
+                    f"(init-experiment / init-macroscale). Parameters were dumped "
+                    f"{note}. Original import error: {exc!r}. "
+                    f"Rollback error: {rollback_exc!r}"
+                ) from rollback_exc
             raise ImportCollectionError(
                 f"Import of '{collection_name}' failed during the write phase "
                 f"and was rolled back to {empty_state}; the HDF5 file holds no "
                 f"partial data and the on-disk source is left uningested. "
                 f"Original error: {exc}"
             ) from exc
+
+    def _dump_params_for_recovery(self):
+        """Best-effort dump of the in-memory parameters when a rollback fails.
+
+        Called only from :meth:`import_collection`'s rollback-failure path, where
+        the on-disk file (and thus the only persisted copy of the parameters) may
+        already be gone.  Writes whatever is in memory — ``self._micro_params``
+        always, ``self._macro_params`` when present — preferring a re-feedable
+        CSV, then JSON, then an inline ``asdict`` dump.  **Never raises**; returns
+        a short human-readable note (woven into the
+        :class:`ImportCollectionError` message) describing what was dumped and
+        where.
+
+        :return: A note such as ``"to <path> (CSV)"`` or
+            ``"(no in-memory parameters to dump)"``.
+        :rtype: str
+        """
+        micro = self._micro_params
+        macro = self._macro_params
+        if micro is None and macro is None:
+            return "(no in-memory parameters to dump)"
+
+        base = os.path.join(self._path, f"{self._run_code}_param_recovery")
+
+        # 1. Preferred: a CSV that can be fed back to init-experiment /
+        #    init-macroscale.  Requires micro params (the CSV's anchor scale).
+        if micro is not None:
+            try:
+                from ..config.parameters import write_params_csv  # noqa: PLC0415
+
+                csv_path = f"{base}.csv"
+                write_params_csv(csv_path, [(self._run_code, micro, macro)])
+                warnings.warn(
+                    f"Parameters dumped to {csv_path} for recovery.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                return f"to {csv_path} (re-feedable CSV)"
+            except Exception:
+                pass
+
+        # 2. Fallback: JSON.
+        try:
+            from .fileops import _params_json_default  # noqa: PLC0415
+
+            payload = {}
+            if micro is not None:
+                payload["micro_params"] = micro.to_basedict()
+            if macro is not None:
+                payload["macro_params"] = macro.to_basedict()
+            json_path = f"{base}.json"
+            with open(json_path, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, default=_params_json_default)
+            warnings.warn(
+                f"Parameters dumped to {json_path} for recovery.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return f"to {json_path} (JSON)"
+        except Exception:
+            pass
+
+        # 3. Last resort: inline the asdict text (rides along in the exception
+        #    message and the warning, even if every file write failed).
+        try:
+            dump = {}
+            if micro is not None:
+                dump["micro_params"] = dataclasses.asdict(micro)
+            if macro is not None:
+                dump["macro_params"] = dataclasses.asdict(macro)
+            warnings.warn(
+                f"Could not write a parameter recovery file; parameters: {dump}",
+                UserWarning,
+                stacklevel=2,
+            )
+            return f"inline (file writes failed): {dump}"
+        except Exception:
+            return "(parameter dump failed entirely)"
 
     def _revert_collection_to_empty(self, collection_name):
         """Roll a partially-imported collection back to its empty state.
