@@ -25,7 +25,6 @@ from lysis.config.parameters import MacroParameters, MicroParameters
 from lysis.dataio.datastore import DataStore
 from lysis.tools.provenance import execution as execution_mod
 
-
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
@@ -72,9 +71,7 @@ def force_dirty(monkeypatch):
     monkeypatch.delenv(CONST.LYSIS_ALLOW_DIRTY_ENV, raising=False)
     monkeypatch.delenv(CONST.LYSIS_ALLOW_COMMIT_MISMATCH_ENV, raising=False)
     monkeypatch.setattr(execution_mod, "_resolve_dirty", lambda: "dirty")
-    monkeypatch.setattr(
-        execution_mod, "_resolve_version", lambda: "deadbeefdeadbeef"
-    )
+    monkeypatch.setattr(execution_mod, "_resolve_version", lambda: "deadbeefdeadbeef")
     # Reset the once-per-process dedup flag so each test sees the warning.
     execution_mod._dirty_warning_emitted = False
     yield
@@ -86,9 +83,7 @@ def force_clean(monkeypatch):
     monkeypatch.delenv(CONST.LYSIS_ALLOW_DIRTY_ENV, raising=False)
     monkeypatch.delenv(CONST.LYSIS_ALLOW_COMMIT_MISMATCH_ENV, raising=False)
     monkeypatch.setattr(execution_mod, "_resolve_dirty", lambda: "clean")
-    monkeypatch.setattr(
-        execution_mod, "_resolve_version", lambda: "commit-A" * 4
-    )
+    monkeypatch.setattr(execution_mod, "_resolve_version", lambda: "commit-A" * 4)
     execution_mod._dirty_warning_emitted = False
     yield
 
@@ -161,9 +156,7 @@ class TestInitExperimentDirtyGate:
                 val = val.decode()
             assert val == "dirty"
 
-    def test_env_var_proceeds(
-        self, runner, force_dirty, tmp_path, monkeypatch
-    ):
+    def test_env_var_proceeds(self, runner, force_dirty, tmp_path, monkeypatch):
         monkeypatch.setenv(CONST.LYSIS_ALLOW_DIRTY_ENV, "1")
         csv_path = _one_run_csv(tmp_path)
         data_root = tmp_path / "experiments"
@@ -230,9 +223,10 @@ class TestRunMicroCommitMatch:
 
         assert result.exit_code == 0, result.output
         # The "legacy file" warning surfaces (from Click runner or the env).
-        assert any(
-            "pre-dates" in str(w.message) for w in caught
-        ) or "pre-dates" in result.output
+        assert (
+            any("pre-dates" in str(w.message) for w in caught)
+            or "pre-dates" in result.output
+        )
 
     @patch("lysis.execution.fortran_micro.FortranMicro")
     def test_mismatch_blocks_run_micro(
@@ -242,16 +236,12 @@ class TestRunMicroCommitMatch:
         mp = MicroParameters()
         ds = DataStore.create("mm", str(tmp_path), mp)
         monkeypatch.setattr(execution_mod, "_resolve_dirty", lambda: "clean")
-        monkeypatch.setattr(
-            execution_mod, "_resolve_version", lambda: "old-commit-zzz"
-        )
+        monkeypatch.setattr(execution_mod, "_resolve_version", lambda: "old-commit-zzz")
         ds.stamp_provenance("micro", "init")
         ds.close()
 
         # Now switch the "current" commit back to commit-A.
-        monkeypatch.setattr(
-            execution_mod, "_resolve_version", lambda: "commit-A" * 4
-        )
+        monkeypatch.setattr(execution_mod, "_resolve_version", lambda: "commit-A" * 4)
 
         mock_fm = MagicMock()
         mock_cls.from_hdf5.return_value = mock_fm
@@ -275,25 +265,26 @@ class TestRunMicroCommitMatch:
         mp = MicroParameters()
         ds = DataStore.create("mm2", str(tmp_path), mp)
         monkeypatch.setattr(execution_mod, "_resolve_dirty", lambda: "clean")
-        monkeypatch.setattr(
-            execution_mod, "_resolve_version", lambda: "old-commit"
-        )
+        monkeypatch.setattr(execution_mod, "_resolve_version", lambda: "old-commit")
         ds.stamp_provenance("micro", "init")
         ds.close()
-        monkeypatch.setattr(
-            execution_mod, "_resolve_version", lambda: "commit-A" * 4
-        )
+        monkeypatch.setattr(execution_mod, "_resolve_version", lambda: "commit-A" * 4)
 
         mock_cls.from_hdf5.return_value = MagicMock()
 
-        result = runner.invoke(
-            cli,
-            [
-                "run-micro",
-                str(tmp_path / "mm2.h5"),
-                "--executable",
-                "/fake/bin",
-                "--allow-commit-mismatch",
-            ],
-        )
+        # Capture the warning via pytest.warns so it is asserted *and* consumed
+        # — otherwise it escapes to pytest's run-wide warnings summary even
+        # though firing here is the expected --allow-commit-mismatch behaviour.
+        with pytest.warns(UserWarning, match="commit-match check failed") as record:
+            result = runner.invoke(
+                cli,
+                [
+                    "run-micro",
+                    str(tmp_path / "mm2.h5"),
+                    "--executable",
+                    "/fake/bin",
+                    "--allow-commit-mismatch",
+                ],
+            )
         assert result.exit_code == 0, result.output
+        assert any("old-commit" in str(w.message) for w in record)
