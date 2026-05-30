@@ -46,8 +46,13 @@ _DEFAULT_PARAMS = [
     ("diss_const_PLG_intact", "micro",   None,         "{:.2f}"),
     ("diss_const_PLG_nicked", "micro",   None,         "{:.2f}"),
     ("deg_rate_fibrin",       "micro",   None,          "{:.2f}"),
+    ("unbind_rate_PLi",       "micro",   None,          "{:.2f}"),
+    ("activation_rate_PLG",   "micro",   None,          "{:.3f}"),
+    ("exposure_rate_binding_site", "micro", None,       "{:.2f}"),
     ("fiber_radius",          "micro",   "nanometers",  "{:.4f}"),
     ("binding_sites",         "micro",   None,          "{:.6f}"),
+    ("nodes_in_micro_row",    "micro",   None,          "{:,}"),
+    ("snap_proportion",       "micro",   None,          "{:.4f}"),
     # ---- Micro run controls -------------------------------------------
     ("micro_simulations",     "micro",   None,          "{:,}"),
     ("micro_seed",            "micro",   None,          "{:,}"),
@@ -101,6 +106,55 @@ def _auto_format(raw):
     if isinstance(raw, float):
         return f"{raw:.4g}"
     return str(raw)
+
+
+def _default_formatted(param_specs, add_names):
+    """Formatted values for freshly-constructed default parameter objects.
+
+    Renders default :class:`~lysis.config.parameters.MicroParameters` and
+    :class:`~lysis.config.parameters.MacroParameters` through the same
+    formatting path as :func:`_load_run_params`, so a run's formatted value can
+    be compared against the model default to decide whether to highlight it.
+
+    :param param_specs: Effective ``(attr_name, source, units, fmt)`` specs.
+    :param add_names: Extra attribute names added via ``--add``.
+    :return: ``{attr_name: formatted_str}`` for every spec row and add name.
+    :rtype: dict[str, str]
+    """
+    import warnings
+
+    from lysis.config.parameters import MacroParameters, MicroParameters
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        micro = MicroParameters()
+        macro = MacroParameters(micro_params=micro)
+
+    defaults = {}
+    for attr_name, _src, display_units, fmt in param_specs:
+        defaults[attr_name] = _format_value(
+            _get_raw(macro, micro, attr_name), display_units, fmt
+        )
+    for attr_name in add_names:
+        defaults[attr_name] = _auto_format(_get_raw(macro, micro, attr_name))
+    return defaults
+
+
+def _nondefault_flags(values, defaults):
+    """Map ``{attr_name: bool}`` marking values that differ from the default.
+
+    A value is non-default when its formatted string differs from the default's
+    and is not ``"N/A"`` (absent macroscale data renders as ``"N/A"`` and is
+    never highlighted).
+
+    :param values: ``{attr_name: formatted_str}`` for one run.
+    :param defaults: ``{attr_name: formatted_str}`` from :func:`_default_formatted`.
+    :rtype: dict[str, bool]
+    """
+    return {
+        attr: val != "N/A" and val != defaults.get(attr)
+        for attr, val in values.items()
+    }
 
 
 def _param_header(attr_name, display_units, natural_units):
@@ -341,6 +395,10 @@ def parameters(
     Run and one row per parameter. Parameters are grouped into macro and micro
     sections, separated by a divider.
 
+    In the terminal (Rich) output, values that differ from the model defaults
+    are highlighted in a distinct color, making non-default runs easy to spot.
+    Markdown output (--markdown) is unstyled.
+
     \b
     Examples:
         lysis parameters data/TB-xi__1_582_867.h5
@@ -378,6 +436,12 @@ def parameters(
     # Pre-build natural-units dict for column headers (no run needed)
     natural_units = MacroParameters.units()
 
+    # Formatted default values, for highlighting cells that differ from them.
+    # Only the Rich output highlights, so skip this work for Markdown output.
+    defaults = None if markdown_out is not None else _default_formatted(
+        param_specs, add_names
+    )
+
     if os.path.isfile(path):
         # --- single-file mode ---
         run_code = os.path.splitext(os.path.basename(path))[0]
@@ -399,8 +463,18 @@ def parameters(
 
         # Drop macroscale rows when this file has no macroscale collection.
         effective_specs = param_specs if has_macro else _drop_macro_specs(param_specs)
+        nondefault_by_run = (
+            None
+            if defaults is None
+            else {run_code: _nondefault_flags(values, defaults)}
+        )
         df = parameters_table(
-            {run_code: values}, effective_specs, add_names, natural_units, [run_code]
+            {run_code: values},
+            effective_specs,
+            add_names,
+            natural_units,
+            [run_code],
+            nondefault_by_run=nondefault_by_run,
         )
 
         if markdown_out is not None:
@@ -475,7 +549,19 @@ def parameters(
         # columns still line up when the set is mixed.
         ordered = [rc for rc in run_codes if rc in rows]
         effective_specs = param_specs if any_macro else _drop_macro_specs(param_specs)
-        df = parameters_table(rows, effective_specs, add_names, natural_units, ordered)
+        nondefault_by_run = (
+            None
+            if defaults is None
+            else {rc: _nondefault_flags(vals, defaults) for rc, vals in rows.items()}
+        )
+        df = parameters_table(
+            rows,
+            effective_specs,
+            add_names,
+            natural_units,
+            ordered,
+            nondefault_by_run=nondefault_by_run,
+        )
 
         if markdown_out is not None:
             emit_markdown(

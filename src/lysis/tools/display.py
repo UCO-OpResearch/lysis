@@ -18,6 +18,10 @@ import math
 
 import pandas as pd
 
+#: Rich style applied to parameter cells whose value differs from the model
+#: default (see :func:`params_df_to_rich`).
+NONDEFAULT_STYLE = "yellow"
+
 
 # ---------------------------------------------------------------------------
 # Percent-difference formatting
@@ -273,6 +277,11 @@ def params_df_to_rich(df: pd.DataFrame):
     display label.  A section separator is inserted between each distinct
     section group.
 
+    If ``df.attrs["nondefault"]`` holds a boolean DataFrame aligned to ``df``
+    (as produced by :func:`~lysis.analysis.summary.parameters_table`), cells
+    flagged ``True`` are styled with :data:`NONDEFAULT_STYLE` so values that
+    differ from the model defaults stand out.
+
     :param df: Parameters DataFrame as returned by
         :func:`~lysis.analysis.summary.parameters_table`.
     :type df: pandas.DataFrame
@@ -280,6 +289,9 @@ def params_df_to_rich(df: pd.DataFrame):
     :rtype: rich.table.Table
     """
     from rich.table import Table
+    from rich.text import Text
+
+    nondefault = df.attrs.get("nondefault")
 
     table = Table(show_header=True, header_style="bold", show_lines=True)
     table.add_column("Parameter", style="bold", no_wrap=True)
@@ -287,11 +299,18 @@ def params_df_to_rich(df: pd.DataFrame):
         table.add_column(str(col), justify="right")
 
     current_section = None
-    for (section, param_label), row in df.iterrows():
+    for idx, row in df.iterrows():
+        section, param_label = idx
         if current_section is not None and section != current_section:
             table.add_section()
         current_section = section
-        table.add_row(param_label, *[str(v) for v in row])
+        cells = []
+        for col, value in zip(df.columns, row):
+            if nondefault is not None and bool(nondefault.loc[idx, col]):
+                cells.append(Text(str(value), style=NONDEFAULT_STYLE))
+            else:
+                cells.append(str(value))
+        table.add_row(param_label, *cells)
 
     return table
 

@@ -203,6 +203,7 @@ def parameters_table(
     add_names: list,
     natural_units: dict,
     run_codes: list,
+    nondefault_by_run: dict | None = None,
 ) -> pd.DataFrame:
     """Build a summary DataFrame for Run parameters.
 
@@ -229,6 +230,13 @@ def parameters_table(
     :type natural_units: dict[str, str]
     :param run_codes: Ordered list of run codes (determines column order).
     :type run_codes: list[str]
+    :param nondefault_by_run: Optional ``{run_code: {attr_name: bool}}`` marking
+        cells whose value differs from the model default.  When provided, a
+        boolean DataFrame aligned to the returned frame's index and columns is
+        attached as ``df.attrs["nondefault"]`` so renderers (e.g.
+        :func:`~lysis.tools.display.params_df_to_rich`) can highlight those
+        cells.  Markdown rendering ignores it.
+    :type nondefault_by_run: dict[str, dict[str, bool]] or None
     :return: DataFrame with MultiIndex rows and run codes as columns.
     :rtype: pandas.DataFrame
     """
@@ -253,7 +261,18 @@ def parameters_table(
     }
 
     index = pd.MultiIndex.from_tuples(index_tuples, names=["section", "parameter"])
-    return pd.DataFrame(data, index=index, columns=present)
+    df = pd.DataFrame(data, index=index, columns=present)
+
+    if nondefault_by_run is not None:
+        flag_data = {
+            rc: [bool(nondefault_by_run.get(rc, {}).get(a, False)) for a in attr_names]
+            for rc in present
+        }
+        df.attrs["nondefault"] = pd.DataFrame(
+            flag_data, index=index, columns=present
+        )
+
+    return df
 
 
 # ---------------------------------------------------------------------------
