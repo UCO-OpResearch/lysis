@@ -46,8 +46,13 @@ _DEFAULT_PARAMS = [
     ("diss_const_PLG_intact", "micro",   None,         "{:.2f}"),
     ("diss_const_PLG_nicked", "micro",   None,         "{:.2f}"),
     ("deg_rate_fibrin",       "micro",   None,          "{:.2f}"),
+    ("unbind_rate_PLi",       "micro",   None,          "{:.2f}"),
+    ("activation_rate_PLG",   "micro",   None,          "{:.3f}"),
+    ("exposure_rate_binding_site", "micro", None,       "{:.2f}"),
     ("fiber_radius",          "micro",   "nanometers",  "{:.4f}"),
     ("binding_sites",         "micro",   None,          "{:.6f}"),
+    ("nodes_in_micro_row",    "micro",   None,          "{:,}"),
+    ("snap_proportion",       "micro",   None,          "{:.4f}"),
     # ---- Micro run controls -------------------------------------------
     ("micro_simulations",     "micro",   None,          "{:,}"),
     ("micro_seed",            "micro",   None,          "{:,}"),
