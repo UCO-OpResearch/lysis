@@ -831,3 +831,79 @@ class TestToQuantityOrNumber:
         units_dict = {"total_time": "sec"}
         result = Parameters.to_quantity_or_number(3600.0, "total_time", units_dict)
         assert str(result.units) == "second"
+
+
+# ---------------------------------------------------------------------------
+# write_params_csv (inverse of Experiment.from_csv)
+# ---------------------------------------------------------------------------
+
+
+class TestWriteParamsCsv:
+    @staticmethod
+    def _read_csv(path):
+        import csv
+
+        with open(path, newline="", encoding="utf-8") as fh:
+            return list(csv.reader(fh))
+
+    def test_header_and_run_columns(self, tmp_path):
+        from lysis.config.parameters import write_params_csv
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            m0 = MicroParameters(micro_simulations=5, fiber_radius=Q_("75 nm"))
+            m1 = MicroParameters(micro_simulations=8)
+        out = tmp_path / "p.csv"
+        write_params_csv(str(out), [("run-00", m0, None), ("run-01", m1, None)])
+
+        rows = self._read_csv(out)
+        assert rows[0] == ["parameter", "run-00", "run-01"]
+        # One shared param column; one value column per run (column-wise merge).
+        assert all(len(r) == 3 for r in rows)
+
+    def test_default_cells_blank_and_all_default_rows_omitted(self, tmp_path):
+        from lysis.config.parameters import write_params_csv
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            m0 = MicroParameters(micro_simulations=5, fiber_radius=Q_("75 nm"))
+            m1 = MicroParameters(micro_simulations=8)  # default fiber_radius
+        out = tmp_path / "p.csv"
+        write_params_csv(str(out), [("run-00", m0, None), ("run-01", m1, None)])
+
+        rows = {r[0]: r[1:] for r in self._read_csv(out)[1:]}
+        # fiber_radius: non-default for run-00, default (blank) for run-01.
+        assert rows["fiber_radius"][0] != ""
+        assert rows["fiber_radius"][1] == ""
+        # micro_simulations differs from default in both runs → present.
+        assert rows["micro_simulations"] == ["5", "8"]
+        # A param left at its default in every run is omitted entirely.
+        assert "fibrinogen_length" not in rows
+
+    def test_round_trips_through_from_csv(self, tmp_path):
+        from lysis.config.experiment import Experiment
+        from lysis.config.parameters import write_params_csv
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            micro = MicroParameters(micro_simulations=7, fiber_radius=Q_("80 nm"))
+            macro = MacroParameters(micro_params=micro, macro_simulations=3)
+        out = tmp_path / "p.csv"
+        write_params_csv(str(out), [("run-00", micro, macro)])
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            exp = Experiment.from_csv(
+                str(out), str(tmp_path), name="rt", dry_run=True
+            )
+        run = exp.runs[0]
+        assert run.run_code == "run-00"
+        assert run.micro_params.micro_simulations == 7
+        assert run.micro_params.fiber_radius.to("nm").magnitude == pytest.approx(80)
+        assert run.macro_params.macro_simulations == 3
+
+    def test_empty_runs_raises(self, tmp_path):
+        from lysis.config.parameters import write_params_csv
+
+        with pytest.raises(ValueError, match="at least one run"):
+            write_params_csv(str(tmp_path / "p.csv"), [])

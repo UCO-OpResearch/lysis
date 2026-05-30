@@ -501,7 +501,13 @@ class FortranRunner(SimulationRunner):
         - On **success**: *data_dir* is removed unless ``keep_tmpdir=True``.
         - On **failure**: *data_dir* is preserved when
           ``keep_on_failure=True`` *or* ``keep_tmpdir=True``; otherwise it
-          is removed.
+          is removed.  When the failure occurs inside
+          :meth:`~lysis.dataio.datastore.DataStore.import_collection`'s write
+          phase, that method rolls the HDF5 collection back to its empty state
+          and raises
+          :class:`~lysis.dataio.datastore.ImportCollectionError`, so the
+          preserved *data_dir* holds the only copy of the (uningested)
+          results.
 
         :param data_dir: Directory containing the Fortran binary output files.
             Typically ``{work_dir}/data/{run_code}/``.

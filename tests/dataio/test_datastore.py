@@ -20,6 +20,7 @@ from lysis.dataio.datastore import (
     DataStore,
     DataCollection,
     DerivedDataCollection,
+    ImportCollectionError,
     SimulationView,
     DataStatus,
     HDF5State,
@@ -2270,6 +2271,220 @@ class TestDataStoreImportCollection:
                 )
         finally:
             ds.close()
+
+    # ------------------------------------------------------------------
+    # Revert-to-empty + loud failure on write-phase errors (#85)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _fail_after_first_write(monkeypatch, error):
+        """Patch ``_write_array_to_dataset`` to succeed once, then raise.
+
+        Leaves one partial write on disk so the rollback has something to undo.
+        """
+        original = DataStore._write_array_to_dataset
+        calls = {"n": 0}
+
+        def flaky(self, ds_spec, arr, sim=None):
+            calls["n"] += 1
+            if calls["n"] >= 2:
+                raise error
+            return original(self, ds_spec, arr, sim=sim)
+
+        monkeypatch.setattr(DataStore, "_write_array_to_dataset", flaky)
+
+    def test_import_microscale_reverts_to_empty_on_failure(
+        self, tmp_path, monkeypatch
+    ):
+        """A write-phase failure rolls microscale_out back to MICRO_EMPTY."""
+        n_micro = 10
+        source_path = self._create_filled_micro_hdf5(tmp_path, n_micro=n_micro)
+        ds = self._create_empty_store(
+            tmp_path, run_code="revert_micro", n_sims=n_micro
+        )
+        boom = RuntimeError("disk full mid-write")
+        self._fail_after_first_write(monkeypatch, boom)
+
+        try:
+            with pytest.raises(ImportCollectionError) as excinfo:
+                ds.import_collection(
+                    "microscale_out", "v2.0.0", source_path, [""]
+                )
+            # Loud failure chains the original error.
+            assert excinfo.value.__cause__ is boom
+
+            # File is back to a clean, freshly-initialized empty state.
+            assert ds.hdf5_state == HDF5State.MICRO_EMPTY
+            micro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["microscale_out"]
+            for ds_spec in micro_spec.data.values():
+                if ds_spec.data_location is None:
+                    continue
+                assert ds._file[ds_spec.data_location].shape[0] == 0
+            assert CONST.CONVERTED_FROM_ATTR not in ds._file.attrs
+            # Init provenance was re-stamped by the create() rollback.
+            assert ds.read_init_provenance("micro") is not None
+        finally:
+            ds.close()
+
+    def test_import_macroscale_reverts_to_empty_on_failure(
+        self, tmp_path, monkeypatch
+    ):
+        """A write-phase failure rolls macroscale_out back to MACRO_EMPTY,
+        leaving the filled microscale data intact."""
+        n_micro, n_macro, n_snapshots = 10, 3, 5
+        source_path = self._create_filled_macro_hdf5(
+            tmp_path, n_micro=n_micro, n_macro=n_macro, n_snapshots=n_snapshots
+        )
+        ds = self._prepare_store_for_macro_import(
+            tmp_path, "revert_macro", n_micro=n_micro, n_macro=n_macro
+        )
+        boom = RuntimeError("write blew up mid-sim")
+        self._fail_after_first_write(monkeypatch, boom)
+
+        try:
+            with pytest.raises(ImportCollectionError) as excinfo:
+                ds.import_collection(
+                    "macroscale_out", "v2.0.0", source_path, [""]
+                )
+            assert excinfo.value.__cause__ is boom
+
+            # macroscale reverted to empty; microscale untouched.
+            assert ds.hdf5_state == HDF5State.MACRO_EMPTY
+            macro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["macroscale_out"]
+            snap_loc = macro_spec.data["snapshot_time"].data_location
+            for sim_idx in range(n_macro):
+                assert ds._file[snap_loc.format(sim=sim_idx)].shape[0] == 0
+            micro_spec = dataspec[COMPATIBLE_DATASPEC_VERSION]["microscale_out"]
+            micro_check = micro_spec.data["tpa_leaving_time"].data_location
+            assert ds._file[micro_check].shape[0] > 0
+            # Macro init provenance was re-stamped by the rollback.
+            assert ds.read_init_provenance("macro") is not None
+        finally:
+            ds.close()
+
+    def test_import_succeeds_after_revert(self, tmp_path, monkeypatch):
+        """After a reverted failure the collection is empty again, so a fresh
+        import passes the 'must be empty' precondition and fills the data."""
+        n_micro = 10
+        source_path = self._create_filled_micro_hdf5(tmp_path, n_micro=n_micro)
+        ds = self._create_empty_store(
+            tmp_path, run_code="reimport", n_sims=n_micro
+        )
+
+        def always_boom(self, *args, **kwargs):
+            raise RuntimeError("nope")
+
+        monkeypatch.setattr(
+            DataStore, "_write_array_to_dataset", always_boom
+        )
+        try:
+            with pytest.raises(ImportCollectionError):
+                ds.import_collection(
+                    "microscale_out", "v2.0.0", source_path, [""]
+                )
+            assert ds.hdf5_state == HDF5State.MICRO_EMPTY
+
+            # Restore the real writer and re-import: must succeed.
+            monkeypatch.undo()
+            ds.import_collection(
+                "microscale_out", "v2.0.0", source_path, [""]
+            )
+            assert ds.hdf5_state == HDF5State.MICRO_FILLED
+            assert ds.microscale_out.pli_first_time.shape[0] == n_micro
+        finally:
+            ds.close()
+
+    # ------------------------------------------------------------------
+    # Rollback-also-fails: still ImportCollectionError + recovery dump (#85)
+    # ------------------------------------------------------------------
+
+    def test_rollback_failure_still_raises_and_dumps_recovery(
+        self, tmp_path, monkeypatch
+    ):
+        """If the rollback itself fails, the caller still gets an
+        ImportCollectionError (not the raw rollback error) and the in-memory
+        params are dumped to a re-feedable recovery CSV."""
+        n_micro = 10
+        source_path = self._create_filled_micro_hdf5(tmp_path, n_micro=n_micro)
+        ds = self._create_empty_store(
+            tmp_path, run_code="rollback_boom", n_sims=n_micro
+        )
+
+        write_boom = RuntimeError("write failed")
+        rollback_boom = OSError("disk full during rollback")
+
+        def fail_write(self, *args, **kwargs):
+            raise write_boom
+
+        def fail_rollback(self, collection_name):
+            raise rollback_boom
+
+        monkeypatch.setattr(DataStore, "_write_array_to_dataset", fail_write)
+        monkeypatch.setattr(
+            DataStore, "_revert_collection_to_empty", fail_rollback
+        )
+
+        try:
+            with pytest.raises(ImportCollectionError) as excinfo:
+                ds.import_collection(
+                    "microscale_out", "v2.0.0", source_path, [""]
+                )
+            # Caller sees ImportCollectionError; rollback error is the cause,
+            # original write error is the cause's context.
+            assert excinfo.value.__cause__ is rollback_boom
+            assert excinfo.value.__cause__.__context__ is write_boom
+            assert "param_recovery" in str(excinfo.value)
+
+            recovery = tmp_path / "rollback_boom_param_recovery.csv"
+            assert recovery.exists()
+        finally:
+            ds.close()
+
+        # The recovery CSV is re-feedable to init-experiment.
+        from lysis.config.experiment import Experiment
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            exp = Experiment.from_csv(
+                str(recovery), str(tmp_path), name="recover", dry_run=True
+            )
+        assert exp.runs[0].micro_params.micro_simulations == n_micro
+
+    def test_rollback_failure_json_fallback(self, tmp_path, monkeypatch):
+        """When the CSV dump fails too, recovery falls back to JSON."""
+        import lysis.config.parameters as params_mod
+
+        n_micro = 10
+        source_path = self._create_filled_micro_hdf5(tmp_path, n_micro=n_micro)
+        ds = self._create_empty_store(
+            tmp_path, run_code="json_fallback", n_sims=n_micro
+        )
+
+        def fail_write(self, *args, **kwargs):
+            raise RuntimeError("write failed")
+
+        def fail_rollback(self, collection_name):
+            raise OSError("rollback failed")
+
+        def fail_csv(*args, **kwargs):
+            raise OSError("cannot write csv")
+
+        monkeypatch.setattr(DataStore, "_write_array_to_dataset", fail_write)
+        monkeypatch.setattr(
+            DataStore, "_revert_collection_to_empty", fail_rollback
+        )
+        monkeypatch.setattr(params_mod, "write_params_csv", fail_csv)
+
+        try:
+            with pytest.raises(ImportCollectionError):
+                ds.import_collection(
+                    "microscale_out", "v2.0.0", source_path, [""]
+                )
+        finally:
+            ds.close()
+
+        assert not (tmp_path / "json_fallback_param_recovery.csv").exists()
+        assert (tmp_path / "json_fallback_param_recovery.json").exists()
 
 
 # ---------------------------------------------------------------------------

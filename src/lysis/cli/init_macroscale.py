@@ -175,8 +175,8 @@ def _init_experiment_folder(ctx, console, folder_path, param_overrides, dry_run,
                 results.append((run.run_code, "dry-run OK"))
             else:
                 with DataStore(run.run_code, exp.path, mode="a") as ds:
+                    # initialize_macroscale() stamps macro init provenance.
                     ds.initialize_macroscale(run.macro_params, force=force)
-                    ds.stamp_provenance("macro", "init")
                 results.append((run.run_code, "initialized"))
         except Exception as exc:
             errors.append((run.run_code, str(exc)))
@@ -234,8 +234,8 @@ def _init_single_h5(ctx, console, h5_path, param_overrides, dry_run, no_progress
     # Initialize macroscale
     try:
         with DataStore(run_code, run_dir, mode="a") as ds:
+            # initialize_macroscale() stamps macro init provenance.
             ds.initialize_macroscale(macro_params, force=force)
-            ds.stamp_provenance("macro", "init")
     except Exception as exc:
         console.print(f"[bold red]Error initializing {h5_path.name}:[/bold red] {exc}")
         ctx.exit(1)
