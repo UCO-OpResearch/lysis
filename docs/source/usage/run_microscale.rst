@@ -117,6 +117,22 @@ Options
     multiple runs write to the same directory and their output files would
     otherwise collide.
 
+.. option:: --num-children N
+
+    Number of Slurm array tasks to split the microscale simulations across
+    (must be **>= 2**).  The run's ``micro_simulations`` are partitioned across
+    the tasks, and each task draws its own per-task seed from the run's recorded
+    entropy.  Defaults to 10.  Only meaningful with ``--slurm``.
+
+.. option:: --direct
+
+    Legacy reproduction only.  Feed the seed straight to the Fortran KISS RNG
+    with **no** :class:`numpy.random.SeedSequence` split, and stamp a
+    ``seed_scheme = "direct"`` provenance attribute on the HDF5 file.  Use this
+    only to reproduce historical runs whose ``uint32`` seed was passed directly
+    to the binary; new runs should use the default ``split`` scheme.  See
+    :ref:`random-seeds`.
+
 Examples
 ~~~~~~~~
 

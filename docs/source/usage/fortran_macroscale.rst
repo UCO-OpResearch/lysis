@@ -288,16 +288,25 @@ Experimental Parameters
 
 :seed:
 
-   :Description: Seed for the random number generator. Stored Python-side as
-      :class:`numpy.uint32`; cast internally to a signed ``INTEGER*4`` for the
-      Fortran CLI and reinterpreted as ``uint_least32_t`` by the C KISS RNG,
-      so a ``np.uint32`` value round-trips bit-exactly.
+   :Description: RNG entropy for the macroscale simulation.  Stored Python-side
+      as a **canonical string** holding the :class:`numpy.random.SeedSequence`
+      entropy — a bare decimal (legacy ``uint32``, "just works") or a
+      ``base58:``-prefixed full-width value (see :mod:`lysis.tools.seedcodec`).
+      A per-simulation ``uint32`` is drawn via
+      ``SeedSequence(entropy).generate_state(macro_simulations)``; each is cast
+      to a signed ``INTEGER*4`` for the Fortran CLI and reinterpreted as
+      ``uint_least32_t`` by the C KISS RNG, so it round-trips bit-exactly.  Both
+      the Fortran and Python macro backends derive seeds from this one field, so
+      they are bit-identical.
 
-   :Default Value: 0 (randomly drawn)
+   :Default Value: ``"0"`` (the deterministic legacy seed).  A **blank** seed
+      cell draws fresh OS entropy at init; ``init-macroscale --random-entropy``
+      forces a fresh draw regardless of the recorded value.
 
    :Units: None
 
-   :Python Name: ``macro_seed`` (Fortran ``INTEGER*4`` bits reinterpreted as ``np.uint32``)
+   :Python Name: ``macro_seed`` (canonical entropy string; per-simulation seed is
+      a Fortran ``INTEGER*4`` whose bits are reinterpreted as ``np.uint32``)
 
 :save_interval:
 

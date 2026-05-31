@@ -282,13 +282,22 @@ Experimental Parameters
 
 :seed:
 
-   :Description: Seed for the random number generator. Stored Python-side as
-      :class:`numpy.uint32`; cast internally to a signed ``INTEGER*4`` for the
-      Fortran CLI and reinterpreted as ``uint_least32_t`` by the C KISS RNG,
-      so a ``np.uint32`` value round-trips bit-exactly.
+   :Description: RNG entropy for the simulation.  Stored Python-side as a
+      **canonical string** holding the :class:`numpy.random.SeedSequence`
+      entropy — a bare decimal (a legacy ``uint32``, which "just works") or a
+      ``base58:``-prefixed full-width value (see :mod:`lysis.tools.seedcodec`).
+      At execution the entropy is split into a per-task 32-bit seed via
+      ``SeedSequence(entropy).generate_state(...)``; that ``uint32`` is cast to a
+      signed ``INTEGER*4`` for the Fortran CLI and reinterpreted as
+      ``uint_least32_t`` by the C KISS RNG, so it round-trips bit-exactly.
+      **Width contract:** 32-bit legacy seed *or* wider OS entropy in →
+      32-bit per-task seed out.
 
-   :Default Value: 0 (randomly drawn)
+   :Default Value: ``"0"`` (the deterministic legacy seed).  A **blank** seed
+      cell in the input CSV is the "no seed" sentinel: ``init-experiment`` then
+      draws fresh OS entropy and records it (see ``experiment_init``).
 
    :Units: None
 
-   :Python Name: ``micro_seed`` (Fortran ``INTEGER*4`` bits reinterpreted as ``np.uint32``)
+   :Python Name: ``micro_seed`` (canonical entropy string; per-task seed is a
+      Fortran ``INTEGER*4`` whose bits are reinterpreted as ``np.uint32``)
