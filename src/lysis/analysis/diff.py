@@ -69,7 +69,9 @@ def _extract_data_arrays(
     ``macroscale_out[<sim>]/<name>``.  Log tables (:data:`_LOG_DATASETS`)
     are skipped.  Derived datasets with ``data_location=None`` are
     already excluded by the :attr:`datasets` property on
-    :class:`DataCollection` / :class:`SimulationView`.
+    :class:`DataCollection` / :class:`SimulationView`.  Absent optional
+    datasets (which the view layer returns as ``None``) are also skipped,
+    so they simply do not appear in this Run's table set.
 
     :param run: Run with data open.
     :type run: Run
@@ -90,7 +92,10 @@ def _extract_data_arrays(
         for name in micro.datasets:
             if name in _LOG_DATASETS:
                 continue
-            tables[f"microscale_out/{name}"] = getattr(micro, name)[:]
+            arr = getattr(micro, name)
+            if arr is None:  # absent optional dataset
+                continue
+            tables[f"microscale_out/{name}"] = arr[:]
 
     if "macroscale_out" in wanted and "macroscale_out" in collections:
         macro = data.macroscale_out
@@ -100,7 +105,10 @@ def _extract_data_arrays(
             for name in view.datasets:
                 if name in _LOG_DATASETS:
                     continue
-                tables[f"macroscale_out[{sim:02}]/{name}"] = getattr(view, name)[:]
+                arr = getattr(view, name)
+                if arr is None:  # absent optional dataset
+                    continue
+                tables[f"macroscale_out[{sim:02}]/{name}"] = arr[:]
 
     return tables
 
