@@ -28,7 +28,14 @@ Group Structure
   Contains a group for each macroscale simulation's datasets, named sim_00, sim_01, sim_02, ...
 
 ``log_files``
-  Contains log files for all executions of code
+  Contains log files for all executions of code.  The binary's own code-output
+  logs live at the top level (``micro_log``, ``macro_log__sim_XX``);
+  scheduler-captured **worker** logs from Slurm-dispatched runs live in the
+  ``dispatcher`` subgroup (optional — absent for direct execution).  The Slurm
+  *master* log is left on disk in ``<run dir>/.slurm/`` and is not ingested.
+  On a successful run the on-disk worker ``.out`` files are removed with the
+  staging directory (the HDF5 becomes the record); on failure they are kept on
+  disk, uningested.
 
 Provenance attributes
 ---------------------
@@ -367,6 +374,29 @@ Log datasets
 
 ``macro_log__sim_XX``
   The log from the macroscale execution of simulation XX, stored one line per row.
+
+  :Data Type:
+    String (``S``)
+  :Dimensions:
+    (log events,)
+
+``dispatcher/micro_dispatcher_log``
+  The scheduler-captured stdout/stderr of the microscale **Slurm worker**
+  job(s) — the identifying header, ``set -x`` trace, and Fortran stdout —
+  concatenated across array tasks into one combined log, stored one line per
+  row.  Complements ``micro_log`` (the binary's own code-output log).  Present
+  only for Slurm-dispatched runs; ``optional`` and absent for direct
+  execution.
+
+  :Data Type:
+    String (``S``)
+  :Dimensions:
+    (log events,)
+
+``dispatcher/macro_dispatcher_log__sim_XX``
+  As above, for macroscale simulation XX's array task (one dataset per
+  simulation, since a macro array task maps 1:1 to a simulation).  ``optional``
+  and absent for direct execution.
 
   :Data Type:
     String (``S``)
