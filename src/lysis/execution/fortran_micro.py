@@ -126,6 +126,7 @@ class FortranMicro(FortranRunner):
         out_file_code: str = "",
         index: "int | None" = None,
         num_children: "int | None" = None,
+        direct: bool = False,
         allow_stale_binary: bool = False,
         skip_binary_verification: bool = False,
         historical_backend_attrs: "dict | None" = None,
@@ -153,6 +154,10 @@ class FortranMicro(FortranRunner):
             the children (see :class:`~lysis.execution.fortran.FortranRunner`
             for details).  Defaults to ``None`` (legacy single-sim-per-task).
         :type num_children: int, optional
+        :param direct: Use the legacy ``seed_scheme="direct"`` path — feed the
+            seed straight to the Fortran KISS RNG with no SeedSequence, and
+            stamp ``seed_scheme="direct"`` provenance.  Defaults to ``False``.
+        :type direct: bool, optional
         :param allow_stale_binary: Downgrade a stamp mismatch between the
             Fortran binary and ``src/fortran/`` from
             :class:`~lysis.tools.provenance.StaleBinaryError` to a
@@ -211,6 +216,7 @@ class FortranMicro(FortranRunner):
             out_file_code=out_file_code,
             index=index,
             num_children=num_children,
+            direct=direct,
             allow_stale_binary=allow_stale_binary,
             skip_binary_verification=skip_binary_verification,
             historical_backend_attrs=historical_backend_attrs,

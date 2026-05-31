@@ -338,10 +338,11 @@ class TestRunMicroSlurm:
         assert mock_submit.call_args.kwargs.get("num_children") == 10
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
-    def test_num_children_zero_is_translated_to_none(
-        self, mock_submit, runner, micro_hdf5
+    @pytest.mark.parametrize("bad", ["0", "1"])
+    def test_num_children_below_two_rejected(
+        self, mock_submit, runner, micro_hdf5, bad
     ):
-        """``--num-children 0`` selects the legacy single-child path."""
+        """``--num-children`` of 0 or 1 is rejected (only >= 2 is allowed)."""
         result = runner.invoke(
             cli,
             [
@@ -351,11 +352,12 @@ class TestRunMicroSlurm:
                 "/bin/micro.exe",
                 "--slurm",
                 "--num-children",
-                "0",
+                bad,
             ],
         )
-        assert result.exit_code == 0, result.output
-        assert mock_submit.call_args.kwargs.get("num_children") is None
+        assert result.exit_code != 0
+        assert "x>=2" in result.output or "is not in the range" in result.output
+        mock_submit.assert_not_called()
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
     def test_modules_default_is_forwarded(self, mock_submit, runner, micro_hdf5):

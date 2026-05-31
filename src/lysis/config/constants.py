@@ -122,6 +122,12 @@ class Const:
         # build that matches the current source tree.  The commit SHA itself
         # lives in ``backend_commit``.
         self.BACKEND_HISTORICAL_ATTR = "backend_historical"
+        # Records the RNG seeding scheme when it departs from the default
+        # SeedSequence "split".  Stamped (``"direct"``) by ``run-micro
+        # --direct`` for legacy reproduction, where the seed is fed straight
+        # to the Fortran KISS RNG with no SeedSequence interposition.  Absent
+        # ⇒ "split".  This is a provenance stamp, not a dataspec dataset.
+        self.SEED_SCHEME_ATTR = "seed_scheme"
         self.LYSIS_ALLOW_STALE_BINARY_ENV = "LYSIS_ALLOW_STALE_BINARY"
         self.LYSIS_ALLOW_DIRTY_ENV = "LYSIS_ALLOW_DIRTY"
         self.LYSIS_ALLOW_COMMIT_MISMATCH_ENV = "LYSIS_ALLOW_COMMIT_MISMATCH"
