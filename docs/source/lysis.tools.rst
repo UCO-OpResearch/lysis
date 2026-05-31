@@ -20,6 +20,14 @@ lysis.tools.kiss module
    :show-inheritance:
    :undoc-members:
 
+lysis.tools.seedcodec module
+----------------------------
+
+.. automodule:: lysis.tools.seedcodec
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 lysis.tools.slurm module
 ------------------------
 
