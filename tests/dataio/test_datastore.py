@@ -1175,6 +1175,46 @@ class TestOptionalDatasetAccess:
             assert "macro_dispatcher_log" not in view  # absent optional
             assert "snapshot_time" in view  # present required
 
+    def test_per_sim_collection_contains_reflects_presence(self, tmp_path):
+        """Collection-level `name in collection` checks physical presence too.
+
+        Mirrors :meth:`SimulationView.__contains__` so a collection-level
+        guard cannot report ``True`` for an absent optional dataset.
+        """
+        filepath = tmp_path / "contains_coll.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+            for sim in range(2):
+                del f[f"log_files/dispatcher/macro_dispatcher_log__sim_{sim:02}"]
+
+        with DataStore("contains_coll", str(tmp_path)) as ds:
+            coll = ds.macroscale_out
+            assert "macro_dispatcher_log" not in coll  # absent in all sims
+            assert "snapshot_time" in coll  # present in all sims
+
+    def test_per_sim_collection_contains_requires_all_sims(self, tmp_path):
+        """An optional present in only some sims is not 'in' the collection.
+
+        Collection-level membership means present for every simulation; the
+        per-sim view still reports presence for the sim that has it.
+        """
+        filepath = tmp_path / "contains_partial.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+            # Drop the optional dataset from sim 1 only.
+            del f["log_files/dispatcher/macro_dispatcher_log__sim_01"]
+
+        with DataStore("contains_partial", str(tmp_path)) as ds:
+            assert "macro_dispatcher_log" not in ds.macroscale_out  # not all sims
+            assert "macro_dispatcher_log" in ds.macroscale_out[0]  # present here
+            assert "macro_dispatcher_log" not in ds.macroscale_out[1]  # absent here
+
 
 # ---------------------------------------------------------------------------
 #  DataStore.create() tests

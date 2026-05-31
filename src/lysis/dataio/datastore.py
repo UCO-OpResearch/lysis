@@ -383,23 +383,20 @@ class DataCollection:
         )
 
     def __contains__(self, name):
-        """Whether *name* is an available dataset in this collection.
+        """Whether *name* is a storable dataset physically present on disk.
 
-        For **combined** collections (``simulations_combined=True``) presence
-        is well defined, so this returns ``True`` only when *name* is a
-        storable dataset (``data_location is not None``) **and** physically
-        present in the file — absent optional and derived datasets report
-        ``False``.
-
-        For **per-simulation** collections presence depends on the simulation
-        index, which this collection-level test does not have; it therefore
-        reports definition-level membership (``True`` iff *name* is a storable
-        dataset in the spec).  Use ``collection[sim] `` /
-        ``name in collection[sim]`` to test physical presence per simulation.
+        Returns ``True`` only when *name* is a storable dataset
+        (``data_location is not None``) **and** physically present in the
+        file.  For **combined** collections that means the dataset exists at
+        its location; for **per-simulation** collections it means the dataset
+        exists for *every* simulation.  Absent optional datasets and derived
+        datasets therefore report ``False`` in both cases — consistent with
+        :meth:`SimulationView.__contains__`.  For per-simulation presence at
+        a single index, use ``name in collection[sim]``.
 
         :param name: Dataset name to test.
         :type name: str
-        :return: Membership per the rules above.
+        :return: ``True`` if the dataset is present on disk, else ``False``.
         :rtype: bool
         """
         ds_spec = self._spec.data.get(name)
@@ -407,7 +404,10 @@ class DataCollection:
             return False
         if self._spec.simulations_combined:
             return ds_spec.data_location in self._h5file
-        return True
+        return all(
+            ds_spec.data_location.format(sim=sim) in self._h5file
+            for sim in range(self._num_sims)
+        )
 
     def __getitem__(self, index):
         if self._spec.simulations_combined:
