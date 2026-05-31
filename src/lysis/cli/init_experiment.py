@@ -51,10 +51,21 @@ from lysis.cli._provenance import allow_dirty_option, enforce_lysis_clean
         "WARNING: all existing data in the folder will be lost."
     ),
 )
+@click.option(
+    "--random-entropy",
+    is_flag=True,
+    default=False,
+    help=(
+        "Draw a fresh random micro_seed/macro_seed for every Run, ignoring any "
+        "value in the CSV. By default a fresh value is drawn only for blank seed "
+        "cells; an explicit seed is always respected."
+    ),
+)
 @allow_dirty_option
 @click.pass_context
 def init_experiment(
-    ctx, csv_path, data_root, name, description, dry_run, no_progress, force, allow_dirty,
+    ctx, csv_path, data_root, name, description, dry_run, no_progress, force,
+    random_entropy, allow_dirty,
 ):
     """Initialise an Experiment from a parameter CSV file.
 
@@ -96,11 +107,13 @@ def init_experiment(
             if not no_progress:
                 with console.status("Validating parameters..."):
                     exp = Experiment.from_csv(
-                        csv_path, data_root, name=name, description=description, dry_run=True
+                        csv_path, data_root, name=name, description=description,
+                        dry_run=True, random_entropy=random_entropy,
                     )
             else:
                 exp = Experiment.from_csv(
-                    csv_path, data_root, name=name, description=description, dry_run=True
+                    csv_path, data_root, name=name, description=description,
+                    dry_run=True, random_entropy=random_entropy,
                 )
         except (ParameterConflict, UnderdeterminedParameters, ValueError) as exc:
             _print_error(console, csv_path, exc)
@@ -130,7 +143,8 @@ def init_experiment(
 
     try:
         exp = Experiment.from_csv(
-            csv_path, data_root, name=name, description=description, dry_run=False
+            csv_path, data_root, name=name, description=description,
+            dry_run=False, random_entropy=random_entropy,
         )
     except FileExistsError as exc:
         stem = os.path.splitext(os.path.basename(csv_path))[0]

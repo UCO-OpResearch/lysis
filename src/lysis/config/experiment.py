@@ -48,6 +48,7 @@ timestamp-based code is used.  Any row absent from the CSV is treated as
 import csv
 import inspect
 import json
+import logging
 import math
 import os
 from datetime import datetime
@@ -57,6 +58,7 @@ from typing import Any
 
 from ..dataio.datastore import DataStore
 from ..dataio.fileops import _params_json_default
+from ..tools.seedcodec import encode_seed, random_entropy as _draw_entropy
 from .param_resolver import (
     ParameterConflict,
     UnderdeterminedParameters,
@@ -69,6 +71,8 @@ from .run import Run
 
 
 __all__ = ["Experiment"]
+
+logger = logging.getLogger(__name__)
 
 # ─── Column classification helpers ───────────────────────────────────────────
 
@@ -295,6 +299,7 @@ class Experiment:
         name: str | None = None,
         description: str = "",
         dry_run: bool = False,
+        random_entropy: bool = False,
     ) -> "Experiment":
         """Parse a parameter CSV and initialise an Experiment.
 
@@ -339,6 +344,11 @@ class Experiment:
         :param dry_run: If ``True``, validate and resolve parameters but do
             **not** create any files or folders.
         :type dry_run: bool
+        :param random_entropy: If ``True``, draw a fresh ``micro_seed`` /
+            ``macro_seed`` entropy for every Run, ignoring any value in the CSV.
+            When ``False`` (default), a fresh value is drawn only for cells left
+            **blank**; an explicit seed in the CSV is respected.
+        :type random_entropy: bool
         :returns: :class:`Experiment` instance with all Runs populated.
         :rtype: Experiment
         :raises FileExistsError: If the experiment folder already exists (only
@@ -411,6 +421,25 @@ class Experiment:
             }
             run_code = raw_run_codes[col_idx] or _make_run_code(base_ts, col_idx)
             run_desc = row.get("run_description", "").strip()
+
+            # Resolve the "no seed" sentinel: a blank CSV cell (the seed key is
+            # absent from *_provided) — or --random-entropy — means "draw fresh
+            # OS entropy and record it", so the run is reproducible from here on
+            # rather than silently deterministic.  An explicit seed is respected.
+            if random_entropy or "micro_seed" not in micro_provided:
+                micro_provided["micro_seed"] = encode_seed(_draw_entropy())
+                logger.info(
+                    "Run %s: drew fresh micro_seed entropy %s",
+                    run_code,
+                    micro_provided["micro_seed"],
+                )
+            if random_entropy or "macro_seed" not in macro_provided:
+                macro_provided["macro_seed"] = encode_seed(_draw_entropy())
+                logger.info(
+                    "Run %s: drew fresh macro_seed entropy %s",
+                    run_code,
+                    macro_provided["macro_seed"],
+                )
 
             try:
                 resolved_micro = resolve_micro_params(micro_provided)
