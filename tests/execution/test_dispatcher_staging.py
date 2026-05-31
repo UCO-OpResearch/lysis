@@ -56,6 +56,19 @@ class TestMicroStageDispatcherLogs:
         combined = (data / f"micro_dispatcher{micro.out_file_code}.out").read_text()
         assert combined == "A0\nA2\nA10\nCHILD\n"
 
+    def test_non_numeric_array_suffix_is_skipped(self, micro, tmp_path):
+        # A glob match whose suffix isn't a task id must be skipped, not crash.
+        src = tmp_path / "staging"
+        data = tmp_path / "data"
+        src.mkdir()
+        data.mkdir()
+        rc = micro.run.run_code
+        _write(src / f"lysis-micro-array__{rc}__0.out", "A0\n")
+        _write(src / f"lysis-micro-array__{rc}__bad.out", "JUNK\n")
+        micro.stage_dispatcher_logs(src, data)
+        combined = (data / f"micro_dispatcher{micro.out_file_code}.out").read_text()
+        assert combined == "A0\n"
+
     def test_no_worker_logs_stages_nothing(self, micro, tmp_path):
         src = tmp_path / "staging"
         data = tmp_path / "data"
