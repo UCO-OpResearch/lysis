@@ -349,7 +349,11 @@ class TestConvertTruncatedData:
     # ── Microscale datasets ──────────────────────────────────────────
 
     def test_microscale_datasets_present(self, converted):
-        for name in dataspec["v2.0.0"]["microscale_out"].data:
+        for name, spec in dataspec["v2.0.0"]["microscale_out"].data.items():
+            # Optional datasets (e.g. the dispatcher log) are absent when the
+            # source did not produce them.
+            if spec.optional:
+                continue
             assert name in converted, f"Missing: {name}"
 
     def test_pli_first_time(self, converted):
@@ -381,7 +385,9 @@ class TestConvertTruncatedData:
     # ── Macroscale output datasets ───────────────────────────────────
 
     def test_macroscale_out_datasets_present(self, converted):
-        for name in dataspec["v2.0.0"]["macroscale_out"].data:
+        for name, spec in dataspec["v2.0.0"]["macroscale_out"].data.items():
+            if spec.optional:  # e.g. dispatcher log, absent in this source
+                continue
             assert name in converted, f"Missing: {name}"
 
     def test_tpa_location_snapshot(self, converted):
@@ -701,7 +707,9 @@ class TestConvertV190Data:
 
     def test_macroscale_datasets_present_after_v200(self, raw):
         converted = convert_data(raw, "v1.90.0", "v2.0.0")
-        for name in dataspec["v2.0.0"]["macroscale_out"].data:
+        for name, spec in dataspec["v2.0.0"]["macroscale_out"].data.items():
+            if spec.optional:  # e.g. dispatcher log, absent in this source
+                continue
             assert name in converted, f"Missing dataset: {name}"
 
     def test_snapshot_time_shape(self, raw):
