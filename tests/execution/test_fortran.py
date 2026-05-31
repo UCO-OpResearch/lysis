@@ -110,10 +110,17 @@ class TestExecCommandTemplate:
         assert "--outFileCode" in cmd
 
     def test_default_params_only_base_args(self, stub_runner):
-        """With all-default params only base args should appear."""
+        """All-default params: base args plus the always-emitted explicit --seed.
+
+        Single-task runs now derive an explicit seed via
+        ``SeedSequence(entropy).generate_state(1)[0]`` so the Fortran binary
+        never silently falls back to its compiled-in default.
+        """
         cmd = stub_runner.exec_command()
-        # base: executable + --runCode + code + --outFileCode + ""  = 5 elements
-        assert len(cmd) == 5
+        # base: executable + --runCode + code + --outFileCode + ""  = 5 elements,
+        # plus --seed <value> = 7.
+        assert len(cmd) == 7
+        assert "--seed" in cmd
 
     def test_non_default_param_included(self, tmp_path):
         """A non-default param must appear as a CLI flag."""
@@ -200,7 +207,7 @@ class TestExecCommandTemplate:
         assert runner.out_file_code == "__02"
 
     def test_index_two_correct_seed(self, tmp_run):
-        seed = tmp_run.micro_params.micro_seed
+        seed = tmp_run.micro_params.seed_as_int()
         stream = np.random.SeedSequence(seed)
         expected_seed = int(np.int32(stream.generate_state(3)[2]))
 
@@ -260,7 +267,7 @@ class TestExecCommandTemplate:
 
     def test_seed_split_count_returns_num_children_when_set(self, tmp_run):
         """When num_children is set, every sibling draws from the same-sized stream."""
-        seed = tmp_run.micro_params.micro_seed
+        seed = tmp_run.micro_params.seed_as_int()
         stream = np.random.SeedSequence(seed)
         seeds = stream.generate_state(10)
 
@@ -292,8 +299,8 @@ class TestExecCommandTemplate:
         r = Run(str(tmp_path))
         r.initialize_micro_param({"micro_seed": high_bit_seed})
         cls = _make_stub_class()
-        # index=None → no SeedSequence split, seed flows through as-is.
-        runner = cls(run=r, executable="/bin/stub.exe", index=None)
+        # direct=True → no SeedSequence split, the raw uint32 flows through.
+        runner = cls(run=r, executable="/bin/stub.exe", index=None, direct=True)
         cmd = runner.exec_command()
 
         expected = str(
@@ -308,7 +315,8 @@ class TestExecCommandTemplate:
         r = Run(str(tmp_path))
         r.initialize_micro_param({"micro_seed": np.uint32(0xDEADBEEF)})
         cls = _make_stub_class()
-        runner = cls(run=r, executable="/bin/stub.exe", index=None)
+        # direct=True → the raw uint32 flows through to the |uint32 signed cast.
+        runner = cls(run=r, executable="/bin/stub.exe", index=None, direct=True)
         cmd = runner.exec_command()
         assert "--seed" in cmd
         assert cmd[cmd.index("--seed") + 1] == "-559038737"

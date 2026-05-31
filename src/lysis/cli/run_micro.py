@@ -104,14 +104,25 @@ from lysis.tools.slurm import DEFAULT_MODULES, parse_sbatch_tokens
 @click.option(
     "--num-children",
     "num_children",
-    type=click.IntRange(min=0),
+    type=click.IntRange(min=2),
     default=10,
     show_default=True,
     metavar="N",
     help=(
-        "Number of Slurm array tasks to split microscale simulations across.  "
-        "Set to 0 to use the legacy single-child path.  "
-        "Only meaningful with --slurm."
+        "Number of Slurm array tasks to split microscale simulations across "
+        "(must be >= 2).  Only meaningful with --slurm."
+    ),
+)
+@click.option(
+    "--direct",
+    "direct",
+    is_flag=True,
+    default=False,
+    help=(
+        "Legacy reproduction: feed the seed straight to the Fortran KISS RNG "
+        "with no SeedSequence interposition, and stamp seed_scheme='direct' "
+        "into the HDF5 provenance.  Use only to reproduce historical runs that "
+        "passed a raw uint32 seed directly to the binary."
     ),
 )
 @click.option(
@@ -179,7 +190,7 @@ from lysis.tools.slurm import DEFAULT_MODULES, parse_sbatch_tokens
 @allow_commit_mismatch_option
 @click.pass_context
 def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
-              fast_tmp_root, keep_tmpdir, file_code, num_children, modules,
+              fast_tmp_root, keep_tmpdir, file_code, num_children, direct, modules,
               fortran_commit, sbatch_tokens, allow_stale_binary, allow_dirty,
               allow_commit_mismatch):
     """Execute the Fortran microscale simulation for a Run or Experiment.
@@ -266,7 +277,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
         if use_slurm:
             from lysis.tools.slurm import submit_micro_slurm_job
 
-            nc_arg = None if num_children == 0 else num_children
+            nc_arg = num_children
 
             try:
                 sbatch_overrides = parse_sbatch_tokens(sbatch_tokens)
@@ -285,6 +296,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
                         keep_tmpdir=keep_tmpdir,
                         out_code=file_code,
                         num_children=nc_arg,
+                        direct=direct,
                         modules=modules,
                         sbatch_overrides=sbatch_overrides,
                         historical_backend_attrs=historical_provenance,
@@ -313,6 +325,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
                         hdf5_path,
                         executable,
                         out_file_code=file_code,
+                        direct=direct,
                         allow_stale_binary=allow_stale_binary,
                         skip_binary_verification=(
                             historical_provenance is not None

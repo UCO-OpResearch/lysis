@@ -647,6 +647,9 @@ class _SlurmJobSpec:
     out_file_code: str
     in_file_code: Optional[str] = None
     num_children: Optional[int] = None
+    #: Forward the legacy ``seed_scheme="direct"`` path into each array
+    #: task's ``from_hdf5(...)`` call (micro only).  Defaults to False.
+    direct: bool = False
 
 
 #: Template for the master Python script in array mode (both scales).
@@ -811,6 +814,8 @@ def _runner_init_line(
     args.append("index=int(os.environ['SLURM_ARRAY_TASK_ID'])")
     if spec.num_children is not None:
         args.append(f"num_children={spec.num_children}")
+    if spec.direct:
+        args.append("direct=True")
     if skip_binary_verification:
         args.append("skip_binary_verification=True")
     if source_stamp is not None and not skip_binary_verification:
@@ -1496,7 +1501,7 @@ def wait_for_jobs(job_ids: List[int], poll_interval: int = 30) -> None:
         remaining = [j for j in remaining if str(j) in running_ids]
 
 
-def _micro_spec(num_children: int, out_code: str) -> _SlurmJobSpec:
+def _micro_spec(num_children: int, out_code: str, direct: bool = False) -> _SlurmJobSpec:
     """Build the microscale array-mode dispatch spec."""
     return _SlurmJobSpec(
         scale="micro",
@@ -1509,6 +1514,7 @@ def _micro_spec(num_children: int, out_code: str) -> _SlurmJobSpec:
         out_file_code=out_code,
         in_file_code=None,
         num_children=num_children,
+        direct=direct,
     )
 
 
@@ -1572,6 +1578,7 @@ def submit_micro_slurm_job(
     keep_tmpdir: bool = False,
     out_code: str = "",
     num_children: Optional[int] = None,
+    direct: bool = False,
     modules: str = DEFAULT_MODULES,
     sbatch_overrides: Optional[Mapping[str, Optional[str]]] = None,
     historical_backend_attrs: Optional[dict] = None,
@@ -1671,9 +1678,9 @@ def submit_micro_slurm_job(
     # Array path: delegate to the unified array-mode dispatch.
     # ------------------------------------------------------------------
     if num_children is not None:
-        if num_children < 1:
+        if num_children < 2:
             raise ValueError(
-                f"num_children must be >= 1 when set, got {num_children}"
+                f"num_children must be >= 2 when set, got {num_children}"
             )
         from lysis.config.run import Run  # noqa: PLC0415
         run_check = Run(str(hdf5_path.parent), run_code=run_code)
@@ -1685,7 +1692,7 @@ def submit_micro_slurm_job(
                 f"({total_sims}) for run {run_code!r}; cannot split "
                 f"{total_sims} simulations across {num_children} tasks."
             )
-        spec = _micro_spec(num_children, out_code)
+        spec = _micro_spec(num_children, out_code, direct=direct)
         return submit_slurm_job(
             spec, hdf5_path, executable, staging_root_dir,
             partition=partition, fast_tmp_root=fast_tmp_root,

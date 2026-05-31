@@ -17,6 +17,7 @@ parameter-class-specific hooks.
 """
 
 import inspect
+import logging
 import os
 import shutil
 import subprocess
@@ -32,9 +33,13 @@ import numpy as np
 
 from pint import Quantity
 
+from ..config.constants import CONST
 from ..config.run import Run
 from ..dataio.datastore import DataStore
+from ..tools.seedcodec import parse_seed
 from .base import SimulationRunner
+
+logger = logging.getLogger(__name__)
 
 
 #: Dataspec version produced by the Fortran microscale binary.
@@ -92,6 +97,12 @@ class FortranRunner(SimulationRunner):
     out_file_code: AnyStr = ""
     index: int = None
     num_children: int = None
+    #: When True, the seed is fed straight to the Fortran KISS RNG with no
+    #: :class:`numpy.random.SeedSequence` interposition — the legacy
+    #: ``seed_scheme="direct"`` path, used by ``run-micro --direct`` to
+    #: reproduce historical runs.  Also stamps the ``seed_scheme`` provenance
+    #: attr at import time.  Defaults to False (the SeedSequence "split" path).
+    direct: bool = False
     #: When True, a mismatch between the Fortran binary's embedded build
     #: stamp and the current ``src/fortran/`` source state downgrades from
     #: a :class:`~lysis.tools.provenance.StaleBinaryError` to a loud
@@ -316,7 +327,12 @@ class FortranRunner(SimulationRunner):
         they are no longer routed through this property.
         """
         info = getattr(self, "_binary_check_info", None) or {}
-        return {k: v for k, v in info.items() if k != "banner"}
+        attrs = {k: v for k, v in info.items() if k != "banner"}
+        # Record the non-default seeding scheme as provenance.  Absence of the
+        # attr implies the default "split"; we only stamp the direct case.
+        if self.direct:
+            attrs[CONST.SEED_SCHEME_ATTR] = "direct"
+        return attrs
 
     def _write_stale_banner(self, fh) -> None:
         """Write the stale-binary banner to *fh* if the preflight was overridden.
@@ -394,12 +410,24 @@ class FortranRunner(SimulationRunner):
         Converts the relevant parameter object to a list of command-line
         arguments compatible with the Fortran program.  Handles:
 
-        - RNG seed splitting when :attr:`index` is set.
+        - RNG seed resolution: the stored entropy (a canonical string, see
+          :mod:`lysis.tools.seedcodec`) is decoded and **always** turned into
+          an explicit ``uint32`` ``--seed`` for the Fortran binary, so the
+          binary's compiled-in default is never silently relied upon.
         - Unit conversions for :class:`pint.Quantity` objects.
         - Index adjustments for parameters with a ``"-1"`` Fortran-name suffix
           (Python 0-based → Fortran 1-based).
         - Scaling for parameters with a ``"*100"`` Fortran-name suffix.
         - Only non-default parameters are included.
+
+        **Seed width contract.**  The persisted seed field holds the full
+        :class:`numpy.random.SeedSequence` entropy (32-bit legacy value or
+        wider OS entropy).  In the default ``split`` scheme a per-task
+        ``uint32`` is drawn via ``SeedSequence(entropy).generate_state(...)``;
+        in the :attr:`direct` scheme the entropy is folded to its low 32 bits
+        and passed straight through (no SeedSequence).  Either way the value
+        handed to Fortran is a 32-bit seed, reinterpreted to a signed
+        ``INTEGER*4`` by the ``|uint32`` branch of :meth:`_params_to_arguments`.
 
         .. note::
             When :attr:`index` is not ``None`` this method mutates
@@ -411,12 +439,13 @@ class FortranRunner(SimulationRunner):
         :rtype: list[str]
         """
         params = asdict(self._get_params())
+        seed_field = self._seed_field()
+        entropy = parse_seed(params[seed_field])
 
-        # Seed splitting for parallel (multi-node) runs
+        # Partition the simulation count across array tasks (index set).  Done
+        # before drawing the seed so _seed_split_count reads the original count.
         if self.index is not None:
-            stream = np.random.SeedSequence(params[self._seed_field()])
             split_count = self._seed_split_count(params)  # read before mutation
-            seeds = stream.generate_state(split_count)
             sim_field = self._simulations_field()
             if self.num_children is None:
                 # Legacy: one simulation per task.
@@ -428,8 +457,20 @@ class FortranRunner(SimulationRunner):
                 total = int(params[sim_field])
                 k = self.num_children
                 params[sim_field] = total // k + (1 if self.index < total % k else 0)
-            params[self._seed_field()] = seeds[self.index]
             self.out_file_code = self.out_file_code + f"__{self.index:02}"
+        else:
+            split_count = 1
+
+        # Resolve the entropy to an explicit per-task uint32 seed.
+        if self.direct:
+            # Legacy reproduction: the raw entropy goes straight to KISS, with
+            # no SeedSequence.  Every task in a partition shares this seed.
+            seed = np.uint32(entropy & 0xFFFFFFFF)
+            logger.info("seed_scheme=direct: raw seed %d -> Fortran", int(seed))
+        else:
+            seeds = np.random.SeedSequence(entropy).generate_state(split_count)
+            seed = seeds[self.index if self.index is not None else 0]
+        params[seed_field] = seed
 
         arguments = self._base_arguments()
         arguments += self._params_to_arguments(params)
