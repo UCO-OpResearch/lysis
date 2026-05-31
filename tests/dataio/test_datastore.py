@@ -1294,6 +1294,29 @@ class TestDataStoreInitializeMacroscale:
         finally:
             ds.close()
 
+    def test_force_reinit_clears_macro_dispatcher_logs(self, tmp_path):
+        """force=True re-init recreates macro dispatcher placeholders without a
+        'name already exists' error, and leaves the microscale dispatcher log."""
+        ds = self._create_micro_store(tmp_path, run_code="force_disp")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            macro = MacroParameters(micro_params=ds.micro_params, macro_simulations=2)
+        ds.initialize_macroscale(macro)
+        try:
+            assert "log_files/dispatcher/macro_dispatcher_log__sim_00" in ds._file
+            # microscale dispatcher placeholder is created by DataStore.create()
+            assert "log_files/dispatcher/micro_dispatcher_log" in ds._file
+            # Re-initialising with force=True must succeed despite the existing
+            # per-sim macro dispatcher placeholders (regression for #85 rollback).
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                ds.initialize_macroscale(macro, force=True)
+            assert "log_files/dispatcher/macro_dispatcher_log__sim_00" in ds._file
+            # The macro-only wipe must not touch the microscale dispatcher log.
+            assert "log_files/dispatcher/micro_dispatcher_log" in ds._file
+        finally:
+            ds.close()
+
     def test_initialize_sim_groups_exist(self, tmp_path):
         """initialize_macroscale() creates per-simulation groups in HDF5."""
         n_sims = 3

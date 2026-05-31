@@ -1192,6 +1192,7 @@ data_converters: dict[
         # Microscale output datasets (fully implemented - direct field mapping)
         # ------------------------------------------------------------------------
         "micro_log": lambda data: data["micro_log"],  # Direct mapping
+        "micro_dispatcher_log": lambda data: data["micro_dispatcher_log"],
         "firstPLi": lambda data: data["pli_first_time"],  # Direct mapping
         "lasttPA": lambda data: data["tpa_final_num"],  # Direct mapping
         "lyscomplete": lambda data: data["fiber_degraded"],  # Direct mapping
@@ -1228,6 +1229,7 @@ data_converters: dict[
         # structured arrays and convert_location_snapshot() for location data
         # ------------------------------------------------------------------------
         "macro_log": lambda data: data["macro_log"],  # Direct mapping
+        "macro_dispatcher_log": lambda data: data["macro_dispatcher_log"],
         "Nsave": lambda data: [
             np.int32(len(x) - 1) for x in data["snapshot_time"]
         ],  # Fortran Nsave counts save intervals, excludes initial time
@@ -1270,6 +1272,7 @@ data_converters: dict[
         # Microscale output datasets (fully implemented - direct field mapping)
         # ------------------------------------------------------------------------
         "micro_log": lambda data: data["micro_log"],  # Direct mapping
+        "micro_dispatcher_log": lambda data: data["micro_dispatcher_log"],
         "pli_first_time": lambda data: data["firstPLi"],  # Direct mapping
         "tpa_final_num": lambda data: data["lasttPA"],  # Direct mapping
         "fiber_degraded": lambda data: data["lyscomplete"],  # Direct mapping
@@ -1317,6 +1320,7 @@ data_converters: dict[
         # structured arrays and convert_location_snapshot() for location data
         # ------------------------------------------------------------------------
         "macro_log": lambda data: data["macro_log"],  # Direct mapping
+        "macro_dispatcher_log": lambda data: data["macro_dispatcher_log"],
         "snapshot_time": lambda data: data["tsave"],  # Direct mapping
         "fiber_degrade_time": functools.partial(
             convert_structured_grid_fields,

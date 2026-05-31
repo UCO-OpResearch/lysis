@@ -285,6 +285,7 @@ class TestDataspecRegistry:
         """v1.99.0 microscale_out has the expected legacy dataset names."""
         expected = {
             "micro_log",
+            "micro_dispatcher_log",
             "firstPLi",
             "lasttPA",
             "lyscomplete",
@@ -301,6 +302,7 @@ class TestDataspecRegistry:
         """v2.0.0 microscale_out has the expected modern dataset names."""
         expected = {
             "micro_log",
+            "micro_dispatcher_log",
             "pli_first_time",
             "tpa_final_num",
             "fiber_degraded",

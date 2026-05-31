@@ -917,8 +917,9 @@ class DataStore:
         :type macro_params: MacroParameters
         :param force: If ``True`` and ``macroscale_out`` already exists,
             wipe the ``macro_data`` group and any ``log_files/macro_log__sim_*``
-            datasets before re-initialising.  Any previously stored
-            execution provenance attributes are lost along with the group.
+            and ``log_files/dispatcher/macro_dispatcher_log__sim_*`` datasets
+            before re-initialising.  Any previously stored execution
+            provenance attributes are lost along with the group.
         :type force: bool
         :raises IOError: If the DataStore is opened in read-only mode.
         :raises TypeError: If ``macro_params`` is not a
@@ -959,6 +960,16 @@ class DataStore:
                 ]
                 for key in macro_log_keys:
                     del self._file[f"log_files/{key}"]
+            # Per-sim macro dispatcher logs live in a nested subgroup; clear
+            # them too so _create_empty_datasets can recreate the placeholders
+            # (this also keeps #85's import-failure rollback consistent).
+            if "log_files/dispatcher" in self._file:
+                for key in [
+                    k
+                    for k in self._file["log_files/dispatcher"]
+                    if k.startswith("macro_dispatcher_log__sim_")
+                ]:
+                    del self._file[f"log_files/dispatcher/{key}"]
             self._file.flush()
 
         # Read microscale unbinding arrays and compute forced_unbind from data.
