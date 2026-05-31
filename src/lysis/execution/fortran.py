@@ -571,6 +571,35 @@ class FortranRunner(SimulationRunner):
         """
         raise NotImplementedError
 
+    def _discover_array_logs(self, source_dir: "Path | str") -> "dict[int, Path]":
+        """Map array-task id -> worker ``.out`` path for this run.
+
+        Globs *source_dir* for this run's
+        ``lysis-{scale}-array__{run_code}__*.out`` worker logs (the scale comes
+        from :meth:`_log_prefix`) and parses the trailing ``%a`` task id.
+        Matches whose suffix is not a numeric task id are skipped, so an
+        unexpected filename never aborts staging; parsing with :func:`int` also
+        makes the result robust to ``%a`` vs ``%2a`` zero-padding in the
+        ``--output`` name.  The master ``.out`` lives elsewhere and is never
+        matched.  Shared by the :class:`FortranMicro` / :class:`FortranMacro`
+        :meth:`stage_dispatcher_logs` implementations.
+
+        :param source_dir: Directory holding the worker ``.out`` files.
+        :type source_dir: Path or str
+        :return: ``{task_id: path}`` for each array task that wrote a log.
+        :rtype: dict[int, pathlib.Path]
+        """
+        source_dir = Path(source_dir)
+        scale = self._log_prefix()
+        run_code = self.run.run_code
+        by_task: "dict[int, Path]" = {}
+        for p in source_dir.glob(f"lysis-{scale}-array__{run_code}__*.out"):
+            try:
+                by_task[int(p.stem.rsplit("__", 1)[-1])] = p
+            except ValueError:
+                continue
+        return by_task
+
     def run_full(
         self,
         *,

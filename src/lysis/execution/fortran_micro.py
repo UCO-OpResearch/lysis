@@ -340,17 +340,10 @@ class FortranMicro(FortranRunner):
         """
         source_dir = Path(source_dir)
         data_dir = Path(data_dir)
-        run_code = self.run.run_code
-        # Order array-task logs by integer task id; skip any glob match whose
-        # suffix isn't numeric (mirrors the guarded parse in FortranMacro).
-        array_logs = []
-        for p in source_dir.glob(f"lysis-micro-array__{run_code}__*.out"):
-            try:
-                array_logs.append((int(p.stem.rsplit("__", 1)[-1]), p))
-            except ValueError:
-                continue
-        sources = [p for _, p in sorted(array_logs, key=lambda t: t[0])]
-        child_log = source_dir / f"lysis-micro-child__{run_code}.out"
+        # Array-task logs ordered by task id, then the legacy single-child log.
+        by_task = self._discover_array_logs(source_dir)
+        sources = [by_task[task] for task in sorted(by_task)]
+        child_log = source_dir / f"lysis-micro-child__{self.run.run_code}.out"
         if child_log.exists():
             sources.append(child_log)
         if not sources:
