@@ -319,6 +319,41 @@ class FortranMicro(FortranRunner):
                 with open(log_src, "rb") as in_fh:
                     shutil.copyfileobj(in_fh, out_fh)
 
+    def stage_dispatcher_logs(
+        self, source_dir: "Path | str", data_dir: "Path | str"
+    ) -> None:
+        """Concatenate the worker ``.out`` logs into one combined dispatcher log.
+
+        Microscale output is combined across all array tasks, so the worker
+        logs are likewise concatenated (each ``.out`` already opens with an
+        identifying header) into ``micro_dispatcher{out_file_code}.out`` in
+        *data_dir*, matching the v1.99.0 ``micro_dispatcher_log`` spec.  Both
+        the array-task logs (``lysis-micro-array__{run_code}__N.out``) and the
+        legacy single-child log (``lysis-micro-child__{run_code}.out``) are
+        captured; the master ``.out`` lives elsewhere and is never matched.
+        Does nothing when no worker logs are present.
+
+        :param source_dir: Directory holding the worker ``.out`` files.
+        :type source_dir: Path or str
+        :param data_dir: The Fortran output directory the import reads from.
+        :type data_dir: Path or str
+        """
+        source_dir = Path(source_dir)
+        data_dir = Path(data_dir)
+        # Array-task logs ordered by task id, then the legacy single-child log.
+        by_task = self._discover_array_logs(source_dir)
+        sources = [by_task[task] for task in sorted(by_task)]
+        child_log = source_dir / f"lysis-micro-child__{self.run.run_code}.out"
+        if child_log.exists():
+            sources.append(child_log)
+        if not sources:
+            return  # no worker logs (e.g. direct execution) -> optional, skipped
+        dst = data_dir / f"micro_dispatcher{self.out_file_code}.out"
+        with open(dst, "wb") as out_fh:
+            for src in sources:
+                with open(src, "rb") as in_fh:
+                    shutil.copyfileobj(in_fh, out_fh)
+
     # ------------------------------------------------------------------
     # Execution
     # ------------------------------------------------------------------

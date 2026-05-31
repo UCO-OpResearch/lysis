@@ -579,6 +579,15 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                     dtype=str,
                     delimiter="\u0000",  # Null-terminated strings
                 ),
+                # Scheduler-captured worker stdout (Slurm child/array jobs),
+                # concatenated to one combined log; absent for direct execution.
+                "micro_dispatcher_log": DataSetSpec(
+                    data_location="micro_dispatcher{file_code}.out",
+                    dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
+                    dtype=str,
+                    delimiter="\u0000",
+                    optional=True,
+                ),
                 # Time when first plasmin (PLi) molecule was generated in each simulation
                 "firstPLi": DataSetSpec(
                     data_location="firstPLi{file_code}.dat",
@@ -697,6 +706,15 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                     dtype=str,
                     delimiter="\u0000",
                 ),
+                # Scheduler-captured worker stdout for this simulation's array
+                # task (Slurm); absent for direct execution.
+                "macro_dispatcher_log": DataSetSpec(
+                    data_location="macro_dispatcher{file_code}_{sim:02}.out",
+                    dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,
+                    dtype=str,
+                    delimiter="\u0000",
+                    optional=True,
+                ),
                 # Number of snapshots recorded during this simulation
                 "Nsave": DataSetSpec(
                     data_location="{sim:02}/Nsave{file_code}_{sim:02}.dat",
@@ -782,6 +800,14 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                     data_location="log_files/micro_log",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
                     dtype=h5py.string_dtype(),
+                ),
+                # Scheduler-captured worker stdout (Slurm), concatenated; absent
+                # for direct execution.
+                "micro_dispatcher_log": DataSetSpec(
+                    data_location="log_files/dispatcher/micro_dispatcher_log",
+                    dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
+                    dtype=h5py.string_dtype(),
+                    optional=True,
                 ),
                 # Time when first plasmin (PLi) molecule was generated in each simulation
                 "pli_first_time": DataSetSpec(
@@ -899,6 +925,14 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                     data_location="log_files/macro_log__sim_{sim:02}",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
                     dtype=h5py.string_dtype(),
+                ),
+                # Scheduler-captured worker stdout for this simulation's array
+                # task (Slurm); absent for direct execution.
+                "macro_dispatcher_log": DataSetSpec(
+                    data_location="log_files/dispatcher/macro_dispatcher_log__sim_{sim:02}",
+                    dataset_storage_type=CONST.DATASET_STORAGE_TYPE.HDF5_DATASET,
+                    dtype=h5py.string_dtype(),
+                    optional=True,
                 ),
                 # Simulation time at each snapshot
                 "snapshot_time": DataSetSpec(

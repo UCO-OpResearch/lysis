@@ -11,6 +11,7 @@ For step-by-step control use :meth:`FortranMacro.exec_in_workdir` followed
 by :meth:`FortranMacro.import_results`.
 """
 
+import shutil
 import subprocess
 
 from dataclasses import asdict, dataclass
@@ -140,6 +141,45 @@ class FortranMacro(FortranRunner):
     def _pre_execute(self) -> None:
         """Generate neighborhoods before the legacy ``execute()`` path runs."""
         self.generate_neighborhoods()
+
+    def stage_dispatcher_logs(
+        self, source_dir: "Path | str", data_dir: "Path | str"
+    ) -> None:
+        """Stage each array task's worker ``.out`` into a per-sim dispatcher log.
+
+        A macroscale array maps task ``%a`` 1:1 to a simulation index, so each
+        ``lysis-macro-array__{run_code}__N.out`` becomes
+        ``macro_dispatcher{out_file_code}_{N:02}.out`` in *data_dir*, matching
+        the v1.99.0 ``macro_dispatcher_log`` spec.  Staging is *dense* over the
+        per-simulation subdirectories the run created (``data_dir/{sim:02}/``):
+        a simulation whose task produced no ``.out`` still gets a placeholder so
+        the per-sim dispatcher count stays aligned with ``macro_simulations``
+        (and the import sim-count check).  Does nothing when no worker logs are
+        present (e.g. direct execution).
+
+        :param source_dir: Directory holding the worker ``.out`` files.
+        :type source_dir: Path or str
+        :param data_dir: The Fortran output directory the import reads from.
+        :type data_dir: Path or str
+        """
+        source_dir = Path(source_dir)
+        data_dir = Path(data_dir)
+        # Array task id -> .out (1:1 with simulation index).
+        by_task = self._discover_array_logs(source_dir)
+        if not by_task:
+            return  # no worker logs -> optional dispatcher log is skipped
+        sims = sorted(
+            int(p.name)
+            for p in data_dir.iterdir()
+            if p.is_dir() and p.name.isdigit()
+        )
+        for sim in sims:
+            dst = data_dir / f"macro_dispatcher{self.out_file_code}_{sim:02}.out"
+            src = by_task.get(sim)
+            if src is not None:
+                shutil.copyfile(src, dst)
+            else:
+                dst.write_text("\n")  # placeholder keeps the per-sim count dense
 
     # ------------------------------------------------------------------
     # Construction helpers

@@ -481,6 +481,7 @@ class FortranRunner(SimulationRunner):
         *,
         keep_on_failure: bool = False,
         keep_tmpdir: bool = False,
+        dispatcher_log_dir: "Path | str | None" = None,
     ) -> None:
         """Convert Fortran output in *data_dir* and write it to the run's HDF5 file.
 
@@ -517,12 +518,21 @@ class FortranRunner(SimulationRunner):
         :type keep_on_failure: bool, optional
         :param keep_tmpdir: Always preserve *data_dir*, defaults to ``False``.
         :type keep_tmpdir: bool, optional
+        :param dispatcher_log_dir: If given, scheduler-captured worker ``.out``
+            logs are staged from this directory into *data_dir* (under the
+            dispatcher spec filenames) before the import, so they ride the
+            normal import pipeline into ``log_files/dispatcher/``.  ``None``
+            (direct, non-Slurm execution) skips this step.  Staging runs inside
+            the try/except so a staging error honours the cleanup policy.
+        :type dispatcher_log_dir: Path or str or None, optional
         :raises Exception: Re-raises any exception from the import pipeline
             after applying the cleanup policy.
         """
         data_dir = Path(data_dir)
 
         try:
+            if dispatcher_log_dir is not None:
+                self.stage_dispatcher_logs(Path(dispatcher_log_dir), data_dir)
             with DataStore(self.run.run_code, self.run.os_path, mode="a") as ds:
                 ds.import_collection(
                     self._collection_name(),
@@ -541,6 +551,54 @@ class FortranRunner(SimulationRunner):
             if not keep_on_failure and not keep_tmpdir:
                 shutil.rmtree(data_dir, ignore_errors=True)
             raise
+
+    def stage_dispatcher_logs(
+        self, source_dir: "Path | str", data_dir: "Path | str"
+    ) -> None:
+        """Stage scheduler-captured worker ``.out`` logs into *data_dir*.
+
+        Copies/concatenates the Slurm worker ``.out`` files in *source_dir*
+        (the master's staging dir, where ``--output`` now lands) into
+        *data_dir* under the ``{scale}_dispatcher`` filenames expected by the
+        v1.99.0 dispatcher-log specs, so :meth:`import_results` ingests them
+        into ``log_files/dispatcher/`` through the normal pipeline.  Scale
+        specific; implemented by :class:`FortranMicro` / :class:`FortranMacro`.
+
+        :param source_dir: Directory holding the worker ``.out`` files.
+        :type source_dir: Path or str
+        :param data_dir: The Fortran output directory the import reads from.
+        :type data_dir: Path or str
+        """
+        raise NotImplementedError
+
+    def _discover_array_logs(self, source_dir: "Path | str") -> "dict[int, Path]":
+        """Map array-task id -> worker ``.out`` path for this run.
+
+        Globs *source_dir* for this run's
+        ``lysis-{scale}-array__{run_code}__*.out`` worker logs (the scale comes
+        from :meth:`_log_prefix`) and parses the trailing ``%a`` task id.
+        Matches whose suffix is not a numeric task id are skipped, so an
+        unexpected filename never aborts staging; parsing with :func:`int` also
+        makes the result robust to ``%a`` vs ``%2a`` zero-padding in the
+        ``--output`` name.  The master ``.out`` lives elsewhere and is never
+        matched.  Shared by the :class:`FortranMicro` / :class:`FortranMacro`
+        :meth:`stage_dispatcher_logs` implementations.
+
+        :param source_dir: Directory holding the worker ``.out`` files.
+        :type source_dir: Path or str
+        :return: ``{task_id: path}`` for each array task that wrote a log.
+        :rtype: dict[int, pathlib.Path]
+        """
+        source_dir = Path(source_dir)
+        scale = self._log_prefix()
+        run_code = self.run.run_code
+        by_task: "dict[int, Path]" = {}
+        for p in source_dir.glob(f"lysis-{scale}-array__{run_code}__*.out"):
+            try:
+                by_task[int(p.stem.rsplit("__", 1)[-1])] = p
+            except ValueError:
+                continue
+        return by_task
 
     def run_full(
         self,

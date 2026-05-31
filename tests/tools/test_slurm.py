@@ -515,6 +515,21 @@ class TestSubmitMicroSlurmJob:
         assert "fm.import_results(" in master_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_passes_dispatcher_log_dir(
+        self, mock_sbatch, micro_hdf5, tmp_path
+    ):
+        """master.py passes dispatcher_log_dir=STAGING_DIR so worker .out logs
+        are ingested into log_files/dispatcher/."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
+        assert "dispatcher_log_dir=STAGING_DIR" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_master_py_passes_executable_to_runner(
         self, mock_sbatch, micro_hdf5, tmp_path
     ):
@@ -886,6 +901,21 @@ class TestSubmitMacroSlurmJob:
         staging_dir = list(staging_root.iterdir())[0]
         master_content = (staging_dir / "lysis-macro-master__run-01.py").read_text()
         assert "lysis.execution.fortran_macro" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_master_py_passes_dispatcher_log_dir(
+        self, mock_sbatch, macro_hdf5, tmp_path, mock_write_setup
+    ):
+        """master.py passes dispatcher_log_dir=STAGING_DIR so worker .out logs
+        are ingested into log_files/dispatcher/."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_macro_slurm_job(
+            macro_hdf5, "/bin/macro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        master_content = (staging_dir / "lysis-macro-master__run-01.py").read_text()
+        assert "dispatcher_log_dir=STAGING_DIR" in master_content
 
     @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
     def test_master_py_passes_executable_to_runner(

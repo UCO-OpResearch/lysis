@@ -546,6 +546,7 @@ fm.import_results(
     data_dir,
     keep_on_failure=True,
     keep_tmpdir=KEEP_TMPDIR,
+    dispatcher_log_dir=STAGING_DIR,
 )
 print("Results imported successfully.", flush=True)
 
@@ -806,6 +807,7 @@ def _generate_array_master_py(
             "    data_dir,\n"
             "    keep_on_failure=True,\n"
             "    keep_tmpdir=KEEP_TMPDIR,\n"
+            "    dispatcher_log_dir=STAGING_DIR,\n"
             ")\n"
             'print("Results imported successfully.", flush=True)'
         )

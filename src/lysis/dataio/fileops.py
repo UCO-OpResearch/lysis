@@ -343,6 +343,7 @@ def _read_file_text(
         os.path.join(path, spec.data_location.format(sim=sim, file_code=file_code)),
         dtype=spec.dtype,
         delimiter=spec.delimiter,
+        comments=None,  # don't strip "#"; log files may contain it (data files don't)
     )
 
 
