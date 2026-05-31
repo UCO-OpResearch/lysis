@@ -206,6 +206,25 @@ class TestInitMacroscaleFolderMode:
         assert "test-run-00" in result.output
         assert "test-run-01" in result.output
 
+    def test_folder_mode_default_keeps_recorded_seed(self, runner, experiment_dir):
+        """Without --random-entropy the recorded macro_seed ('0') is preserved."""
+        runner.invoke(cli, ["init-macroscale", str(experiment_dir)])
+        with DataStore("test-run-00", str(experiment_dir), mode="r") as ds:
+            assert ds.macro_params.macro_seed == "0"
+
+    def test_folder_mode_random_entropy_draws_fresh(self, runner, experiment_dir):
+        """--random-entropy stamps a fresh, distinct macro_seed per run."""
+        result = runner.invoke(
+            cli, ["init-macroscale", str(experiment_dir), "--random-entropy"]
+        )
+        assert result.exit_code == 0, result.output
+        seeds = {}
+        for run_code in ["test-run-00", "test-run-01"]:
+            with DataStore(run_code, str(experiment_dir), mode="r") as ds:
+                seeds[run_code] = ds.macro_params.macro_seed
+        assert all(s != "0" for s in seeds.values())
+        assert seeds["test-run-00"] != seeds["test-run-01"]
+
     def test_folder_mode_param_override_warns(self, runner, experiment_dir):
         """--param is ignored in folder mode; a warning should be printed."""
         result = runner.invoke(
