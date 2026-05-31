@@ -546,6 +546,7 @@ fm.import_results(
     data_dir,
     keep_on_failure=True,
     keep_tmpdir=KEEP_TMPDIR,
+    dispatcher_log_dir=STAGING_DIR,
 )
 print("Results imported successfully.", flush=True)
 
@@ -722,6 +723,7 @@ fm.import_results(
     data_dir,
     keep_on_failure=True,
     keep_tmpdir=KEEP_TMPDIR,
+    dispatcher_log_dir=STAGING_DIR,
 )
 print("Results imported successfully.", flush=True)
 
