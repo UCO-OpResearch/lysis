@@ -322,6 +322,80 @@ class TestExecCommandTemplate:
         assert cmd[cmd.index("--seed") + 1] == "-559038737"
 
 
+class TestSeedScheme:
+    """seed_scheme split (default) vs direct, and the reproducibility contract."""
+
+    def _seed_token(self, runner):
+        cmd = runner.exec_command()
+        assert "--seed" in cmd
+        return cmd[cmd.index("--seed") + 1]
+
+    def test_single_task_always_emits_explicit_seed(self, tmp_run):
+        """A default single-task run emits --seed (never Fortran's compiled default)."""
+        cls = _make_stub_class()
+        runner = cls(run=tmp_run, executable="/x", index=None)
+        cmd = runner.exec_command()
+        assert "--seed" in cmd
+
+    def test_split_is_deterministic_for_same_entropy(self, tmp_path):
+        """Same recorded entropy → identical per-task seeds (reproducible)."""
+        cls = _make_stub_class()
+        seeds_a, seeds_b = [], []
+        for store in (seeds_a, seeds_b):
+            r = Run(str(tmp_path))
+            r.initialize_micro_param({"micro_seed": 0xABCDEF})
+            for i in range(4):
+                runner = cls(run=r, executable="/x", index=i, num_children=4)
+                store.append(self._seed_token(runner))
+        assert seeds_a == seeds_b
+
+    def test_recorded_entropy_round_trips(self, tmp_path):
+        """Re-supplying a recorded entropy reproduces the byte-identical seed."""
+        cls = _make_stub_class()
+        from lysis.tools.seedcodec import encode_seed, random_entropy
+
+        recorded = encode_seed(random_entropy())  # a base58: wide value
+        tokens = []
+        for _ in range(2):
+            r = Run(str(tmp_path))
+            r.initialize_micro_param({"micro_seed": recorded})
+            runner = cls(run=r, executable="/x", index=2, num_children=8)
+            tokens.append(self._seed_token(runner))
+        assert tokens[0] == tokens[1]
+
+    def test_base58_entropy_resolves_to_uint32_seed(self, tmp_path):
+        """A wide base58: entropy still yields a valid signed-int32 --seed token."""
+        cls = _make_stub_class()
+        from lysis.tools.seedcodec import encode_seed
+
+        r = Run(str(tmp_path))
+        r.initialize_micro_param(
+            {"micro_seed": encode_seed(0x0123456789ABCDEF0123456789ABCDEF)}
+        )
+        runner = cls(run=r, executable="/x", index=None)
+        token = self._seed_token(runner)
+        assert -(2**31) <= int(token) < 2**31  # fits signed INTEGER*4
+
+    def test_split_does_not_stamp_seed_scheme(self, stub_runner):
+        """The default split scheme leaves no seed_scheme provenance attr."""
+        from lysis.config.constants import CONST
+
+        assert CONST.SEED_SCHEME_ATTR not in stub_runner._backend_hdf5_attrs
+
+    def test_direct_passes_raw_seed_and_stamps_scheme(self, tmp_path):
+        """direct=True bypasses SeedSequence and stamps seed_scheme='direct'."""
+        from lysis.config.constants import CONST
+
+        cls = _make_stub_class()
+        r = Run(str(tmp_path))
+        r.initialize_micro_param({"micro_seed": np.uint32(0x80000001)})
+        runner = cls(run=r, executable="/x", index=None, direct=True)
+        token = self._seed_token(runner)
+        # raw uint32 0x80000001 → signed int32 -2147483647 (no SeedSequence)
+        assert token == "-2147483647"
+        assert runner._backend_hdf5_attrs.get(CONST.SEED_SCHEME_ATTR) == "direct"
+
+
 # ---------------------------------------------------------------------------
 # skip_binary_verification (historical-build path)
 # ---------------------------------------------------------------------------
