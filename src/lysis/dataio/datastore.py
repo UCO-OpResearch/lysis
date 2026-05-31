@@ -260,11 +260,37 @@ class SimulationView:
                     f"Dataset '{name}' is a derived dataset and not stored on disk."
                 )
             path = ds_spec.data_location.format(sim=self._sim)
+            if path not in self._h5file:
+                if ds_spec.optional:
+                    # Absent optional dataset: signal "no data" rather than raise.
+                    return None
+                raise KeyError(
+                    f"Required dataset '{name}' is missing from the file "
+                    f"(expected at '{path}')."
+                )
             return self._h5file[path]
         raise AttributeError(
             f"'{type(self).__name__}' has no dataset '{name}'. "
             f"Available datasets: {self.datasets}"
         )
+
+    def __contains__(self, name):
+        """Whether *name* is a storable dataset physically present on disk.
+
+        Returns ``True`` only when *name* is a storable dataset in the spec
+        (``data_location is not None``) **and** its formatted path exists in
+        the underlying file.  Absent optional datasets and derived datasets
+        therefore report ``False``.
+
+        :param name: Dataset name to test.
+        :type name: str
+        :return: ``True`` if the dataset is present on disk, else ``False``.
+        :rtype: bool
+        """
+        ds_spec = self._spec.data.get(name)
+        if ds_spec is None or ds_spec.data_location is None:
+            return False
+        return ds_spec.data_location.format(sim=self._sim) in self._h5file
 
     def __repr__(self):
         return (
@@ -342,11 +368,46 @@ class DataCollection:
                 raise AttributeError(
                     f"Dataset '{name}' is a derived dataset and not stored on disk."
                 )
+            if ds_spec.data_location not in self._h5file:
+                if ds_spec.optional:
+                    # Absent optional dataset: signal "no data" rather than raise.
+                    return None
+                raise KeyError(
+                    f"Required dataset '{name}' is missing from the file "
+                    f"(expected at '{ds_spec.data_location}')."
+                )
             return self._h5file[ds_spec.data_location]
         raise AttributeError(
             f"'{type(self).__name__}' has no dataset '{name}'. "
             f"Available datasets: {self.datasets}"
         )
+
+    def __contains__(self, name):
+        """Whether *name* is an available dataset in this collection.
+
+        For **combined** collections (``simulations_combined=True``) presence
+        is well defined, so this returns ``True`` only when *name* is a
+        storable dataset (``data_location is not None``) **and** physically
+        present in the file — absent optional and derived datasets report
+        ``False``.
+
+        For **per-simulation** collections presence depends on the simulation
+        index, which this collection-level test does not have; it therefore
+        reports definition-level membership (``True`` iff *name* is a storable
+        dataset in the spec).  Use ``collection[sim] `` /
+        ``name in collection[sim]`` to test physical presence per simulation.
+
+        :param name: Dataset name to test.
+        :type name: str
+        :return: Membership per the rules above.
+        :rtype: bool
+        """
+        ds_spec = self._spec.data.get(name)
+        if ds_spec is None or ds_spec.data_location is None:
+            return False
+        if self._spec.simulations_combined:
+            return ds_spec.data_location in self._h5file
+        return True
 
     def __getitem__(self, index):
         if self._spec.simulations_combined:
@@ -374,9 +435,6 @@ class DataCollection:
                 f"Access datasets directly: {self._name}.dataset_name"
             )
         return self._num_sims
-
-    def __contains__(self, name):
-        return name in self._spec.data and self._spec.data[name].data_location is not None
 
     def __repr__(self):
         kind = "combined" if self._spec.simulations_combined else "per-simulation"

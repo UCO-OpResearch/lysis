@@ -1053,6 +1053,130 @@ class TestSimulationView:
 
 
 # ---------------------------------------------------------------------------
+#  Optional-dataset access tests (issue #103)
+# ---------------------------------------------------------------------------
+
+
+#: HDF5 path of the combined-collection optional dataset (microscale_out).
+_MICRO_OPTIONAL_PATH = "log_files/dispatcher/micro_dispatcher_log"
+#: HDF5 path of a required combined-collection dataset (microscale_out).
+_MICRO_REQUIRED_PATH = "micro_data/pli_first_time"
+
+
+class TestOptionalDatasetAccess:
+    """DataStore views honor the ``optional`` flag (issue #103).
+
+    Accessing an absent ``optional=True`` dataset returns ``None`` instead of
+    raising; an absent **required** dataset still raises ``KeyError``.
+    """
+
+    # --- combined collection (microscale_out) via DataCollection ----------
+
+    def test_combined_absent_optional_returns_none(self, tmp_path):
+        """Absent optional dataset on a combined collection returns None."""
+        filepath = tmp_path / "opt_comb_absent.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+            del f[_MICRO_OPTIONAL_PATH]
+
+        with DataStore("opt_comb_absent", str(tmp_path)) as ds:
+            assert ds.microscale_out.micro_dispatcher_log is None
+
+    def test_combined_present_optional_returns_dataset(self, tmp_path):
+        """Present optional dataset on a combined collection returns h5py.Dataset."""
+        filepath = tmp_path / "opt_comb_present.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+
+        with DataStore("opt_comb_present", str(tmp_path)) as ds:
+            assert isinstance(ds.microscale_out.micro_dispatcher_log, h5py.Dataset)
+
+    def test_combined_absent_required_raises(self, tmp_path):
+        """Absent required dataset on a combined collection still raises KeyError."""
+        filepath = tmp_path / "req_comb_absent.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+            del f[_MICRO_REQUIRED_PATH]
+
+        with DataStore("req_comb_absent", str(tmp_path)) as ds:
+            with pytest.raises(KeyError, match="Required dataset 'pli_first_time'"):
+                _ = ds.microscale_out.pli_first_time
+
+    def test_combined_contains_reflects_presence(self, tmp_path):
+        """`name in collection` is False for absent optional, True for present."""
+        filepath = tmp_path / "contains_comb.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+            del f[_MICRO_OPTIONAL_PATH]
+
+        with DataStore("contains_comb", str(tmp_path)) as ds:
+            coll = ds.microscale_out
+            assert "micro_dispatcher_log" not in coll  # absent optional
+            assert "pli_first_time" in coll  # present required
+
+    # --- per-simulation collection (macroscale_out) via SimulationView ----
+
+    def test_per_sim_absent_optional_returns_none(self, tmp_path):
+        """Absent optional dataset on a SimulationView returns None."""
+        filepath = tmp_path / "opt_sim_absent.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+            for sim in range(2):
+                del f[f"log_files/dispatcher/macro_dispatcher_log__sim_{sim:02}"]
+
+        with DataStore("opt_sim_absent", str(tmp_path)) as ds:
+            assert ds.macroscale_out[0].macro_dispatcher_log is None
+
+    def test_per_sim_present_optional_returns_dataset(self, tmp_path):
+        """Present optional dataset on a SimulationView returns h5py.Dataset."""
+        filepath = tmp_path / "opt_sim_present.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+
+        with DataStore("opt_sim_present", str(tmp_path)) as ds:
+            assert isinstance(ds.macroscale_out[0].macro_dispatcher_log, h5py.Dataset)
+
+    def test_per_sim_absent_required_raises(self, tmp_path):
+        """Absent required dataset on a SimulationView still raises KeyError."""
+        filepath = tmp_path / "req_sim_absent.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+            del f["macro_data/sim_00/snapshot_time"]
+
+        with DataStore("req_sim_absent", str(tmp_path)) as ds:
+            with pytest.raises(KeyError, match="Required dataset 'snapshot_time'"):
+                _ = ds.macroscale_out[0].snapshot_time
+
+    def test_per_sim_contains_reflects_presence(self, tmp_path):
+        """`name in view` is False for absent optional, True for present."""
+        filepath = tmp_path / "contains_sim.h5"
+        with h5py.File(filepath, "w") as f:
+            _write_micro_attrs(f)
+            _write_micro_datasets(f)
+            _write_macro_attrs(f, n_sims=2)
+            _write_macro_datasets(f, n_sims=2)
+            del f["log_files/dispatcher/macro_dispatcher_log__sim_00"]
+
+        with DataStore("contains_sim", str(tmp_path)) as ds:
+            view = ds.macroscale_out[0]
+            assert "macro_dispatcher_log" not in view  # absent optional
+            assert "snapshot_time" in view  # present required
+
+
+# ---------------------------------------------------------------------------
 #  DataStore.create() tests
 # ---------------------------------------------------------------------------
 
