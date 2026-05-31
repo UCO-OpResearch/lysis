@@ -87,6 +87,7 @@ from pint import Quantity
 
 from .constants import ureg, Q_
 from ..tools.util import dict_to_formatted_str
+from ..tools.seedcodec import parse_seed, encode_seed
 
 
 ################################
@@ -669,8 +670,13 @@ class MicroParameters(Parameters):
     :Units: None
     :Fortran: simulations"""
 
-    micro_seed: np.uint32 = np.uint32(0)
-    """Seed for the random number generator
+    micro_seed: str = "0"
+    """Seed (entropy) for the random number generator.
+
+    Stored as a canonical string holding the :class:`numpy.random.SeedSequence`
+    entropy: a bare decimal (legacy ``uint32``, just-works) or a ``base58:``-prefixed
+    full-width value. See :mod:`lysis.tools.seedcodec`. A blank CSV cell at init draws
+    fresh entropy; the dataclass default ``"0"`` is the deterministic legacy seed.
 
     :Units: None
     :Fortran: seed|uint32"""
@@ -714,12 +720,12 @@ class MicroParameters(Parameters):
             during object construction.
         """
 
-        # Normalise seed to np.uint32 by bit pattern (handles Python int /
-        # np.int32 / float from JSON / signed-negative legacy values).
+        # Canonicalise the seed to its entropy string form (accepts int /
+        # np.uint32 / decimal str / base58: str / signed-negative legacy values).
         object.__setattr__(
             self,
             "micro_seed",
-            np.uint32(int(self.micro_seed) & 0xFFFFFFFF),
+            encode_seed(parse_seed(self.micro_seed)),
         )
 
         # One protofibril is two fibrinogens
@@ -795,6 +801,17 @@ class MicroParameters(Parameters):
             / self.nodes_in_micro_row**2
             * self.fibrin_conc_per_fiber,
         )
+
+    def seed_as_int(self) -> int:
+        """Return the RNG entropy as a non-negative integer.
+
+        Decodes the canonical :attr:`micro_seed` string (bare decimal or
+        ``base58:`` form) for feeding to :class:`numpy.random.SeedSequence`.
+
+        :return: The integer entropy.
+        :rtype: int
+        """
+        return parse_seed(self.micro_seed)
 
 
 @dataclass(frozen=True)
@@ -1039,8 +1056,13 @@ class MacroParameters(Parameters):
     :Units: None
     :Fortran: num_t"""
 
-    macro_seed: np.uint32 = np.uint32(0)
-    """Seed for the random number generator
+    macro_seed: str = "0"
+    """Seed (entropy) for the random number generator.
+
+    Stored as a canonical string holding the :class:`numpy.random.SeedSequence`
+    entropy: a bare decimal (legacy ``uint32``, just-works) or a ``base58:``-prefixed
+    full-width value. See :mod:`lysis.tools.seedcodec`. A blank CSV cell at init draws
+    fresh entropy; the dataclass default ``"0"`` is the deterministic legacy seed.
 
     :Units: None
     :Fortran: seed|uint32"""
@@ -1144,12 +1166,12 @@ class MacroParameters(Parameters):
             This method should never be called manually. It runs automatically
             during object construction.
         """
-        # Normalise seed to np.uint32 by bit pattern (handles Python int /
-        # np.int32 / float from JSON / signed-negative legacy values).
+        # Canonicalise the seed to its entropy string form (accepts int /
+        # np.uint32 / decimal str / base58: str / signed-negative legacy values).
         object.__setattr__(
             self,
             "macro_seed",
-            np.uint32(int(self.macro_seed) & 0xFFFFFFFF),
+            encode_seed(parse_seed(self.macro_seed)),
         )
 
         object.__setattr__(
@@ -1206,7 +1228,9 @@ class MacroParameters(Parameters):
             self, "total_time_steps", int(self.total_time / self.time_step)
         )
 
-        # Set the state
+        # Set the state.  The KISS RNG's fourth state word is the seed as a
+        # uint32; fold the (possibly wide) entropy to its low 32 bits.  For a
+        # per-simulation seed (a uint32 drawn from SeedSequence) this is identity.
         object.__setattr__(
             self,
             "state",
@@ -1214,7 +1238,7 @@ class MacroParameters(Parameters):
                 np.uint32(129281),
                 np.uint32(362436069),
                 np.uint32(123456789),
-                self.macro_seed,
+                np.uint32(parse_seed(self.macro_seed) & 0xFFFFFFFF),
             ),
         )
 
@@ -1223,6 +1247,17 @@ class MacroParameters(Parameters):
         object.__setattr__(
             self, "number_of_saves", int(self.total_time / self.save_interval) + 1
         )
+
+    def seed_as_int(self) -> int:
+        """Return the RNG entropy as a non-negative integer.
+
+        Decodes the canonical :attr:`macro_seed` string (bare decimal or
+        ``base58:`` form) for feeding to :class:`numpy.random.SeedSequence`.
+
+        :return: The integer entropy.
+        :rtype: int
+        """
+        return parse_seed(self.macro_seed)
 
     @classmethod
     def calculate_forced_unbind(
