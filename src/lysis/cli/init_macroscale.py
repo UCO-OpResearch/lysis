@@ -12,6 +12,7 @@ In both cases the microscale datasets must already contain completed simulation
 results so that ``forced_unbind`` can be computed automatically.
 """
 
+import dataclasses
 import os
 import sys
 
@@ -19,6 +20,7 @@ import click
 
 from lysis.cli import cli
 from lysis.cli._provenance import allow_dirty_option, enforce_lysis_clean
+from lysis.tools.seedcodec import encode_seed, random_entropy as _draw_entropy
 
 
 def _coerce_value(val_str: str):
@@ -76,9 +78,21 @@ def _coerce_value(val_str: str):
         "WARNING: any existing macroscale simulation data will be lost."
     ),
 )
+@click.option(
+    "--random-entropy",
+    is_flag=True,
+    default=False,
+    help=(
+        "Draw a fresh random macro_seed for every run, overriding whatever is "
+        "stored in experiment.json (folder mode) or the default/--param value "
+        "(single-file mode)."
+    ),
+)
 @allow_dirty_option
 @click.pass_context
-def init_macroscale(ctx, path, params, dry_run, no_progress, force, allow_dirty):
+def init_macroscale(
+    ctx, path, params, dry_run, no_progress, force, random_entropy, allow_dirty
+):
     """Initialise macroscale structure in one or more HDF5 files.
 
     PATH may be an experiment folder (initialises all runs) or a single HDF5
@@ -122,11 +136,13 @@ def init_macroscale(ctx, path, params, dry_run, no_progress, force, allow_dirty)
     # ── Dispatch: folder or single H5 file ───────────────────────────────
     if path_obj.is_dir():
         _init_experiment_folder(
-            ctx, console, path_obj, param_overrides, dry_run, no_progress, force
+            ctx, console, path_obj, param_overrides, dry_run, no_progress, force,
+            random_entropy,
         )
     elif path_obj.suffix == ".h5":
         _init_single_h5(
-            ctx, console, path_obj, param_overrides, dry_run, no_progress, force
+            ctx, console, path_obj, param_overrides, dry_run, no_progress, force,
+            random_entropy,
         )
     else:
         console.print(
@@ -139,7 +155,10 @@ def init_macroscale(ctx, path, params, dry_run, no_progress, force, allow_dirty)
 # ─── Folder mode ──────────────────────────────────────────────────────────────
 
 
-def _init_experiment_folder(ctx, console, folder_path, param_overrides, dry_run, no_progress, force):
+def _init_experiment_folder(
+    ctx, console, folder_path, param_overrides, dry_run, no_progress, force,
+    random_entropy=False,
+):
     """Initialise macroscale for every run in an experiment folder."""
     from lysis.config.experiment import Experiment
     from lysis.dataio.datastore import DataStore
@@ -174,9 +193,18 @@ def _init_experiment_folder(ctx, console, folder_path, param_overrides, dry_run,
                     _check_microscale_ready(ds, run.run_code)
                 results.append((run.run_code, "dry-run OK"))
             else:
+                macro_params = run.macro_params
+                if random_entropy:
+                    macro_params = dataclasses.replace(
+                        macro_params, macro_seed=encode_seed(_draw_entropy())
+                    )
+                    console.print(
+                        f"[cyan]{run.run_code}:[/cyan] fresh macro_seed "
+                        f"{macro_params.macro_seed}"
+                    )
                 with DataStore(run.run_code, exp.path, mode="a") as ds:
                     # initialize_macroscale() stamps macro init provenance.
-                    ds.initialize_macroscale(run.macro_params, force=force)
+                    ds.initialize_macroscale(macro_params, force=force)
                 results.append((run.run_code, "initialized"))
         except Exception as exc:
             errors.append((run.run_code, str(exc)))
@@ -190,7 +218,10 @@ def _init_experiment_folder(ctx, console, folder_path, param_overrides, dry_run,
 # ─── Single H5 mode ───────────────────────────────────────────────────────────
 
 
-def _init_single_h5(ctx, console, h5_path, param_overrides, dry_run, no_progress, force):
+def _init_single_h5(
+    ctx, console, h5_path, param_overrides, dry_run, no_progress, force,
+    random_entropy=False,
+):
     """Initialise macroscale for a single HDF5 file."""
     from lysis.config.paramcheck import load_macro_params
     from lysis.dataio.datastore import DataStore
@@ -223,6 +254,14 @@ def _init_single_h5(ctx, console, h5_path, param_overrides, dry_run, no_progress
         console.print(f"[bold red]Error in --param overrides:[/bold red] {exc}")
         ctx.exit(1)
         return
+
+    if random_entropy:
+        macro_params = dataclasses.replace(
+            macro_params, macro_seed=encode_seed(_draw_entropy())
+        )
+        console.print(
+            f"[cyan]{run_code}:[/cyan] fresh macro_seed {macro_params.macro_seed}"
+        )
 
     if dry_run:
         console.print(
