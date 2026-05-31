@@ -34,7 +34,7 @@ _DEFAULT_PARAMS = [
     ("total_time",            "macro",    "minutes",    "{:.0f}"),
     ("time_step",             "macro",    None,         "{:1.3e}"),
     ("total_time_steps",      "macro",    None,         "{:,}"),
-    ("macro_seed",            "macro",    None,         "{:,}"),
+    ("macro_seed",            "macro",    None,         None),
     ("save_interval",         "macro",    None,         "{:.0f}"),
     ("number_of_saves",       "macro",    None,         "{:,}"),
     # ---- Micro physical -----------------------------------------------
@@ -55,7 +55,7 @@ _DEFAULT_PARAMS = [
     ("snap_proportion",       "micro",   None,          "{:.4f}"),
     # ---- Micro run controls -------------------------------------------
     ("micro_simulations",     "micro",   None,          "{:,}"),
-    ("micro_seed",            "micro",   None,          "{:,}"),
+    ("micro_seed",            "micro",   None,          None),
 ]
 
 # Computed (virtual) parameters not directly stored on any params object
