@@ -163,14 +163,8 @@ class FortranMacro(FortranRunner):
         """
         source_dir = Path(source_dir)
         data_dir = Path(data_dir)
-        run_code = self.run.run_code
-        # Map array task id -> .out (robust to %a vs %2a padding in the name).
-        by_task: dict[int, Path] = {}
-        for p in source_dir.glob(f"lysis-macro-array__{run_code}__*.out"):
-            try:
-                by_task[int(p.stem.rsplit("__", 1)[-1])] = p
-            except ValueError:
-                continue
+        # Array task id -> .out (1:1 with simulation index).
+        by_task = self._discover_array_logs(source_dir)
         if not by_task:
             return  # no worker logs -> optional dispatcher log is skipped
         sims = sorted(
