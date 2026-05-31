@@ -15,6 +15,7 @@ from lysis.analysis.diff import (
     available_scales,
     diff_runs,
     list_tables,
+    _extract_data_arrays,
 )
 
 
@@ -33,11 +34,25 @@ class _StubDataset:
         return self._data[key]
 
 
+def _wrap_table(value):
+    """Wrap a table value, mirroring the real view layer.
+
+    A ``None`` value models an *absent optional* dataset: it is still listed
+    by ``.datasets`` but dot-access returns ``None`` (the issue #103
+    sentinel) rather than an :class:`_StubDataset`.
+    """
+    return None if value is None else _StubDataset(value)
+
+
 class _StubCollection:
-    """Minimal stand-in for ``DataCollection`` (simulations_combined=True)."""
+    """Minimal stand-in for ``DataCollection`` (simulations_combined=True).
+
+    A table value of ``None`` models an absent optional dataset: listed by
+    ``.datasets`` but returned as ``None`` from dot-access.
+    """
 
     def __init__(self, tables):
-        self._tables = {k: _StubDataset(v) for k, v in tables.items()}
+        self._tables = {k: _wrap_table(v) for k, v in tables.items()}
 
     @property
     def datasets(self):
@@ -52,10 +67,14 @@ class _StubCollection:
 
 
 class _StubSimView:
-    """Minimal stand-in for ``SimulationView``."""
+    """Minimal stand-in for ``SimulationView``.
+
+    A table value of ``None`` models an absent optional dataset: listed by
+    ``.datasets`` but returned as ``None`` from dot-access.
+    """
 
     def __init__(self, tables):
-        self._tables = {k: _StubDataset(v) for k, v in tables.items()}
+        self._tables = {k: _wrap_table(v) for k, v in tables.items()}
 
     @property
     def datasets(self):
@@ -317,3 +336,83 @@ class TestDiffRunsIncludesMacro:
         labels = diff_runs(run1, run2)["data_diff"].keys()
         assert "macroscale_out[00]/snapshot_time" in labels
         assert all(not label.endswith("macro_log") for label in labels)
+
+
+# ---------------------------------------------------------------------------
+# Absent optional datasets (issue #103)
+# ---------------------------------------------------------------------------
+
+
+class TestDiffRunsOptionalDatasets:
+    """Absent optional datasets (dot-access returns ``None``) are skipped.
+
+    Models the dispatcher-log scenario from issue #103: one run carries an
+    optional dataset, the other lacks it.  ``lysis diff`` must complete
+    rather than raising the ``component not found`` ``KeyError``.
+    """
+
+    def test_extract_skips_absent_optional_micro(self):
+        """_extract_data_arrays drops a combined dataset whose access is None."""
+        run = _make_run(
+            micro_tables={
+                "x": np.array([1.0, 2.0]),
+                "micro_dispatcher_log": None,  # absent optional
+            },
+        )
+        tables = _extract_data_arrays(run, {"microscale_out"})
+        assert "microscale_out/x" in tables
+        assert "microscale_out/micro_dispatcher_log" not in tables
+
+    def test_extract_skips_absent_optional_macro(self):
+        """_extract_data_arrays drops a per-sim dataset whose access is None."""
+        run = _make_run(
+            macro_per_sim=[
+                {
+                    "snapshot_time": np.array([0.0, 1.0]),
+                    "macro_dispatcher_log": None,  # absent optional
+                },
+            ],
+        )
+        tables = _extract_data_arrays(run, {"macroscale_out"})
+        assert "macroscale_out[00]/snapshot_time" in tables
+        assert "macroscale_out[00]/macro_dispatcher_log" not in tables
+
+    def test_diff_completes_when_optional_present_in_one_run(self):
+        """A run with and a run without an optional dataset diff without error.
+
+        The optional dataset is reported as present-in-one-run-only rather
+        than raising, and shared required datasets still compare.
+        """
+        run1 = _make_run(
+            micro_tables={
+                "x": np.array([1.0, 2.0]),
+                "micro_dispatcher_log": np.array(["log a"]),  # present
+            },
+        )
+        run2 = _make_run(
+            micro_tables={
+                "x": np.array([1.0, 2.0]),
+                "micro_dispatcher_log": None,  # absent optional
+            },
+        )
+        result = diff_runs(run1, run2)
+        diff = result["data_diff"]
+        # Shared required dataset compared and matches.
+        assert diff["microscale_out/x"]["status"] == "match"
+        # Optional present only in run1 -> reported missing in run2.
+        opt = diff["microscale_out/micro_dispatcher_log"]
+        assert opt["status"] == "missing"
+        assert opt["detail"] == "not in run2"
+
+    def test_diff_completes_when_optional_absent_in_both(self):
+        """Optional dataset absent from both runs is simply omitted."""
+        run1 = _make_run(
+            micro_tables={"x": np.array([1.0]), "micro_dispatcher_log": None},
+        )
+        run2 = _make_run(
+            micro_tables={"x": np.array([1.0]), "micro_dispatcher_log": None},
+        )
+        result = diff_runs(run1, run2)
+        labels = result["data_diff"].keys()
+        assert "microscale_out/x" in labels
+        assert "microscale_out/micro_dispatcher_log" not in labels
