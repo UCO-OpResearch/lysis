@@ -374,6 +374,50 @@ class TestRunMicroSlurm:
         )
         assert result.exit_code == 0, result.output
         assert mock_submit.call_args.kwargs.get("direct") is True
+        # --direct forces the legacy single-child path: num_children -> None.
+        assert mock_submit.call_args.kwargs.get("num_children") is None
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
+    def test_direct_warns_when_num_children_explicit(
+        self, mock_submit, runner, micro_hdf5
+    ):
+        """Passing --num-children alongside --direct warns that it is ignored."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
+                "--slurm",
+                "--direct",
+                "--num-children",
+                "20",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "ignored" in result.output
+        # The explicit 20 is discarded; the legacy single-child path runs.
+        assert mock_submit.call_args.kwargs.get("num_children") is None
+
+    @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
+    def test_direct_no_warning_without_explicit_num_children(
+        self, mock_submit, runner, micro_hdf5
+    ):
+        """--direct alone (default --num-children) prints no ignored-warning."""
+        result = runner.invoke(
+            cli,
+            [
+                "run-micro",
+                str(micro_hdf5),
+                "--executable",
+                "/bin/micro.exe",
+                "--slurm",
+                "--direct",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "ignored" not in result.output
 
     @patch("lysis.tools.slurm.submit_micro_slurm_job", return_value=1)
     @pytest.mark.parametrize("bad", ["0", "1"])

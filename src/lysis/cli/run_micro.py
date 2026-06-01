@@ -277,8 +277,16 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
         if use_slurm:
             from lysis.tools.slurm import submit_micro_slurm_job
 
-            # If we are using the "--direct" flag, then we are on the legacy path
+            # If we are using the "--direct" flag, then we are on the legacy
+            # single-child path; --num-children does not apply.  Warn only when
+            # the user explicitly set it (the option defaults to 10).
             if direct:
+                nc_source = ctx.get_parameter_source("num_children")
+                if nc_source is not None and nc_source.name != "DEFAULT":
+                    console.print(
+                        "[yellow]--direct uses the legacy single-child path; "
+                        "--num-children is ignored.[/yellow]"
+                    )
                 nc_arg = None
             else:
                 nc_arg = num_children
