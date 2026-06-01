@@ -145,6 +145,59 @@ def sim(run_with_data):
 
 
 # ---------------------------------------------------------------------------
+#  RNG seed handling
+# ---------------------------------------------------------------------------
+
+
+class TestMacroscaleSeed:
+    """MacroscaleSim decodes the entropy string and folds it for KISS."""
+
+    _WIDE = 0x0123456789ABCDEF0123456789ABCDEF  # 128-bit, exceeds uint32
+
+    def test_native_rng_accepts_wide_entropy(self, tmp_path):
+        """The default_rng path takes the full-width entropy without error."""
+        from lysis.tools.seedcodec import encode_seed
+
+        run = _make_run_and_datastore(
+            tmp_path, macro_overrides={"macro_seed": encode_seed(self._WIDE)}
+        )
+        sim = MacroscaleSim(run)  # must not raise
+        assert sim.rng is not None
+
+    def test_kiss_rng_folds_wide_entropy_to_uint32(self, tmp_path):
+        """The KISS path folds a wide base58: entropy to a uint32-range seed.
+
+        KISS seeds a uint32 state word via ``ctypes.c_uint``, which raises
+        OverflowError beyond ``2**32-1``.  The KissRandomGenerator C library is
+        mocked here so the test exercises only the fold (its shared-library path
+        is a separate, pre-existing concern), asserting the value handed to KISS
+        is the low 32 bits — matching ``state[3]``.
+        """
+        from unittest.mock import patch
+
+        from lysis.tools.seedcodec import encode_seed
+
+        run = _make_run_and_datastore(
+            tmp_path,
+            macro_overrides={
+                "macro_seed": encode_seed(self._WIDE),
+                "duplicate_fortran": True,
+            },
+        )
+        # Return a real Generator so the rest of __init__ (molecule placement)
+        # works; we only care about the seed value handed to KISS.
+        with patch(
+            "lysis.macroscale.KissRandomGenerator",
+            return_value=np.random.default_rng(0),
+        ) as mock_kiss:
+            MacroscaleSim(run)
+        seed_arg = mock_kiss.call_args.args[0]
+        assert seed_arg == (self._WIDE & 0xFFFFFFFF)
+        assert 0 <= seed_arg <= 0xFFFFFFFF
+        assert run.macro_params.state[3] == np.uint32(self._WIDE & 0xFFFFFFFF)
+
+
+# ---------------------------------------------------------------------------
 #  Initialization tests
 # ---------------------------------------------------------------------------
 
