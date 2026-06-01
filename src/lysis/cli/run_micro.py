@@ -277,7 +277,11 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
         if use_slurm:
             from lysis.tools.slurm import submit_micro_slurm_job
 
-            nc_arg = num_children
+            # If we are using the "--direct" flag, then we are on the legacy path
+            if direct:
+                nc_arg = None
+            else:
+                nc_arg = num_children
 
             try:
                 sbatch_overrides = parse_sbatch_tokens(sbatch_tokens)
