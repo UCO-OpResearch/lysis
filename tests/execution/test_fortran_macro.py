@@ -157,7 +157,7 @@ class TestFortranMacroExecCommand:
     def test_seed_split_uses_macro_simulations(self, tmp_run):
         """Seed split count for FortranMacro must equal macro_simulations."""
         n_sims = tmp_run.macro_params.macro_simulations
-        seed = tmp_run.macro_params.macro_seed
+        seed = tmp_run.macro_params.seed_as_int()
 
         stream = np.random.SeedSequence(seed)
         expected_seed = int(np.int32(stream.generate_state(n_sims)[0]))

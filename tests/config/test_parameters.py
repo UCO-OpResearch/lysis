@@ -89,32 +89,43 @@ class TestMicroParametersCustomInit:
         assert micro.micro_simulations == 1_000
 
     def test_override_micro_seed(self):
-        """micro_seed can be overridden."""
+        """micro_seed can be overridden; canonicalised to its string form."""
         micro = _micro(micro_seed=42)
-        assert micro.micro_seed == 42
+        assert micro.micro_seed == "42"
+        assert micro.seed_as_int() == 42
 
-    def test_micro_seed_default_is_uint32(self):
-        """Default micro_seed has dtype np.uint32."""
+    def test_micro_seed_default_is_canonical_string(self):
+        """Default micro_seed is the canonical entropy string ``"0"``."""
         micro = _micro()
-        assert isinstance(micro.micro_seed, np.uint32)
+        assert micro.micro_seed == "0"
+        assert micro.seed_as_int() == 0
 
-    def test_micro_seed_override_normalised_to_uint32(self):
-        """Plain-int override is normalised to np.uint32."""
+    def test_micro_seed_override_canonicalised_to_string(self):
+        """Plain-int override is stored as a bare decimal string."""
         micro = _micro(micro_seed=42)
-        assert isinstance(micro.micro_seed, np.uint32)
-        assert micro.micro_seed == np.uint32(42)
+        assert isinstance(micro.micro_seed, str)
+        assert micro.micro_seed == "42"
 
     def test_micro_seed_negative_wraps_bitwise(self):
         """Negative int override is reinterpreted as the uint32 bit pattern."""
         micro = _micro(micro_seed=-1)
-        assert isinstance(micro.micro_seed, np.uint32)
-        assert micro.micro_seed == np.uint32(0xFFFFFFFF)
+        assert micro.seed_as_int() == 0xFFFFFFFF
+        assert micro.micro_seed == str(0xFFFFFFFF)
 
     def test_micro_seed_high_bit_preserved(self):
-        """High-bit int override is preserved bit-for-bit as uint32."""
+        """High-bit int override is preserved bit-for-bit through seed_as_int."""
         micro = _micro(micro_seed=0x80000001)
-        assert isinstance(micro.micro_seed, np.uint32)
-        assert micro.micro_seed == np.uint32(0x80000001)
+        assert micro.seed_as_int() == 0x80000001
+        assert micro.micro_seed == str(0x80000001)
+
+    def test_micro_seed_base58_round_trips(self):
+        """A wide base58: entropy survives construction and decodes back."""
+        from lysis.tools.seedcodec import encode_seed
+
+        wide = 0x0123456789ABCDEF0123456789ABCDEF
+        micro = _micro(micro_seed=encode_seed(wide))
+        assert micro.micro_seed.startswith("base58:")
+        assert micro.seed_as_int() == wide
 
     def test_override_diss_const_tPA_woPLG(self):
         """diss_const_tPA_woPLG override propagates into unbind_rate_tPA_woPLG."""
@@ -445,24 +456,27 @@ class TestMacroParametersCustomInit:
         macro = _macro(macro_seed=12345)
         assert macro.state[3] == 12345
 
-    def test_macro_seed_default_is_uint32(self):
-        """Default macro_seed has dtype np.uint32."""
+    def test_macro_seed_default_is_canonical_string(self):
+        """Default macro_seed is the canonical entropy string ``"0"``."""
         macro = _macro()
-        assert isinstance(macro.macro_seed, np.uint32)
+        assert macro.macro_seed == "0"
+        assert macro.seed_as_int() == 0
 
     def test_macro_seed_negative_wraps_bitwise(self):
         """Negative int override is reinterpreted as the uint32 bit pattern."""
         macro = _macro(macro_seed=-1)
-        assert isinstance(macro.macro_seed, np.uint32)
-        assert macro.macro_seed == np.uint32(0xFFFFFFFF)
-        # The RNG state tuple mirrors the normalised value.
+        assert macro.seed_as_int() == 0xFFFFFFFF
+        assert macro.macro_seed == str(0xFFFFFFFF)
+        # The RNG state tuple mirrors the uint32-folded value.
         assert macro.state[3] == np.uint32(0xFFFFFFFF)
 
     def test_macro_seed_high_bit_preserved(self):
-        """High-bit int override is preserved bit-for-bit as uint32."""
+        """High-bit int override is preserved bit-for-bit through seed_as_int."""
         macro = _macro(macro_seed=0xDEADBEEF)
-        assert isinstance(macro.macro_seed, np.uint32)
-        assert macro.macro_seed == np.uint32(0xDEADBEEF)
+        assert macro.seed_as_int() == 0xDEADBEEF
+        assert macro.macro_seed == str(0xDEADBEEF)
+        # state[3] folds the entropy to its uint32 bit pattern.
+        assert macro.state[3] == np.uint32(0xDEADBEEF)
 
     def test_macro_state_tuple_elements_are_uint32(self):
         """All four RNG state entries are np.uint32."""

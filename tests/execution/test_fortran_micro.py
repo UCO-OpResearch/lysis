@@ -95,11 +95,16 @@ class TestFortranMicroExecCommand:
         assert tmp_run.run_code in cmd
 
     def test_default_params_no_extra_flags(self, tmp_run):
-        """With all-default params the command should only have --runCode and --outFileCode."""
+        """All-default params: base args plus the always-emitted explicit --seed.
+
+        Single-task runs now derive an explicit seed via SeedSequence so the
+        Fortran binary never falls back to its compiled-in default.
+        """
         fm = FortranMicro(run=tmp_run, executable="/bin/micro.exe")
         cmd = fm.exec_command()
-        # Only executable + 4 elements: --runCode, run_code, --outFileCode, ""
-        assert len(cmd) == 5
+        # executable + --runCode, run_code, --outFileCode, "" (5) + --seed <v> (2)
+        assert len(cmd) == 7
+        assert "--seed" in cmd
 
     def test_non_default_param_included(self, tmp_path):
         """A non-default constructor param must appear in the command."""
@@ -168,7 +173,7 @@ class TestFortranMicroExecCommand:
 
     def test_index_two_uses_correct_seed(self, tmp_run):
         """index=2 must derive seed from SeedSequence at position 2."""
-        seed = tmp_run.micro_params.micro_seed
+        seed = tmp_run.micro_params.seed_as_int()
         stream = np.random.SeedSequence(seed)
         expected_seed = int(np.int32(stream.generate_state(3)[2]))
 
@@ -832,7 +837,9 @@ class TestFortranBinaryExecution:
             pass
 
         hdf5_path = tmp_path / f"{run_code}.h5"
-        fm = FortranMicro.from_hdf5(hdf5_path, binary)
+        # The fixture reference was produced by feeding _FIXTURE_SEED straight to
+        # the binary, so reproduce it with direct=True (no SeedSequence split).
+        fm = FortranMicro.from_hdf5(hdf5_path, binary, direct=True)
         data_dir = fm.exec_in_workdir(tmp_path)
         fm.import_results(data_dir, keep_tmpdir=True)
         return hdf5_path

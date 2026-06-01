@@ -185,13 +185,17 @@ def _read_table(run, label):
     data = run.data
     if label.startswith("microscale_out/"):
         name = label[len("microscale_out/"):]
-        return getattr(data.microscale_out, name)[:]
-    if label.startswith("macroscale_out["):
+        arr = getattr(data.microscale_out, name)
+    elif label.startswith("macroscale_out["):
         idx_end = label.index("]")
         sim = int(label[len("macroscale_out["):idx_end])
         name = label[idx_end + 2:]  # skip "]/"
-        return getattr(data.macroscale_out[sim], name)[:]
-    raise KeyError(label)
+        arr = getattr(data.macroscale_out[sim], name)
+    else:
+        raise KeyError(label)
+    if arr is None:  # absent optional dataset -- not a comparable table
+        raise KeyError(label)
+    return arr[:]
 
 
 # ---------------------------------------------------------------------------

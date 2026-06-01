@@ -84,6 +84,11 @@ resolver will attempt to derive the missing value algebraically from
 whatever is provided.  If it cannot be derived, the parameter's default
 value is used.
 
+The ``micro_seed`` / ``macro_seed`` columns are a special case: a blank seed
+cell is the "no seed" sentinel and triggers a **fresh random draw** (see
+:ref:`random-seeds` below) rather than falling back to the deterministic
+default.
+
 Special metadata row
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -273,6 +278,44 @@ Error Messages
     **Fix**: check the spelling.  Parameter names are Python attribute
     names (e.g. ``fiber_radius``, ``pore_size``), not Fortran names.
 
+
+.. _random-seeds:
+
+Random seeds and reproducibility
+--------------------------------
+
+Each Run carries an RNG entropy in its ``micro_seed`` / ``macro_seed`` column.
+The value is stored as a **canonical string** holding the
+:class:`numpy.random.SeedSequence` entropy, in one of two interchangeable forms:
+
+- a **bare decimal** (e.g. ``12345``) — a plain integer.  A legacy ``uint32``
+  seed is a bare decimal, so old runs reproduce with **no conversion**; and
+- a **``base58:``-prefixed** value (e.g. ``base58:3xK9q``) — a compact,
+  human-retypeable encoding of full-width OS entropy.
+
+Both decode to a single integer fed to ``SeedSequence``, so the Fortran and
+Python backends derive seeds identically.
+
+How the seed is resolved at ``init-experiment``:
+
+- **Explicit value** in the CSV cell → used verbatim (reproducible).
+- **Blank cell** → fresh OS entropy is drawn, recorded into the Run, and logged
+  at ``INFO``.  This is the recommended default: the run is reproducible *from
+  that point on* (the chosen value is persisted), rather than silently
+  deterministic across every machine.
+- ``--random-entropy`` → draw fresh entropy for **every** Run, ignoring any
+  value in the CSV.  ``init-macroscale --random-entropy`` does the same for
+  ``macro_seed`` on an already-initialised experiment.
+
+To **reproduce** a recorded run, copy its ``micro_seed`` / ``macro_seed`` string
+from the HDF5 params back into the CSV cell.
+
+.. note::
+
+   ``run-micro --direct`` reproduces *legacy* runs whose ``uint32`` seed was fed
+   straight to the Fortran KISS RNG with no ``SeedSequence`` split.  It stamps a
+   ``seed_scheme = "direct"`` provenance attribute (absence ⇒ the default
+   ``"split"``).  Do not use it for new runs.
 
 Template CSV
 ------------

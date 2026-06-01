@@ -468,9 +468,11 @@ class FortranMacro(FortranRunner):
         if self.index is None:
             self._write_setup_files(data_dir)
 
-        # Determine simulation range
+        # Determine simulation range.  The persisted macro_seed is a canonical
+        # entropy string; decode it before seeding so the Fortran and Python
+        # macro backends draw the identical per-simulation seed stream.
         n_sims = self.run.macro_params.macro_simulations
-        macro_seed = self.run.macro_params.macro_seed
+        macro_seed = self.run.macro_params.seed_as_int()
         seeds = np.random.SeedSequence(macro_seed).generate_state(n_sims)
 
         sims = [self.index] if self.index is not None else list(range(n_sims))

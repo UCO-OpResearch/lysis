@@ -245,14 +245,20 @@ class MacroscaleSim:
         self.logger = logging.getLogger(__name__)
         self.logger.debug(f"Initializing MacroscaleSim")
 
-        # Initialize pseudorandom number generator
+        # Initialize pseudorandom number generator.  macro_seed is a canonical
+        # entropy string; decode it to an integer for the RNG.
+        macro_seed = run.macro_params.seed_as_int()
         if run.macro_params.duplicate_fortran:
-            # If we are copying the Fortran code step-by-step,
-            # we want to use the same RNG which is the KISS C code
-            self.rng = KissRandomGenerator(run.macro_params.macro_seed)
+            # If we are copying the Fortran code step-by-step, we want to use the
+            # same RNG, which is the KISS C code.  KISS seeds a uint32 state word
+            # via ``ctypes.c_uint`` (which raises OverflowError beyond 2**32-1),
+            # so fold a wide OS entropy to its low 32 bits — matching ``state[3]``
+            # in :meth:`MacroParameters.__post_init__`.
+            self.rng = KissRandomGenerator(macro_seed & 0xFFFFFFFF)
         else:
-            # Use NumPy's default RNG (Mersenne Twister) for native mode
-            self.rng = np.random.default_rng(seed=abs(run.macro_params.macro_seed))
+            # Use NumPy's default RNG (Mersenne Twister) for native mode; it
+            # accepts the full-width entropy directly.
+            self.rng = np.random.default_rng(seed=macro_seed)
 
         # Initialize the Binding Time Factory which will generate random binding times for the simulation
         # We use the factory to generate these times in batches, giving us faster amortized run times

@@ -630,3 +630,68 @@ class TestExperimentRenameRun:
         with open(os.path.join(exp.path, "experiment.json")) as fh:
             meta = json.load(fh)
         assert old_code in [r["run_code"] for r in meta["runs"]]
+
+
+# ─── Seed entropy resolution (blank cell / --random-entropy) ─────────────────
+
+
+def _one_row_csv(tmp_path, micro_seed, macro_seed):
+    """Write a single-run CSV with the given (possibly blank) seed cells."""
+    micro = _default_micro_row()
+    macro = _default_macro_row()
+    micro["micro_seed"] = micro_seed
+    macro["macro_seed"] = macro_seed
+    row = {**micro, **macro, "run_code": "seed-run", "run_description": ""}
+    csv_path = tmp_path / "seed_exp.csv"
+    _write_minimal_csv(csv_path, [row])
+    return csv_path
+
+
+class TestSeedEntropy:
+    """from_csv resolves the blank-cell / --random-entropy seed sentinel."""
+
+    def test_blank_seed_draws_fresh_distinct(self, tmp_path):
+        """Two inits from a blank-seed CSV draw different, non-zero base58 seeds."""
+        csv_path = _one_row_csv(tmp_path, micro_seed="", macro_seed="")
+        data_root = tmp_path / "out"
+        data_root.mkdir()
+        s1 = Experiment.from_csv(csv_path, data_root, name="a", dry_run=True)
+        s2 = Experiment.from_csv(csv_path, data_root, name="a", dry_run=True)
+        m1 = s1.runs[0].micro_params.micro_seed
+        m2 = s2.runs[0].micro_params.micro_seed
+        assert m1 != m2
+        assert m1 != "0" and m2 != "0"
+        assert m1.startswith("base58:") and m2.startswith("base58:")
+        # Macro seed is resolved too.
+        assert s1.runs[0].macro_params.macro_seed.startswith("base58:")
+
+    def test_explicit_seed_respected(self, tmp_path):
+        """A non-blank seed cell is preserved verbatim, no fresh draw."""
+        csv_path = _one_row_csv(tmp_path, micro_seed="12345", macro_seed="6789")
+        data_root = tmp_path / "out"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="a", dry_run=True)
+        assert exp.runs[0].micro_params.micro_seed == "12345"
+        assert exp.runs[0].macro_params.macro_seed == "6789"
+
+    def test_random_entropy_overrides_explicit_seed(self, tmp_path):
+        """random_entropy=True ignores an explicit CSV seed and draws fresh."""
+        csv_path = _one_row_csv(tmp_path, micro_seed="12345", macro_seed="6789")
+        data_root = tmp_path / "out"
+        data_root.mkdir()
+        exp = Experiment.from_csv(
+            csv_path, data_root, name="a", dry_run=True, random_entropy=True
+        )
+        assert exp.runs[0].micro_params.micro_seed != "12345"
+        assert exp.runs[0].macro_params.macro_seed != "6789"
+
+    def test_resolved_seed_persists_to_hdf5(self, tmp_path):
+        """The drawn micro_seed is written into the run's HDF5 params (not '0')."""
+        csv_path = _one_row_csv(tmp_path, micro_seed="", macro_seed="")
+        data_root = tmp_path / "out"
+        data_root.mkdir()
+        exp = Experiment.from_csv(csv_path, data_root, name="a")
+        with DataStore("seed-run", exp.path, mode="r") as ds:
+            stored = ds.micro_params.micro_seed
+        assert stored == exp.runs[0].micro_params.micro_seed
+        assert stored != "0"

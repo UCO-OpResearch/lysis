@@ -154,8 +154,10 @@ class PythonRunner(SimulationRunner):
         orig_params = self._get_params()
         seed_field = self._seed_field()
         n_sims = getattr(orig_params, self._simulations_field())
+        # The persisted seed is a canonical entropy string (#97/#109); decode
+        # it to an int before splitting, matching the Fortran macro path.
         seeds = np.random.SeedSequence(
-            getattr(orig_params, seed_field)
+            orig_params.seed_as_int()
         ).generate_state(n_sims)
 
         sim_class = self._simulation_class()

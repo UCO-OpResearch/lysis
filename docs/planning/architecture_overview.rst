@@ -137,8 +137,8 @@ This goal is **largely achieved**.  The ``lysis.dataio`` package provides:
 - Import support for all legacy formats (Fortran text, binary, JSON, and
   parsed log files).
 
-See the `Data Handling Completion Plan <data_handling_completion_plan.rst>`_
-for full details.
+See the `Data Specification <../source/usage/data_specification.rst>`_ for the
+technical details of the format.
 
 Goal 3: Standard Metrics and Visualizations
 --------------------------------------------
@@ -264,8 +264,8 @@ It provides:
 - **630+ automated tests** covering all modules, including 68 integration
   tests with real Fortran fixture data.
 
-For the complete status and remaining items, see the
-`Data Handling Completion Plan <data_handling_completion_plan.rst>`_.
+The data system's core is complete; remaining polish and follow-up work is
+tracked in the project's GitHub issues.
 
 Macroscale Simulation (Written, Pending Validation)
 ----------------------------------------------------
@@ -359,8 +359,6 @@ Key Documents
      - Purpose
    * - `Ontology <../source/usage/ontology.rst>`_
      - Definitions of all project-specific terms
-   * - `Data Handling Completion Plan <data_handling_completion_plan.rst>`_
-     - Detailed status and architecture of the data system
    * - `Data Specification <../source/usage/data_specification.rst>`_
      - Technical specification of the HDF5 data format
    * - `Git Workflow Guide <git_workflow_guide.rst>`_

@@ -110,10 +110,17 @@ class TestExecCommandTemplate:
         assert "--outFileCode" in cmd
 
     def test_default_params_only_base_args(self, stub_runner):
-        """With all-default params only base args should appear."""
+        """All-default params: base args plus the always-emitted explicit --seed.
+
+        Single-task runs now derive an explicit seed via
+        ``SeedSequence(entropy).generate_state(1)[0]`` so the Fortran binary
+        never silently falls back to its compiled-in default.
+        """
         cmd = stub_runner.exec_command()
-        # base: executable + --runCode + code + --outFileCode + ""  = 5 elements
-        assert len(cmd) == 5
+        # base: executable + --runCode + code + --outFileCode + ""  = 5 elements,
+        # plus --seed <value> = 7.
+        assert len(cmd) == 7
+        assert "--seed" in cmd
 
     def test_non_default_param_included(self, tmp_path):
         """A non-default param must appear as a CLI flag."""
@@ -200,7 +207,7 @@ class TestExecCommandTemplate:
         assert runner.out_file_code == "__02"
 
     def test_index_two_correct_seed(self, tmp_run):
-        seed = tmp_run.micro_params.micro_seed
+        seed = tmp_run.micro_params.seed_as_int()
         stream = np.random.SeedSequence(seed)
         expected_seed = int(np.int32(stream.generate_state(3)[2]))
 
@@ -260,7 +267,7 @@ class TestExecCommandTemplate:
 
     def test_seed_split_count_returns_num_children_when_set(self, tmp_run):
         """When num_children is set, every sibling draws from the same-sized stream."""
-        seed = tmp_run.micro_params.micro_seed
+        seed = tmp_run.micro_params.seed_as_int()
         stream = np.random.SeedSequence(seed)
         seeds = stream.generate_state(10)
 
@@ -292,8 +299,8 @@ class TestExecCommandTemplate:
         r = Run(str(tmp_path))
         r.initialize_micro_param({"micro_seed": high_bit_seed})
         cls = _make_stub_class()
-        # index=None → no SeedSequence split, seed flows through as-is.
-        runner = cls(run=r, executable="/bin/stub.exe", index=None)
+        # direct=True → no SeedSequence split, the raw uint32 flows through.
+        runner = cls(run=r, executable="/bin/stub.exe", index=None, direct=True)
         cmd = runner.exec_command()
 
         expected = str(
@@ -308,10 +315,85 @@ class TestExecCommandTemplate:
         r = Run(str(tmp_path))
         r.initialize_micro_param({"micro_seed": np.uint32(0xDEADBEEF)})
         cls = _make_stub_class()
-        runner = cls(run=r, executable="/bin/stub.exe", index=None)
+        # direct=True → the raw uint32 flows through to the |uint32 signed cast.
+        runner = cls(run=r, executable="/bin/stub.exe", index=None, direct=True)
         cmd = runner.exec_command()
         assert "--seed" in cmd
         assert cmd[cmd.index("--seed") + 1] == "-559038737"
+
+
+class TestSeedScheme:
+    """seed_scheme split (default) vs direct, and the reproducibility contract."""
+
+    def _seed_token(self, runner):
+        cmd = runner.exec_command()
+        assert "--seed" in cmd
+        return cmd[cmd.index("--seed") + 1]
+
+    def test_single_task_always_emits_explicit_seed(self, tmp_run):
+        """A default single-task run emits --seed (never Fortran's compiled default)."""
+        cls = _make_stub_class()
+        runner = cls(run=tmp_run, executable="/x", index=None)
+        cmd = runner.exec_command()
+        assert "--seed" in cmd
+
+    def test_split_is_deterministic_for_same_entropy(self, tmp_path):
+        """Same recorded entropy → identical per-task seeds (reproducible)."""
+        cls = _make_stub_class()
+        seeds_a, seeds_b = [], []
+        for store in (seeds_a, seeds_b):
+            r = Run(str(tmp_path))
+            r.initialize_micro_param({"micro_seed": 0xABCDEF})
+            for i in range(4):
+                runner = cls(run=r, executable="/x", index=i, num_children=4)
+                store.append(self._seed_token(runner))
+        assert seeds_a == seeds_b
+
+    def test_recorded_entropy_round_trips(self, tmp_path):
+        """Re-supplying a recorded entropy reproduces the byte-identical seed."""
+        cls = _make_stub_class()
+        from lysis.tools.seedcodec import encode_seed, random_entropy
+
+        recorded = encode_seed(random_entropy())  # a base58: wide value
+        tokens = []
+        for _ in range(2):
+            r = Run(str(tmp_path))
+            r.initialize_micro_param({"micro_seed": recorded})
+            runner = cls(run=r, executable="/x", index=2, num_children=8)
+            tokens.append(self._seed_token(runner))
+        assert tokens[0] == tokens[1]
+
+    def test_base58_entropy_resolves_to_uint32_seed(self, tmp_path):
+        """A wide base58: entropy still yields a valid signed-int32 --seed token."""
+        cls = _make_stub_class()
+        from lysis.tools.seedcodec import encode_seed
+
+        r = Run(str(tmp_path))
+        r.initialize_micro_param(
+            {"micro_seed": encode_seed(0x0123456789ABCDEF0123456789ABCDEF)}
+        )
+        runner = cls(run=r, executable="/x", index=None)
+        token = self._seed_token(runner)
+        assert -(2**31) <= int(token) < 2**31  # fits signed INTEGER*4
+
+    def test_split_does_not_stamp_seed_scheme(self, stub_runner):
+        """The default split scheme leaves no seed_scheme provenance attr."""
+        from lysis.config.constants import CONST
+
+        assert CONST.SEED_SCHEME_ATTR not in stub_runner._backend_hdf5_attrs
+
+    def test_direct_passes_raw_seed_and_stamps_scheme(self, tmp_path):
+        """direct=True bypasses SeedSequence and stamps seed_scheme='direct'."""
+        from lysis.config.constants import CONST
+
+        cls = _make_stub_class()
+        r = Run(str(tmp_path))
+        r.initialize_micro_param({"micro_seed": np.uint32(0x80000001)})
+        runner = cls(run=r, executable="/x", index=None, direct=True)
+        token = self._seed_token(runner)
+        # raw uint32 0x80000001 → signed int32 -2147483647 (no SeedSequence)
+        assert token == "-2147483647"
+        assert runner._backend_hdf5_attrs.get(CONST.SEED_SCHEME_ATTR) == "direct"
 
 
 # ---------------------------------------------------------------------------
