@@ -264,6 +264,45 @@ class TestGenerateMicroChildScript:
             "module load intel-compilers/2024 SciPy-bundle/2023.07" in script
         )
 
+    def test_single_tier_direct_bakes_kwarg(self, tmp_path):
+        """direct=True must bake direct=True into the single-tier from_hdf5 call.
+
+        Regression for the PR #112 gap: the legacy single-child path
+        rerouted --direct here but dropped the seed_scheme="direct" wiring.
+        """
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "", direct=True,
+        )
+        assert ", direct=True" in script
+
+    def test_single_tier_no_direct_by_default(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+        )
+        assert "direct=True" not in script
+
+    def test_two_tier_direct_bakes_kwarg(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+            fast_tmp_root="/nvme/scratch", direct=True,
+        )
+        assert ", direct=True" in script
+
+    def test_two_tier_no_direct_by_default(self, tmp_path):
+        staging = tmp_path / "staging"
+        script = generate_micro_child_script(
+            staging, "run-01", tmp_path / "run-01.h5",
+            "/bin/micro.exe", "",
+            fast_tmp_root="/nvme/scratch",
+        )
+        assert "direct=True" not in script
+
 
 # ---------------------------------------------------------------------------
 # TestSubmitMicroChildJob
@@ -616,6 +655,44 @@ class TestSubmitMicroSlurmJob:
         staging_dir = list(staging_root.iterdir())[0]
         child_content = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
         assert str(micro_hdf5) in child_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_direct_threaded_into_child_and_master(
+        self, mock_sbatch, micro_hdf5, tmp_path
+    ):
+        """direct=True on the legacy single-child path must reach BOTH the
+        child (seed folding) and master (seed_scheme provenance) scripts.
+
+        Regression test for the PR #112 gap: --direct was rerouted to this
+        path but the direct flag was dropped before any script was written.
+        """
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe",
+            staging_root=staging_root, direct=True,
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        child_content = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
+        master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
+        assert ", direct=True" in child_content
+        assert "DIRECT = True" in master_content
+        assert "direct=DIRECT" in master_content
+
+    @patch("lysis.tools.slurm.gs.sbatch", return_value=1)
+    def test_direct_absent_by_default(self, mock_sbatch, micro_hdf5, tmp_path):
+        """Without direct=True the child stays on the default split scheme and
+        the master records DIRECT = False."""
+        staging_root = tmp_path / "staging_root"
+        staging_root.mkdir()
+        submit_micro_slurm_job(
+            micro_hdf5, "/bin/micro.exe", staging_root=staging_root
+        )
+        staging_dir = list(staging_root.iterdir())[0]
+        child_content = (staging_dir / "lysis-micro-child__run-01.sh").read_text()
+        master_content = (staging_dir / "lysis-micro-master__run-01.py").read_text()
+        assert "direct=True" not in child_content
+        assert "DIRECT = False" in master_content
 
 
 # ---------------------------------------------------------------------------

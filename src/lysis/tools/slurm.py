@@ -498,6 +498,7 @@ FILE_CODE = $file_code
 BINARY_NAME = $binary_name
 KEEP_TMPDIR = $keep_tmpdir
 HISTORICAL_BACKEND_ATTRS = $historical_backend_attrs
+DIRECT = $direct
 
 # ---------------------------------------------------------------------------
 # Submit child jobs
@@ -541,6 +542,7 @@ fm = FortranMicro(
     executable=str(STAGING_DIR / BINARY_NAME),
     skip_binary_verification=(HISTORICAL_BACKEND_ATTRS is not None),
     historical_backend_attrs=HISTORICAL_BACKEND_ATTRS,
+    direct=DIRECT,
 )
 fm.import_results(
     data_dir,
@@ -569,6 +571,7 @@ def _generate_micro_master_py(
     binary_name: str,
     keep_tmpdir: bool,
     historical_backend_attrs: Optional[dict] = None,
+    direct: bool = False,
 ) -> str:
     """Return the content of the single-child micro master Python script.
 
@@ -580,6 +583,11 @@ def _generate_micro_master_py(
         ``<binary> --version`` query.  ``None`` (default) preserves the
         normal-mode behaviour.
     :type historical_backend_attrs: dict or None
+    :param direct: When ``True``, construct the master's ``FortranMicro``
+        with ``direct=True`` so ``import_results`` stamps
+        ``seed_scheme="direct"`` provenance into the HDF5 file.  Defaults
+        to ``False``.
+    :type direct: bool, optional
     """
     return _MICRO_MASTER_PY_TEMPLATE.substitute(
         staging_dir=repr(str(staging_dir)),
@@ -589,6 +597,7 @@ def _generate_micro_master_py(
         binary_name=repr(binary_name),
         keep_tmpdir=repr(keep_tmpdir),
         historical_backend_attrs=repr(historical_backend_attrs),
+        direct=repr(direct),
     )
 
 
@@ -1260,6 +1269,7 @@ def generate_micro_child_script(
     pythonpath: "Path | str | None" = None,
     source_stamp: Optional[tuple] = None,
     experiment: Optional[str] = None,
+    direct: bool = False,
 ) -> str:
     """Generate a Slurm bash script for a single child microscale Fortran job.
 
@@ -1335,6 +1345,12 @@ def generate_micro_child_script(
     :param experiment: Best-effort experiment identifier shown in the log
         header; ``None`` (default) renders as ``(unknown)``.
     :type experiment: str, optional
+    :param direct: When ``True``, bake ``direct=True`` into the generated
+        ``from_hdf5(...)`` call so the child folds the run seed to
+        ``uint32`` and feeds it straight to the Fortran KISS RNG
+        (``seed_scheme="direct"``) instead of the default
+        :class:`numpy.random.SeedSequence` split.  Defaults to ``False``.
+    :type direct: bool, optional
     :return: Slurm bash script text.
     :rtype: str
     :raises ImportError: If ``GooseSLURM`` is not installed.
@@ -1383,6 +1399,11 @@ def generate_micro_child_script(
     else:
         source_stamp_kwarg = ""
 
+    # Legacy reproduction: feed the raw uint32 seed straight to the Fortran
+    # KISS RNG with no SeedSequence split (mirrors the array-mode wiring in
+    # ``_build_runner_from_hdf5_line``).
+    direct_kwarg = ", direct=True" if direct else ""
+
     if fast_tmp_root is None:
         # ------------------------------------------------------------------
         # Single-tier: Fortran writes directly to the shared staging dir.
@@ -1401,7 +1422,7 @@ mkdir -p "${{staging_datadir}}" """
 {py} -c "
 from pathlib import Path
 from lysis.execution.fortran_micro import FortranMicro
-fm = FortranMicro.from_hdf5('{hdf5_path}', '{staging_dir}/{binary_name}', out_file_code='{out_code}'{skip_verify_kwarg}{source_stamp_kwarg})
+fm = FortranMicro.from_hdf5('{hdf5_path}', '{staging_dir}/{binary_name}', out_file_code='{out_code}'{skip_verify_kwarg}{source_stamp_kwarg}{direct_kwarg})
 fm.exec_in_workdir(Path('{staging_dir}'))
 " """
 
@@ -1431,7 +1452,7 @@ cp "{staging_dir}/{binary_name}" "${{local_work_dir}}/" """
 {py} -c "
 from pathlib import Path
 from lysis.execution.fortran_micro import FortranMicro
-fm = FortranMicro.from_hdf5('{hdf5_path}', '${{local_work_dir}}/{binary_name}', out_file_code='{out_code}'{skip_verify_kwarg}{source_stamp_kwarg})
+fm = FortranMicro.from_hdf5('{hdf5_path}', '${{local_work_dir}}/{binary_name}', out_file_code='{out_code}'{skip_verify_kwarg}{source_stamp_kwarg}{direct_kwarg})
 fm.exec_in_workdir(Path('${{local_work_dir}}'))
 " """
 
@@ -1634,6 +1655,14 @@ def submit_micro_slurm_job(
         across that many tasks.  ``None`` (default) selects the legacy
         single-child path.
     :type num_children: int, optional
+    :param direct: When ``True``, use the legacy ``seed_scheme="direct"``
+        path: the seed is folded to ``uint32`` and fed straight to the
+        Fortran KISS RNG (no :class:`numpy.random.SeedSequence` split), and
+        ``seed_scheme="direct"`` is stamped into the HDF5 provenance.
+        Threaded through to both the child and master scripts on the
+        single-child path and to the array tasks on the array path.
+        Defaults to ``False``.
+    :type direct: bool, optional
     :param modules: Space-separated list of LMod module specs (include a
         Fortran compiler module so the binary finds its runtime), baked into every generated script (master, array tasks,
         and the legacy single child).  Defaults to
@@ -1763,6 +1792,7 @@ def submit_micro_slurm_job(
         pythonpath=pythonpath,
         source_stamp=source_stamp,
         experiment=experiment,
+        direct=direct,
     )
     child_path = staging_dir / f"lysis-micro-child__{run_code}.sh"
     child_path.write_text(child_script)
@@ -1774,6 +1804,7 @@ def submit_micro_slurm_job(
     master_py_content = _generate_micro_master_py(
         staging_dir, hdf5_path, run_code, out_code, executable.name, keep_tmpdir,
         historical_backend_attrs=historical_backend_attrs,
+        direct=direct,
     )
     master_py_path = staging_dir / f"lysis-micro-master__{run_code}.py"
     master_py_path.write_text(master_py_content)

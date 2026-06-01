@@ -122,7 +122,9 @@ Options
     Number of Slurm array tasks to split the microscale simulations across
     (must be **>= 2**).  The run's ``micro_simulations`` are partitioned across
     the tasks, and each task draws its own per-task seed from the run's recorded
-    entropy.  Defaults to 10.  Only meaningful with ``--slurm``.
+    entropy.  Defaults to 10.  Only meaningful with ``--slurm``.  Ignored when
+    ``--direct`` is set (``--direct`` always uses the single-child path); a
+    warning is printed if you pass both explicitly.
 
 .. option:: --direct
 
@@ -132,6 +134,11 @@ Options
     only to reproduce historical runs whose ``uint32`` seed was passed directly
     to the binary; new runs should use the default ``split`` scheme.  See
     :ref:`random-seeds`.
+
+    ``--direct`` **always** uses the legacy single-child (non-array) execution
+    path.  Under ``--slurm`` it submits a single child job regardless of
+    ``--num-children`` (which is ignored), so every simulation in the run shares
+    the one raw ``uint32`` seed — exactly as the historical binary was invoked.
 
 Examples
 ~~~~~~~~
