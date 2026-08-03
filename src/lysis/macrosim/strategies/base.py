@@ -35,7 +35,7 @@ class BindStrategy(abc.ABC):
     """Binds molecules to fibers and computes unbinding/lysis times."""
 
     @abc.abstractmethod
-    def bind(self, m: np.ndarray, current_time: float) -> None:
+    def bind(self, state, m: np.ndarray, current_time: float) -> None:
         """Bind molecules in mask m: update bound state, binding_time,
         fiber_status (lysis), and record bind / fiber-degrade events."""
 

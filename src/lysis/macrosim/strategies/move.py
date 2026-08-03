@@ -4,13 +4,13 @@ find_still_stuck/move_to_empty_edge/unrestricted_move/move are currently
 identical in orchestration logic between the two classes -- only the neighbor-
 selection formulas inlined inside move_to_empty_edge and unrestricted_move
 differ. This duplication is intentional: MoveStrategy has no default
-implementations, so a future third variant is forced to explicitly decide
-whether to reuse this logic or write its own, rather than silently
+implementations, so future variants are forced to explicitly decide
+whether to reuse this logic or write their own, rather than silently
 inheriting it.
 
 state is expected to be whatever owns simulation state (location, neighbors,
 fiber_status, counters, binding_time_factory, etc.) -- in practice, the
-orchestrator built in Step 7.
+orchestrator.
 """
 
 import numpy as np
