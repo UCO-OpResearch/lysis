@@ -13,19 +13,13 @@ class MoveStrategy(abc.ABC):
         """Boolean mask: which molecules attempt an unrestricted move this timestep."""
 
     @abc.abstractmethod
-    def find_still_stuck(
-        self, state, m: np.ndarray, current_time: float
-    ) -> np.ndarray: ...
+    def find_still_stuck(self, state, m: np.ndarray, current_time: float) -> np.ndarray: ...
 
     @abc.abstractmethod
-    def move_to_empty_edge(
-        self, state, m: np.ndarray, current_time: float
-    ) -> None: ...
+    def move_to_empty_edge(self, state, m: np.ndarray, current_time: float) -> None: ...
 
     @abc.abstractmethod
-    def unrestricted_move(
-        self, state, free_to_move: np.ndarray, current_time: float
-    ) -> None: ...
+    def unrestricted_move(self, state, free_to_move: np.ndarray, current_time: float) -> None: ...
 
     @abc.abstractmethod
     def move(self, state, m: np.ndarray, current_time: float) -> None: ...
@@ -44,21 +38,19 @@ class UnbindStrategy(abc.ABC):
     """Handles all three unbind pathways."""
 
     @abc.abstractmethod
-    def unbind_by_degradation(self, m: np.ndarray, current_time: float) -> None: ...
+    def unbind_by_degradation(self, state, m: np.ndarray, current_time: float) -> None: ...
 
     @abc.abstractmethod
-    def unbind_by_time(self, m: np.ndarray, current_time: float) -> None: ...
+    def unbind_by_time(self, state, m: np.ndarray, current_time: float) -> None: ...
 
     @abc.abstractmethod
-    def expire_waiting_period(self, current_time: float) -> None: ...
+    def expire_waiting_period(self, state, current_time: float) -> None: ...
 
 class ConflictResolutionStrategy(abc.ABC):
     """Decides, for molecules eligible for both bind and move in the same
     timestep, which one wins."""
 
     @abc.abstractmethod
-    def resolve_conflict(
-        self, conflict: np.ndarray, current_time: float, binding_time: np.ndarray
-    ) -> np.ndarray:
+    def resolve_conflict(self, conflict: np.ndarray, current_time: float, binding_time: np.ndarray) -> np.ndarray:
         """Return the overridden should-bind value for each True entry in
         conflict. Native/Fortran differ here."""
