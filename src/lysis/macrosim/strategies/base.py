@@ -65,3 +65,14 @@ class UnbindStrategy(abc.ABC):
 
     @abc.abstractmethod
     def expire_waiting_period(self, current_time: float) -> None: ...
+
+class ConflictResolutionStrategy(abc.ABC):
+    """Decides, for molecules eligible for both bind and move in the same
+    timestep, which one wins."""
+
+    @abc.abstractmethod
+    def resolve_conflict(
+        self, conflict: np.ndarray, current_time: float, binding_time: np.ndarray
+    ) -> np.ndarray:
+        """Return the overridden should-bind value for each True entry in
+        conflict. Native/Fortran differ here."""
