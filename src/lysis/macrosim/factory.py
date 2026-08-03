@@ -1,23 +1,78 @@
-"""Composition root -- the ONLY module allowed to branch on duplicate_fortran.
+"""Composition root -- the only module that reads duplicate_fortran."""
 
-STATUS: placeholder until strategies/services exist.
+from .services.binding_time import BindingTimeFactory
+from .services.random_draw import FortranDrawSource, NativeDrawSource, RandomDrawSource
+from .strategies.bind import DefaultBindStrategy
+from .strategies.conflict_resolution import (
+    FortranConflictResolutionStrategy,
+    NativeConflictResolutionStrategy,
+)
+from .strategies.move import FortranMoveStrategy, NativeMoveStrategy
+from .strategies.unbind import FortranUnbindStrategy, NativeUnbindStrategy
+from .macroscale_sim import MacroscaleSim
 
-This is the enforced coupling point: every strategy category and service 
-must get exactly one entry here per mode. The structural
-test in test_factory_registry.py will walk each ABC's
-registered subclasses and fail if one isn't wired up here -- so a
-half-finished new strategy can't silently slip through.
+# Adding a new variant to any category is just one new entry here -- nothing
+# else in this file needs to change.
+_DRAW_SOURCES = {
+    "native": NativeDrawSource,
+    "fortran": FortranDrawSource,
+}
 
-Target shape, once strategies/services exist:
+_MOVE_STRATEGIES = {
+    "native": NativeMoveStrategy,
+    "fortran": FortranMoveStrategy,
+}
 
-    def make_draw_source(duplicate_fortran: bool, seed: int): ...
-    def make_move_strategy(duplicate_fortran: bool, draws, moving_probability): ...
-    def make_bind_strategy(duplicate_fortran: bool, draws, ...): ...
-    def make_unbind_strategy(duplicate_fortran: bool, draws, ...): ...
-    def make_recorder(run): ...
+_UNBIND_STRATEGIES = {
+    "native": NativeUnbindStrategy,
+    "fortran": FortranUnbindStrategy,
+}
 
-    def build_simulation(run) -> "MacroscaleSim":
-        # the single place that reads run.macro_params.duplicate_fortran
-        # and assembles a fully-wired MacroscaleSim.
-        ...
-"""
+_CONFLICT_STRATEGIES = {
+    "native": NativeConflictResolutionStrategy,
+    "fortran": FortranConflictResolutionStrategy,
+}
+
+def make_draw_source(mode: str, seed: int) -> RandomDrawSource:
+    return _DRAW_SOURCES[mode](seed)
+
+def make_move_strategy(mode: str, draws, moving_probability: float):
+    return _MOVE_STRATEGIES[mode](draws, moving_probability)
+
+
+def make_bind_strategy(draws):
+    # No registry -- there's currently only one variant, and nothing selects
+    # between variants of Bind at all (see DefaultBindStrategy's docstring).
+    return DefaultBindStrategy(draws)
+
+
+def make_unbind_strategy(mode: str, draws):
+    return _UNBIND_STRATEGIES[mode](draws)
+
+
+def make_conflict_strategy(mode: str, draws, time_step: float):
+    return _CONFLICT_STRATEGIES[mode](draws, time_step)
+
+
+def build_simulation(run, sim_number=0) -> MacroscaleSim:
+    # Placeholder until mode piping has a source -- for now, just read the run's duplicate_fortran flag.
+    mode = "fortran" if run.macro_params.duplicate_fortran else "native"
+    seed = run.macro_params.seed_as_int()
+
+    draws = make_draw_source(mode, seed)
+    binding_time_factory = BindingTimeFactory(run, draws.rng)
+
+    return MacroscaleSim(
+        run=run,
+        sim_number=sim_number,
+        draws=draws,
+        binding_time_factory=binding_time_factory,
+        move_strategy=make_move_strategy(
+            mode, draws, run.macro_params.moving_probability
+        ),
+        bind_strategy=make_bind_strategy(draws),
+        unbind_strategy=make_unbind_strategy(mode, draws),
+        conflict_strategy=make_conflict_strategy(
+            mode, draws, run.macro_params.time_step.magnitude
+        ),
+    )

@@ -69,7 +69,3 @@ class FortranDrawSource(RandomDrawSource):
             "single RandomDraw.MOVE draw instead. Reaching this means "
             "something is calling integers() on the wrong mode."
         )
-
-
-def make_draw_source(duplicate_fortran: bool, seed: int) -> RandomDrawSource:
-    return FortranDrawSource(seed) if duplicate_fortran else NativeDrawSource(seed)
