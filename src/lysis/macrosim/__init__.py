@@ -1,20 +1,27 @@
 """Modular replacement for the monolithic macroscale.py.
 
-Package layout (see simulation/README.md for the full contributor guide):
+Package layout (see macrosim/README.md for the contributor guide):
 
     macrosim/
-        macroscale_sim.py   -- thin orchestrator
-        factory.py          -- composition root; the ONLY place duplicate_fortran
-                                is read to decide which concrete classes get built
+        macroscale_sim.py       -- MacroscaleSim: owns simulation state and
+                                    the per-timestep loop, delegating every
+                                    mode-dependent decision to its injected
+                                    strategies.
+        factory.py               -- composition root; the only place
+                                    duplicate_fortran is read, via a
+                                    native/fortran registry per category.
         strategies/
-            base.py          -- MoveStrategy / BindStrategy / UnbindStrategy ABCs
-            move.py          -- NativeMoveStrategy / FortranMoveStrategy
-            bind.py          -- Native/Fortran bind strategies
-            unbind.py        -- UnbindDegradation / UnbindTime variants
+            base.py              -- MoveStrategy / BindStrategy /
+                                    UnbindStrategy / ConflictResolutionStrategy
+                                    ABCs
+            move.py               -- NativeMoveStrategy / FortranMoveStrategy
+            bind.py               -- DefaultBindStrategy (single
+                                    implementation -- bind() has no actual
+                                    Native/Fortran divergence)
+            unbind.py             -- NativeUnbindStrategy / FortranUnbindStrategy
+            conflict_resolution.py -- Native/FortranConflictResolutionStrategy
         services/
-            random_draw.py   -- RandomDrawSource protocol + Native/Fortran impls
-            recording.py     -- Recorder service
-
-Nothing here is wired up yet -- this file exists so the target shape is
-reviewable before any logic moves out of macroscale.py.
+            random_draw.py        -- RandomDrawSource + Native/FortranDrawSource
+            binding_time.py        -- BindingTimeFactory (batch binding-time
+                                    generation, shared by both modes)
 """
