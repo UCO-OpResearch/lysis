@@ -11,3 +11,9 @@ __pycache__
 fort.*
 *.sublime-*
 data
+
+# uv-managed virtual environment
+.venv
+
+# Python build / editable-install metadata
+*.egg-info
