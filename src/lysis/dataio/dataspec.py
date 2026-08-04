@@ -552,6 +552,13 @@ class DataSpec:
 # Collections: "microscale_out", "macroscale_in", "macroscale_out"
 _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
     # ============================================================================
+    # v1.90.0: Identical to v1.95.0, except the macroscale degradation data is
+    # stored as the 'f_deg_time' snapshot array instead of the 'f_deg_list'
+    # event log
+    # NOTE: This spec will be added below as a modified copy of v1.95.0
+    # ============================================================================
+    "v1.90.0": {},
+    # ============================================================================
     # v1.95.0: Identical to v1.99.0, except pre Pint Quantity implementation
     # NOTE: This spec will be added below as a copy of v1.99.0
     # ============================================================================
@@ -997,7 +1004,18 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
 # ============================================================================
 # v1.95.00 <-- v1.99.0
 def _create_v1_95():
+    """Build the v1.95.0 spec as a modified copy of v1.99.0.
+
+    v1.95.0 predates the Pint Quantity implementation, so parameters are plain
+    floats rather than Quantities, and the microscale run has no ``params.json``
+    at all — its parameters must be parsed out of the ``micro{file_code}.txt``
+    log file instead.
+
+    :return: The v1.95.0 collection specifications.
+    :rtype: dict[str, DataCollectionSpec]
+    """
     v1_95 = copy.deepcopy(_dataspec_raw["v1.99.0"])
+    # Microscale parameters come from the micro log, not a JSON file
     v1_95["microscale_out"] = v1_95["microscale_out"].replace(
         params=DataSetSpec(
             data_location="micro{file_code}.txt",
@@ -1005,6 +1023,7 @@ def _create_v1_95():
             dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_PARSED,
         )
     )
+    # Macroscale params.json still exists, but holds bare floats, not Quantities
     v1_95["macroscale_out"] = v1_95["macroscale_out"].replace(
         params={"dtype": np.float64}
     )
@@ -1016,7 +1035,19 @@ _dataspec_raw["v1.95.0"] = _create_v1_95()
 
 # v1.90.0 <-- v1.95.0
 def _create_v1_90():
+    """Build the v1.90.0 spec as a modified copy of v1.95.0.
+
+    v1.90.0 records fiber degradation as ``f_deg_time``: a binary snapshot array
+    of shape ``(Nsave + 1, total_edges)`` giving each fiber's scheduled degrade
+    time at every snapshot (the sentinel ``9.9e100`` means "not yet scheduled").
+    Later versions replaced this with the ``f_deg_list`` event log, which
+    therefore does not exist here.
+
+    :return: The v1.90.0 collection specifications.
+    :rtype: dict[str, DataCollectionSpec]
+    """
     v1_90 = copy.deepcopy(_dataspec_raw["v1.95.0"])
+    # Swap the f_deg_list event log for the f_deg_time snapshot array
     v1_90["macroscale_out"] = v1_90["macroscale_out"].replace(
         data={
             "f_deg_list": None,  # removed (None → deleted by fixed replace())
