@@ -34,10 +34,24 @@ Generate array of random floats::
 """
 
 import ctypes
-import os
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
+
+
+def _kiss_library_path() -> Path:
+    """Return the absolute path to the compiled KISS shared library.
+
+    Computed from the installed ``lysis`` package location
+    (``src/lysis/tools/kiss.py`` → repo root is three parents up), matching
+    the convention used by :func:`lysis.tools.slurm._repo_root`.  The
+    library is built by ``make shared`` into ``<repo root>/lib/kiss.so``.
+
+    :return: Absolute path to ``lib/kiss.so`` (which may not exist yet).
+    :rtype: pathlib.Path
+    """
+    return Path(__file__).resolve().parents[3] / "lib" / "kiss.so"
 
 
 class KissRandomGenerator:
@@ -64,7 +78,14 @@ class KissRandomGenerator:
 
     Note:
         The underlying C library (kiss.so) must be compiled and available in
-        the lib/ directory relative to this module.
+        the ``lib/`` directory at the repository root (``make shared``).
+
+    Warning:
+        The generator state lives in C file-scope globals, so *all* instances
+        of this class share a single stream.  Constructing a second generator
+        re-seeds the one shared state rather than creating an independent one,
+        and draws from either instance advance it for both.  Use
+        :meth:`getstate`/:meth:`setstate` to return to a known point.
     """
 
     def __init__(self, seed: int = None):
@@ -81,12 +102,15 @@ class KissRandomGenerator:
         :raises OSError: If the kiss.so library cannot be found or loaded
         :raises ctypes.CException: If C function signatures don't match expected types
         """
-        # Determine the current path and find the kiss.so library
-        path = os.path.dirname(__file__)
-        lib_path = os.path.join(path, "..", "..", "..", "..", "lib")
-        kiss_file = "kiss.so"
+        # Find the kiss.so library built by ``make shared``
+        kiss_path = _kiss_library_path()
+        if not kiss_path.is_file():
+            raise OSError(
+                f"KISS shared library not found at {kiss_path}. "
+                f"Build it with 'make shared' from the repository root."
+            )
         # Import the C library
-        my_kiss = ctypes.CDLL(os.path.join(lib_path, kiss_file))
+        my_kiss = ctypes.CDLL(str(kiss_path))
 
         # Defile the datatype for the RNG state
         self.state_type = ctypes.c_uint * 4
@@ -98,7 +122,7 @@ class KissRandomGenerator:
 
         self.vurcw1 = my_kiss.c_vurcw2_
         self.vurcw1.argtypes = [
-            np.ctypeslib.ndpointer(np.float_, flags="C_CONTIGUOUS"),
+            np.ctypeslib.ndpointer(np.float64, flags="C_CONTIGUOUS"),
             ctypes.c_int,
         ]
 
@@ -158,12 +182,13 @@ class KissRandomGenerator:
     def seed(self, seed: int = None):
         """Set the seed for the random number generator.
 
-        The seed determines the starting point of the random sequence. The same
-        seed will always produce the same sequence of random numbers, enabling
-        reproducible simulations.
-
-        Internally, the seed becomes the fourth element of the generator's state
-        vector. The other three state elements are preserved from the current state.
+        Internally, the seed becomes only the *fourth* element of the generator's
+        state vector; the other three elements are preserved from the current
+        state.  In a fresh process those three still hold the C library's
+        compiled-in defaults, so a given seed reproduces a given sequence — but
+        re-seeding a generator that has already been drawn from does **not**
+        rewind it, because the first three state words have advanced.  Use
+        :meth:`setstate` to return to an exact previous point.
 
         :param seed: The seed value. If None, generates a time-based seed using
             the system clock. Should be in range [0, 2^32-1].
@@ -176,10 +201,9 @@ class KissRandomGenerator:
             Values outside the 32-bit range will produce undefined behavior.
 
         Example:
-            >>> kiss1 = KissRandomGenerator(42)
-            >>> kiss2 = KissRandomGenerator(42)
-            >>> kiss1.random() == kiss2.random()  # Same seed, same sequence
-            True
+            >>> kiss = KissRandomGenerator(42)  # Fresh process
+            >>> kiss.getstate()[3]
+            42
         """
         # If no seed was given, generate one from the system clock
         if seed is None:
@@ -219,18 +243,24 @@ class KissRandomGenerator:
         return c_state[0], c_state[1], c_state[2], c_state[3]
 
     def random(self, size: int = None) -> float | np.ndarray:
-        """Generate random float(s) uniformly distributed in [0, 1).
+        """Generate random float(s) uniformly distributed in [0, 1].
 
         If size is None, returns a single float. If size is specified, returns
         a numpy array of the given size filled with random floats.
 
         This method mimics numpy.random.Generator.random() for compatibility.
+        Note that, unlike numpy's half-open ``[0, 1)``, the C generator builds
+        each value from two 32-bit draws scaled by ``1 / (2**64 - 1)`` and
+        clamps to ``1.0``, so the interval is closed at both ends.
+
+        Each returned value consumes *two* draws from the underlying KISS
+        sequence.
 
         :param size: If None, return a single float. If an integer, return a
             1D numpy array of that length.
         :type size: int, optional
-        :return: A single random float in [0, 1) if size is None, otherwise a
-            numpy array of random floats.
+        :return: A single random float in [0, 1] if size is None, otherwise a
+            numpy array (dtype ``float64``) of random floats.
         :rtype: float or np.ndarray
 
         Example:
@@ -243,8 +273,8 @@ class KissRandomGenerator:
         if size is None:
             return self.urcw1()
         else:
-            out = np.empty(size, dtype=np.float_)
-            self.vurcw1(out, size)
+            out = np.empty(size, dtype=np.float64)
+            self.vurcw1(out, int(size))
             # for i in range(size):
             #     out[i] = self.urcw1()
             return out
