@@ -37,6 +37,7 @@ notebooks = [
     "jupyter-black>=0.3",
     "black>=23.0",
     "jupyterlab>=4.6.2",
+    "octave-kernel>=0.39.0",
 ]
 
 [project.scripts]

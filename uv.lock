@@ -1474,6 +1474,8 @@ notebooks = [
     { name = "jupyterlab" },
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "octave-kernel", version = "0.39.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "octave-kernel", version = "1.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 test = [
     { name = "pytest" },
@@ -1493,6 +1495,7 @@ requires-dist = [
     { name = "networkx", marker = "extra == 'notebooks'", specifier = ">=3.0" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "nvtx", marker = "extra == 'gpu'", specifier = ">=0.2" },
+    { name = "octave-kernel", marker = "extra == 'notebooks'", specifier = ">=0.39.0" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "pint", specifier = ">=0.20" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0" },
@@ -1694,6 +1697,49 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "metakernel"
+version = "0.32.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.11'",
+]
+dependencies = [
+    { name = "comm", marker = "python_full_version < '3.11'" },
+    { name = "ipykernel", marker = "python_full_version < '3.11'" },
+    { name = "jedi", marker = "python_full_version < '3.11'" },
+    { name = "jupyter-core", marker = "python_full_version < '3.11'" },
+    { name = "pexpect", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/18/6f/a68999453116a90e7e8f58a4dd91e40929e039c507828181784e3af00903/metakernel-0.32.0.tar.gz", hash = "sha256:031984b4c0629c129c86162d27bd8df264d6993bf961aec730fdb71facefddbc", size = 460794, upload-time = "2026-03-10T12:12:11.985Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9c/0a/fc5d09d84543a6c46e4f69dc5639d55c9258dd5bb6f258b1aedf3f32ab77/metakernel-0.32.0-py3-none-any.whl", hash = "sha256:1c033a52feffa46d844d9ef339f16299872d7046897b6f1ec64ced2f30b82159", size = 197940, upload-time = "2026-03-10T12:12:09.539Z" },
+]
+
+[[package]]
+name = "metakernel"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.14' and sys_platform == 'win32'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+]
+dependencies = [
+    { name = "comm", marker = "python_full_version >= '3.11'" },
+    { name = "ipykernel", marker = "python_full_version >= '3.11'" },
+    { name = "jedi", marker = "python_full_version >= '3.11'" },
+    { name = "jupyter-core", marker = "python_full_version >= '3.11'" },
+    { name = "pexpect", marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/76/1e/8b236222e93a3cd4962314d094f6a4936567e8a0728461f9d3b07a4f0f8f/metakernel-1.0.0.tar.gz", hash = "sha256:76f2b8926cbad5a089deb6f727399c4e34e8915af97896a8bb7968ebe02da21c", size = 229742, upload-time = "2026-03-24T01:24:13.452Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/2b/72e0cc706c2884549323976f1d6221b74e0700f22e827e60b8413204eebb/metakernel-1.0.0-py3-none-any.whl", hash = "sha256:9f90660ce583baffe0235316f3e1a0abf75bbf60039e811ccbedd68ef612fa44", size = 204586, upload-time = "2026-03-24T01:24:11.774Z" },
 ]
 
 [[package]]
@@ -2013,6 +2059,46 @@ wheels = [
 ]
 
 [[package]]
+name = "octave-kernel"
+version = "0.39.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.11'",
+]
+dependencies = [
+    { name = "ipykernel", marker = "python_full_version < '3.11'" },
+    { name = "jupyter-client", marker = "python_full_version < '3.11'" },
+    { name = "metakernel", version = "0.32.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/f6/c044883eaff44b31984d8a3090c903376c478d409fa07c5a9a0ac7003ea4/octave_kernel-0.39.0.tar.gz", hash = "sha256:384390c28c5911c78aeb746e6e2eeefc6492f4878356c75ef5c0cc99c0e719f4", size = 265903, upload-time = "2026-03-09T12:46:25.352Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/10/e88bfa82e0da89d0a3a2d0fcb9e9f0822ab23713a17b2c74c37dc7068ffd/octave_kernel-0.39.0-py3-none-any.whl", hash = "sha256:693c40c473dbc1f3442b7e3afdb03f6858bcfa5d484a643028fd8ca7231927c2", size = 36537, upload-time = "2026-03-09T12:46:23.526Z" },
+]
+
+[[package]]
+name = "octave-kernel"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.14' and sys_platform == 'win32'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+]
+dependencies = [
+    { name = "ipykernel", marker = "python_full_version >= '3.11'" },
+    { name = "jupyter-client", marker = "python_full_version >= '3.11'" },
+    { name = "metakernel", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "rpds-py", version = "2026.6.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/74/e1/c174cc8371d71f855894642b442a45af4dc428905adc15586793f1d45067/octave_kernel-1.1.0.tar.gz", hash = "sha256:2c6e907a126b2d1c9b37900460bf8c66442e7aea9071aaa7c4b4834d39554961", size = 566943, upload-time = "2026-06-30T13:11:37.054Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/35/10/753e22c156a02722fa4b3f95a7337335e5fdcc13f5a1396b005b4e91166d/octave_kernel-1.1.0-py3-none-any.whl", hash = "sha256:d08dd22d6a5907f48e1ddd81d726c8b487f86b358c9c7023b0d08dfc723488af", size = 40478, upload-time = "2026-06-30T13:11:36.07Z" },
+]
+
+[[package]]
 name = "overrides"
 version = "7.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2194,7 +2280,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess", marker = "(python_full_version < '3.11' and sys_platform == 'emscripten') or (python_full_version < '3.11' and sys_platform == 'win32') or (sys_platform != 'emscripten' and sys_platform != 'win32')" },
+    { name = "ptyprocess" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
