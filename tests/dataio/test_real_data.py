@@ -15,6 +15,7 @@ Fortran fibrinolysis simulator:
 """
 
 import os
+import re
 import warnings
 
 import h5py
@@ -24,7 +25,11 @@ from click.testing import CliRunner
 
 from lysis.cli import cli
 from lysis.config.constants import CONST
-from lysis.dataio.dataconvert import convert_data, generate_macroscale_in
+from lysis.dataio.dataconvert import (
+    convert_bind_events_to_bound,
+    convert_data,
+    generate_macroscale_in,
+)
 from lysis.dataio.dataspec import dataspec
 from lysis.dataio.datastore import DataStore
 from lysis.dataio.fileops import read_data_collection, write_data_collection
@@ -773,3 +778,305 @@ class TestReadFullV190Data:
         assert converted["params"].get(CONST.CONVERTED_FROM_ATTR) == "v1.90.0"
         assert "fiber_degrade_time" in converted
         assert len(converted["snapshot_time"]) == 10
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# v1.85.0 fixture tests (always run in CI)
+# ═════════════════════════════════════════════════════════════════════════════
+
+V185_MICRO_FILE_CODE = "_PLG2_tPA01_Q2"
+V185_MACRO_FILE_CODE = "_PLG2_tPA01_along_Q2"
+V185_TOTAL_EDGES = 33545
+V185_TOTAL_MOLECULES = 43074
+V185_EMPTY_EDGES = 7784  # last_empty_edge + 1 == full_row * empty_rows
+V185_SIMULATIONS = 2
+V185_SNAPSHOTS = 3
+
+
+def _read_v185_all(path):
+    """Read all three collections from *path* (v1.85.0).
+
+    Note the macroscale output uses a different file code from the microscale
+    output and the macroscale input files.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return read_data_collection(
+            path,
+            collections=[
+                dataspec["v1.85.0"]["microscale_out"],
+                dataspec["v1.85.0"]["macroscale_in"],
+                dataspec["v1.85.0"]["macroscale_out"],
+            ],
+            file_codes=[
+                V185_MICRO_FILE_CODE,
+                V185_MICRO_FILE_CODE,
+                V185_MACRO_FILE_CODE,
+            ],
+        )
+
+
+class TestReadV185Combined:
+    """Read the combined-simulation v1.85.0 fixture and verify."""
+
+    @pytest.fixture
+    def data(self, fortran_v185_sample_path):
+        return _read_v185_all(fortran_v185_sample_path)
+
+    def test_datasets_are_single_arrays_not_lists(self, data):
+        """simulations_combined=True yields one array, not one per simulation."""
+        for name in ("tsave", "f_deg_time", "m_loc", "m_bound", "mfpt"):
+            assert isinstance(data[name], np.ndarray), name
+
+    def test_nsave_is_a_vector_of_counts(self, data):
+        assert data["Nsave"].shape == (V185_SIMULATIONS,)
+        assert data["Nsave"].dtype == np.int32
+
+    def test_snapshot_rows_match_nsave(self, data):
+        """Every snapshot-indexed dataset holds sum(Nsave + 1) rows."""
+        expected = int((data["Nsave"] + 1).sum())
+        assert len(data["tsave"]) == expected
+        assert data["f_deg_time"].shape == (expected, V185_TOTAL_EDGES)
+        assert data["m_loc"].shape == (expected, V185_TOTAL_MOLECULES)
+        assert data["m_bound"].shape == (expected, V185_TOTAL_MOLECULES)
+
+    def test_mfpt_is_one_row_per_simulation(self, data):
+        """mfpt partitions by simulation, not by snapshot."""
+        assert data["mfpt"].shape == (V185_SIMULATIONS, V185_TOTAL_MOLECULES)
+
+    def test_m_bind_t_absent(self, data):
+        """v1.85.0 never wrote the binding event log."""
+        assert "m_bind_t" not in data
+
+    def test_deg_present(self, data):
+        """The v1.85.0-only degradation-state array is readable."""
+        assert data["deg"].shape == data["f_deg_time"].shape
+
+    def test_f_deg_time_uses_zero_not_the_v190_sentinel(self, data):
+        """v1.85.0 marks unscheduled edges with 0.0, not 9.9e100."""
+        assert np.all(data["f_deg_time"][0] == 0.0)
+        assert not np.any(data["f_deg_time"] >= 9.9e99)
+
+    def test_micro_and_macro_in_read_with_no_v185_changes(self, data):
+        """microscale_out and macroscale_in are identical to v1.90.0."""
+        assert data["firstPLi"].shape == data["lysis"].shape
+        assert data["tPAleave"].shape == (101,)
+        assert data["lenlysisvect"].shape == (100,)
+        assert data["lysismat"].shape[1] == 100
+
+    def test_params_loaded(self, data):
+        macro = data["params"]["macro_params"]
+        assert macro["total_edges"] == V185_TOTAL_EDGES
+        assert macro["total_molecules"] == V185_TOTAL_MOLECULES
+        # Legacy v1.85.0 spellings survive the read untouched.
+        assert macro["total_trials"] == V185_SIMULATIONS
+        assert macro["last_empty_edge"] == V185_EMPTY_EDGES - 1
+
+
+class TestConvertV185Data:
+    """Convert v1.85.0 fixture data through the full pipeline."""
+
+    @pytest.fixture
+    def raw(self, fortran_v185_sample_path):
+        return _read_v185_all(fortran_v185_sample_path)
+
+    @pytest.fixture
+    def v190(self, raw):
+        return convert_data(raw, "v1.85.0", "v1.90.0")
+
+    def test_split_into_per_simulation_lists(self, v190):
+        for name in ("tsave", "f_deg_time", "m_loc", "m_bound", "mfpt", "macro_log"):
+            assert len(v190[name]) == V185_SIMULATIONS, name
+
+    def test_each_simulation_has_its_own_snapshots(self, v190):
+        assert [len(t) for t in v190["tsave"]] == [V185_SNAPSHOTS] * V185_SIMULATIONS
+
+    def test_every_simulation_starts_at_time_zero(self, v190):
+        """The split is wrong if a simulation starts mid-timeline."""
+        for tsave in v190["tsave"]:
+            assert tsave[0] == 0.0
+
+    def test_nsave_becomes_per_simulation_scalars(self, v190):
+        assert [int(n) for n in v190["Nsave"]] == [
+            V185_SNAPSHOTS - 1
+        ] * V185_SIMULATIONS
+
+    def test_empty_edges_keep_zero_after_sentinel_remap(self, v190):
+        """A blanket 0.0 -> 9.9e100 remap would destroy the empty-edge marker."""
+        for f in v190["f_deg_time"]:
+            assert np.all(f[:, :V185_EMPTY_EDGES] == 0.0)
+
+    def test_unscheduled_fibrin_gets_the_v190_sentinel(self, v190):
+        for f in v190["f_deg_time"]:
+            assert np.all(f[0, V185_EMPTY_EDGES:] >= 9.9e99)
+
+    def test_m_bind_t_reconstructed(self, v190):
+        """v1.85.0 has no event log, so it is rebuilt from the m_bound snapshots."""
+        assert len(v190["m_bind_t"]) == V185_SIMULATIONS
+        assert v190["m_bind_t"][0].dtype.names == (
+            "Simulation Time Elapsed",
+            "tPA Molecule Index",
+            "Molecule New Status",
+            "Grid Location Index",
+        )
+
+    def test_m_bind_t_replays_back_to_m_bound(self, raw, v190):
+        """The reconstructed log must reproduce the original m_bound exactly."""
+        zero_based = []
+        for log in v190["m_bind_t"]:
+            log = log.copy()
+            log["tPA Molecule Index"] -= 1  # replay expects 0-based indices
+            zero_based.append(log)
+        replayed = convert_bind_events_to_bound(
+            {"m_bind_t": zero_based, "tsave": v190["tsave"], "params": v190["params"]},
+            input_dataset="m_bind_t",
+            snapshot_dataset="tsave",
+        )
+        for got, want in zip(replayed, v190["m_bound"]):
+            assert np.array_equal(got.astype(np.int32), want.astype(np.int32))
+
+    def test_macro_log_header_shared_by_every_simulation(self, v190):
+        logs = v190["macro_log"]
+        header_len = 34  # lines before the first "run number=" marker
+        for log in logs:
+            assert list(log[:header_len]) == list(logs[0][:header_len])
+
+    def test_deg_dropped(self, v190):
+        """v1.90.0 removed the underlying Fortran degradation-state array."""
+        assert "deg" not in v190
+
+    def test_converted_from_records_the_first_hop(self, raw):
+        """A v1.85.0 file must not be reported as converted from v1.90.0."""
+        converted = convert_data(raw, "v1.85.0", "v2.0.0")
+        assert converted["params"].get(CONST.CONVERTED_FROM_ATTR) == "v1.85.0"
+
+    def test_macroscale_datasets_present_after_v200(self, raw):
+        converted = convert_data(raw, "v1.85.0", "v2.0.0")
+        for name, spec in dataspec["v2.0.0"]["macroscale_out"].data.items():
+            if spec.optional:  # e.g. dispatcher log, absent in this source
+                continue
+            assert name in converted, f"Missing dataset: {name}"
+
+    def test_snapshot_time_after_v200(self, raw):
+        converted = convert_data(raw, "v1.85.0", "v2.0.0")
+        assert len(converted["snapshot_time"]) == V185_SIMULATIONS
+        for t in converted["snapshot_time"]:
+            assert t.shape == (V185_SNAPSHOTS,)
+
+    def test_tpa_bind_events_not_empty_after_v200(self, raw):
+        """Binding history must survive the whole chain, not just the first hop."""
+        converted = convert_data(raw, "v1.85.0", "v2.0.0")
+        assert all(len(e) > 0 for e in converted["tpa_bind_events"])
+
+
+class TestDataStoreV185Warning:
+    """Opening a v2.0.0 HDF5 converted from v1.85.0 emits UserWarning."""
+
+    @pytest.fixture
+    def converted_h5_dir(self, fortran_v185_sample_path, tmp_path):
+        raw = _read_v185_all(fortran_v185_sample_path)
+        converted = convert_data(raw, "v1.85.0", "v2.0.0")
+        run_code = "v185_test"
+        h5_path = str(tmp_path / f"{run_code}.h5")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            write_data_collection(
+                converted,
+                h5_path,
+                [
+                    dataspec["v2.0.0"]["microscale_out"],
+                    dataspec["v2.0.0"]["macroscale_out"],
+                ],
+                ["", ""],
+            )
+        return run_code, str(tmp_path)
+
+    def test_datastore_warns_on_converted_from_v185(self, converted_h5_dir):
+        run_code, dir_path = converted_h5_dir
+        with pytest.warns(UserWarning, match="v1.85.0"):
+            ds = DataStore(run_code, dir_path)
+            ds.close()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# v1.85.0 full dataset tests (local only)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.real_data
+class TestReadFullV185Data:
+    """Read v1.85.0 data from the full dataset (local only)."""
+
+    @pytest.fixture
+    def data(self, full_data_v185_paths):
+        micro_dir, macro_dir = full_data_v185_paths
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            micro = read_data_collection(
+                micro_dir,
+                collections=[dataspec["v1.85.0"]["microscale_out"]],
+                file_codes=[V185_MICRO_FILE_CODE],
+            )
+            macro = read_data_collection(
+                macro_dir,
+                collections=[dataspec["v1.85.0"]["macroscale_out"]],
+                file_codes=[V185_MACRO_FILE_CODE],
+            )
+        return micro, macro
+
+    def test_microscale_read_from_its_own_directory(self, data):
+        """A v1.85.0 run spans two directories."""
+        micro, _ = data
+        assert micro["firstPLi"].shape == (50000,)
+        assert micro["params"]["micro_params"]["runs"] == pytest.approx(50000)
+
+    def test_ten_simulations_concatenated(self, data):
+        _, macro = data
+        assert list(macro["Nsave"]) == [
+            169,
+            170,
+            170,
+            170,
+            169,
+            169,
+            171,
+            170,
+            170,
+            170,
+        ]
+        assert len(macro["tsave"]) == int((macro["Nsave"] + 1).sum()) == 1708
+
+    def test_mfpt_row_major_matches_the_macro_log(self, data):
+        """mfpt is C-order (n_sims, n_molecules), proved against the log's own counter.
+
+        The Fortran writes one full mfpt vector per run, so the file is
+        run-major.  The macro log independently reports how many molecules
+        reached the back row in each run; the nonzero count per row must match.
+        """
+        _, macro = data
+        logged = [
+            int(m)
+            for m in re.findall(
+                r"Molecules that reached back row:\s+(\d+)",
+                "\n".join(str(line) for line in macro["macro_log"]),
+            )
+        ]
+        assert logged, "macro log did not report reached-back-row counts"
+        assert [int((row > 0).sum()) for row in macro["mfpt"]] == logged
+
+    def test_split_produces_ten_simulations(self, data):
+        _, macro = data
+        converted = convert_data(macro, "v1.85.0", "v1.90.0")
+        assert [len(t) for t in converted["tsave"]] == [
+            170,
+            171,
+            171,
+            171,
+            170,
+            170,
+            172,
+            171,
+            171,
+            171,
+        ]
+        assert all(t[0] == 0.0 for t in converted["tsave"])

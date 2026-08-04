@@ -1,0 +1,419 @@
+ number of command arguments =           10
+ command arg            1  = --expCode
+ command arg            2  = 2023-02-02-2200
+ Setting expCode = 2023-02-02-2200
+ command arg            3  = --inFileCode
+ command arg            4  = _PLG2_tPA01_Q2.dat
+ Setting inFileCode = 
+ _PLG2_tPA01_Q2.dat                                                             
+  
+ command arg            5  = --outFileCode
+ command arg            6  = _PLG2_tPA01_along_Q2.dat
+ Setting outFileCode = 
+ _PLG2_tPA01_along_Q2.dat                                                       
+  
+ command arg            7  = --tf
+ command arg            8  = 0
+ Setting tf =            0
+ command arg            9  = --seed
+ command arg           10  = 17109424
+ Setting seed =     17109424
+ command line processed
+  filetype=
+ binary                                                                         
+  
+  N=          93
+  F=         121
+  Ffree=          29
+  num=       33545
+  M=       43074
+  obtained using code macro_Q2_diffuse_along.f90 on data 2023-02-02-2200
+  seed=    17109424
+ read tPAleave.dat
+ read tsectPA.dat
+ enoFB=        7784
+  run number=           1
+  q=  0.200000000000000     
+  delx=  1.013500000000000E-004
+  tstep=  3.423940833333333E-004
+  tf=           0
+  num_t=  0.000000000000000E+000
+  kon=  0.100000000000000     
+  bs=         427
+  avgwait=   27.8000000000000     
+  frac_forced=  8.520000000000000E-002
+  save as deg
+ _PLG2_tPA01_along_Q2.dat                                                       
+  
+After   10.00 sec,     0 fibers are degraded (  0.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   20.00 sec,    59 fibers are degraded (  0.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   30.00 sec,   308 fibers are degraded (  1.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   40.00 sec,   685 fibers are degraded (  2.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   50.00 sec,   963 fibers are degraded (  3.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   60.00 sec,  1168 fibers are degraded (  4.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   70.00 sec,  1315 fibers are degraded (  5.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   80.00 sec,  1516 fibers are degraded (  5.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   90.00 sec,  1714 fibers are degraded (  6.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  100.00 sec,  1933 fibers are degraded (  7.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  110.00 sec,  2164 fibers are degraded (  8.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  120.00 sec,  2350 fibers are degraded (  9.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  130.00 sec,  2547 fibers are degraded (  9.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  140.00 sec,  2748 fibers are degraded ( 10.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  150.00 sec,  2974 fibers are degraded ( 11.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  160.00 sec,  3162 fibers are degraded ( 12.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  170.00 sec,  3385 fibers are degraded ( 13.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  180.00 sec,  3589 fibers are degraded ( 13.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  190.00 sec,  3788 fibers are degraded ( 14.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  200.00 sec,  3987 fibers are degraded ( 15.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  210.00 sec,  4162 fibers are degraded ( 16.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  220.00 sec,  4370 fibers are degraded ( 17.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  230.00 sec,  4571 fibers are degraded ( 17.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  240.00 sec,  4769 fibers are degraded ( 18.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  250.00 sec,  4969 fibers are degraded ( 19.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  260.00 sec,  5163 fibers are degraded ( 20.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  270.00 sec,  5362 fibers are degraded ( 20.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  280.00 sec,  5578 fibers are degraded ( 21.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  290.00 sec,  5779 fibers are degraded ( 22.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  300.00 sec,  5990 fibers are degraded ( 23.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  310.00 sec,  6170 fibers are degraded ( 24.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  320.00 sec,  6360 fibers are degraded ( 24.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  330.00 sec,  6563 fibers are degraded ( 25.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  340.00 sec,  6748 fibers are degraded ( 26.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  350.00 sec,  6942 fibers are degraded ( 26.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  360.00 sec,  7144 fibers are degraded ( 27.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  370.00 sec,  7338 fibers are degraded ( 28.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  380.00 sec,  7529 fibers are degraded ( 29.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  390.00 sec,  7721 fibers are degraded ( 30.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  400.00 sec,  7916 fibers are degraded ( 30.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  410.00 sec,  8117 fibers are degraded ( 31.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  420.00 sec,  8305 fibers are degraded ( 32.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  430.00 sec,  8506 fibers are degraded ( 33.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  440.00 sec,  8666 fibers are degraded ( 33.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  450.00 sec,  8879 fibers are degraded ( 34.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  460.00 sec,  9066 fibers are degraded ( 35.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  470.00 sec,  9267 fibers are degraded ( 36.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  480.00 sec,  9456 fibers are degraded ( 36.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  490.00 sec,  9632 fibers are degraded ( 37.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  500.00 sec,  9834 fibers are degraded ( 38.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  510.00 sec, 10016 fibers are degraded ( 38.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  520.00 sec, 10203 fibers are degraded ( 39.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  530.00 sec, 10397 fibers are degraded ( 40.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  540.00 sec, 10617 fibers are degraded ( 41.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  550.00 sec, 10798 fibers are degraded ( 41.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  560.00 sec, 10982 fibers are degraded ( 42.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  570.00 sec, 11155 fibers are degraded ( 43.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  580.00 sec, 11354 fibers are degraded ( 44.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  590.00 sec, 11542 fibers are degraded ( 44.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  600.00 sec, 11719 fibers are degraded ( 45.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  610.00 sec, 11914 fibers are degraded ( 46.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  620.00 sec, 12085 fibers are degraded ( 46.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  630.00 sec, 12278 fibers are degraded ( 47.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  640.00 sec, 12468 fibers are degraded ( 48.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  650.00 sec, 12670 fibers are degraded ( 49.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  660.00 sec, 12837 fibers are degraded ( 49.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  670.00 sec, 13023 fibers are degraded ( 50.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  680.00 sec, 13208 fibers are degraded ( 51.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  690.00 sec, 13382 fibers are degraded ( 51.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  700.00 sec, 13562 fibers are degraded ( 52.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  710.00 sec, 13728 fibers are degraded ( 53.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  720.00 sec, 13903 fibers are degraded ( 54.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  730.00 sec, 14103 fibers are degraded ( 54.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  740.00 sec, 14277 fibers are degraded ( 55.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  750.00 sec, 14475 fibers are degraded ( 56.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  760.00 sec, 14661 fibers are degraded ( 56.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  770.00 sec, 14824 fibers are degraded ( 57.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  780.00 sec, 15019 fibers are degraded ( 58.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  790.00 sec, 15204 fibers are degraded ( 59.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  800.00 sec, 15366 fibers are degraded ( 59.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  810.00 sec, 15556 fibers are degraded ( 60.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  820.00 sec, 15716 fibers are degraded ( 61.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  830.00 sec, 15901 fibers are degraded ( 61.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  840.00 sec, 16072 fibers are degraded ( 62.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  850.00 sec, 16245 fibers are degraded ( 63.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  860.00 sec, 16443 fibers are degraded ( 63.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  870.00 sec, 16607 fibers are degraded ( 64.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  880.00 sec, 16797 fibers are degraded ( 65.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  890.00 sec, 16982 fibers are degraded ( 65.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  900.00 sec, 17134 fibers are degraded ( 66.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  910.00 sec, 17307 fibers are degraded ( 67.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  920.00 sec, 17494 fibers are degraded ( 67.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  930.00 sec, 17681 fibers are degraded ( 68.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  940.00 sec, 17844 fibers are degraded ( 69.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  950.00 sec, 18023 fibers are degraded ( 70.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  960.00 sec, 18193 fibers are degraded ( 70.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  970.00 sec, 18366 fibers are degraded ( 71.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  980.00 sec, 18534 fibers are degraded ( 71.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  990.00 sec, 18694 fibers are degraded ( 72.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1000.00 sec, 18859 fibers are degraded ( 73.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1010.00 sec, 19049 fibers are degraded ( 73.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1020.00 sec, 19231 fibers are degraded ( 74.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1030.00 sec, 19392 fibers are degraded ( 75.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1040.00 sec, 19567 fibers are degraded ( 76.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1050.00 sec, 19732 fibers are degraded ( 76.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1060.00 sec, 19900 fibers are degraded ( 77.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1070.00 sec, 20076 fibers are degraded ( 77.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1080.00 sec, 20254 fibers are degraded ( 78.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1090.00 sec, 20415 fibers are degraded ( 79.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1100.00 sec, 20591 fibers are degraded ( 79.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1110.00 sec, 20760 fibers are degraded ( 80.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1120.00 sec, 20920 fibers are degraded ( 81.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1130.00 sec, 21092 fibers are degraded ( 81.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1140.00 sec, 21267 fibers are degraded ( 82.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1150.00 sec, 21422 fibers are degraded ( 83.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1160.00 sec, 21607 fibers are degraded ( 83.9% of total) and     1 molecules have reached the back row (  0.0% of total).
+After 1170.00 sec, 21758 fibers are degraded ( 84.5% of total) and     1 molecules have reached the back row (  0.0% of total).
+After 1180.00 sec, 21929 fibers are degraded ( 85.1% of total) and     1 molecules have reached the back row (  0.0% of total).
+After 1190.00 sec, 22111 fibers are degraded ( 85.8% of total) and     2 molecules have reached the back row (  0.0% of total).
+After 1200.00 sec, 22282 fibers are degraded ( 86.5% of total) and     2 molecules have reached the back row (  0.0% of total).
+After 1210.00 sec, 22445 fibers are degraded ( 87.1% of total) and     3 molecules have reached the back row (  0.0% of total).
+After 1220.00 sec, 22601 fibers are degraded ( 87.7% of total) and     6 molecules have reached the back row (  0.0% of total).
+After 1230.00 sec, 22768 fibers are degraded ( 88.4% of total) and     9 molecules have reached the back row (  0.0% of total).
+After 1240.00 sec, 22934 fibers are degraded ( 89.0% of total) and    11 molecules have reached the back row (  0.0% of total).
+After 1250.00 sec, 23112 fibers are degraded ( 89.7% of total) and    23 molecules have reached the back row (  0.1% of total).
+After 1260.00 sec, 23270 fibers are degraded ( 90.3% of total) and    41 molecules have reached the back row (  0.1% of total).
+After 1270.00 sec, 23441 fibers are degraded ( 91.0% of total) and    59 molecules have reached the back row (  0.1% of total).
+After 1280.00 sec, 23600 fibers are degraded ( 91.6% of total) and    89 molecules have reached the back row (  0.2% of total).
+After 1290.00 sec, 23767 fibers are degraded ( 92.3% of total) and   129 molecules have reached the back row (  0.3% of total).
+After 1300.00 sec, 23945 fibers are degraded ( 93.0% of total) and   193 molecules have reached the back row (  0.4% of total).
+After 1310.00 sec, 24112 fibers are degraded ( 93.6% of total) and   277 molecules have reached the back row (  0.6% of total).
+After 1320.00 sec, 24293 fibers are degraded ( 94.3% of total) and   410 molecules have reached the back row (  1.0% of total).
+After 1330.00 sec, 24448 fibers are degraded ( 94.9% of total) and   623 molecules have reached the back row (  1.4% of total).
+After 1340.00 sec, 24603 fibers are degraded ( 95.5% of total) and   956 molecules have reached the back row (  2.2% of total).
+After 1350.00 sec, 24785 fibers are degraded ( 96.2% of total) and  1425 molecules have reached the back row (  3.3% of total).
+After 1360.00 sec, 24961 fibers are degraded ( 96.9% of total) and  2321 molecules have reached the back row (  5.4% of total).
+After 1370.00 sec, 25093 fibers are degraded ( 97.4% of total) and  3927 molecules have reached the back row (  9.1% of total).
+After 1380.00 sec, 25225 fibers are degraded ( 97.9% of total) and  6291 molecules have reached the back row ( 14.6% of total).
+After 1390.00 sec, 25363 fibers are degraded ( 98.5% of total) and 10013 molecules have reached the back row ( 23.2% of total).
+After 1400.00 sec, 25488 fibers are degraded ( 98.9% of total) and 14332 molecules have reached the back row ( 33.3% of total).
+After 1410.00 sec, 25572 fibers are degraded ( 99.3% of total) and 18050 molecules have reached the back row ( 41.9% of total).
+After 1420.00 sec, 25653 fibers are degraded ( 99.6% of total) and 21206 molecules have reached the back row ( 49.2% of total).
+After 1430.00 sec, 25704 fibers are degraded ( 99.8% of total) and 23558 molecules have reached the back row ( 54.7% of total).
+After 1440.00 sec, 25737 fibers are degraded ( 99.9% of total) and 25379 molecules have reached the back row ( 58.9% of total).
+After 1450.00 sec, 25759 fibers are degraded (100.0% of total) and 26858 molecules have reached the back row ( 62.4% of total).
+After 1460.00 sec, 25761 fibers are degraded (100.0% of total) and 28180 molecules have reached the back row ( 65.4% of total).
+After 1470.00 sec, 25761 fibers are degraded (100.0% of total) and 29376 molecules have reached the back row ( 68.2% of total).
+After 1480.00 sec, 25761 fibers are degraded (100.0% of total) and 30503 molecules have reached the back row ( 70.8% of total).
+After 1490.00 sec, 25761 fibers are degraded (100.0% of total) and 31535 molecules have reached the back row ( 73.2% of total).
+After 1500.00 sec, 25761 fibers are degraded (100.0% of total) and 32490 molecules have reached the back row ( 75.4% of total).
+After 1510.00 sec, 25761 fibers are degraded (100.0% of total) and 33312 molecules have reached the back row ( 77.3% of total).
+After 1520.00 sec, 25761 fibers are degraded (100.0% of total) and 34146 molecules have reached the back row ( 79.3% of total).
+After 1530.00 sec, 25761 fibers are degraded (100.0% of total) and 34859 molecules have reached the back row ( 80.9% of total).
+After 1540.00 sec, 25761 fibers are degraded (100.0% of total) and 35502 molecules have reached the back row ( 82.4% of total).
+After 1550.00 sec, 25761 fibers are degraded (100.0% of total) and 36125 molecules have reached the back row ( 83.9% of total).
+After 1560.00 sec, 25761 fibers are degraded (100.0% of total) and 36673 molecules have reached the back row ( 85.1% of total).
+After 1570.00 sec, 25761 fibers are degraded (100.0% of total) and 37210 molecules have reached the back row ( 86.4% of total).
+After 1580.00 sec, 25761 fibers are degraded (100.0% of total) and 37728 molecules have reached the back row ( 87.6% of total).
+After 1590.00 sec, 25761 fibers are degraded (100.0% of total) and 38159 molecules have reached the back row ( 88.6% of total).
+After 1600.00 sec, 25761 fibers are degraded (100.0% of total) and 38553 molecules have reached the back row ( 89.5% of total).
+After 1610.00 sec, 25761 fibers are degraded (100.0% of total) and 38922 molecules have reached the back row ( 90.4% of total).
+After 1620.00 sec, 25761 fibers are degraded (100.0% of total) and 39255 molecules have reached the back row ( 91.1% of total).
+After 1630.00 sec, 25761 fibers are degraded (100.0% of total) and 39596 molecules have reached the back row ( 91.9% of total).
+After 1640.00 sec, 25761 fibers are degraded (100.0% of total) and 39844 molecules have reached the back row ( 92.5% of total).
+After 1650.00 sec, 25761 fibers are degraded (100.0% of total) and 40071 molecules have reached the back row ( 93.0% of total).
+After 1660.00 sec, 25761 fibers are degraded (100.0% of total) and 40318 molecules have reached the back row ( 93.6% of total).
+After 1670.00 sec, 25761 fibers are degraded (100.0% of total) and 40554 molecules have reached the back row ( 94.1% of total).
+After 1680.00 sec, 25761 fibers are degraded (100.0% of total) and 40763 molecules have reached the back row ( 94.6% of total).
+After 1690.00 sec, 25761 fibers are degraded (100.0% of total) and 40954 molecules have reached the back row ( 95.1% of total).
+ Processing time:    9841.92588200000       sec
+ Total Binds:      1318384
+ Total Regular Moves:            20551938405
+ Total Restricted Moves:            11896116317
+ Molecules that reached back row:        40954
+ Last fiber degraded at:    1452.90204224150       sec
+ nplt=         171
+ r4=  0.616551309355430     
+ countmacrounbd=      677992
+ countmicrounbd=       54595
+  run number=           2
+  q=  0.200000000000000     
+  delx=  1.013500000000000E-004
+  tstep=  3.423940833333333E-004
+  tf=           0
+  num_t=  0.000000000000000E+000
+  kon=  0.100000000000000     
+  bs=         427
+  avgwait=   27.8000000000000     
+  frac_forced=  8.520000000000000E-002
+  save as deg
+ _PLG2_tPA01_along_Q2.dat                                                       
+  
+After   10.00 sec,     0 fibers are degraded (  0.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   20.00 sec,    44 fibers are degraded (  0.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   30.00 sec,   303 fibers are degraded (  1.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   40.00 sec,   704 fibers are degraded (  2.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   50.00 sec,   973 fibers are degraded (  3.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   60.00 sec,  1159 fibers are degraded (  4.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   70.00 sec,  1320 fibers are degraded (  5.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   80.00 sec,  1512 fibers are degraded (  5.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After   90.00 sec,  1723 fibers are degraded (  6.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  100.00 sec,  1959 fibers are degraded (  7.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  110.00 sec,  2177 fibers are degraded (  8.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  120.00 sec,  2385 fibers are degraded (  9.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  130.00 sec,  2561 fibers are degraded (  9.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  140.00 sec,  2775 fibers are degraded ( 10.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  150.00 sec,  2977 fibers are degraded ( 11.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  160.00 sec,  3188 fibers are degraded ( 12.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  170.00 sec,  3394 fibers are degraded ( 13.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  180.00 sec,  3583 fibers are degraded ( 13.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  190.00 sec,  3777 fibers are degraded ( 14.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  200.00 sec,  3960 fibers are degraded ( 15.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  210.00 sec,  4163 fibers are degraded ( 16.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  220.00 sec,  4376 fibers are degraded ( 17.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  230.00 sec,  4585 fibers are degraded ( 17.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  240.00 sec,  4787 fibers are degraded ( 18.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  250.00 sec,  4983 fibers are degraded ( 19.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  260.00 sec,  5181 fibers are degraded ( 20.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  270.00 sec,  5390 fibers are degraded ( 20.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  280.00 sec,  5581 fibers are degraded ( 21.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  290.00 sec,  5751 fibers are degraded ( 22.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  300.00 sec,  5959 fibers are degraded ( 23.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  310.00 sec,  6156 fibers are degraded ( 23.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  320.00 sec,  6346 fibers are degraded ( 24.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  330.00 sec,  6546 fibers are degraded ( 25.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  340.00 sec,  6742 fibers are degraded ( 26.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  350.00 sec,  6927 fibers are degraded ( 26.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  360.00 sec,  7112 fibers are degraded ( 27.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  370.00 sec,  7283 fibers are degraded ( 28.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  380.00 sec,  7475 fibers are degraded ( 29.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  390.00 sec,  7692 fibers are degraded ( 29.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  400.00 sec,  7898 fibers are degraded ( 30.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  410.00 sec,  8099 fibers are degraded ( 31.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  420.00 sec,  8275 fibers are degraded ( 32.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  430.00 sec,  8467 fibers are degraded ( 32.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  440.00 sec,  8677 fibers are degraded ( 33.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  450.00 sec,  8880 fibers are degraded ( 34.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  460.00 sec,  9083 fibers are degraded ( 35.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  470.00 sec,  9271 fibers are degraded ( 36.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  480.00 sec,  9453 fibers are degraded ( 36.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  490.00 sec,  9626 fibers are degraded ( 37.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  500.00 sec,  9806 fibers are degraded ( 38.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  510.00 sec, 10001 fibers are degraded ( 38.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  520.00 sec, 10184 fibers are degraded ( 39.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  530.00 sec, 10377 fibers are degraded ( 40.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  540.00 sec, 10549 fibers are degraded ( 40.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  550.00 sec, 10750 fibers are degraded ( 41.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  560.00 sec, 10934 fibers are degraded ( 42.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  570.00 sec, 11124 fibers are degraded ( 43.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  580.00 sec, 11314 fibers are degraded ( 43.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  590.00 sec, 11495 fibers are degraded ( 44.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  600.00 sec, 11695 fibers are degraded ( 45.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  610.00 sec, 11866 fibers are degraded ( 46.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  620.00 sec, 12069 fibers are degraded ( 46.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  630.00 sec, 12239 fibers are degraded ( 47.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  640.00 sec, 12415 fibers are degraded ( 48.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  650.00 sec, 12605 fibers are degraded ( 48.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  660.00 sec, 12816 fibers are degraded ( 49.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  670.00 sec, 12985 fibers are degraded ( 50.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  680.00 sec, 13156 fibers are degraded ( 51.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  690.00 sec, 13314 fibers are degraded ( 51.7% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  700.00 sec, 13512 fibers are degraded ( 52.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  710.00 sec, 13700 fibers are degraded ( 53.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  720.00 sec, 13910 fibers are degraded ( 54.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  730.00 sec, 14077 fibers are degraded ( 54.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  740.00 sec, 14268 fibers are degraded ( 55.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  750.00 sec, 14459 fibers are degraded ( 56.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  760.00 sec, 14636 fibers are degraded ( 56.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  770.00 sec, 14814 fibers are degraded ( 57.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  780.00 sec, 14995 fibers are degraded ( 58.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  790.00 sec, 15135 fibers are degraded ( 58.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  800.00 sec, 15324 fibers are degraded ( 59.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  810.00 sec, 15508 fibers are degraded ( 60.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  820.00 sec, 15711 fibers are degraded ( 61.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  830.00 sec, 15875 fibers are degraded ( 61.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  840.00 sec, 16054 fibers are degraded ( 62.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  850.00 sec, 16219 fibers are degraded ( 63.0% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  860.00 sec, 16386 fibers are degraded ( 63.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  870.00 sec, 16550 fibers are degraded ( 64.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  880.00 sec, 16730 fibers are degraded ( 64.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  890.00 sec, 16911 fibers are degraded ( 65.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  900.00 sec, 17090 fibers are degraded ( 66.3% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  910.00 sec, 17287 fibers are degraded ( 67.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  920.00 sec, 17478 fibers are degraded ( 67.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  930.00 sec, 17640 fibers are degraded ( 68.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  940.00 sec, 17814 fibers are degraded ( 69.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  950.00 sec, 17990 fibers are degraded ( 69.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  960.00 sec, 18164 fibers are degraded ( 70.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  970.00 sec, 18338 fibers are degraded ( 71.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  980.00 sec, 18495 fibers are degraded ( 71.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After  990.00 sec, 18673 fibers are degraded ( 72.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1000.00 sec, 18846 fibers are degraded ( 73.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1010.00 sec, 19022 fibers are degraded ( 73.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1020.00 sec, 19187 fibers are degraded ( 74.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1030.00 sec, 19358 fibers are degraded ( 75.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1040.00 sec, 19519 fibers are degraded ( 75.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1050.00 sec, 19690 fibers are degraded ( 76.4% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1060.00 sec, 19887 fibers are degraded ( 77.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1070.00 sec, 20061 fibers are degraded ( 77.9% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1080.00 sec, 20239 fibers are degraded ( 78.6% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1090.00 sec, 20408 fibers are degraded ( 79.2% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1100.00 sec, 20560 fibers are degraded ( 79.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1110.00 sec, 20726 fibers are degraded ( 80.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1120.00 sec, 20900 fibers are degraded ( 81.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1130.00 sec, 21082 fibers are degraded ( 81.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1140.00 sec, 21247 fibers are degraded ( 82.5% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1150.00 sec, 21416 fibers are degraded ( 83.1% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1160.00 sec, 21594 fibers are degraded ( 83.8% of total) and     0 molecules have reached the back row (  0.0% of total).
+After 1170.00 sec, 21757 fibers are degraded ( 84.5% of total) and     1 molecules have reached the back row (  0.0% of total).
+After 1180.00 sec, 21945 fibers are degraded ( 85.2% of total) and     2 molecules have reached the back row (  0.0% of total).
+After 1190.00 sec, 22105 fibers are degraded ( 85.8% of total) and     4 molecules have reached the back row (  0.0% of total).
+After 1200.00 sec, 22267 fibers are degraded ( 86.4% of total) and     4 molecules have reached the back row (  0.0% of total).
+After 1210.00 sec, 22433 fibers are degraded ( 87.1% of total) and     5 molecules have reached the back row (  0.0% of total).
+After 1220.00 sec, 22595 fibers are degraded ( 87.7% of total) and     7 molecules have reached the back row (  0.0% of total).
+After 1230.00 sec, 22782 fibers are degraded ( 88.4% of total) and     9 molecules have reached the back row (  0.0% of total).
+After 1240.00 sec, 22939 fibers are degraded ( 89.0% of total) and    19 molecules have reached the back row (  0.0% of total).
+After 1250.00 sec, 23115 fibers are degraded ( 89.7% of total) and    31 molecules have reached the back row (  0.1% of total).
+After 1260.00 sec, 23284 fibers are degraded ( 90.4% of total) and    38 molecules have reached the back row (  0.1% of total).
+After 1270.00 sec, 23442 fibers are degraded ( 91.0% of total) and    59 molecules have reached the back row (  0.1% of total).
+After 1280.00 sec, 23611 fibers are degraded ( 91.7% of total) and    82 molecules have reached the back row (  0.2% of total).
+After 1290.00 sec, 23783 fibers are degraded ( 92.3% of total) and   118 molecules have reached the back row (  0.3% of total).
+After 1300.00 sec, 23955 fibers are degraded ( 93.0% of total) and   177 molecules have reached the back row (  0.4% of total).
+After 1310.00 sec, 24120 fibers are degraded ( 93.6% of total) and   278 molecules have reached the back row (  0.6% of total).
+After 1320.00 sec, 24279 fibers are degraded ( 94.2% of total) and   416 molecules have reached the back row (  1.0% of total).
+After 1330.00 sec, 24437 fibers are degraded ( 94.9% of total) and   628 molecules have reached the back row (  1.5% of total).
+After 1340.00 sec, 24601 fibers are degraded ( 95.5% of total) and   959 molecules have reached the back row (  2.2% of total).
+After 1350.00 sec, 24743 fibers are degraded ( 96.0% of total) and  1389 molecules have reached the back row (  3.2% of total).
+After 1360.00 sec, 24929 fibers are degraded ( 96.8% of total) and  2169 molecules have reached the back row (  5.0% of total).
+After 1370.00 sec, 25086 fibers are degraded ( 97.4% of total) and  3794 molecules have reached the back row (  8.8% of total).
+After 1380.00 sec, 25231 fibers are degraded ( 97.9% of total) and  6435 molecules have reached the back row ( 14.9% of total).
+After 1390.00 sec, 25369 fibers are degraded ( 98.5% of total) and 10278 molecules have reached the back row ( 23.9% of total).
+After 1400.00 sec, 25488 fibers are degraded ( 98.9% of total) and 14791 molecules have reached the back row ( 34.3% of total).
+After 1410.00 sec, 25576 fibers are degraded ( 99.3% of total) and 18648 molecules have reached the back row ( 43.3% of total).
+After 1420.00 sec, 25661 fibers are degraded ( 99.6% of total) and 21637 molecules have reached the back row ( 50.2% of total).
+After 1430.00 sec, 25718 fibers are degraded ( 99.8% of total) and 23982 molecules have reached the back row ( 55.7% of total).
+After 1440.00 sec, 25745 fibers are degraded ( 99.9% of total) and 25619 molecules have reached the back row ( 59.5% of total).
+After 1450.00 sec, 25754 fibers are degraded (100.0% of total) and 27021 molecules have reached the back row ( 62.7% of total).
+After 1460.00 sec, 25761 fibers are degraded (100.0% of total) and 28278 molecules have reached the back row ( 65.6% of total).
+After 1470.00 sec, 25761 fibers are degraded (100.0% of total) and 29509 molecules have reached the back row ( 68.5% of total).
+After 1480.00 sec, 25761 fibers are degraded (100.0% of total) and 30570 molecules have reached the back row ( 71.0% of total).
+After 1490.00 sec, 25761 fibers are degraded (100.0% of total) and 31581 molecules have reached the back row ( 73.3% of total).
+After 1500.00 sec, 25761 fibers are degraded (100.0% of total) and 32426 molecules have reached the back row ( 75.3% of total).
+After 1510.00 sec, 25761 fibers are degraded (100.0% of total) and 33252 molecules have reached the back row ( 77.2% of total).
+After 1520.00 sec, 25761 fibers are degraded (100.0% of total) and 34034 molecules have reached the back row ( 79.0% of total).
+After 1530.00 sec, 25761 fibers are degraded (100.0% of total) and 34753 molecules have reached the back row ( 80.7% of total).
+After 1540.00 sec, 25761 fibers are degraded (100.0% of total) and 35407 molecules have reached the back row ( 82.2% of total).
+After 1550.00 sec, 25761 fibers are degraded (100.0% of total) and 36034 molecules have reached the back row ( 83.7% of total).
+After 1560.00 sec, 25761 fibers are degraded (100.0% of total) and 36619 molecules have reached the back row ( 85.0% of total).
+After 1570.00 sec, 25761 fibers are degraded (100.0% of total) and 37163 molecules have reached the back row ( 86.3% of total).
+After 1580.00 sec, 25761 fibers are degraded (100.0% of total) and 37643 molecules have reached the back row ( 87.4% of total).
+After 1590.00 sec, 25761 fibers are degraded (100.0% of total) and 38095 molecules have reached the back row ( 88.4% of total).
+After 1600.00 sec, 25761 fibers are degraded (100.0% of total) and 38517 molecules have reached the back row ( 89.4% of total).
+After 1610.00 sec, 25761 fibers are degraded (100.0% of total) and 38885 molecules have reached the back row ( 90.3% of total).
+After 1620.00 sec, 25761 fibers are degraded (100.0% of total) and 39218 molecules have reached the back row ( 91.0% of total).
+After 1630.00 sec, 25761 fibers are degraded (100.0% of total) and 39539 molecules have reached the back row ( 91.8% of total).
+After 1640.00 sec, 25761 fibers are degraded (100.0% of total) and 39805 molecules have reached the back row ( 92.4% of total).
+After 1650.00 sec, 25761 fibers are degraded (100.0% of total) and 40057 molecules have reached the back row ( 93.0% of total).
+After 1660.00 sec, 25761 fibers are degraded (100.0% of total) and 40280 molecules have reached the back row ( 93.5% of total).
+After 1670.00 sec, 25761 fibers are degraded (100.0% of total) and 40502 molecules have reached the back row ( 94.0% of total).
+After 1680.00 sec, 25761 fibers are degraded (100.0% of total) and 40695 molecules have reached the back row ( 94.5% of total).
+After 1690.00 sec, 25761 fibers are degraded (100.0% of total) and 40890 molecules have reached the back row ( 94.9% of total).
+After 1700.00 sec, 25761 fibers are degraded (100.0% of total) and 41040 molecules have reached the back row ( 95.3% of total).
+ Processing time:    9914.05319300000       sec
+ Total Binds:      1320522
+ Total Regular Moves:            20762749398
+ Total Restricted Moves:            11921890318
+ Molecules that reached back row:        41040
+ Last fiber degraded at:    1458.53305533600       sec
+ nplt=         172
+ r4=  0.860816995336123     
+ countmacrounbd=      679587
+ countmicrounbd=       54580

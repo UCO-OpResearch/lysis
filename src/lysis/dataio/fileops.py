@@ -425,6 +425,16 @@ _COLLECTION_LOG_PARSER = {
         "params_key": "micro_params",
         "stop_pattern": r"^\s*init_entry\s*=",
     },
+    # v1.85.0 micro logs list the rate constants immediately after ``runs=``
+    # and then only ``stats=`` progress lines, so ``stop_pattern`` never fires
+    # on a genuine v1.85.0 log.  It is kept identical to v1.90.0 so that
+    # v1.90.0-era rerun logs, which are often left alongside v1.85.0 data,
+    # parse the same way from either spec.
+    ("v1.85.0", "microscale_out"): {
+        "parser": parse_micro_log,
+        "params_key": "micro_params",
+        "stop_pattern": r"^\s*init_entry\s*=",
+    },
 }
 """Map ``(spec_version, collection_name)`` to parser config for FILE_PARSED storage."""
 

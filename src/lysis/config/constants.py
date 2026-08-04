@@ -522,4 +522,28 @@ FIBER_TYPES = {
     "Q4":     {"fiber_radius": Q_("72.7 nanometers"),  "nodes_in_micro_row": 13},
 }
 
+#: Fortran sentinel (v1.90.0 and later) marking a fibrin edge on which no tPA
+#: molecule has yet landed, so no degradation has been scheduled for it.
+#:
+#: Set by ``t_degrade = 9.9d+100`` in
+#: ``src/fortran/macro_diffuse_into_and_along__internal.f90``.
+UNSCHEDULED_DEGRADE_TIME: float = 9.9e100
+
+#: Degrade time of an empty (ghost) edge -- one of the ``empty_edges`` edges
+#: below the clot, which can never degrade.
+#:
+#: Set by ``t_degrade(1:enoFB) = 0`` in
+#: ``src/fortran/macro_diffuse_into_and_along__internal.f90``.
+EMPTY_EDGE_DEGRADE_TIME: float = 0.0
+
+#: The v1.85.0 "no degradation scheduled" sentinel.
+#:
+#: v1.85.0 initialised the *whole* ``t_degrade`` vector to zero
+#: (``t_degrade=0.0d+00`` in ``macro_Q2_diffuse_along.f90``) and never
+#: distinguished empty edges, so this value is ambiguous on its own: it means
+#: "empty edge" for the first ``empty_edges`` entries and "fibrin edge, not yet
+#: scheduled" for the rest.  Converters must disambiguate by index, never by
+#: value.
+V185_UNSCHEDULED_DEGRADE_TIME: float = 0.0
+
 CONST = Const()

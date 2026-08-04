@@ -187,3 +187,38 @@ def full_data_v190_path():
     if not _FULL_DATA_V190_DIR.exists():
         pytest.skip("Full v1.90.0 dataset not found at data/2026-02-28-1907/")
     return str(_FULL_DATA_V190_DIR)
+
+
+_FIXTURE_V185_DIR = _REPO_ROOT / "tests" / "fixtures" / "fortran_v185_sample"
+# A v1.85.0 run spans two directories: the microscale output lives with the
+# microscale run, the macroscale output with the macroscale run.
+_FULL_DATA_V185_MICRO_DIR = _REPO_ROOT / "data" / "2023-02-01-2200"
+_FULL_DATA_V185_MACRO_DIR = _REPO_ROOT / "data" / "2023-02-02-2200"
+
+
+@pytest.fixture(scope="session")
+def fortran_v185_sample_path():
+    """Path to the committed truncated v1.85.0 Fortran data fixture.
+
+    Returns the path to tests/fixtures/fortran_v185_sample/, which contains a
+    truncated subset of real v1.85.0 output: 2 simulations x 3 snapshots, all
+    concatenated into one file per dataset as v1.85.0 wrote them.
+    """
+    if not _FIXTURE_V185_DIR.exists():
+        pytest.skip(
+            "Truncated v1.85.0 fixture not found at tests/fixtures/fortran_v185_sample/"
+        )
+    return str(_FIXTURE_V185_DIR)
+
+
+@pytest.fixture(scope="session")
+def full_data_v185_paths():
+    """Paths to the full v1.85.0 Fortran data directories (local only).
+
+    Returns ``(microscale_dir, macroscale_dir)``.  Tests using this fixture
+    should be marked with @pytest.mark.real_data so they are skipped in CI.
+    """
+    for path in (_FULL_DATA_V185_MICRO_DIR, _FULL_DATA_V185_MACRO_DIR):
+        if not path.exists():
+            pytest.skip(f"Full v1.85.0 dataset not found at {path}")
+    return str(_FULL_DATA_V185_MICRO_DIR), str(_FULL_DATA_V185_MACRO_DIR)

@@ -114,6 +114,7 @@ See Also
 """
 
 import functools
+import re
 import warnings
 from collections import deque
 
@@ -128,7 +129,13 @@ from pint import Quantity
 
 import dataclasses
 
-from ..config.constants import CONST, Q_
+from ..config.constants import (
+    CONST,
+    EMPTY_EDGE_DEGRADE_TIME,
+    Q_,
+    UNSCHEDULED_DEGRADE_TIME,
+    V185_UNSCHEDULED_DEGRADE_TIME,
+)
 from ..config.parameters import MacroParameters, MicroParameters, Parameters
 from .dataspec import (
     DataCollectionSpec,
@@ -859,7 +866,7 @@ def convert_f_deg_list_to_f_deg_time(input_data: DataCollectionType) -> list[np.
     :rtype: list[np.ndarray]
     """
     n_edges = input_data["params"]["macro_params"]["total_edges"]
-    initial_degrade_time = 9.9e100  # Fortran sentinel: t_degrade = 9.9d+100
+    initial_degrade_time = UNSCHEDULED_DEGRADE_TIME
 
     output = []
     for events, tsave in zip(input_data["f_deg_list"], input_data["tsave"]):
@@ -896,7 +903,7 @@ def convert_f_deg_time_to_f_deg_list(input_data: DataCollectionType) -> list[np.
         "Fiber New Degrade Time")`` matching the v1.95.0 dtype.
     :rtype: list[np.ndarray]
     """
-    initial_degrade_time = 9.9e100
+    initial_degrade_time = UNSCHEDULED_DEGRADE_TIME
     output = []
     for f_deg_time, tsave in zip(input_data["f_deg_time"], input_data["tsave"]):
         events = []
@@ -920,6 +927,318 @@ def convert_f_deg_time_to_f_deg_list(input_data: DataCollectionType) -> list[np.
         )
         output.append(f_deg_list_arr)
     return output
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# v1.85.0 <-> v1.90.0: combined-simulation <-> per-simulation macroscale output
+#
+# v1.85.0 concatenates every simulation into one file per dataset, so
+# ``macroscale_out`` is ``simulations_combined=True`` and each dataset arrives
+# as a single array.  v1.90.0 stores one directory per simulation, so each
+# dataset is a list of arrays.  ``_convert_single_step`` decides whether to
+# wrap or unwrap based on the *output* collection only, so the split (and the
+# matching join) has to happen inside these converters.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def simulation_boundaries(input_data: DataCollectionType) -> np.ndarray:
+    """Compute the row indices at which each new simulation starts.
+
+    ``Nsave`` counts save *intervals*, so simulation ``i`` occupies
+    ``Nsave[i] + 1`` snapshot rows (the extra row is the initial state at
+    ``t = 0``).
+
+    :param input_data: Data collection containing the combined ``Nsave`` vector.
+    :type input_data: DataCollectionType
+    :return: Interior split points, suitable for :func:`numpy.split`.
+    :rtype: np.ndarray
+    """
+    nsave = np.asarray(input_data["Nsave"]).ravel()
+    return np.cumsum(nsave + 1)[:-1]
+
+
+def split_combined_by_snapshot(
+    input_data: DataCollectionType, dataset: str
+) -> list[np.ndarray]:
+    """Split a combined snapshot-indexed array into one array per simulation.
+
+    Used for datasets with one row per snapshot (``tsave``, ``f_deg_time``,
+    ``m_loc``, ``m_bound``), which partition on ``Nsave`` boundaries.
+
+    :param input_data: Data collection containing ``dataset`` and ``Nsave``.
+    :type input_data: DataCollectionType
+    :param dataset: Name of the combined dataset to split.
+    :type dataset: str
+    :return: One array per simulation.
+    :rtype: list[np.ndarray]
+    """
+    return list(np.split(input_data[dataset], simulation_boundaries(input_data)))
+
+
+def split_combined_by_simulation(
+    input_data: DataCollectionType, dataset: str
+) -> list[np.ndarray]:
+    """Split a combined simulation-indexed array into one array per simulation.
+
+    Used for datasets with exactly one row per simulation (``mfpt``), which
+    need no ``Nsave`` bookkeeping.
+
+    :param input_data: Data collection containing ``dataset``.
+    :type input_data: DataCollectionType
+    :param dataset: Name of the combined dataset to split.
+    :type dataset: str
+    :return: One array per simulation.
+    :rtype: list[np.ndarray]
+    """
+    return list(np.asarray(input_data[dataset]))
+
+
+def combine_per_simulation(
+    input_data: DataCollectionType, dataset: str, stack: bool = False
+) -> np.ndarray:
+    """Join a list of per-simulation arrays back into one combined array.
+
+    The inverse of :func:`split_combined_by_snapshot` (``stack=False``) and
+    :func:`split_combined_by_simulation` (``stack=True``).
+
+    :param input_data: Data collection containing the per-simulation list.
+    :type input_data: DataCollectionType
+    :param dataset: Name of the per-simulation dataset to join.
+    :type dataset: str
+    :param stack: If True, stack the parts along a new leading axis (each part
+        becomes one row).  If False, concatenate them along the existing
+        leading axis.
+    :type stack: bool
+    :return: The combined array.
+    :rtype: np.ndarray
+    """
+    parts = [np.atleast_1d(part) for part in input_data[dataset]]
+    return np.stack(parts) if stack else np.concatenate(parts, axis=0)
+
+
+def _v185_empty_edges(input_data: DataCollectionType) -> int:
+    """Read the empty (ghost) edge count from un-converted v1.85.0 parameters.
+
+    Dataset converters receive the *input* data with its parameters not yet
+    converted (``_convert_single_step`` builds the output params separately),
+    so the v1.85.0 spelling ``last_empty_edge`` is used when present.  It is an
+    inclusive 0-based index, hence the ``+ 1``.  Files that omit it fall back
+    to the same product :class:`~lysis.config.parameters.MacroParameters` uses
+    to derive ``empty_edges``.
+
+    :param input_data: Data collection containing v1.85.0 ``params``.
+    :type input_data: DataCollectionType
+    :return: Number of leading edges that can never degrade.
+    :rtype: int
+    :raises KeyError: If neither ``last_empty_edge`` nor both of ``full_row``
+        and ``empty_rows`` are available.
+    """
+    macro_params = input_data["params"]["macro_params"]
+    if "last_empty_edge" in macro_params:
+        return int(macro_params["last_empty_edge"]) + 1
+    if "empty_edges" in macro_params:
+        return int(macro_params["empty_edges"])
+    return int(macro_params["full_row"]) * int(macro_params["empty_rows"])
+
+
+def convert_f_deg_time_v185_to_v190(
+    input_data: DataCollectionType,
+) -> list[np.ndarray]:
+    """Remap the v1.85.0 degrade-time sentinel, then split by simulation.
+
+    v1.85.0 initialised the whole ``t_degrade`` vector to ``0.0``, so that
+    value is ambiguous: for the first ``empty_edges`` entries it means "empty
+    (ghost) edge", and for the rest it means "fibrin edge, no tPA has landed
+    yet".  v1.90.0 keeps ``0.0`` for empty edges only and marks unscheduled
+    fibrin with ``9.9e100``.
+
+    The two cases are told apart by *index*, never by value, so the remap is
+    applied to the fibrin region only — a blanket value remap would overwrite
+    the empty-edge marker.  A scheduled time can never legitimately be zero
+    (the Fortran schedules ``t + rmicro - tstep/2 > 0``), so within the fibrin
+    region the remap is unambiguous.
+
+    :param input_data: Data collection containing v1.85.0 ``f_deg_time``,
+        ``Nsave`` and ``params``.
+    :type input_data: DataCollectionType
+    :return: One ``(n_snapshots, total_edges)`` array per simulation, using the
+        v1.90.0 sentinel convention.
+    :rtype: list[np.ndarray]
+    """
+    empty_edges = _v185_empty_edges(input_data)
+    remapped = np.array(input_data["f_deg_time"], dtype=np.float64, copy=True)
+    fibrin = remapped[:, empty_edges:]
+    fibrin[fibrin == V185_UNSCHEDULED_DEGRADE_TIME] = UNSCHEDULED_DEGRADE_TIME
+    return list(np.split(remapped, simulation_boundaries(input_data)))
+
+
+def convert_f_deg_time_v190_to_v185(
+    input_data: DataCollectionType,
+) -> np.ndarray:
+    """Join per-simulation ``f_deg_time`` arrays and restore the v1.85.0 sentinel.
+
+    The inverse of :func:`convert_f_deg_time_v185_to_v190`.  This direction
+    needs no index restriction: ``9.9e100`` only ever appears on fibrin edges,
+    and empty edges already hold ``0.0`` in both versions.
+
+    :param input_data: Data collection containing the per-simulation v1.90.0
+        ``f_deg_time`` list.
+    :type input_data: DataCollectionType
+    :return: One combined array using the v1.85.0 sentinel convention.
+    :rtype: np.ndarray
+    """
+    combined = combine_per_simulation(input_data, "f_deg_time")
+    return np.where(
+        combined == UNSCHEDULED_DEGRADE_TIME, EMPTY_EDGE_DEGRADE_TIME, combined
+    )
+
+
+#: Regex marking the start of each simulation's block in a v1.85.0 macro log.
+_V185_RUN_MARKER = re.compile(r"^\s*run number\s*=")
+
+
+def split_macro_log(input_data: DataCollectionType) -> list[np.ndarray]:
+    """Split a combined v1.85.0 macro log into one log per simulation.
+
+    v1.85.0 writes every simulation's output to one log file, with each
+    simulation's block introduced by a ``run number=`` line.  The lines before
+    the first marker are the shared parameter echo (``N=``, ``F=``, ``num=``,
+    ``M=``, ``seed=``, ...); they are prepended to *every* simulation's log so
+    each one remains self-describing.
+
+    If no marker is found the whole log is returned as a single simulation, so
+    a truncated or unexpectedly formatted log degrades gracefully rather than
+    raising.
+
+    :param input_data: Data collection containing the combined ``macro_log``.
+    :type input_data: DataCollectionType
+    :return: One array of log lines per simulation.
+    :rtype: list[np.ndarray]
+    """
+    lines = np.asarray(input_data["macro_log"])
+    starts = [i for i, line in enumerate(lines) if _V185_RUN_MARKER.match(str(line))]
+    if not starts:
+        return [lines]
+    header = lines[: starts[0]]
+    bounds = starts + [len(lines)]
+    return [
+        np.concatenate([header, lines[bounds[i] : bounds[i + 1]]])
+        for i in range(len(starts))
+    ]
+
+
+def join_macro_log(input_data: DataCollectionType) -> np.ndarray:
+    """Join per-simulation macro logs into one combined v1.85.0 log.
+
+    The inverse of :func:`split_macro_log`.  The shared header that
+    :func:`split_macro_log` copied onto every simulation is kept once, from the
+    first simulation, and stripped from the rest.
+
+    :param input_data: Data collection containing the per-simulation
+        ``macro_log`` list.
+    :type input_data: DataCollectionType
+    :return: One combined array of log lines.
+    :rtype: np.ndarray
+    """
+    parts = [np.asarray(part) for part in input_data["macro_log"]]
+    if not parts:
+        return np.asarray([])
+    out = [parts[0]]
+    for part in parts[1:]:
+        marker = [i for i, line in enumerate(part) if _V185_RUN_MARKER.match(str(line))]
+        out.append(part[marker[0] :] if marker else part)
+    return np.concatenate(out)
+
+
+def convert_m_bound_to_m_bind_t(input_data: DataCollectionType) -> list[np.ndarray]:
+    """Reconstruct a v1.90.0 ``m_bind_t`` event log from v1.85.0 snapshots.
+
+    The v1.85.0 Fortran never wrote ``m_bind_t`` (its ``open`` statement is
+    commented out), so the tPA binding history survives only in the ``m_bound``
+    snapshots.  This detects every change in binding status between consecutive
+    snapshots and emits one event per change, taking the molecule's location
+    from the matching ``m_loc`` snapshot.
+
+    This conversion is **lossy** in two ways: event times are quantised to the
+    snapshot interval rather than the true event time, and v1.85.0 recorded
+    only bound/unbound, so :attr:`~lysis.config.constants.MolStatus.MICRO_UNBOUND`
+    and :attr:`~lysis.config.constants.MolStatus.MACRO_UNBOUND` are both
+    reported as :attr:`~lysis.config.constants.MolStatus.UNBOUND`.
+
+    The stored values ``0``/``1`` already equal ``MolStatus.UNBOUND`` and
+    ``MolStatus.BOUND``, so no status remapping is needed.
+
+    :param input_data: Data collection containing combined ``m_bound``,
+        ``m_loc``, ``tsave`` and ``Nsave``.
+    :type input_data: DataCollectionType
+    :return: One structured event-log array per simulation, matching the
+        v1.90.0 ``m_bind_t`` dtype and sorted by event time.
+    :rtype: list[np.ndarray]
+    """
+    event_dtype = np.dtype(
+        [
+            ("Simulation Time Elapsed", np.float64),
+            ("tPA Molecule Index", np.int32),
+            ("Molecule New Status", np.int32),
+            ("Grid Location Index", np.int32),
+        ]
+    )
+
+    bounds = simulation_boundaries(input_data)
+    output = []
+    for m_bound, m_loc, tsave in zip(
+        np.split(input_data["m_bound"], bounds),
+        np.split(input_data["m_loc"], bounds),
+        np.split(input_data["tsave"], bounds),
+    ):
+        # Molecules already bound in the first snapshot have no preceding
+        # snapshot to differ from, so seed the log with their initial state.
+        initial = np.flatnonzero(m_bound[0] != CONST.MOL_STATUS.UNBOUND)
+        # Every later change is a disagreement between consecutive snapshots.
+        # Vectorised: a per-molecule Python loop would be intractable here
+        # (real data reaches ~1700 snapshots x ~43000 molecules).
+        changed_snap, changed_mol = np.nonzero(m_bound[1:] != m_bound[:-1])
+        changed_snap = changed_snap + 1  # index into the *later* snapshot
+
+        times = np.concatenate([np.full(len(initial), tsave[0]), tsave[changed_snap]])
+        molecules = np.concatenate([initial, changed_mol])
+        snapshots = np.concatenate([np.zeros(len(initial), dtype=int), changed_snap])
+
+        events = np.empty(len(molecules), dtype=event_dtype)
+        events["Simulation Time Elapsed"] = times
+        # Molecule index: 0-based Python → 1-based Fortran.
+        events["tPA Molecule Index"] = molecules + 1
+        events["Molecule New Status"] = m_bound[snapshots, molecules]
+        # Grid location is already a 1-based Fortran index in m_loc.
+        events["Grid Location Index"] = m_loc[snapshots, molecules]
+
+        # replay_event_log_to_snapshot() searchsorts over the time column, so
+        # the log must be time-ordered.  Stable sort keeps per-snapshot order.
+        output.append(
+            events[np.argsort(events["Simulation Time Elapsed"], kind="stable")]
+        )
+    return output
+
+
+def convert_m_bind_t_to_m_bound_v185(
+    input_data: DataCollectionType,
+) -> np.ndarray:
+    """Rebuild a combined v1.85.0 ``m_bound`` array from a v1.90.0 event log.
+
+    Delegates the per-simulation replay to
+    :func:`convert_bind_events_to_bound`, then concatenates the result into the
+    single combined array that v1.85.0 expects.
+
+    :param input_data: Data collection containing per-simulation ``m_bind_t``
+        and ``tsave``.
+    :type input_data: DataCollectionType
+    :return: One combined ``(total_snapshots, total_molecules)`` array.
+    :rtype: np.ndarray
+    """
+    per_sim = convert_bind_events_to_bound(
+        input_data, input_dataset="m_bind_t", snapshot_dataset="tsave"
+    )
+    return np.concatenate(per_sim, axis=0)
 
 
 def _not_implemented(dataset_name: str, input_spec: str, output_spec: str):
@@ -1058,6 +1377,54 @@ def _convert_params_v195_to_v190(params):
     return out
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Legacy v1.85.0 parameter renames
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Top-level v1.85.0 ``params.json`` keys with no parameter meaning.
+#:
+#: v1.85.0 files were written by the pre-package ``Experiment`` class, which
+#: recorded its own bookkeeping alongside the parameter sections.
+#: ``data_filenames`` in particular is a *dict*, so every downstream params
+#: converter would otherwise mistake it for a parameter section and try to
+#: rename its contents.
+_V185_TOP_LEVEL_REMOVE = {"experiment_code", "data_filenames"}
+
+
+def _convert_params_v185_to_v190(params: dict) -> dict:
+    """Drop v1.85.0 top-level bookkeeping keys.
+
+    The macro parameter *names* need no translation here: v1.85.0 already uses
+    the legacy spellings that :func:`_convert_params_v190_to_v195` expects
+    (``total_trials``, ``seed``, ``log_lvl``), and the remaining v1.85.0-era
+    keys (``last_empty_edge``, ``average_bind_time``, ``binding_rate``, ...)
+    are carried unchanged by later Fortran-format files too.
+
+    :param params: Parameters dict read from a v1.85.0 ``params.json``.
+    :type params: dict
+    :return: Parameters dict without the non-parameter bookkeeping keys.
+    :rtype: dict
+    """
+    return {
+        key: value for key, value in params.items() if key not in _V185_TOP_LEVEL_REMOVE
+    }
+
+
+def _convert_params_v190_to_v185(params: dict) -> dict:
+    """Convert parameters from v1.90.0 back to v1.85.0.
+
+    Nothing is renamed on the way back: the bookkeeping keys dropped by
+    :func:`_convert_params_v185_to_v190` carried no parameter information and
+    cannot be reconstructed.
+
+    :param params: Parameters dict using v1.90.0 keys.
+    :type params: dict
+    :return: The same parameters, unchanged.
+    :rtype: dict
+    """
+    return dict(params)
+
+
 def _convert_params_add_units(params: dict) -> dict:
     """Convert parameters from v1.95.0 (bare magnitudes) to v1.99.0 (with units).
 
@@ -1123,6 +1490,8 @@ params_converters: dict[tuple[str, str], Callable] = {
     ("v1.99.0", "v1.95.0"): _convert_params_strip_units,
     ("v1.90.0", "v1.95.0"): _convert_params_v190_to_v195,
     ("v1.95.0", "v1.90.0"): _convert_params_v195_to_v190,
+    ("v1.85.0", "v1.90.0"): _convert_params_v185_to_v190,
+    ("v1.90.0", "v1.85.0"): _convert_params_v190_to_v185,
 }
 
 
@@ -1144,6 +1513,56 @@ params_converters: dict[tuple[str, str], Callable] = {
 data_converters: dict[
     tuple[str, str], dict[str, Callable[[DataCollectionType], DataSetType]]
 ] = {
+    # ============================================================================
+    # Convert from v1.85.0 to v1.90.0 (split combined simulations — lossy)
+    #
+    # microscale_out and macroscale_in are identical between the two versions,
+    # so those datasets pass through untouched.  Every macroscale_out dataset
+    # must return a LIST of per-simulation arrays, because the v1.90.0
+    # collection is simulations_combined=False.
+    # ============================================================================
+    ("v1.85.0", "v1.90.0"): {
+        name: (lambda data, n=name: data[n])
+        for collection_name in ("microscale_out", "macroscale_in")
+        for name in dataspec["v1.85.0"][collection_name].data
+    }
+    | {
+        "macro_log": split_macro_log,
+        # A combined vector of per-simulation counts becomes per-simulation scalars.
+        "Nsave": lambda data: [np.int32(n) for n in np.asarray(data["Nsave"]).ravel()],
+        "tsave": functools.partial(split_combined_by_snapshot, dataset="tsave"),
+        "f_deg_time": convert_f_deg_time_v185_to_v190,
+        "m_loc": functools.partial(split_combined_by_snapshot, dataset="m_loc"),
+        "m_bound": functools.partial(split_combined_by_snapshot, dataset="m_bound"),
+        # One row per simulation already, so no Nsave bookkeeping is needed.
+        "mfpt": functools.partial(split_combined_by_simulation, dataset="mfpt"),
+        # Never written by v1.85.0; reconstructed from the m_bound snapshots.
+        "m_bind_t": convert_m_bound_to_m_bind_t,
+    },
+    # ============================================================================
+    # Convert from v1.90.0 to v1.85.0 (join simulations into combined arrays)
+    #
+    # Every macroscale_out converter must return a SINGLE array, because the
+    # v1.85.0 collection is simulations_combined=True.
+    # ============================================================================
+    ("v1.90.0", "v1.85.0"): {
+        name: (lambda data, n=name: data[n])
+        for collection_name in ("microscale_out", "macroscale_in")
+        for name in dataspec["v1.90.0"][collection_name].data
+    }
+    | {
+        "macro_log": join_macro_log,
+        "Nsave": lambda data: np.asarray(data["Nsave"], dtype=np.int32).ravel(),
+        "tsave": functools.partial(combine_per_simulation, dataset="tsave"),
+        "f_deg_time": convert_f_deg_time_v190_to_v185,
+        "m_loc": functools.partial(combine_per_simulation, dataset="m_loc"),
+        # v1.85.0 has no m_bind_t, so m_bound must be replayed from the event log.
+        "m_bound": convert_m_bind_t_to_m_bound_v185,
+        "mfpt": functools.partial(combine_per_simulation, dataset="mfpt", stack=True),
+        # v1.85.0-only; no v1.90.0 source, since v1.90.0 dropped the underlying
+        # Fortran "degrade" array in favour of "t_degrade" (f_deg_time).
+        "deg": _not_implemented("deg", "v1.90.0", "v1.85.0"),
+    },
     # ============================================================================
     # Convert from v1.90.0 to v1.95.0 (reconstruct event log from snapshots — lossy)
     # ============================================================================

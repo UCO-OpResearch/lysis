@@ -855,3 +855,136 @@ Macroscale Output
     ``t_degrade``
   :Initial value:
     ``9.9e100`` (edges not yet scheduled for degradation)
+
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+v1.85.0
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Identical to v1.90.0 except that **every macroscale output simulation is
+concatenated into a single top-level file per dataset**
+(``simulations_combined=True``).  v1.85.0 predates the
+one-directory-per-simulation convention, so there are no ``{sim:02}/``
+subdirectories and no ``_{sim:02}`` filename suffixes.
+
+``microscale_out`` and ``macroscale_in`` are unchanged from v1.90.0.
+
+Run layout
+++++++++++
+
+A v1.85.0 run spans **two directories**, with different file codes:
+
+============================  ==========================  =========================
+Collection                    Directory                   File code
+============================  ==========================  =========================
+``microscale_out``            microscale run directory    e.g. ``_PLG2_tPA01_Q2``
+``macroscale_in``             macroscale run directory    e.g. ``_PLG2_tPA01_Q2``
+``macroscale_out``            macroscale run directory    e.g. ``_PLG2_tPA01_along_Q2``
+============================  ==========================  =========================
+
+Both :func:`~lysis.dataio.fileops.read_data_collection` and
+:meth:`~lysis.dataio.datastore.DataStore.import_collection` accept a path and
+file code per collection, so a v1.85.0 run is imported with one call per
+directory.
+
+Recovering per-simulation data
+++++++++++++++++++++++++++++++
+
+``Nsave.dat`` is the only record of where one simulation ends and the next
+begins.  Simulation ``i`` occupies ``Nsave[i] + 1`` snapshot rows -- the extra
+row is the initial state at ``t = 0``.  Datasets partition three different
+ways:
+
+- **Snapshot-indexed** (``tsave``, ``f_deg_time``, ``deg``, ``m_loc``,
+  ``m_bound``): split at ``cumsum(Nsave + 1)``.
+- **Simulation-indexed** (``mfpt``): exactly one row per simulation.
+- **The combined log** (``macro{file_code}.txt``): split at lines matching
+  ``run number=``.  The shared header preceding the first marker is prepended
+  to every simulation's log so each stays self-describing.
+
+All binary datasets are written one contiguous 1-D block at a time -- one per
+snapshot, or one per simulation for ``mfpt`` -- so they are read in C order,
+not Fortran column-major order.
+
+``Nsave.dat``
+  One snapshot count per simulation, rather than the single scalar used by
+  v1.90.0 and later.
+
+  :File Type:
+    Binary
+  :Data Type:
+    integer (``i4``)
+  :Units:
+    None
+  :Dimensions:
+    (``macro_simulations``,)
+  :Fortran Name:
+    ``Nsavevect``
+
+``mfpt.dat``
+  First-passage times, one row per simulation.  Written once per run, after
+  the time loop, so the file is run-major.
+
+  :File Type:
+    Binary
+  :Data Type:
+    double precision (``f8``)
+  :Units:
+    seconds
+  :Dimensions:
+    (``macro_simulations``, ``M``) — ``M = total_molecules``
+  :Fortran Name:
+    ``mfpt``
+
+``f_deg_time.dat``
+  As v1.90.0, **but with a different sentinel convention**.  v1.85.0
+  initialises the whole ``t_degrade`` vector to zero and never distinguishes
+  empty edges, so ``0.0`` is ambiguous:
+
+  - for the first ``empty_edges`` columns it means "empty (ghost) edge";
+  - for every other column it means "fibrin edge, no tPA has landed yet".
+
+  v1.90.0 keeps ``0.0`` for empty edges only and marks unscheduled fibrin with
+  ``9.9e100``.  Conversion therefore remaps by **index**, never by value:
+  a blanket value remap would destroy the empty-edge marker.
+
+  :Initial value:
+    ``0.0`` (both empty edges and edges not yet scheduled for degradation)
+
+``deg.dat``
+  **v1.85.0 only** (optional).  The degradation *state* of each edge at each
+  snapshot, as distinct from the ``f_deg_time`` *schedule*: ``0`` = intact,
+  ``-t`` = degraded at time ``t``, ``-1`` = empty (ghost) edge.  v1.90.0
+  removed the underlying Fortran ``degrade`` array in favour of ``t_degrade``,
+  so this dataset is dropped on conversion.  It carries no independent
+  information: it is derivable from ``f_deg_time``, ``tsave`` and
+  ``empty_edges``.
+
+  :File Type:
+    Binary
+  :Data Type:
+    double precision (``f8``)
+  :Units:
+    seconds (negated), or the ``-1`` empty-edge marker
+  :Dimensions:
+    (``cNsave``, ``num``) — one row per snapshot, one column per fiber edge
+  :Fortran Name:
+    ``degrade``
+
+``m_bind_t.dat``
+  **Does not exist** in v1.85.0 — the Fortran ``open`` statement for it is
+  commented out.  Conversion to v1.90.0 reconstructs the event log by
+  differencing consecutive ``m_bound`` snapshots and taking each molecule's
+  location from the matching ``m_loc`` snapshot.  This is lossy in two ways:
+  event times are quantised to the snapshot interval, and v1.85.0 recorded
+  only bound/unbound, so ``MICRO_UNBOUND`` and ``MACRO_UNBOUND`` are both
+  reported as ``UNBOUND``.
+
+Parameters
+++++++++++
+
+``params.json`` was written by the pre-package ``Experiment`` class.  It uses
+the same legacy key spellings as v1.90.0 (``total_trials``, ``seed``,
+``log_lvl``), carries a null ``micro_params``, and adds two top-level
+bookkeeping keys — ``experiment_code`` and ``data_filenames`` — that are
+dropped on conversion.  ``data_filenames`` in particular is a mapping, so it
+would otherwise be mistaken for a parameter section.

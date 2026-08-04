@@ -552,6 +552,13 @@ class DataSpec:
 # Collections: "microscale_out", "macroscale_in", "macroscale_out"
 _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
     # ============================================================================
+    # v1.85.0: Identical to v1.90.0, except that macroscale_out stores every
+    # simulation concatenated into one top-level file per dataset
+    # (simulations_combined=True) instead of one directory per simulation
+    # NOTE: This spec will be added below as a modified copy of v1.90.0
+    # ============================================================================
+    "v1.85.0": {},
+    # ============================================================================
     # v1.90.0: Identical to v1.95.0, except the macroscale degradation data is
     # stored as the 'f_deg_time' snapshot array instead of the 'f_deg_list'
     # event log
@@ -1065,6 +1072,83 @@ def _create_v1_90():
 _dataspec_raw["v1.90.0"] = _create_v1_90()
 
 
+# v1.85.0 <-- v1.90.0
+def _create_v1_85():
+    """Build the v1.85.0 spec as a modified copy of v1.90.0.
+
+    v1.85.0 predates the one-directory-per-simulation convention: every
+    macroscale dataset is written to a single top-level file with all
+    simulations concatenated, so ``macroscale_out`` is
+    ``simulations_combined=True``.  Simulation boundaries are recoverable only
+    from ``Nsave``, which becomes a vector holding one snapshot count per
+    simulation; the snapshot-indexed datasets (``tsave``, ``f_deg_time``,
+    ``m_loc``, ``m_bound``, ``deg``) partition at ``cumsum(Nsave + 1)``, while
+    ``mfpt`` holds exactly one row per simulation.
+
+    ``microscale_out`` and ``macroscale_in`` are unchanged from v1.90.0.
+
+    Three datasets differ in availability rather than layout: ``m_bind_t`` was
+    never written by the v1.85.0 Fortran and is removed outright,
+    ``macro_dispatcher_log`` predates the Slurm dispatcher and is optional, and
+    ``deg`` -- a per-snapshot degradation *state* array, superseded by the
+    ``f_deg_time`` *schedule* array -- exists only here and is optional.
+
+    :return: The v1.85.0 collection specifications.
+    :rtype: dict[str, DataCollectionSpec]
+    """
+    v1_85 = copy.deepcopy(_dataspec_raw["v1.90.0"])
+    v1_85["macroscale_out"] = v1_85["macroscale_out"].replace(
+        simulations_combined=True,
+        # ``data`` adds and removes whole datasets; per-dataset field patches
+        # must be passed as top-level keyword arguments (see replace() docs).
+        data={
+            # Never written by the v1.85.0 Fortran -- the "open" statement for
+            # it is commented out.  It is REMOVED rather than marked optional
+            # on purpose: an optional-but-absent dataset is skipped outright by
+            # _convert_single_step, whereas an undeclared one falls through to
+            # the converter, which reconstructs it from m_bound and m_loc.
+            "m_bind_t": None,
+            # v1.85.0 only.  Degradation *state* of each edge at each snapshot:
+            # 0 = intact, -t = degraded at time t, -1 = empty (ghost) edge.
+            # Derivable from f_deg_time, tsave and empty_edges, and dropped on
+            # conversion to v1.90.0, which removed the underlying Fortran array.
+            "deg": DataSetSpec(
+                data_location="deg{file_code}.dat",
+                dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_BINARY,
+                dtype=np.float64,
+                shape=(-1, "macro_params.total_edges"),
+                optional=True,
+            ),
+        },
+        # Every path loses the "{sim:02}/" directory and "_{sim:02}" suffix:
+        # one top-level file per dataset, all simulations concatenated.
+        macro_log={"data_location": "macro{file_code}.txt"},
+        # v1.85.0 predates the Slurm dispatcher, so this file never exists in
+        # practice.  It stays declared (and optional) so that conversion to
+        # v1.90.0, whose spec also declares it, takes the normal
+        # optional-and-absent path instead of failing to find a converter.
+        macro_dispatcher_log={
+            "data_location": "macro_dispatcher{file_code}.out",
+        },
+        # One snapshot count per simulation, not a per-simulation scalar.
+        Nsave={"data_location": "Nsave{file_code}.dat", "shape": (-1,)},
+        tsave={"data_location": "tsave{file_code}.dat"},
+        f_deg_time={"data_location": "f_deg_time{file_code}.dat"},
+        m_loc={"data_location": "m_loc{file_code}.dat"},
+        m_bound={"data_location": "m_bound{file_code}.dat"},
+        # One row per simulation (not per snapshot), so the second dimension
+        # must be declared for reshape() to recover the layout.
+        mfpt={
+            "data_location": "mfpt{file_code}.dat",
+            "shape": (-1, "macro_params.total_molecules"),
+        },
+    )
+    return v1_85
+
+
+_dataspec_raw["v1.85.0"] = _create_v1_85()
+
+
 # Wrap each version's raw dict in a DataSpec object
 dataspec: dict[str, DataSpec] = {}
 for _version, _collections in _dataspec_raw.items():
@@ -1091,13 +1175,31 @@ del _k, _v
 # Spec versions that use Fortran file-based storage.
 # Derived from the tag system so this set stays in sync if tags are updated.
 # Used by fileops.read_data_collection to trigger paramcheck validation at read time.
-fortran_versions: frozenset[str] = frozenset({tags["fortran"], "v1.95.0", "v1.90.0"})
+fortran_versions: frozenset[str] = frozenset(
+    {tags["fortran"], "v1.95.0", "v1.90.0", "v1.85.0"}
+)
 
 # Warnings emitted when opening HDF5 files that were converted from a given source version.
 # Add an entry here for any conversion that results in data loss or approximation.
 # Keys are the original source version string (as stored in the ``converted_from`` HDF5
 # attribute); values are the warning message text.
 CONVERSION_WARNINGS: dict[str, str] = {
+    # Note that ``converted_from`` records only the FIRST version in a
+    # conversion chain, so a v1.85.0 file never triggers the v1.90.0 warning
+    # below; this entry must therefore cover the whole chain's losses.
+    "v1.85.0": (
+        "This HDF5 file was converted from v1.85.0 format. "
+        "The tpa_bind_events log was reconstructed by differencing the m_bound "
+        "snapshots: event times are quantised to the snapshot interval, and "
+        "only BOUND/UNBOUND are recoverable (v1.85.0 never recorded the "
+        "MICRO_UNBOUND and MACRO_UNBOUND states). "
+        "The f_deg_list event log was reconstructed from snapshot differences; "
+        "exact fiber degradation scheduling times are not preserved. "
+        "The v1.85.0-only 'deg' degradation-state array is not carried over. "
+        "RNG seeds (micro_seed, macro_seed) were stored as signed integers and "
+        "are now reinterpreted as np.uint32 bit patterns — a negative legacy "
+        "seed becomes its unsigned equivalent (same bits, different print)."
+    ),
     "v1.90.0": (
         "This HDF5 file was converted from v1.90.0 format. "
         "The f_deg_list event log was reconstructed from snapshot differences; "
