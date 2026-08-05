@@ -683,7 +683,9 @@ _dataspec_raw: dict[str, dict[str, DataCollectionSpec]] = {
                     dtype=np.float64,
                     shape=(-1, CONST.TPA_LEAVE_TIME_BINS),
                 ),
-                # Count of simulations per bin where full fiber lysis occurred
+                # 1-indexed row of the first 6,000 (no-lysis) entry in each lysismat
+                # column; equals the count of degraded simulations per bin PLUS ONE.
+                # The 0-indexed Python equivalent is `binned_fiber_degraded`.
                 "lenlysisvect": DataSetSpec(
                     data_location="lenlysisvect{file_code}.dat",
                     dataset_storage_type=CONST.DATASET_STORAGE_TYPE.FILE_TEXT,

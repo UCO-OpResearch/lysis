@@ -242,8 +242,16 @@ Macro to Micro datasets
 
 ``binned_fiber_degraded``
   The number of simulations in a tPA leaving time bin, where full lysis of the fiber occurs.
-  That is, ``binned_fiber_degraded[i]`` is the 1-indexed location of the first ``6000`` entry in 
-  column ``i`` of ``binned_fiber_degrade_time``.
+  That is, ``binned_fiber_degraded[i]`` is the 0-indexed location of the first ``numpy.inf``
+  entry in column ``i`` of ``binned_fiber_degrade_time``.  Because each column is sorted in
+  increasing order and ``numpy.inf`` marks "no lysis", every entry above that location is a
+  genuine fiber degrade time, so the 0-indexed location *is* the count of degraded
+  simulations in that bin.
+
+  This is **not** the same convention as its Fortran counterpart ``lenlysisvect.dat``, which
+  stores the equivalent location 1-indexed.  The two differ by exactly one::
+
+      binned_fiber_degraded[i] == lenlysisvect[i] - 1
 
   :Data Type:
     NumPy 16-bit unsigned integer (``u2``)
@@ -632,9 +640,23 @@ even though these files are only used in Fortran which is 1-indexed.*
     (``simulations`` // 100, 100)
 
 ``lenlysisvect.dat``
-  The number of simulations in a tPA leaving time bin, where full lysis of the fiber occurs.
-  That is, ``lenlysisvect[i]`` is the 1-indexed location of the first ``6000`` entry in 
-  column ``i`` of ``lysismat``.
+  The 1-indexed location of the first ``6000`` entry in each column of ``lysismat``.
+  That is, ``lenlysisvect[i]`` is the row number, counting from one, of the first simulation
+  in column ``i`` of ``lysismat`` for which full lysis of the fiber did *not* occur.
+
+  Because each column of ``lysismat`` is sorted in increasing order and ``6000`` marks
+  "no lysis", every entry above that row is a genuine fiber degrade time.  The number of
+  simulations in bin ``i`` where full lysis occurred is therefore ``lenlysisvect[i] - 1``,
+  **not** ``lenlysisvect[i]``.  See ``binned_fiber_degraded`` for the 0-indexed Python
+  equivalent, which does hold the count directly.
+
+  .. note::
+
+     The original MATLAB pre-processing (``archive/matlab/micro_to_macro.m``) writes the
+     magic value ``999`` for any bin whose column contains no ``6000`` entry at all — that
+     is, a bin in which every simulation degraded.  ``999`` is neither a count nor a valid
+     row index, and must be special-cased when reading MATLAB-generated files.  Files
+     written by the Python pipeline never contain this value.
 
   :File Type:
     Space-delimited Text
