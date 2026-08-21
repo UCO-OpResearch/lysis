@@ -157,6 +157,56 @@ the next *newer* one.
    ``PLG2_tPA01_along_Q2`` file code ``[D]``. The tPA Diffusion baseline is
    therefore the Dataset that the modern v1.85.0 reader was written against.
 
+Prior investigations
+====================
+
+These logs were written in one session, but they rest on archaeology done
+across several earlier ones. What those established, so it is not re-derived:
+
+**2026-08-04 — microscale/macroscale provenance.** Determined that the
+``2023-02-01-22xx`` Datasets are the microscale inputs to the
+``2023-02-02-22xx`` macroscale Runs, mapped three-to-twelve by Kd Scenario, and
+that the micro log copied into each macroscale directory is a *verbose variant*
+of the microscale original rather than the same file. Recorded in
+:doc:`tpa_diffusion`.
+
+**2026-08-04 — the v0.1.0 tag is cut from the wrong commit.** ``v0.1.0`` points
+at ``368a6f2`` (2024-01-12), but the code used for the 2023 papers runs to
+``63a01bb`` (2024-01-30). The two intervening commits are notebook-only — no
+package code, Fortran, docs or Makefile changed. ``dev-0.1.1`` was rebased onto
+``63a01bb`` to correct this for the re-release. Consequence for these logs: the
+**tag** is not a reliable marker of the paper-era code; ``63a01bb`` is.
+
+**2026-08-04 — paper figure lineage.** The B&W figures for the tPA Diffusion
+paper come from ``63a01bb``; the earlier ``42263b5`` is a scratch intermediate
+that renders a 2x2 into the top-left quadrant of a 4x4 grid and crops it out
+with a hand-built ``Bbox``. Cell 31 of the 2200 notebook has been unchanged
+since ``63a01bb``.
+
+**2026-08-04 — the two checkouts render different figures.** Every one of the
+59 PNGs common to ``lysis-v0.1.0/data/2023-02-02-220*`` and
+``lysis/data/2023-02-02-220*`` differs, and not merely in embedded metadata: 13
+differ in pixel *dimensions*, with the v0.1.0 renders generally far higher
+resolution (e.g. ``microscale_measure_plots`` at 6190x3751 against 845x555).
+Ten figures exist on only one side. 69 side-by-side diff composites were
+rendered to ``lysis/data/2023-02-02-2200/diffs/`` (35 MB, gitignored).
+
+   **Do not treat a figure as identified by filename alone.** The same name
+   denotes different renders in the two trees.
+
+**2026-08-05 — ``lenlysisvect`` has four conflicting definitions.** The
+quantity is the position of the first ``6000`` in a sorted column of
+``lysismat``, which reads as ``count + 1`` 1-indexed (MATLAB/Fortran) and
+``count`` 0-indexed (Python). Verified empirically:
+``lenlysisvect == argmax(lysismat, axis=0) + 1 == count_degraded + 1``, always.
+The MATLAB generator also writes a magic ``999`` when a column contains no
+``6000`` at all. The modern conversion path handles the index-base split
+correctly; the shared all-degraded edge case became issue #122.
+
+   Relevant to any Dataset here whose microscale summary tables are read
+   directly — ``lenlysisvect`` counts are off by one from fibre counts if the
+   index base is assumed rather than checked.
+
 Conventions
 ===========
 

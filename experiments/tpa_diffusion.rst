@@ -95,12 +95,66 @@ The baseline. A 3 x 4 grid of Scenarios and Mechanisms.
    ``_fixed`` variant at Runs 03, 08 and 13. Both the Mechanism entry and the
    three Run entries are commented out rather than deleted ``[N]``.
 
-   Only ``2023-02-02-2202`` still exists on disk; ``2207`` and ``2212`` are
-   gone ``[D]``. Do not process ``2202`` — it is bugged output.
+   None of the three survives. ``2207`` and ``2212`` have no directory at all,
+   and ``2202`` is an **empty directory** in both checkouts ``[D]``. An earlier
+   draft of this log said ``2202`` still held bugged output that should not be
+   processed; that was wrong — there is no output there to process.
 
 The 12 valid Runs: ``00`` ``01`` ``03`` ``04`` (Physiological), ``05`` ``06``
 ``08`` ``09`` (10x smaller), ``10`` ``11`` ``13`` ``14`` (10x bigger) ``[N]``.
 Each carries an explicit seed and a wall-clock budget of 900–1800 s ``[N]``.
+
+Microscale inputs
+-----------------
+
+The macroscale Runs of ``2023-02-02-2200`` take their microscale input from a
+**separate set of Dataset codes one day earlier**, ``2023-02-01-22xx`` ``[D]``.
+Three exist, one per Kd Scenario, and each feeds the four Mechanism Runs of its
+family:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 24 16 36
+
+   * - Microscale Dataset
+     - Scenario
+     - Micro seed
+     - Feeds macroscale Runs
+   * - ``2023-02-01-2200``
+     - Physiological Kd
+     - ``981681759``
+     - ``2200`` ``2201`` ``2203`` ``2204``
+   * - ``2023-02-01-2205``
+     - 10x smaller Kd
+     - ``221452692``
+     - ``2205`` ``2206`` ``2208`` ``2209``
+   * - ``2023-02-01-2210``
+     - 10x bigger Kd
+     - ``-1986027869``
+     - ``2210`` ``2211`` ``2213`` ``2214``
+
+Each carries a ``micro_PLG2_tPA01{scenario_code}_Q2.txt`` log at
+``runs=50000``. The four macroscale Runs in a family share that one microscale
+Run, so within a family only the Mechanism and the macroscale seed vary — their
+``params.json`` files are identical except for ``experiment_code``,
+``macro_version`` and ``seed``/``state`` ``[D]``.
+
+.. note::
+
+   **The micro log is copied into the macroscale directories in a verbose
+   variant.** The copy is the same Scenario, same seed and same 50,000
+   Simulations as the microscale original, but emits four extra diagnostic
+   lines per Simulation (``init_entry``, ``state(1,init_entry)``, ``p_rebind``,
+   and early termination for lack of tPA), which inflates it from ~2 KB to
+   ~6.9 MB ``[D]``. In the Physiological family the copy also **drops the
+   ``_Q2`` suffix** and becomes ``micro_PLG2_tPA01.txt``; in the other two
+   families it keeps the full name. Similar names, different files — do not
+   assume the macro-directory copy and the micro-directory original are
+   interchangeable without checking.
+
+Beyond the log, only ``LatQ2.dat`` and ``PLi_PLG2_tPA01_Q2.dat`` are duplicated
+into the macroscale directories, and only for part of the Physiological family
+``[D]``. The remaining microscale outputs live solely in ``2023-02-01-22xx``.
 
 2023-11-24-1000
 ---------------
@@ -164,7 +218,10 @@ Open questions
 ==============
 
 * The macroscale executable for ``2023-02-02-2200`` is recorded only as the
-  placeholder ``macro_XXXXX.f90``. The Mechanism table gives per-Run executable
+  placeholder ``macro_XXXXX.f90``, though the per-Run ``params.json`` files name
+  the Mechanism sources directly (``macro_Q2_diffuse_along.f90``,
+  ``macro_Q2_always_rebind.f90``, ``macro_Q2_diffuse_into.f90``,
+  ``macro_Q2_diffuse_into_and_along_fixed.f90``) ``[D]``. The Mechanism table gives per-Run executable
   names (``macro_Q2_*``), so the source file may be recoverable from
   ``archive/fortran/`` in the modern repository.
 * Whether the ``2023-11-24-1000`` "Baseline diffusion" Runs were re-executed or
