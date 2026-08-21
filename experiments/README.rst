@@ -22,6 +22,9 @@ processed it, where it sits in the lineage, and **why** it was superseded.
    * - :doc:`internal_lysis`
      - 2023-04 → 2023-12
      - Lysis initiated from molecules starting *inside* the clot
+   * - :doc:`reexecution_environment`
+     - 2026-08
+     - How to run any of the above again, and what breaks if you deviate
 
 .. note::
 
@@ -175,7 +178,8 @@ at ``368a6f2`` (2024-01-12), but the code used for the 2023 papers runs to
 ``63a01bb`` (2024-01-30). The two intervening commits are notebook-only — no
 package code, Fortran, docs or Makefile changed. ``dev-0.1.1`` was rebased onto
 ``63a01bb`` to correct this for the re-release. Consequence for these logs: the
-**tag** is not a reliable marker of the paper-era code; ``63a01bb`` is.
+**tag** is not a reliable marker of the paper-era code; ``63a01bb`` is. See
+:doc:`reexecution_environment`.
 
 **2026-08-04 — paper figure lineage.** The B&W figures for the tPA Diffusion
 paper come from ``63a01bb``; the earlier ``42263b5`` is a scratch intermediate
