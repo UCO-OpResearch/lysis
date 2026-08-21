@@ -38,8 +38,10 @@ _lysis_repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # --- Load required LMod modules. --------------------------------------------
 # Octave backs the octave-kernel; the Intel compilers are needed for the
-# Fortran binaries. Done before venv activation so .venv/bin stays at the
-# front of PATH for the bare `jupyter-lab` call.
+# Fortran binaries; FFmpeg backs matplotlib's FFMpegWriter, which the
+# analysis notebooks use to render the simulation animations. Done before
+# venv activation so .venv/bin stays at the front of PATH for the bare
+# `jupyter-lab` call.
 if ! command -v module >/dev/null 2>&1; then
     echo "ood_jupyter_lab.sh: 'module' (LMod) not available; cannot load modules." >&2
     unset _lysis_repo_root
@@ -49,6 +51,7 @@ fi
 module purge
 module load Octave/10.1.0-foss-2023a
 module load intel-compilers/2023.1.0
+module load FFmpeg/6.0-GCCcore-12.3.0
 
 # --- Provision the uv env (notebook stack is in the main dependencies). ------
 # Run in a subshell so the caller's working directory is left unchanged.
