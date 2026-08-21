@@ -22,6 +22,9 @@ processed it, where it sits in the lineage, and **why** it was superseded.
    * - :doc:`internal_lysis`
      - 2023-04 → 2023-12
      - Lysis initiated from molecules starting *inside* the clot
+   * - :doc:`tidy_fortran_data`
+     - 2024-02
+     - Degradation output as an event log instead of a snapshot array
 
 Provenance of these logs
 ========================

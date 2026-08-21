@@ -258,10 +258,12 @@ Downstream
 ==========
 
 ``2024-02-02-1400`` derives from ``2023-12-10-1900`` but belongs to a different
-Experiment Sequence, **"Tidy Fortran Data"** — *"No change to input data, new
-output format"* ``[S]``. It is a format migration, not an Internal Lysis result,
-and its data is present in the ``main`` checkout ``[D]``. Log it separately if
-that line of work is ever written up.
+Experiment Sequence, **"Tidy Fortran Data"** ``[S]``. It re-executes these ten
+Scenarios with identical seeds and changes only the output format, so it is a
+format migration rather than an Internal Lysis result.
+
+Logged separately at :doc:`tidy_fortran_data` — but note that its code and
+notebooks are v0.2.x, so that log may move when the v0.2.x logs are written.
 
 Open questions
 ==============
