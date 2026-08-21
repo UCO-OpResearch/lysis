@@ -50,8 +50,11 @@ Lineage
    one. All three derive from ``2023-04-23-2000``, not from each other ``[S]``.
    The combined Dataset is the one that carries the Main Sequence forward.
 
-   Only the combined arm's data has been located. Both single-factor arms are
-   missing, which is the single biggest gap in this Experiment's record.
+   **All three arms survive.** The combined arm is in the local cold archive;
+   both single-factor arms exist only on OneDrive ``[O]``. Recovering the
+   comparison therefore means pulling ``2023-05-23-11xx`` and
+   ``2023-05-23-20xx`` down from OneDrive — roughly 8.7 GB and 9.1 GB
+   compressed respectively, dominated by Runs ``02``–``04`` at 1.7–4.2 GB each.
 
 Scenario naming
 ===============
@@ -110,12 +113,12 @@ canonical checkout, and inside the ``2023-04-15-1400``, ``2023-04-23-2000``,
 ``2023-05-23-1000`` and ``2023-12-04-1000`` archive tarballs ``[A]``.
 
 **No Dataset in this Experiment contains ``f_deg_list``.** That format arrives
-with :doc:`tidy_fortran_data` (``2024-02-02-1400``, v1.95.0), the immediate
-child of this Experiment's last Dataset — so the v1.90.0 → v1.95.0 spec
-boundary falls exactly at the end of this lineage.
+with ``2024-02-02-1400`` (Tidy Fortran Data, v1.95.0, logged with v0.2.x), the
+immediate child of this Experiment's last Dataset — so the v1.90.0 → v1.95.0
+spec boundary falls exactly at the end of this lineage.
 
-The two Datasets not located (``2023-05-23-1100``, ``2023-05-23-2000``) are
-presumed v1.90.0 by position, but this is unverified ``[?]``.
+``2023-05-23-1100`` and ``2023-05-23-2000`` are presumed v1.90.0 by position;
+they exist only as OneDrive tarballs and have not been opened ``[?]`` ``[O]``.
 
 Datasets
 ========
@@ -205,7 +208,9 @@ tuples gain a sixth field (10 or 100) absent from ``2023-04-23-2000`` ``[N]``.
 :Derived from: ``2023-04-23-2000`` ``[S]``
 :Reason for change: **"Eliminated empty rows"** ``[S]``
 :Notebooks: ``_Archive/2023-05-23-1100 - F-Macro Multi-Array-{Run,Process}.ipynb`` ``[N]``
-:Data: **not located** — absent from all checkouts and from the archive; OneDrive unsearched ``[D]`` ``[A]``
+:Data: **OneDrive archive only** — all ten, ``1100``–``1109``, as ``.tar.gz``
+   dated 2024-01-16 ``[O]``; absent from every checkout and from the local cold
+   archive ``[D]`` ``[A]``
 
 2023-05-23-2000
 ---------------
@@ -214,7 +219,9 @@ tuples gain a sixth field (10 or 100) absent from ``2023-04-23-2000`` ``[N]``.
 :Derived from: ``2023-04-23-2000`` ``[S]``
 :Reason for change: **"Adjusted clot height"** ``[S]``
 :Notebooks: ``_Archive/2023-05-23-2000 - F-Macro Multi-Array-{Run,Process}.ipynb`` ``[N]``
-:Data: **not located** — absent from all checkouts and from the archive; OneDrive unsearched ``[D]`` ``[A]``
+:Data: **OneDrive archive only** — all ten, ``2000``–``2009``, as ``.tar.gz``
+   dated 2024-01-16 ``[O]``; absent from every checkout and from the local cold
+   archive ``[D]`` ``[A]``
 
 .. note::
 
@@ -279,8 +286,9 @@ Experiment Sequence, **"Tidy Fortran Data"** ``[S]``. It re-executes these ten
 Scenarios with identical seeds and changes only the output format, so it is a
 format migration rather than an Internal Lysis result.
 
-Logged separately at :doc:`tidy_fortran_data` — but note that its code and
-notebooks are v0.2.x, so that log may move when the v0.2.x logs are written.
+Logged separately with the **v0.2.x** Experiments, not here: its producing
+commits are not ancestors of the v0.1.x tip ``63a01bb``, and its notebooks are
+live only in the ``lysis-v0.2.0`` worktree.
 
 Open questions
 ==============
@@ -298,11 +306,10 @@ Open questions
   (``Internal - Remaining Unbind Time``) it is presumably the ``__internal``
   arm ``[?]``, but the spreadsheet's placeholder suggests uncertainty at the
   time of writing.
-* ``2023-05-23-1100`` and ``2023-05-23-2000`` are the only Datasets in this
-  Experiment not located anywhere. They are the two single-factor arms of the
-  factorial split, so losing both leaves the combined ``1000`` Dataset without
-  its controls. **OneDrive has not been searched** and is the obvious next
-  place to look; the Zenodo deposit (commit ``c2993ae``) is a second lead.
+* **Every Dataset in this Experiment is now accounted for.** The last two
+  gaps — ``2023-05-23-1100`` and ``2023-05-23-2000`` — were found in the
+  OneDrive archive ``[O]``. Nothing in this lineage is lost; the open work is
+  retrieval, not search.
 * ``2023-05-17-1400`` ("Model Schematic") sits between ``2023-05-23`` Datasets
   in time and shares the Internal Lysis machinery, but the spreadsheet assigns
   it its own Sequence with no parent ``[S]``. Its data survives in ``main``

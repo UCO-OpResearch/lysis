@@ -22,9 +22,13 @@ processed it, where it sits in the lineage, and **why** it was superseded.
    * - :doc:`internal_lysis`
      - 2023-04 → 2023-12
      - Lysis initiated from molecules starting *inside* the clot
-   * - :doc:`tidy_fortran_data`
-     - 2024-02
-     - Degradation output as an event log instead of a snapshot array
+
+.. note::
+
+   **Tidy Fortran Data** (``2024-02-02-1400``) was drafted here and then moved
+   to the **v0.2.x** line, where its code and notebooks live. It derives from
+   the last Internal Lysis Dataset, so it appears under "Downstream" in
+   :doc:`internal_lysis` — but the log itself belongs with v0.2.x.
 
 Provenance of these logs
 ========================
@@ -48,6 +52,10 @@ with the evidence it rests on:
 
 ``[A]``
    Confirmed present as a ``.tar.gz`` in ``~/Archive/lysis_data/``.
+
+``[O]``
+   Confirmed present in the OneDrive archive, from a directory listing taken
+   2026-08-21. Seen in a listing, not opened.
 
 ``[?]``
    Inferred. Treat as a hypothesis, not a record.
@@ -80,16 +88,25 @@ Raw data is spread across at least four places, and no single one is complete:
      - cold archive
      - 173 per-Run ``.tar.gz`` (a few 2024 sets are ``.tar.xz``). Holds several
        Datasets that exist nowhere else.
-   * - OneDrive
+   * - OneDrive — ``Lysis/Archive``
      - offsite
-     - Further archives. **Not surveyed** — contents unknown to these logs.
+     - The deepest store. Holds every 2023 Internal Lysis Dataset, including
+       two that exist nowhere else. Mostly ``.tar.gz``; some sets also
+       unpacked.
+   * - OneDrive — ``Lysis/Current``
+     - offsite
+     - The 2024-era working set (``2024-01-26`` onward) plus unpacked copies of
+       the headline 2023 Datasets.
 
 .. note::
 
-   Because OneDrive has not been searched, a Dataset marked *not located* below
-   means exactly that: not found in the three places that *were* searched. It is
-   **not** a claim that the data is gone. Only two Datasets across both
-   Experiments fall into this category.
+   OneDrive **has** now been surveyed, from ``ls`` listings of both folders
+   taken 2026-08-21. With those included, **every Dataset in both Experiments
+   logged here is accounted for.** No Dataset is known to be lost.
+
+   The listings record names, sizes and dates only — nothing in OneDrive has
+   been opened — so any ``[O]``-only claim about file *contents* remains
+   unverified.
 
 The 0.1.x notebooks read from a ``data_root`` variable, so pointing them at a
 different store is a one-cell edit. ``2023-02-02-2200 - F-Macro
@@ -124,8 +141,8 @@ carries, and the answer partitions them cleanly by date ``[D]``:
      - Per-Simulation dirs; ``params.json`` holds bare floats
 
 **No v0.1.x Dataset contains ``f_deg_list``.** The changeover is a hard cutover
-at ``2024-02-02-1400`` — the :doc:`tidy_fortran_data` Dataset, whose entire
-purpose was to make it. Confirmed across the canonical checkout, this worktree,
+at ``2024-02-02-1400`` — the Tidy Fortran Data Dataset, whose entire purpose was
+to make it (logged with v0.2.x). Confirmed across the canonical checkout, this worktree,
 and four spot-checked archive tarballs ``[D]`` ``[A]``.
 
 Note that the spec numbers run **opposite** to intuition when reading the
