@@ -100,6 +100,23 @@ Mechanism is constant across the whole Experiment:
 ``Into and along - Internal`` / ``macro_diffuse_into_and_along__internal``
 ``[N]`` ``[S]``.
 
+Data specification
+==================
+
+Every Dataset in this Experiment aligns with **v1.90.0** ``[D]``: degradation
+recorded as the ``f_deg_time`` snapshot array, one directory per Simulation.
+Verified directly on ``2023-06-09-1000`` and ``2023-12-10-1900`` in the
+canonical checkout, and inside the ``2023-04-15-1400``, ``2023-04-23-2000``,
+``2023-05-23-1000`` and ``2023-12-04-1000`` archive tarballs ``[A]``.
+
+**No Dataset in this Experiment contains ``f_deg_list``.** That format arrives
+with :doc:`tidy_fortran_data` (``2024-02-02-1400``, v1.95.0), the immediate
+child of this Experiment's last Dataset — so the v1.90.0 → v1.95.0 spec
+boundary falls exactly at the end of this lineage.
+
+The two Datasets not located (``2023-05-23-1100``, ``2023-05-23-2000``) are
+presumed v1.90.0 by position, but this is unverified ``[?]``.
+
 Datasets
 ========
 

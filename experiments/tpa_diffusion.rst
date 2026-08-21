@@ -35,6 +35,10 @@ Datasets
 :Macroscale: recorded only as ``macro_XXXXX.f90`` — **not identified** ``[S]`` ``[?]``
 :Data: present in both checkouts, 13 Run directories ``[D]``; **not** in the
    cold archive ``[A]``
+:Data specification: **v1.85.0** — ``f_deg_time``, and the combined-simulation
+   flat layout (one ``f_deg_time_PLG2_tPA01_along_Q2.dat`` per Run directory,
+   no ``00``–``09`` subdirectories) ``[D]``. This Dataset is the source of
+   ``tests/fixtures/fortran_v185_sample/``.
 
 The baseline. A 3 x 4 grid of Scenarios and Mechanisms.
 
@@ -112,6 +116,8 @@ Each carries an explicit seed and a wall-clock budget of 900–1800 s ``[N]``.
    The spreadsheet records only the ``slow_micro`` one ``[S]``.
 :Data: present in both checkouts, 9 Run directories ``[D]``; also archived,
    ``03 08 13 15 16 17 18 19 20`` ``[A]``
+:Data specification: **v1.90.0** — ``f_deg_time``, one directory per
+   Simulation ``[D]``
 
 Revisits the paper's conclusions by slowing the diffusion of fibrin degradation
 products at the microscale. Keeps the three Kd Scenarios and replaces the four

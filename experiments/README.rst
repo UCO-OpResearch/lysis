@@ -96,6 +96,50 @@ different store is a one-cell edit. ``2023-02-02-2200 - F-Macro
 Multi-Process.ipynb`` still carries a commented-out ``data_root`` line aimed at
 ``/home/bpaynter/Archive/lysis_data`` from an earlier such switch.
 
+Data specification alignment
+============================
+
+Every Dataset logged here was surveyed for which degradation-output file it
+carries, and the answer partitions them cleanly by date ``[D]``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 16 20 38
+
+   * - Datasets
+     - Spec
+     - Degradation file
+     - Distinguishing layout
+   * - ``2023-02-02-22xx``
+     - **v1.85.0**
+     - ``f_deg_time``
+     - Flat — all Simulations combined in one top-level file
+   * - ``2023-05-17`` … ``2023-12-10``
+     - **v1.90.0**
+     - ``f_deg_time``
+     - One directory per Simulation (``00``–``09``)
+   * - ``2024-02-02`` onward
+     - **v1.95.0**
+     - ``f_deg_list``
+     - Per-Simulation dirs; ``params.json`` holds bare floats
+
+**No v0.1.x Dataset contains ``f_deg_list``.** The changeover is a hard cutover
+at ``2024-02-02-1400`` — the :doc:`tidy_fortran_data` Dataset, whose entire
+purpose was to make it. Confirmed across the canonical checkout, this worktree,
+and four spot-checked archive tarballs ``[D]`` ``[A]``.
+
+Note that the spec numbers run **opposite** to intuition when reading the
+package source: ``v1.85.0`` is the oldest and ``v1.99.0`` the current Fortran
+format, and each older spec is defined in ``dataspec.py`` as a modified copy of
+the next *newer* one.
+
+.. note::
+
+   The ``v1.85.0`` test fixture (``tests/fixtures/fortran_v185_sample/``) is
+   file-for-file a sample of ``2023-02-02-2200`` — it carries the same
+   ``PLG2_tPA01_along_Q2`` file code ``[D]``. The tPA Diffusion baseline is
+   therefore the Dataset that the modern v1.85.0 reader was written against.
+
 Conventions
 ===========
 

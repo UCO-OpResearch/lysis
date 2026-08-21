@@ -118,13 +118,47 @@ should move there and leave a cross-reference behind. If they are organised by
 Afterlife
 =========
 
-``f_deg_list`` did not survive. The modern data specification (v1.90.0) records
-fibre degradation as **``f_deg_time``** again — a binary snapshot array of shape
-``(Nsave+1, total_edges)`` with a ``9.9e100`` sentinel for "not yet scheduled to
-degrade" ``[?]``.
+``f_deg_list`` **is the format that stuck.** It is still the current Fortran
+representation: the base data specification ``v1.99.0`` defines
+``f_deg_list{file_code}_{sim:02}.dat`` as a three-field text event log
+(``Simulation Time Elapsed``, ``Grid Location Index``,
+``Fiber New Degrade Time``) ``[D]``.
 
-Whether that is a revival of the pre-2024 format or a coincidence of naming has
-**not been verified** — the 2023 ``f_deg_time`` file is 19 MB of a repeating
-8-byte pattern, consistent with a sentinel-filled array, but no field-level
-comparison has been done. Worth resolving before citing this Dataset as
-evidence about the modern format.
+The older specs are built by deriving *backwards* from ``v1.99.0``, and
+``_create_v1_90()`` is the one that removes it:
+
+.. code-block:: text
+
+    v1.99.0  f_deg_list   <- base (current Fortran spec)
+    v1.95.0  f_deg_list   <- copy of v1.99.0, pre-Pint parameters
+    v1.90.0  f_deg_time   <- copy of v1.95.0, swaps the event log for the array
+    v1.85.0  f_deg_time   <- copy of v1.90.0, combined-simulation layout
+
+So this Experiment marks the **permanent** transition from ``f_deg_time`` to
+``f_deg_list``, and the spec boundary between ``v1.90.0`` and ``v1.95.0`` falls
+exactly here.
+
+.. note::
+
+   An earlier draft of this log recorded the opposite — that ``f_deg_list`` had
+   been superseded by a return to ``f_deg_time`` in v1.90.0. That was a
+   misreading of the version numbers: v1.90.0 is **older** than v1.95.0, not
+   newer. The modern dataset ``2026-02-28-1907`` does contain ``f_deg_time``,
+   but it was produced in 2026 specifically to exercise the legacy v1.90.0
+   reader, and is the source of ``tests/fixtures/fortran_v190_sample/`` ``[D]``.
+
+Data specification
+==================
+
+``2024-02-02-1400`` aligns with **v1.95.0** ``[D]``:
+
+* ``f_deg_list`` rather than ``f_deg_time`` — rules out v1.90.0 and v1.85.0.
+* One directory per Simulation (``00``–``09``) — rules out v1.85.0's
+  combined-simulation layout.
+* ``params.json`` holds **bare floats** (``"binding_rate": 0.1``) and
+  ``"micro_params": null``, so microscale parameters must be parsed out of
+  ``micro_PLG2_tPA01.txt`` — this is precisely what ``_create_v1_95()``
+  describes, and it rules out v1.99.0, where parameters are Pint Quantities.
+
+This makes ``2024-02-02-1400`` the **earliest v1.95.0 Dataset** in the
+collection, and its parent ``2023-12-10-1900`` the latest v1.90.0 one.
