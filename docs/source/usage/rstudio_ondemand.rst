@@ -9,25 +9,29 @@ the project's HDF5 output files with the R package ``hdf5r``.
 
 .. note::
 
-   This guide uses angle-bracketed placeholders like ``<_username_>`` for
-   values you must fill in with your own — replace the whole token, brackets
-   and underscores included, with the same value everywhere it appears.
-
-   A token written ``<_TODO: ...__>`` instead marks a detail this guide does
-   not have yet (it needs a maintainer to fill it in, usually from a
-   screenshot of the live site). If you hit one, treat the surrounding steps
-   as provisional and ask the Lysis maintainers for the current value.
+   This guide uses angle-bracketed tokens written ``<_TODO: ...__>`` to mark
+   a detail this guide does not have yet (it needs a maintainer to fill it
+   in, usually from a screenshot of the live site). If you hit one, treat
+   the surrounding steps as provisional and ask the Lysis maintainers for
+   the current value.
 
 .. _before-you-start-group:
 
 Before You Start
 -----------------
 
-You will need:
+This guide needs no local software installation and no clone of the
+``lysis`` repository — everything in it runs against absolute paths under
+``/shared/lysis-group/`` through your browser. You will need:
 
-- A Buddy HPC account. If you don't have one yet, or haven't confirmed you
-  can SSH in and clone the repository, see :doc:`system_onboarding` first —
-  this guide assumes that part is done.
+- A Buddy HPC account. If you don't have one yet, contact hpc@uco.edu (or
+  whoever issued your Lysis project access) to get one set up.
+
+  If you *also* want to use the ``lysis`` command-line tool (for example its
+  ``micro-stats``, ``macro-stats``, or ``parameters`` commands) rather than
+  working purely through RStudio, that additionally requires an SSH key and
+  a clone of the repository — see :doc:`system_onboarding` for that setup.
+  It is not needed for anything in this guide.
 - Membership in the ``lysis-group`` Unix group. That group membership is
   what grants read access to ``/shared/lysis-group/``, where the Lysis
   project's shared data lives. Check whether you're already a member by
@@ -83,7 +87,8 @@ Launching the RStudio App
      which you don't need for this guide.
    - **Queue** — leave this at its default, ``general``. That's a sensible
      choice for reading and summarising data, as opposed to running new
-     simulations.
+     simulations. If you need more memory than that gives you, see
+     :ref:`rstudio-troubleshooting`.
    - **Number of hours** — the form accepts 1-48 and defaults to ``12``.
      The default is more than enough for a typical working session; lower
      it if you know you'll finish sooner.
@@ -203,6 +208,12 @@ Listing Contents
 dataset, including each dataset's shape (``dataset.dims``) and HDF5 type
 class.
 
+Note that the group names you'll see here (``micro_data``, ``macro_data``,
+``log_files``) are not the same as the Data Collection names used in
+:doc:`data_specification` and :doc:`ontology` (``microscale_out``,
+``macroscale_in``, ``macroscale_out``) — the latter are conceptual
+categories, the former are the literal on-disk HDF5 group names.
+
 Reading a Dataset
 ~~~~~~~~~~~~~~~~~~
 
@@ -222,6 +233,26 @@ whole thing into memory — index like a normal R array:
 This matters most for the macroscale collections, where some datasets carry
 one row per snapshot across a whole simulation; see :doc:`data_specification`
 for which datasets are large.
+
+Macroscale datasets are also nested one level deeper than microscale ones:
+each macroscale simulation gets its own subgroup, ``macro_data/sim_00``,
+``macro_data/sim_01``, and so on. List the simulations present in a file
+with ``names(h5f[["macro_data"]])``, then read a dataset from one of them
+with, e.g., ``h5f[["macro_data/sim_00/snapshot_time"]][]``.
+
+.. note::
+
+   This shape comes from the ``lysis`` package's own data specification
+   (``src/lysis/dataio/dataspec.py``), not from a live example. Every file
+   this guide's author checked under ``/shared/lysis-group/`` in the
+   austin-runs data (all 320 ``.h5`` files across
+   ``wpumphrey/austin-runs-corrected`` and
+   ``austin_segrest/austin-old-data-imported``) is microscale-only
+   (``micro_data`` + ``log_files``, no ``macro_data``).
+   ``<_TODO: does a macroscale example file exist anywhere in the Lysis
+   shared data (e.g. under austin_segrest/old_data_compiled, which holds no
+   .h5 files and may use a different, non-HDF5 layout) that this section
+   could be verified against and linked to?__>``
 
 Reading Attributes
 ~~~~~~~~~~~~~~~~~~~~
@@ -433,10 +464,21 @@ Running out of memory reading a dataset
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Some macroscale datasets are much larger than the microscale datasets shown
-in this guide's worked example (see :doc:`data_specification`). If reading a
-whole dataset with ``[]`` exhausts your session's memory, read a subset
-instead (see "Reading a Dataset" above), or request a session with more
-memory on the launch form.
+in this guide's worked example (see :doc:`data_specification`). The launch
+form has no separate memory field (see "Launching the RStudio App", step 3),
+so before requesting a bigger session, try:
+
+- Reading a subset instead of the whole dataset (see "Reading a Dataset"
+  above).
+- Removing large objects you no longer need with ``rm()``, then
+  ``gc()``, before reading the next one.
+- Processing a large dataset in chunks (read a slice, summarise it, discard
+  it, move to the next slice) rather than holding the whole thing in memory
+  at once.
+
+If you do need more memory than a standard session provides, select
+**high-mem** in the **Queue** dropdown on the launch form: it provides nodes
+with the same 16 cores but 256 GB of RAM instead of the standard 64 GB.
 
 See Also
 -----------
