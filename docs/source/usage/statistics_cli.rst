@@ -11,8 +11,8 @@ Statistics Commands: A Reference
 Overview
 ========
 
-This page documents the five ``lysis`` commands that report numbers rather than
-produce data:
+This page documents the seven ``lysis`` commands that report numbers rather
+than produce data:
 
 .. list-table::
    :header-rows: 1
@@ -27,6 +27,12 @@ produce data:
      - Six macroscale summary metrics (degradation rate, lag time, time to full
        degradation, tPA back-row percentage, first-passage time, lysis-front
        velocity) for one or more Runs.
+   * - ``lysis deg-rate``
+     - Macroscale degradation rates over **configurable** degradation
+       intervals (default 20 %→80 %, 20 %→50 %, 50 %→80 %).
+   * - ``lysis deg-time``
+     - Macroscale times to reach **configurable** degradation milestones
+       (default 5 %, 20 %, 50 %, 80 %, 100 %).
    * - ``lysis parameters``
      - The Scenario parameters stored in each Run's file, with units, and a
        re-feedable CSV export.
@@ -36,7 +42,7 @@ produce data:
    * - ``lysis compare macro-stats``
      - The same, for macroscale Runs.
 
-All five are **read-only**.  They open each ``.h5`` file in HDF5 read mode,
+All seven are **read-only**.  They open each ``.h5`` file in HDF5 read mode,
 compute in memory, and print.  They never write to the data file.  The only
 files they can create are the ones you explicitly name with ``--markdown`` or
 ``--csv``.
@@ -47,10 +53,11 @@ of Runs and into R, Python, or a spreadsheet, without writing any HDF5 code.
 
 .. note::
 
-   Two closely related commands, ``lysis deg-rate`` and ``lysis deg-time``,
-   report degradation rates and degradation-milestone times over
-   *configurable* percentage intervals.  A third, ``lysis diff``, compares
-   HDF5 tables element by element.  None of the three is documented here.
+   ``lysis diff`` also compares two Runs, but element by element over the raw
+   HDF5 tables.  It is a diagnostic tool for checking whether two Runs produced
+   identical data, not an analysis tool, and it is not documented here — see
+   ``lysis diff --help``.  For *statistical* comparison of two Runs, use
+   :ref:`statistics_cli_compare`.
 
 .. _statistics_cli_common:
 
@@ -293,6 +300,43 @@ Macroscale (from the ``macroscale_out`` Data Collection)
 
 :math:`y_i = i\,\Delta`
     The y-distance (microns) of grid row :math:`i` from the front of the clot.
+
+Degradation milestones
+----------------------
+
+Two commands on this page — :ref:`statistics_cli_deg_rate` and
+:ref:`statistics_cli_deg_time` — locate the moment a Simulation crosses a given
+degradation threshold, so the crossing is given a symbol here.
+
+:math:`k_s(\theta)`
+    The **milestone frame**: the index of the first save point of Simulation
+    :math:`s` at which the degraded fraction reaches the threshold
+    :math:`\theta \in [0, 1]`.
+
+    .. math::
+
+       k_s(\theta) = \min\bigl\{\, k : \phi^{(s)}_k \ge \theta \,\bigr\}
+
+    Implemented as ``numpy.argmax`` over the boolean array
+    :math:`\phi^{(s)} \ge \theta`, which returns ``0`` when the threshold is
+    never reached — see
+    `issue #126 <https://github.com/UCO-OpResearch/lysis/issues/126>`_ and the
+    warnings that cite it.  Source of truth:
+    ``find_degradation_marker_frames`` in
+    ``src/lysis/analysis/degradation.py``.
+
+:math:`T_s(\theta)`
+    The **milestone time**, in **minutes**:
+
+    .. math::
+
+       T_s(\theta) = \frac{t^{(s)}_{k_s(\theta)}}{60}
+
+    Source of truth: ``find_degradation_marker_times`` in the same module.
+
+Each :math:`k_s(\theta)` depends only on its own threshold, so asking for more
+milestones or more intervals never changes the value of the ones you already
+had.
 
 Statistical conventions
 -----------------------
@@ -604,7 +648,10 @@ at the end; the nesting above says the same thing.)
    (``src/lysis/geometry/edge_grid.py``).  So the "columns" over which the
    front velocity is averaged are the leftmost :math:`C` edges of each row and
    are of mixed orientation.  This is what the code does; whether it is what
-   the model intends has not been established here.
+   the model intends has not been established.  The question is filed for
+   analysis as
+   `issue #127 <https://github.com/UCO-OpResearch/lysis/issues/127>`_ — it is
+   an open question about intent, not a confirmed defect.
 
 Source of truth: ``calculate_time_row_exposed`` in
 ``src/lysis/analysis/degradation.py``.
@@ -707,9 +754,15 @@ The time of the first save point at which the degraded fraction reaches
    the clot did fully degrade in every Simulation.  A near-zero mean, or a mean
    far below the ``Lysis lag time``, is the tell.
 
-The same ``argmax`` rule governs all degradation milestones, not only 100 %;
-see ``find_degradation_marker_frames`` in
-``src/lysis/analysis/degradation.py``.
+   This is a confirmed defect and is tracked as
+   `issue #126 <https://github.com/UCO-OpResearch/lysis/issues/126>`_, which
+   the maintainer intends to fix.  Until it is fixed, check for full
+   degradation yourself.
+
+The same ``argmax`` rule governs all degradation milestones, not only 100 %,
+so the same defect reaches every milestone of :ref:`statistics_cli_deg_time`
+and both endpoints of every interval of :ref:`statistics_cli_deg_rate`.  See
+``find_degradation_marker_frames`` in ``src/lysis/analysis/degradation.py``.
 
 ``Percent of molecules that reached the back row``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -808,10 +861,14 @@ fit.  The ``+ 1`` is a literal one-minute slack in the code.
    ``per_sim_front_velocity``
    (``src/lysis/analysis/degradation.py``), which returns the :math:`(\mu_s)` and :math:`(\sigma_s)` vectors directly.
 
-   The source carries a ``.. todo::`` noting this aggregation is intended to be
-   replaced by a single mean and standard deviation over all columns of all
-   Simulations.  Check ``mean_front_velocity`` in
-   ``src/lysis/analysis/degradation.py`` before relying on this column.
+   This aggregation is **deliberate for now** — it is not scheduled for change,
+   and the formula and the numbers above are correct as the command stands.  It
+   is tracked as
+   `issue #124 <https://github.com/UCO-OpResearch/lysis/issues/124>`_, together
+   with the ``.. todo::`` in ``mean_front_velocity``
+   (``src/lysis/analysis/degradation.py``) proposing a single mean and standard
+   deviation pooled over all columns of all Simulations.  Read that issue
+   before quoting this column's ``±`` as a Run-level uncertainty.
 
 Example
 -------
@@ -827,6 +884,365 @@ Example
       Percent of molecules that reached the back row: 21.321 ± 0.485
       First passage time (min): 33.426 ± 8.369
       Front Velocity (microns/min): 3.471 ± 0.183
+
+.. _statistics_cli_deg_rate:
+
+``lysis deg-rate``
+==================
+
+Synopsis
+--------
+
+.. code-block:: text
+
+    lysis deg-rate [OPTIONS] PATH
+
+Reports the macroscale degradation rate over one or more **configurable**
+degradation intervals — by default 20 %→80 %, 20 %→50 % and 50 %→80 %.  Like
+:ref:`statistics_cli_macro` it requires a ``macroscale_out`` Data Collection and
+fails on a microscale-only file.
+
+Options
+-------
+
+.. program:: lysis deg-rate
+
+.. option:: --sort <smart|alpha>
+
+   Row order in directory mode.  Default ``smart``.  See
+   :ref:`statistics_cli_sort`.
+
+.. option:: --no-progress
+
+   Suppress progress indicators.
+
+.. option:: --markdown <FILE>
+
+   Write a Markdown table to ``FILE``, or ``-`` for standard output.  Implies
+   ``--no-progress``.  Markdown column headers carry the units inline, as
+   ``20% to 80% (%/min)``.
+
+.. option:: --add <START-END>
+
+   Add one degradation interval.  Repeatable.  ``START`` and ``END`` are
+   integer percentages written with a hyphen between them, e.g. ``--add 0-100``.
+   They must satisfy :math:`0 \le \text{START} < \text{END} \le 100`.
+
+.. option:: --drop <START-END>
+
+   Remove one interval from the default set.  Repeatable, same ``START-END``
+   syntax, e.g. ``--drop 20-80``.
+
+.. option:: --help
+
+   Show the command's help and exit.
+
+Choosing intervals
+------------------
+
+The effective interval list is built as **drop first, then add**
+(``src/lysis/cli/deg_rate.py``):
+
+1. start from the defaults ``[(20, 80), (20, 50), (50, 80)]``;
+2. remove every interval named by ``--drop``;
+3. append every interval named by ``--add`` that is not already present.
+
+Three consequences, all confirmed by executing the command:
+
+* **Column order is not sorted.**  Surviving defaults keep their default order,
+  and added intervals follow in the order you wrote them.  ``--add 0-100 --add
+  0-50 --drop 20-80`` yields the columns ``20% to 50%``, ``50% to 80%``,
+  ``0% to 100%``, ``0% to 50%`` — in that order.
+* **``--add`` beats ``--drop`` for the same interval.**  Dropping is applied to
+  the defaults before adding, so ``--add 20-80 --drop 20-80`` leaves
+  ``20% to 80%`` in the table.
+* **Duplicates are ignored.**  ``--add 20-80`` when it is already present is a
+  no-op.
+
+An interval that fails to parse, or that violates
+:math:`0 \le \text{START} < \text{END} \le 100`, is reported and the command
+exits ``1`` — not Click's usual ``2``, because the value is validated inside the
+command body rather than by a Click parameter type.  Dropping every default
+without adding anything also exits ``1``
+(``Error: No intervals remain after applying --drop.``).
+
+Statistics
+----------
+
+One column per interval.  The DataFrame column name is exactly
+``"<START>% to <END>%"``; the Rich table appends ``(%/min)`` on a second header
+line and the Markdown table appends it inline.  Each cell is
+``mean ± std`` formatted to **four** decimal places (``deg_rate_table`` in
+``src/lysis/analysis/summary.py``).
+
+``<START>% to <END>%``
+~~~~~~~~~~~~~~~~~~~~~~
+
+The average degradation rate between two milestones, in **percent of the clot
+per minute**.  Plain Python floats, not Pint ``Quantity`` values.
+
+For an interval given as integer percentages :math:`(a, b)`, write
+:math:`\theta_a = a/100` and :math:`\theta_b = b/100`.  The per-Simulation rate
+is the **two-point secant slope** of the degraded fraction between the two
+milestone frames:
+
+.. math::
+
+   r_s(a, b) = 100 \cdot 60 \cdot
+     \frac{\phi^{(s)}_{k_s(\theta_b)} - \phi^{(s)}_{k_s(\theta_a)}}
+          {t^{(s)}_{k_s(\theta_b)} - t^{(s)}_{k_s(\theta_a)}}
+
+The factor :math:`60` converts the per-second denominator to per-minute; the
+factor :math:`100` converts the dimensionless fraction to percent.  The
+reported pair is
+
+.. math::
+
+   \text{Mean} = \operatorname{mean}_{s}\bigl(r_s(a, b)\bigr),
+   \qquad
+   \text{Standard Deviation} = \operatorname{sd}_{s}\bigl(r_s(a, b)\bigr)
+
+Aggregated over: the :math:`S` macroscale Simulations, all of them, with no
+exclusions.  Standard deviation is the population form
+(:math:`\text{ddof} = 0`); no quantile is involved.
+
+Because the endpoints are save-point frames rather than interpolated crossings,
+:math:`r_s` is a secant between two points that both lie *on or after* their
+thresholds — its time resolution is the save interval, and it is systematically
+a slight underestimate of the instantaneous rate at the interval's midpoint.
+
+Source of truth: ``degradation_rates`` and ``compute_degradation_rate_stats``
+in ``src/lysis/analysis/degradation.py``; interval parsing and assembly in
+``src/lysis/cli/deg_rate.py``.
+
+.. warning::
+
+   **The** `#126 <https://github.com/UCO-OpResearch/lysis/issues/126>`_
+   **milestone defect reaches this command through both endpoints.**  When a
+   milestone is never reached, :math:`k_s(\theta)` is ``0`` rather than
+   undefined, and the secant is silently taken from the wrong frames:
+
+   * **End milestone never reached** — :math:`k_s(\theta_b) = 0`, so both the
+     numerator and the denominator change sign and cancel.  The result is a
+     **positive, entirely plausible-looking rate** that is in fact the
+     :math:`0\% \rightarrow a\%` rate, not the :math:`a\% \rightarrow b\%` rate
+     you asked for.  Nothing in the output marks it.
+   * **Both milestones never reached** — :math:`k_s(\theta_a) = k_s(\theta_b) =
+     0`, the denominator is exactly zero, and the cell reports ``nan``.
+
+   Only the second case is visible in the table.  Before trusting a
+   ``deg-rate`` column, confirm with :ref:`statistics_cli_deg_time` that every
+   Simulation actually reached **both** endpoints of the interval — a
+   milestone time of ``0.00`` there is the tell.
+
+Relationship to ``macro-stats``
+-------------------------------
+
+``lysis deg-rate`` and the ``Degradation rate (%/min)`` metric of
+:ref:`statistics_cli_macro` both report a percent-per-minute degradation rate,
+and they are **not the same quantity**.  Neither reproduces the other for any
+choice of interval:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 39 39
+
+   * -
+     - ``macro-stats`` ``Degradation rate``
+     - ``deg-rate`` ``<a>% to <b>%``
+   * - Estimator
+     - Least-squares slope of a straight line fitted to *all* save points in
+       the rapid-degradation phase.
+     - Two-point secant between the :math:`a\%` and :math:`b\%` milestone
+       frames.
+   * - Window
+     - Chosen automatically per Simulation: the save points where the
+       incremental change exceeds half that Simulation's maximum increment.
+     - Chosen by you, as a pair of degradation percentages.
+   * - Points used
+     - Every save point in the window.
+     - Exactly two.
+   * - Configurable
+     - No.
+     - Yes.
+
+On ``TF-x__9_951`` the two give ``2.946 ± 0.065`` (``macro-stats``) and
+``3.0033 ± 0.0691`` (``deg-rate``, 20 %→80 %).  Both are correct; they measure
+different things.  Use ``macro-stats`` when you want one robust
+whole-Simulation rate, and ``deg-rate`` when you want to compare the early and
+late phases of lysis against each other — which is exactly what the default
+20 %→50 % and 50 %→80 % pair is for.
+
+Example
+-------
+
+.. code-block:: console
+
+    $ lysis deg-rate /shared/lysis-group/bpaynter/data/lysis-front-pre-lat/TF-x__9_951.h5
+    TF-x__9_951
+
+      20% to 80%: 3.0033 ± 0.0691 %/min
+      20% to 50%: 2.9692 ± 0.0726 %/min
+      50% to 80%: 3.0391 ± 0.0811 %/min
+
+.. _statistics_cli_deg_time:
+
+``lysis deg-time``
+==================
+
+Synopsis
+--------
+
+.. code-block:: text
+
+    lysis deg-time [OPTIONS] PATH
+
+Reports how long the clot took to reach each of one or more **configurable**
+degradation milestones — by default 5 %, 20 %, 50 %, 80 % and 100 %.  Requires a
+``macroscale_out`` Data Collection.
+
+Options
+-------
+
+.. program:: lysis deg-time
+
+.. option:: --sort <smart|alpha>
+
+   Row order in directory mode.  Default ``smart``.
+
+.. option:: --no-progress
+
+   Suppress progress indicators.
+
+.. option:: --markdown <FILE>
+
+   Write a Markdown table to ``FILE``, or ``-`` for standard output.  Implies
+   ``--no-progress``.  Markdown column headers carry the units inline, as
+   ``50% (min)``.
+
+.. option:: --add <PCT>
+
+   Add one degradation milestone.  Repeatable.  ``PCT`` is an integer
+   percentage in :math:`[0, 100]`, with an optional trailing ``%`` — both
+   ``--add 90`` and ``--add 90%`` work.
+
+.. option:: --drop <PCT>
+
+   Remove one milestone from the default set.  Repeatable, same syntax.
+
+.. option:: --help
+
+   Show the command's help and exit.
+
+Choosing milestones
+-------------------
+
+Assembly follows the same **drop first, then add** rule as ``deg-rate``
+(``src/lysis/cli/deg_time.py``), with one difference that matters:
+
+* **The final list is sorted ascending**, unlike ``deg-rate``'s.  ``--add 90%
+  --add 10 --drop 5`` yields the columns ``10%``, ``20%``, ``50%``, ``80%``,
+  ``90%``, ``100%`` — your ``--add`` order is not preserved.
+* ``--add`` still beats ``--drop`` for the same value, and duplicates are still
+  ignored.
+* A milestone that is not an integer in :math:`[0, 100]` is reported and the
+  command exits ``1``.  Dropping every default without adding anything also
+  exits ``1`` (``Error: No milestones remain after applying --drop.``).
+
+.. note::
+
+   ``--add 0`` is accepted and produces a column that is always
+   ``0.00 ± 0.00``: every Simulation satisfies :math:`\phi^{(s)}_0 \ge 0` at its
+   first save point, so :math:`k_s(0) = 0` and :math:`T_s(0) = t^{(s)}_0 / 60`,
+   which is zero.  That zero is legitimate arithmetic, **not** the ``#126``
+   defect — but it is also the same value ``#126`` produces for an unreached
+   milestone, which is precisely why an unreached milestone is hard to spot.
+
+Statistics
+----------
+
+One column per milestone.  The DataFrame column name is exactly ``"<PCT>%"``;
+the Rich table appends ``(min)`` on a second header line and the Markdown table
+appends it inline.  Each cell is ``mean ± std`` formatted to **two** decimal
+places (``deg_time_table`` in ``src/lysis/analysis/summary.py``).
+
+``<PCT>%``
+~~~~~~~~~~
+
+The time at which the clot first reached the given degradation milestone, in
+**minutes**.  Plain Python floats, not Pint ``Quantity`` values.
+
+For a milestone given as an integer percentage :math:`m`, with
+:math:`\theta = m/100`:
+
+.. math::
+
+   \text{Mean} = \operatorname{mean}_{s}\bigl(T_s(\theta)\bigr),
+   \qquad
+   \text{Standard Deviation} = \operatorname{sd}_{s}\bigl(T_s(\theta)\bigr)
+
+where :math:`T_s(\theta) = t^{(s)}_{k_s(\theta)} / 60` is the milestone time of
+:ref:`statistics_cli_notation`.
+
+Aggregated over: the :math:`S` macroscale Simulations, all of them, with no
+exclusions.  Standard deviation is the population form
+(:math:`\text{ddof} = 0`); no quantile is involved.
+
+Because :math:`T_s` is a save-point time and not an interpolated crossing, its
+resolution is the save interval and it is systematically a slight
+**over**\ estimate of the true crossing time.
+
+Source of truth: ``compute_degradation_marker_stats`` in
+``src/lysis/analysis/degradation.py``; milestone parsing and assembly in
+``src/lysis/cli/deg_time.py``.
+
+.. warning::
+
+   **Every column of this command is exposed to the**
+   `#126 <https://github.com/UCO-OpResearch/lysis/issues/126>`_ **milestone
+   defect.**  A milestone that a Simulation never reaches is reported as having
+   been reached at save point 0 — normally ``0.00`` minutes — rather than as
+   missing.  A single such Simulation drags that column's mean down and inflates
+   its standard deviation, with nothing in the output to say so.
+
+   The high milestones are the ones at risk: a Run that stalls at 90 % lysis
+   will show a plausible ``80%`` column and a badly wrong ``100%`` one.  Look
+   for a column whose mean is *lower* than the column to its left, or whose
+   standard deviation is large relative to its neighbours — milestone times must
+   increase monotonically across a row, so any inversion is a positive
+   indication of the defect.
+
+Relationship to ``macro-stats``
+-------------------------------
+
+Unlike ``deg-rate``, this command **does** reproduce one of the
+:ref:`statistics_cli_macro` metrics exactly.  ``macro-stats``'
+``Time to full clot degradation (min)`` is defined as
+:math:`u_s = t^{(s)}_{c_s}/60` with :math:`c_s = \min\{k : \phi^{(s)}_k \ge 1\}`
+— which is precisely :math:`T_s(1)`, the ``100%`` column here.  The two go
+through the same ``find_degradation_marker_times`` call and differ only in
+display precision: ``macro-stats`` prints three decimals, ``deg-time`` two.
+
+On ``TF-x__9_951``, ``macro-stats`` reports ``42.133 ± 0.521`` and ``deg-time``
+reports ``42.13 ± 0.52`` for ``100%``.  They also share the ``#126`` exposure,
+for the same reason.
+
+The other four default milestones have no ``macro-stats`` equivalent — 5 %,
+20 %, 50 % and 80 % are only available here.
+
+Example
+-------
+
+.. code-block:: console
+
+    $ lysis deg-time /shared/lysis-group/bpaynter/data/lysis-front-pre-lat/TF-x__9_951.h5
+    TF-x__9_951
+
+      5%: 4.25 ± 0.08 min
+      20%: 10.75 ± 0.23 min
+      50%: 20.87 ± 0.32 min
+      80%: 30.72 ± 0.52 min
+      100%: 42.13 ± 0.52 min
 
 .. _statistics_cli_parameters:
 
@@ -1361,6 +1777,58 @@ Compare two versions of the same Experiment
         --markdown <_output_file_>
 
 Remember to correct the resulting p-values for multiple comparisons.
+
+Check that every Run actually finished lysing
+---------------------------------------------
+
+Do this **before** trusting any milestone-based column, because of
+`issue #126 <https://github.com/UCO-OpResearch/lysis/issues/126>`_:
+
+.. code-block:: console
+
+    $ lysis deg-time /shared/lysis-group/bpaynter/data/lysis-front-pre-lat/ \
+        --markdown -
+    | Run | 5% (min) | 20% (min) | 50% (min) | 80% (min) | 100% (min) |
+    | --- | --- | --- | --- | --- | --- |
+    | Q1 | 7.28 ± 0.08 | 22.50 ± 0.30 | 54.00 ± 0.60 | 88.45 ± 0.75 | 117.58 ± 0.45 |
+    | TB-ix__21_105 | 3.90 ± 0.08 | 11.88 ± 0.15 | 32.35 ± 0.29 | 56.08 ± 0.53 | 76.63 ± 0.72 |
+    | TB-xi__21_105 | 4.38 ± 0.11 | 11.35 ± 0.12 | 27.32 ± 0.30 | 45.15 ± 0.44 | 61.30 ± 0.85 |
+    | TB-xiii__21_105 | 4.45 ± 0.11 | 10.18 ± 0.16 | 22.37 ± 0.30 | 35.68 ± 0.51 | 48.78 ± 0.49 |
+    | TF-v__9_951 | 5.92 ± 0.08 | 18.92 ± 0.19 | 46.42 ± 0.43 | 76.82 ± 0.63 | 102.60 ± 0.93 |
+    | TF-vii__9_951 | 5.08 ± 0.08 | 14.38 ± 0.18 | 30.57 ± 0.41 | 47.60 ± 0.28 | 63.72 ± 0.58 |
+    | TF-x__9_951 | 4.25 ± 0.08 | 10.75 ± 0.23 | 20.87 ± 0.32 | 30.72 ± 0.52 | 42.13 ± 0.52 |
+
+Read across each row: the times must increase monotonically.  They do here, and
+no cell is ``0.00``, so every Simulation of every Run reached 100 % and the
+milestone columns — and the ``deg-rate`` and ``macro-stats`` numbers derived
+from them — are trustworthy for this folder.
+
+Compare the early and late phases of lysis
+------------------------------------------
+
+The default ``deg-rate`` intervals are chosen for exactly this: 20 %→50 % is the
+early half, 50 %→80 % the late half, and 20 %→80 % the whole rapid phase.
+
+.. code-block:: console
+
+    $ lysis deg-rate /shared/lysis-group/bpaynter/data/lysis-front-pre-lat/ \
+        --markdown -
+    | Run | 20% to 80% (%/min) | 20% to 50% (%/min) | 50% to 80% (%/min) |
+    | --- | --- | --- | --- |
+    | Q1 | 0.9096 ± 0.0094 | 0.9520 ± 0.0152 | 0.8711 ± 0.0125 |
+    | TB-ix__21_105 | 1.3564 ± 0.0163 | 1.4665 ± 0.0187 | 1.2617 ± 0.0221 |
+    | TB-xi__21_105 | 1.7721 ± 0.0220 | 1.8754 ± 0.0308 | 1.6799 ± 0.0274 |
+    | TB-xiii__21_105 | 2.3517 ± 0.0478 | 2.4650 ± 0.0616 | 2.2499 ± 0.0668 |
+    | TF-v__9_951 | 1.0362 ± 0.0102 | 1.0915 ± 0.0131 | 0.9863 ± 0.0124 |
+    | TF-vii__9_951 | 1.8061 ± 0.0144 | 1.8529 ± 0.0326 | 1.7624 ± 0.0277 |
+    | TF-x__9_951 | 3.0033 ± 0.0691 | 2.9692 ± 0.0726 | 3.0391 ± 0.0811 |
+
+To widen the window, add your own interval — the defaults are only defaults:
+
+.. code-block:: console
+
+    $ lysis deg-rate /shared/lysis-group/bpaynter/data/lysis-front-pre-lat/TF-x__9_951.h5 \
+        --add 0-100 --drop 20-80 --markdown <_output_file_>
 
 Export parameters for analysis in R
 -----------------------------------
