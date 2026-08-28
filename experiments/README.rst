@@ -26,13 +26,6 @@ processed it, where it sits in the lineage, and **why** it was superseded.
      - 2026-08
      - How to run any of the above again, and what breaks if you deviate
 
-.. note::
-
-   **Tidy Fortran Data** (``2024-02-02-1400``) was drafted here and then moved
-   to the **v0.2.x** line, where its code and notebooks live. It derives from
-   the last Internal Lysis Dataset, so it appears under "Downstream" in
-   :doc:`internal_lysis` — but the log itself belongs with v0.2.x.
-
 Provenance of these logs
 ========================
 
@@ -41,10 +34,12 @@ They are archaeology, not a contemporaneous lab notebook. Every entry is marked
 with the evidence it rests on:
 
 ``[S]``
-   From ``Computational Result Data.xlsx``, the hand-maintained index of
-   Dataset codes. This is a *primary* record — written at the time by the
-   researcher — and is the only surviving source for most "reason for change"
-   entries.
+   From a **contemporaneous primary record** — written at the time by the
+   person who did the work, in whatever form that took. For the tPA Diffusion
+   and Internal Lysis Experiments this is ``Computational Result Data.xlsx``,
+   the hand-maintained index of Dataset codes, and is the only surviving
+   source for most "reason for change" entries. A narrative ``.rst`` written
+   by a researcher and stored beside their data counts equally as ``[S]``.
 
 ``[N]``
    Read directly out of the notebook source (``runs``/``scenarios``/
@@ -59,6 +54,25 @@ with the evidence it rests on:
 ``[O]``
    Confirmed present in the OneDrive archive, from a directory listing taken
    2026-08-21. Seen in a listing, not opened.
+
+``[H]``
+   Read directly out of HDF5 attributes with ``h5py`` in mode ``"r"``. The
+   modern data collections carry full provenance stamps, so this is the
+   strongest evidence available for any Experiment logged from ``.h5`` files.
+
+``[G]``
+   From the ``lysis`` git history — a commit, branch or diff.
+
+``[X]``
+   Computed by cross-checking one artefact against another (comparing
+   Run-code lists, seeds, or array contents across data sets). Reproducible;
+   the log names the method wherever this tag appears.
+
+``[M]``
+   Maintainer testimony — a recollection, not a contemporaneous record.
+   Weaker than ``[S]``, and not to be conflated with ``[?]``: ``[M]`` says
+   *someone remembers this happening*, ``[?]`` says *this is inferred, not
+   remembered or recorded*.
 
 ``[?]``
    Inferred. Treat as a hypothesis, not a record.
@@ -145,7 +159,7 @@ carries, and the answer partitions them cleanly by date ``[D]``:
 
 **No v0.1.x Dataset contains ``f_deg_list``.** The changeover is a hard cutover
 at ``2024-02-02-1400`` — the Tidy Fortran Data Dataset, whose entire purpose was
-to make it (logged with v0.2.x). Confirmed across the canonical checkout, this worktree,
+to make it. Confirmed across the canonical checkout, this worktree,
 and four spot-checked archive tarballs ``[D]`` ``[A]``.
 
 Note that the spec numbers run **opposite** to intuition when reading the
