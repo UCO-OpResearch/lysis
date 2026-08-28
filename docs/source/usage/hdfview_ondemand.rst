@@ -66,9 +66,9 @@ Launching the HDFView App
 
 2. From the top menu bar, open the **Interactive Apps** menu, then choose
    **HDFView**, listed under the **Data** category (alongside OpenRefine,
-   ParaView, QGIS, and QualCoder). This app will launch an HDFView
-   interactive instance on Buddy — you interact with the HDFView GUI through
-   a VNC session, the same mechanism the **Buddy Desktop** app uses.
+   ParaView, QGIS, and QualCoder). This app launches an HDFView interactive
+   instance on Buddy — you interact with the HDFView GUI through a VNC
+   session in your browser.
 
    .. note::
 
@@ -110,10 +110,9 @@ Launching the HDFView App
    start time (**Created at**), time left before the wall time expires
    (**Time Remaining**), a **Session ID**, and a **Cancel** button — the
    same fields RStudio's session card uses (see :doc:`rstudio_ondemand`).
-   Click the card's connect/launch button to open the HDFView desktop in a
-   new browser tab. As with Buddy Desktop (also VNC-based), expect
-   compression/image-quality controls and a view-only shareable link
-   alongside it.
+   Where RStudio's card has a **Connect to RStudio Server** button, this
+   card's button reads **Launch HDFView**; click it to open the HDFView
+   desktop in a new browser tab.
 
    Your session ends automatically when its wall time runs out. A
    **Cancel** button on the session card ends it early.
@@ -300,10 +299,10 @@ Interactive Sessions**, and contact hpc@uco.edu if it persists.
 The VNC screen is blank, very slow, or oddly scaled
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Try lowering the compression setting or raising image quality on the
-session card (mirroring Buddy Desktop's controls), or reconnecting from the
-**My Interactive Sessions** page. If the window seems the wrong size for
-your screen, resizing your browser window and reconnecting can help.
+Try reconnecting from the **My Interactive Sessions** page — click
+**Launch HDFView** again to reopen the VNC tab. If the window seems the
+wrong size for your screen, resizing your browser window before
+reconnecting can help.
 
 "Permission denied" opening anything under ``/shared/lysis-group/``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
