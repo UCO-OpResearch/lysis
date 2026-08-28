@@ -24,6 +24,33 @@ System Onboarding
    if a command fails with something like "could not resolve hostname", check
    that you have not accidentally left a placeholder token in it.
 
+Which Path Are You On?
+-----------------------
+
+This guide covers three different situations — skim the list below and
+follow only the steps that apply to you. Steps and sections marked
+**Development path only** can be skipped if you are on the "Analysis +
+the ``lysis`` CLI" path.
+
+- **Analysis only** — reading existing data with RStudio/hdf5r or
+  HDFView, no local repository needed. Skip this page entirely and go to
+  the RStudio or HDFView guide instead (forthcoming in this documentation
+  set).
+- **Analysis + the** ``lysis`` **CLI** — running commands such as
+  micro-stats, macro-stats, or inspecting parameters, without executing
+  new Simulations. Follow Steps 1, 2, 4, and 5 below, noting these
+  differences:
+
+  - In Step 4, clone over **HTTPS** instead of SSH — the repository is
+    public, so no GitHub SSH key is needed. **Skip Step 3.**
+  - In Step 5, a bare ``uv sync --frozen`` is enough — you do not need
+    ``--extra test``.
+  - **Skip Step 6** — these commands read data that already exists and
+    never touch the Fortran binaries.
+
+- **Development** — executing new Simulations, or changing the Python or
+  Fortran source. Follow the whole page, in order.
+
 This guide walks through setting up your local environment and HPC account
 to run simulations on Buddy.
 
@@ -48,7 +75,16 @@ Before starting, ensure you have:
 - An HPC account on Buddy
 - Git installed locally
 - A GitHub account
-- Your IDE of choice (VS Code used here)
+- **Development path only.** Your IDE of choice (VS Code used here)
+- Membership in the ``lysis-group`` Unix group, which grants read access
+  to ``/shared/lysis-group/``. Check with:
+
+  .. code-block:: bash
+
+      groups | grep lysis-group
+
+  If this prints nothing, you are not yet a member — contact your HPC
+  administrator to be added before continuing.
 
 Step 1: Configure Local SSH Config
 ----------------------------------
@@ -56,7 +92,9 @@ Step 1: Configure Local SSH Config
 Configuring your SSH settings streamlines future remote connections to
 Buddy. An SSH config file (usually ``~/.ssh/config`` on Linux/macOS, or
 ``C:\Users\{User}\.ssh\config`` on Windows) lets you type a short name like
-``node-<_node_number_>`` instead of the full connection details every time.
+``node-<_node_number_>`` instead of the full connection details every time
+— you'll see where that node number comes from in `Connect to Buddy`_
+below.
 
 See the `VS Code Setup`_ section below for the IDE-specific configuration
 instructions.
@@ -106,13 +144,17 @@ From your local PowerShell, run:
 
 .. code-block:: powershell
 
-    cat .ssh/id_ed25519.pub | ssh <_username_>@hpc.uco.edu "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+    cat ~/.ssh/id_ed25519.pub | ssh <_username_>@hpc.uco.edu "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 
 This command produces no output on success. You will be prompted for your
 Buddy password once (this is the last time you should need it).
 
 Step 3: Create Buddy SSH Key and Add It to GitHub
 --------------------------------------------------
+
+**Development path only.** If you're on the "Analysis + lysis CLI" path,
+skip this step — Step 4 below shows you how to clone over HTTPS instead,
+which needs no GitHub SSH key.
 
 1. From the Buddy terminal, generate a new SSH key:
 
@@ -126,7 +168,7 @@ Step 3: Create Buddy SSH Key and Add It to GitHub
 
    .. code-block:: bash
 
-       cat id_ed25519.pub
+       cat ~/.ssh/id_ed25519.pub
 
    You should see a single line of text starting with ``ssh-ed25519 AAAA...``.
    Copy this whole line.
@@ -157,23 +199,35 @@ Step 4: Cloning the GitHub Repository
 
    These commands produce no output on success.
 
-2. In a web browser, navigate to the GitHub repository page:
-   https://github.com/UCO-OpResearch/lysis
-3. Click the green **<> Code** dropdown (this ``<>`` is GitHub's own button
-   label, not a placeholder for you to fill in).
-4. Select **SSH**.
-5. Copy the SSH repository URL shown. It will look like
-   ``git@github.com:UCO-OpResearch/lysis.git``.
+2. Clone the repository. Which method to use depends on your path from
+   `Which Path Are You On?`_ above:
 
-6. Back in the Buddy terminal, clone the repository:
+   **Analysis + lysis CLI path — clone over HTTPS** (no SSH key needed,
+   the repository is public):
 
    .. code-block:: bash
 
-       git clone <_ssh_repository_url_>
+       git clone https://github.com/UCO-OpResearch/lysis.git
 
-   You should see output starting with ``Cloning into 'lysis'...``, followed
-   by progress lines (``Receiving objects: ...``, ``Resolving deltas: ...``),
-   and ending without an error.
+   **Development path — clone over SSH**, using the Buddy → GitHub key
+   from Step 3:
+
+   - In a web browser, navigate to the GitHub repository page:
+     https://github.com/UCO-OpResearch/lysis
+   - Click the green **<> Code** dropdown (this ``<>`` is GitHub's own
+     button label, not a placeholder for you to fill in).
+   - Select **SSH**.
+   - Copy the SSH repository URL shown. It will look like
+     ``git@github.com:UCO-OpResearch/lysis.git``.
+   - Back in the Buddy terminal, clone:
+
+     .. code-block:: bash
+
+         git clone <_ssh_repository_url_>
+
+   Either way, you should see output starting with ``Cloning into
+   'lysis'...``, followed by progress lines (``Receiving objects: ...``,
+   ``Resolving deltas: ...``), and ending without an error.
 
    This creates a new directory named ``lysis`` in your current location.
    The rest of this guide refers to that directory as ``<_project_dir_>``
@@ -183,7 +237,9 @@ Step 4: Cloning the GitHub Repository
 Step 5: Configure ``.bashrc`` and Initialize ``uv``
 ---------------------------------------------------
 
-1. Add the Intel compiler module to your ``.bashrc``:
+1. **Development path only.** Add the Intel compiler module to your
+   ``.bashrc`` (skip this on the "Analysis + lysis CLI" path — you won't
+   be compiling anything):
 
    .. code-block:: bash
 
@@ -219,13 +275,19 @@ Step 5: Configure ``.bashrc`` and Initialize ``uv``
    .. code-block:: bash
 
        cd <_project_dir_>
-       uv sync --extra test
+       uv sync --frozen --extra test
+
+   If you're on the "Analysis + lysis CLI" path, a bare
+   ``uv sync --frozen`` is enough — skip ``--extra test``.
 
    This creates an isolated Python environment (a **virtual environment**,
    stored in ``.venv/``) and installs the ``lysis`` package into it in
    **editable** mode — meaning changes you pull in with ``git pull`` take
-   effect immediately, with no separate reinstall step. ``--extra test``
-   also installs the packages needed to run the test suite.
+   effect immediately, with no separate reinstall step. ``--frozen``
+   installs exactly the versions recorded in ``uv.lock`` instead of
+   re-resolving them (the project convention — never omit it), and
+   ``--extra test`` additionally installs the packages needed to run the
+   test suite.
 
    You should see a series of ``+ package==version`` lines as dependencies
    download, ending without an error. This can take a minute or two the
@@ -233,6 +295,9 @@ Step 5: Configure ``.bashrc`` and Initialize ``uv``
 
 Step 6: Build the Fortran Binaries
 ------------------------------------
+
+**Development path only.** Skip this whole step on the "Analysis + lysis
+CLI" path — those commands never touch the compiled Fortran binaries.
 
 The Python package does not compile the Fortran simulation code for you.
 You must build it yourself before executing a Simulation for the first
@@ -312,27 +377,46 @@ not only to compile.
    The error message also mentions an override that lets the check be
    skipped; that override exists for advanced historical-reproduction
    workflows (see :doc:`data_specification`) and is not a substitute for
-   rebuilding — do not use it to make this error go away.
+   rebuilding — do not use it to make this error go away. (See also
+   `Fortran Binary Is Out Of Date`_ in Troubleshooting.)
 
 Setup Verification
-==================
+--------------------
 
 Verify the following before continuing:
 
 - You can SSH into Buddy without entering a password
-- You can clone the GitHub repository from Buddy without error
-- ``uv sync --extra test`` completes successfully
-- ``make`` completes with no ``Error`` or ``Fatal Error`` lines, and
-  ``bin/`` contains ``micro_rates``,
+- Group membership check passes: ``groups | grep lysis-group`` prints a
+  line containing ``lysis-group``
+- You can clone the GitHub repository from Buddy without error (via SSH
+  or HTTPS, per your path from `Which Path Are You On?`_)
+- ``uv sync --frozen`` (add ``--extra test`` on the Development path)
+  completes successfully
+- **Development path only.** ``make`` completes with no ``Error`` or
+  ``Fatal Error`` lines, and ``bin/`` contains ``micro_rates``,
   ``macro_diffuse_into_and_along__internal``, and
   ``macro_diffuse_into_and_along__external``
-- IDE can open a remote SSH session
+- **Development path only.** The test suite runs:
+  ``uv run --extra test pytest`` completes (this can take a while — some
+  tests execute the compiled Fortran binaries). Do **not** run a bare
+  ``uv run pytest`` — since ``pytest`` is an optional extra, a bare
+  ``uv run pytest`` re-syncs your environment, drops it, and fails with:
+
+  .. code-block:: text
+
+      error: Failed to spawn: `pytest`
+        Caused by: No such file or directory (os error 2)
+
+- **Development path only.** IDE can open a remote SSH session
 
 VS Code Setup
-==============
+---------------
+
+**Development path only.** Skip this whole section on the "Analysis +
+lysis CLI" path.
 
 SSH Configuration
-------------------
+^^^^^^^^^^^^^^^^^^
 
 This configuration will need to be done once on each computer connected to
 Buddy.
@@ -360,7 +444,7 @@ username:
         User <_username_>
 
 Connect to Buddy
-----------------
+^^^^^^^^^^^^^^^^^^
 
 These steps will be done each time you connect to Buddy.
 
@@ -393,10 +477,10 @@ Once it finishes connecting
 
 
 Troubleshooting
-================
+-----------------
 
 SSH Permission Denied
-----------------------
+^^^^^^^^^^^^^^^^^^^^^^^
 
 If you receive an SSH permission error:
 
@@ -405,7 +489,7 @@ If you receive an SSH permission error:
 - Confirm your SSH agent is running
 
 Verify SSH Connection
-----------------------
+^^^^^^^^^^^^^^^^^^^^^^^
 
 Test your connection with:
 
@@ -414,7 +498,7 @@ Test your connection with:
     ssh <_username_>@hpc.uco.edu
 
 Verify GitHub Authentication
------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Test GitHub SSH access with:
 
@@ -423,24 +507,26 @@ Test GitHub SSH access with:
     ssh -T git@github.com
 
 Permission Denied When Cloning the Repository
-------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-If ``git clone <_ssh_repository_url_>`` (Step 4) fails with a
-permission or "publickey" error, this almost always means the **Buddy**
-SSH key from Step 3 was never added to GitHub, or was added under the
-wrong GitHub account. This is a different key from the one in Step 2 — see
-the note near the top of this page about the two separate SSH keys. Check
-it using `Verify GitHub Authentication`_ above.
+If ``git clone <_ssh_repository_url_>`` (Step 4, Development path) fails
+with a permission or "publickey" error, this almost always means the
+**Buddy** SSH key from Step 3 was never added to GitHub, or was added
+under the wrong GitHub account. This is a different key from the one in
+Step 2 — see the note near the top of this page about the two separate
+SSH keys. Check it using `Verify GitHub Authentication`_ above. (If you
+cloned over HTTPS on the "Analysis + lysis CLI" path, this does not apply
+to you — HTTPS cloning of this public repository needs no key at all.)
 
 ``uv: command not found``
---------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The ``uv`` installer (Step 5.3) adds itself to your shell's startup file,
 but that only takes effect in **new** terminal sessions. Close and reopen
 your terminal, or run ``source ~/.bashrc``, then try again.
 
 ``module: command not found``
--------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The ``module`` command is provided by Buddy's LMod system and only exists
 **on Buddy**, not on your local machine. Make sure you are actually
@@ -449,3 +535,14 @@ hostname) before running ``module load`` commands.
 
 If you are on Buddy and still see this error, your shell may not have
 loaded LMod's initialization script; contact HPC support.
+
+Fortran Binary Is Out Of Date
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If ``lysis run-micro`` or ``lysis run-macro`` (Development path) stops
+immediately with an error starting ``Fortran binary at ... reports
+build ...``, your compiled binaries are older than the checked-out
+``src/fortran/`` source — most often because a ``git pull`` brought in
+Fortran changes since your last ``make``. See the note in `Step 6: Build
+the Fortran Binaries`_ above: the fix is always to rebuild with ``make``,
+never the override flag mentioned in the error message.
