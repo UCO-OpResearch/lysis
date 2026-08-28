@@ -54,67 +54,62 @@ Launching the RStudio App
 
    https://ondemand.hpc.uco.edu
 
-   Sign in with your Buddy account credentials.
+   Sign in with your Buddy account credentials. The dashboard's top menu bar
+   has **Apps**, **Files**, **Jobs**, **Clusters**, **Interactive Apps**,
+   **My Interactive Sessions**, and **All Apps** menus, plus **Help** and
+   your logged-in username on the right.
 
-   ``<_TODO: Screenshot 1 -- the OnDemand dashboard landing page, showing the
-   top menu bar, so this step can describe exactly what a first-time user
-   sees.__>``
+2. From the top menu bar, open the **Interactive Apps** menu, then choose
+   **RStudio Server**, listed under the **Mathematics** category.
 
-2. From the top menu bar, open the **Interactive Apps** menu and find the
-   RStudio tile.
+3. On the RStudio Server launch form:
 
-   ``<_TODO: Screenshot 2 -- the expanded Interactive Apps dropdown, showing
-   every app tile and its exact label, so this guide can name the RStudio
-   tile precisely (there may be more than one RStudio entry).__>``
+   - **RStudio/R Version** — choose exactly:
 
-3. On the RStudio launch form, you will be asked to choose an RStudio
-   **version**. Choose exactly:
+     ::
 
-   ::
+         RStudio 2024.12.1 (R 4.5.0) + tidyverse
 
-       RStudio 2024.12.1 (R 4.5.0) + tidyverse
+     .. important::
 
-   .. important::
+        Pick this version specifically. It is the version the Lysis
+        maintainers have confirmed carries the ``hdf5r`` R package, which
+        this guide depends on. Other RStudio versions listed in the dropdown
+        may not have ``hdf5r`` available — if you pick a different one,
+        ``library(hdf5r)`` may fail (see :ref:`rstudio-troubleshooting`).
 
-      Pick this version specifically. It is the version the Lysis
-      maintainers have confirmed carries the ``hdf5r`` R package, which this
-      guide depends on. Other RStudio versions listed in the form may not
-      have ``hdf5r`` available — if you pick a different one, ``library(hdf5r)``
-      may fail (see :ref:`rstudio-troubleshooting`).
+   - **Additional modules** — leave this blank. It's for loading extra
+     Lmod modules beyond what the chosen RStudio version already provides,
+     which you don't need for this guide.
+   - **Queue** — leave this at its default, ``general``. That's a sensible
+     choice for reading and summarising data, as opposed to running new
+     simulations.
+   - **Number of hours** — the form accepts 1-48 and defaults to ``12``.
+     The default is more than enough for a typical working session; lower
+     it if you know you'll finish sooner.
 
-   The rest of the form asks for session resources — typically a queue or
-   partition, the number of hours to reserve, and the number of CPU cores.
-   Sensible values for browsing and summarising Lysis HDF5 files (as opposed
-   to running new simulations) are modest, but this guide does not yet have
-   confirmed field names or recommended values for Buddy's form.
+   There is no separate field for CPU cores or account on this form — Buddy
+   fixes those for the RStudio Server app (the resulting session runs with a
+   fixed core count; see step 5).
 
-   ``<_TODO: Screenshot 3 -- the full RStudio launch form with every field
-   visible (queue/partition, wall time, cores, account, and any other
-   fields), so each can be documented by its real name along with a sensible
-   default for a data-analysis (not simulation) workload.__>``
+   Click **Launch**.
 
-4. Click **Launch**. Your session is submitted as a batch job and starts in
-   a **queued** state, moves to **starting**, and finally **running** once a
-   compute node is assigned. You can watch this on the **My Interactive
-   Sessions** page (also reached from the top menu bar).
+4. Your session is submitted as a batch job and briefly enters a
+   **queued** state before becoming **running**. On Buddy, interactive
+   sessions typically start very quickly — often in well under a minute —
+   so you may not see the queued state at all. You can watch its status on
+   the **My Interactive Sessions** page (also reached from the top menu
+   bar).
 
-   ``<_TODO: Screenshot 4 -- the My Interactive Sessions page showing one
-   queued and one running session, so this guide can describe roughly how
-   long a student should expect to wait and what each state looks like on
-   Buddy specifically.__>``
-
-5. Once the session is **running**, its session card shows a **Connect to
-   RStudio Server** button (or similar) plus the time remaining before the
-   session's wall time expires. Click it to open RStudio in a new browser
-   tab.
-
-   ``<_TODO: Screenshot 5 -- the RStudio session card itself, showing the
-   Connect button, the time-remaining indicator, and the delete/cancel
-   control, so this step can name them exactly.__>``
+5. Once the session is **running**, its card on **My Interactive Sessions**
+   shows the compute node it's running on (**Host**), when it started
+   (**Created at**), how much time remains before its wall time expires
+   (**Time Remaining**), and a **Connect to RStudio Server** button. Click
+   it to open RStudio in a new browser tab.
 
    Your session ends automatically when its requested wall time runs out —
-   save your work before then. You can also end it early from the session
-   card.
+   save your work before then. A **Cancel** button on the session card ends
+   it early.
 
 Orienting Yourself in RStudio
 -------------------------------
@@ -387,10 +382,11 @@ Session won't start / stays queued
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Buddy is a shared cluster; a queued session is waiting for resources to
-become free. Check the **My Interactive Sessions** page for its current
-status. ``<_TODO: is there a typical/expected queue time on Buddy worth
-mentioning here, or a specific queue/partition known to start faster for
-short interactive sessions?__>``
+become free. On Buddy, interactive sessions typically start within seconds
+(well under a minute), so a session that stays queued for several minutes or
+longer is unusual. Check the **My Interactive Sessions** page for its
+current status, and if it stays queued for an extended time, contact
+hpc@uco.edu.
 
 ``library(hdf5r)`` fails with "there is no package called 'hdf5r'"
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
