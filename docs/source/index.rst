@@ -9,6 +9,7 @@ This documentation includes both usage guides and API reference.
    :caption: Usage Guide
 
    usage/system_onboarding
+   usage/rstudio_ondemand
    usage/ontology
    usage/fiber_size_conventions
    usage/data_specification
