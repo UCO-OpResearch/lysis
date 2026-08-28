@@ -14,6 +14,7 @@ This documentation includes both usage guides and API reference.
    usage/data_specification
    usage/experiment_init
    usage/run_microscale
+   usage/statistics_cli
    usage/fortran_microscale
    usage/fortran_macroscale
    usage/historical_fortran
