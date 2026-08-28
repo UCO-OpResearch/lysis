@@ -111,6 +111,14 @@ Launching the RStudio App
    save your work before then. A **Cancel** button on the session card ends
    it early.
 
+   .. tip::
+
+      When you're done, shut down RStudio itself first — the red power
+      button in the top-right corner of the RStudio window — *before*
+      clicking Cancel on the session card (or letting the wall time expire).
+      This isn't required, but it avoids a harmless workspace-restore error
+      message on your next launch; see :ref:`rstudio-troubleshooting`.
+
 Orienting Yourself in RStudio
 -------------------------------
 
@@ -387,6 +395,17 @@ become free. On Buddy, interactive sessions typically start within seconds
 longer is unusual. Check the **My Interactive Sessions** page for its
 current status, and if it stays queued for an extended time, contact
 hpc@uco.edu.
+
+A workspace-restore error appears when RStudio starts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This happens if a previous session wasn't shut down cleanly — for example,
+the session's wall time expired, or it was cancelled from the session card
+while RStudio was still running, instead of being shut down from inside
+RStudio first (see the tip in "Launching the RStudio App", step 5). It's
+generally harmless and can be dismissed; going forward, you can avoid it by
+shutting down RStudio itself (the red power button in the top-right corner
+of the RStudio window) before ending the session.
 
 ``library(hdf5r)`` fails with "there is no package called 'hdf5r'"
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
