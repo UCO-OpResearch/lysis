@@ -34,8 +34,7 @@ the ``lysis`` CLI" path.
 
 - **Analysis only** — reading existing data with RStudio/hdf5r or
   HDFView, no local repository needed. Skip this page entirely and go to
-  the RStudio or HDFView guide instead (forthcoming in this documentation
-  set).
+  :doc:`rstudio_ondemand` or :doc:`hdfview_ondemand` instead.
 - **Analysis + the** ``lysis`` **CLI** — running commands such as
   micro-stats, macro-stats, or inspecting parameters, without executing
   new Simulations. Follow Steps 1, 2, 4, and 5 below, noting these

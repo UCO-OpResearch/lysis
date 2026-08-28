@@ -498,7 +498,6 @@ See Also
   documentation.
 - :doc:`data_specification` — the full description of every dataset and
   attribute in a Lysis HDF5 file.
-- ``<_TODO: link to the Buddy Desktop / HDFView guide once merged__>`` — a
-  complementary guide for browsing Lysis HDF5 files visually with HDFView,
-  useful alongside this one for spot-checking a file's structure before
-  writing R code against it.
+- :doc:`hdfview_ondemand` — a complementary guide for browsing Lysis HDF5
+  files visually with HDFView, useful alongside this one for spot-checking a
+  file's structure before writing R code against it.

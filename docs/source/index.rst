@@ -10,6 +10,7 @@ This documentation includes both usage guides and API reference.
 
    usage/system_onboarding
    usage/rstudio_ondemand
+   usage/hdfview_ondemand
    usage/ontology
    usage/fiber_size_conventions
    usage/data_specification
