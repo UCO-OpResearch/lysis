@@ -24,8 +24,8 @@ This guide needs no local software installation and no clone of the
 ``lysis`` repository — everything in it runs against absolute paths under
 ``/shared/lysis-group/`` through your browser. You will need:
 
-- A Buddy HPC account. If you don't have one yet, contact hpc@uco.edu (or
-  whoever issued your Lysis project access) to get one set up.
+- A Buddy HPC account. If you don't have one yet, see below — it's arranged
+  through the same process as ``lysis-group`` membership.
 
   If you *also* want to use the ``lysis`` command-line tool (for example its
   ``micro-stats``, ``macro-stats``, or ``parameters`` commands) rather than
@@ -44,10 +44,16 @@ This guide needs no local software installation and no clone of the
       # or
       id
 
-  and looking for ``lysis-group`` in the output. If it's missing,
-  ``<_TODO: who should a student contact to be added to lysis-group -- is it
-  hpc@uco.edu (Buddy's general shared-directory request process), or the
-  Lysis project maintainer directly?__>``
+  and looking for ``lysis-group`` in the output.
+
+  .. important::
+
+     If it's missing, **do not email hpc@uco.edu directly to request
+     access.** Access is authorised by **Dr. Bannish (Lysis Group PI)**, who
+     contacts the UCO HPC group at hpc@uco.edu on your behalf. Ask Dr.
+     Bannish first; once she has requested access for you, any follow-up
+     (account issues, questions) can go directly between you and the HPC
+     group.
 - A web browser. No local software installation is required — everything in
   this guide runs on Buddy through your browser.
 
@@ -242,17 +248,20 @@ with, e.g., ``h5f[["macro_data/sim_00/snapshot_time"]][]``.
 
 .. note::
 
-   This shape comes from the ``lysis`` package's own data specification
-   (``src/lysis/dataio/dataspec.py``), not from a live example. Every file
-   this guide's author checked under ``/shared/lysis-group/`` in the
-   austin-runs data (all 320 ``.h5`` files across
-   ``wpumphrey/austin-runs-corrected`` and
-   ``austin_segrest/austin-old-data-imported``) is microscale-only
-   (``micro_data`` + ``log_files``, no ``macro_data``).
-   ``<_TODO: does a macroscale example file exist anywhere in the Lysis
-   shared data (e.g. under austin_segrest/old_data_compiled, which holds no
-   .h5 files and may use a different, non-HDF5 layout) that this section
-   could be verified against and linked to?__>``
+   **The austin-runs data itself is entirely microscale** — every file
+   under ``wpumphrey/austin-runs-corrected`` and
+   ``austin_segrest/austin-old-data-imported`` (320 ``.h5`` files, all
+   checked) has only ``micro_data`` and ``log_files``, no ``macro_data``
+   group at all. The macroscale shape above is real, but it was verified
+   against a file from a **different** Lysis dataset:
+   ``/shared/lysis-group/bpaynter/data/lysis-front-pre-lat/Q1.h5``, opened
+   read-only. That file has ``macro_data/sim_00`` through
+   ``macro_data/sim_09`` (10 simulations), each holding
+   ``fiber_degrade_time``, ``snapshot_time``, ``tpa_bind_events``,
+   ``tpa_location_snapshot``, and ``tpa_transit_time`` — matching
+   :doc:`data_specification`'s macroscale dataset list. If you're working
+   specifically with austin-runs files, you will only ever see
+   ``micro_data``.
 
 Reading Attributes
 ~~~~~~~~~~~~~~~~~~~~
@@ -464,9 +473,9 @@ Running out of memory reading a dataset
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Some macroscale datasets are much larger than the microscale datasets shown
-in this guide's worked example (see :doc:`data_specification`). The launch
-form has no separate memory field (see "Launching the RStudio App", step 3),
-so before requesting a bigger session, try:
+in this guide's worked example (see :doc:`data_specification`). There's no
+separate memory field on the launch form (see "Launching the RStudio App",
+step 3) — try these first:
 
 - Reading a subset instead of the whole dataset (see "Reading a Dataset"
   above).
@@ -476,9 +485,10 @@ so before requesting a bigger session, try:
   it, move to the next slice) rather than holding the whole thing in memory
   at once.
 
-If you do need more memory than a standard session provides, select
-**high-mem** in the **Queue** dropdown on the launch form: it provides nodes
-with the same 16 cores but 256 GB of RAM instead of the standard 64 GB.
+If you genuinely need more RAM than that gets you, the **Queue** dropdown
+is the mechanism for it: relaunch RStudio with **high-mem** selected
+instead of ``general``. It provides nodes with the same 16 cores but
+256 GB of RAM instead of the standard 64 GB.
 
 See Also
 -----------
