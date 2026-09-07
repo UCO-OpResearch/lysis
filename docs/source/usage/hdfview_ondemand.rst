@@ -157,10 +157,11 @@ Navigating to the shared data
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use **File → Open** (with read-only mode set as above) and browse to
-``/shared/lysis-group/``. For what's actually in each subfolder — which
-runs, which parameters — see the README at
-``/shared/lysis-group/austin-runs.rst`` (a plain-text file, not part of this
-Sphinx build; open it in any text editor or HDFView's own file browser).
+``/shared/lysis-group/experiments/austin-runs/raw/``. For what's actually
+in each subfolder — which runs, which parameters — see the README at
+``/shared/lysis-group/experiments/austin-runs/README.rst`` (a plain-text
+file, not part of this Sphinx build; open it in any text editor or HDFView's
+own file browser).
 
 .. note::
 
@@ -169,7 +170,8 @@ Sphinx build; open it in any text editor or HDFView's own file browser).
    against writes (e.g. ``-r--r--r--`` files inside a ``dr-xr-xr-x``
    directory, which blocks even renaming), so a write might simply fail
    with a permission error. Others are not locked down nearly as tightly —
-   for example, the files under ``wpumphrey/austin-runs-corrected/`` are
+   for example, the files under
+   ``experiments/austin-runs/raw/austin-runs-corrected/`` are
    individually read-only (``-r--r-----``) but sit in a directory that
    ``lysis-group`` members can still write to, so renaming or deleting a
    file there is not blocked by permissions alone. **Don't treat filesystem
@@ -223,7 +225,7 @@ Open, read-only:
 
 ::
 
-    /shared/lysis-group/wpumphrey/austin-runs-corrected/2131.h5
+    /shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/2131.h5
 
 In the tree, expand it. You'll see two groups: ``log_files`` and
 ``micro_data``. Expand ``micro_data`` — it holds 8 datasets, each of length
@@ -347,6 +349,6 @@ See Also
   Collection, ...) used throughout this guide.
 - :doc:`data_specification` — the full description of every dataset and
   attribute in a Lysis HDF5 file.
-- ``/shared/lysis-group/austin-runs.rst`` — describes the austin-runs
-  dataset itself (which runs, which parameters); not part of this Sphinx
-  build.
+- ``/shared/lysis-group/experiments/austin-runs/README.rst`` — describes the
+  austin-runs dataset itself (which runs, which parameters); not part of
+  this Sphinx build.

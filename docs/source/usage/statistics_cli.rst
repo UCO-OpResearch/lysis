@@ -196,9 +196,11 @@ Two failures you are likely to meet with the shared data:
     The file has no macroscale Data Collection.  ``lysis macro-stats`` and
     ``lysis compare macro-stats`` need one.  Microscale-only files —
     which includes every file under
-    ``/shared/lysis-group/austin_segrest/austin-old-data-imported`` and
-    ``/shared/lysis-group/wpumphrey/austin-runs-corrected`` — support
-    ``micro-stats``, ``parameters``, and ``compare micro-stats`` only.
+    ``/shared/lysis-group/experiments/austin-runs/raw/austin-old-data-imported``
+    and
+    ``/shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected``
+    — support ``micro-stats``, ``parameters``, and ``compare micro-stats``
+    only.
 
 ``Error loading <_run_code_>: seed must be an int or str, got float64``
     The file stores its RNG seed as a float.  Some older converted files do.
@@ -538,7 +540,7 @@ Example
 
 .. code-block:: console
 
-    $ lysis micro-stats /shared/lysis-group/wpumphrey/austin-runs-corrected/2131.h5
+    $ lysis micro-stats /shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/2131.h5
     2131
 
       Fibers Degraded: 46,685
@@ -1458,7 +1460,7 @@ microscale-only Run, which is why only four rows survive:
 
 .. code-block:: console
 
-    $ lysis parameters /shared/lysis-group/wpumphrey/austin-runs-corrected/2131.h5 --csv -
+    $ lysis parameters /shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/2131.h5 --csv -
     parameter,2131
     bind_rate_tPA,0.001 / micromolar / second
     unbind_rate_PLi,0.576 / second
@@ -1680,8 +1682,8 @@ Two individual files:
 .. code-block:: console
 
     $ lysis compare micro-stats \
-        /shared/lysis-group/austin_segrest/austin-old-data-imported/2131.h5 \
-        /shared/lysis-group/wpumphrey/austin-runs-corrected/2131.h5 --markdown -
+        /shared/lysis-group/experiments/austin-runs/raw/austin-old-data-imported/2131.h5 \
+        /shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/2131.h5 --markdown -
     ## 2131.h5 vs 2131.h5
 
     | Metric | Value |
@@ -1733,14 +1735,14 @@ Microscale statistics for one Run
 
 .. code-block:: console
 
-    $ lysis micro-stats /shared/lysis-group/wpumphrey/austin-runs-corrected/2131.h5
+    $ lysis micro-stats /shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/2131.h5
 
 Every Run in a directory, to a Markdown file
 --------------------------------------------
 
 .. code-block:: console
 
-    $ lysis micro-stats /shared/lysis-group/wpumphrey/austin-runs-corrected/ \
+    $ lysis micro-stats /shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/ \
         --markdown <_output_file_>
 
 Sending the table to a file rather than to ``-`` keeps per-Run error messages
@@ -1772,8 +1774,8 @@ Compare two versions of the same Experiment
 .. code-block:: console
 
     $ lysis compare micro-stats \
-        /shared/lysis-group/austin_segrest/austin-old-data-imported/ \
-        /shared/lysis-group/wpumphrey/austin-runs-corrected/ \
+        /shared/lysis-group/experiments/austin-runs/raw/austin-old-data-imported/ \
+        /shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/ \
         --markdown <_output_file_>
 
 Remember to correct the resulting p-values for multiple comparisons.
@@ -1835,7 +1837,7 @@ Export parameters for analysis in R
 
 .. code-block:: console
 
-    $ lysis parameters /shared/lysis-group/wpumphrey/austin-runs-corrected/ \
+    $ lysis parameters /shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/ \
         --csv <_output_file_>
 
 Then, in R:

@@ -154,12 +154,12 @@ or from the **Files** pane, using its "Go To Folder" option to navigate to
    .. code-block:: r
 
        # Correct — read-only open, output goes to your home directory
-       h5f <- H5File$new("/shared/lysis-group/wpumphrey/austin-runs-corrected/some_run.h5",
+       h5f <- H5File$new("/shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/some_run.h5",
                           mode = "r")
        write.csv(my_summary, "~/some_run_summary.csv")
 
        # INCORRECT — never do this against /shared/lysis-group/
-       h5f <- H5File$new("/shared/lysis-group/wpumphrey/austin-runs-corrected/some_run.h5",
+       h5f <- H5File$new("/shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/some_run.h5",
                           mode = "r+")   # write-capable mode on shared data
 
 Reading Lysis HDF5 Files with hdf5r
@@ -188,7 +188,7 @@ Opening a File Read-Only
 
 .. code-block:: r
 
-    path <- "/shared/lysis-group/wpumphrey/austin-runs-corrected/KdtPAnoplg_M4.h5"
+    path <- "/shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/KdtPAnoplg_M4.h5"
     h5f <- H5File$new(path, mode = "r")
 
 ``mode = "r"`` is mandatory for anything under ``/shared/lysis-group/`` — see
@@ -242,9 +242,9 @@ with, e.g., ``h5f[["macro_data/sim_00/snapshot_time"]][]``.
 .. note::
 
    **The austin-runs data itself is entirely microscale** — every file
-   under ``wpumphrey/austin-runs-corrected`` and
-   ``austin_segrest/austin-old-data-imported`` (320 ``.h5`` files, all
-   checked) has only ``micro_data`` and ``log_files``, no ``macro_data``
+   under ``experiments/austin-runs/raw/austin-runs-corrected`` and
+   ``experiments/austin-runs/raw/austin-old-data-imported`` (320 ``.h5``
+   files, all checked) has only ``micro_data`` and ``log_files``, no ``macro_data``
    group at all. The macroscale shape above is real, but it was verified
    against a file from a **different** Lysis dataset:
    ``/shared/lysis-group/bpaynter/data/lysis-front-pre-lat/Q1.h5``, opened
@@ -320,7 +320,7 @@ parameter attribute, and computes a summary statistic.
 
     library(hdf5r)
 
-    path <- "/shared/lysis-group/wpumphrey/austin-runs-corrected/KdtPAnoplg_M4.h5"
+    path <- "/shared/lysis-group/experiments/austin-runs/raw/austin-runs-corrected/KdtPAnoplg_M4.h5"
     h5f <- H5File$new(path, mode = "r")
 
     # Structure: group/dataset names, shapes, and HDF5 type classes
@@ -389,14 +389,26 @@ parameter attribute, and computes a summary statistic.
 Where the Data Is
 --------------------
 
-The austin-runs data lives under ``/shared/lysis-group/``, split across
-three folders: ``austin_segrest/old_data_compiled``,
-``austin_segrest/austin-old-data-imported``, and
-``wpumphrey/austin-runs-corrected`` (the folder used in the worked example
-above). For what's actually in each of these — which runs, which
-parameters, how they relate to each other — see the README at
-``/shared/lysis-group/austin-runs.rst``, which describes the dataset in
-detail; this guide only covers how to read the file format.
+The austin-runs data lives in one place:
+``/shared/lysis-group/experiments/austin-runs/``. Its ``raw/`` folder holds
+the three data sets — ``austin-runs-corrected`` (the authoritative data, and
+the folder used in the worked example above), ``austin-old-data-imported``
+(the historical baseline), and ``old_data_compiled`` (the raw Fortran
+archive, kept for provenance only). **Start with**
+``austin-runs-corrected``.
+
+For what's actually in each of these — which runs, which parameters, how
+they relate to each other — see the README at
+``/shared/lysis-group/experiments/austin-runs/README.rst``, which describes
+the dataset in detail; this guide only covers how to read the file format.
+
+.. note::
+
+   These folders moved on 2026-09-07, out of per-person directories
+   (``wpumphrey/``, ``austin_segrest/``) and into ``experiments/``. The old
+   paths still work — they are now symlinks to the new locations — so an
+   older script or email will not break. Use the new paths in anything you
+   write.
 
 hdf5r Reference Pointers
 ---------------------------
