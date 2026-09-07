@@ -7,13 +7,6 @@ dataset open as a data frame in RStudio and can start doing statistics." It
 covers launching RStudio through Buddy's Open OnDemand web portal and reading
 the project's HDF5 output files with the R package ``hdf5r``.
 
-.. note::
-
-   This guide uses angle-bracketed tokens written ``<_TODO: ...__>`` to mark
-   a detail this guide does not have yet (it needs a maintainer to fill it
-   in, usually from a screenshot of the live site). If you hit one, treat
-   the surrounding steps as provisional and ask the Lysis maintainers for
-   the current value.
 
 .. _before-you-start-group:
 
