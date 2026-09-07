@@ -397,6 +397,11 @@ the folder used in the worked example above), ``austin-old-data-imported``
 archive, kept for provenance only). **Start with**
 ``austin-runs-corrected``.
 
+``raw/`` also holds ``rerun-matrix/``, which is not a fourth data set: it is
+the four-way rerun from the ``Lat`` bug investigation, and one of its four
+folders is the same data as ``austin-runs-corrected``. It is there for
+provenance, not as a starting point for analysis.
+
 For what's actually in each of these — which runs, which parameters, how
 they relate to each other — see the README at
 ``/shared/lysis-group/experiments/austin-runs/README.rst``, which describes
