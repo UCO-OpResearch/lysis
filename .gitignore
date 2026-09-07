@@ -49,3 +49,8 @@ docs/html/
 # Generated Graphviz source for the internal-imports diagram
 # (regenerate with scripts/regen_import_graph.py; .svg/.png are committed)
 docs/planning/lysis_internal_imports.dot
+
+# Experiment logs and data documentation live in the PRIVATE repo
+# UCO-OpResearch/lysis-data. They describe unpublished results and named
+# collaborators' work, and must not be added to this public repo.
+/experiments/
