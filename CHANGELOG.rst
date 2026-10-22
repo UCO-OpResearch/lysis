@@ -110,6 +110,11 @@ Fixed
   precision. (#137)
 - Changing the Fortran compiler, its flags or its version now rebuilds every
   Fortran binary; previously ``make`` kept the old binaries. (#137)
+- ``lysis run-macro`` passes the binding-site concentration (``--bs``) as the
+  integer the Fortran programs declare. It was passed as a real (426.69... by
+  default), which ``ifx`` and ``ifort`` silently truncate to 426 and
+  ``gfortran`` rejects. Intel results are unchanged: every compiler now gets
+  426. (#137)
 - ``lysis run-micro`` / ``run-macro`` (especially under ``--slurm``) no longer
   abort with a spurious ``StaleBinaryError`` when the staging directory lives
   outside the source repository. The Slurm master now resolves the
