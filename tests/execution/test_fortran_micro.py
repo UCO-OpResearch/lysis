@@ -776,6 +776,62 @@ _BINARY_TEST_SIMULATIONS = 1000
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _FIXTURE_SEED = 2133256963
 
+#: Largest floating-point difference, in units in the last place (ULP),
+#: accepted between the fixture and a binary built by a compiler other than
+#: ifort.  The fixture was made with ifort.  ifx 2024.2 and later, and
+#: gfortran with the Makefile's flags, round the lysis time and the tPA
+#: leaving time differently in about 1-2% of simulations: by at most 2 ULP
+#: over this test's 1,000 simulations, and at most 4 ULP over the 65,000
+#: simulations of the compiler study behind #137.  No count, flag or event
+#: changed there.  The bound is the study's maximum, not this sample's, so
+#: a different seed or lattice does not need a new number.  Integer and
+#: boolean datasets are always compared exactly.
+_CROSS_COMPILER_MAX_ULPS = 4
+
+
+def _fixture_max_ulps(binary: "Path | str") -> int:
+    """ULP bound for comparing *binary*'s float output with the fixture.
+
+    0 for an ifort build: ifort made the fixture, so its output must still
+    match exactly, and the tolerance cannot hide an ifort regression.
+    :data:`_CROSS_COMPILER_MAX_ULPS` for any other compiler.  ifort's
+    ``compiler_version()`` is the only one that says "Compiler Classic".
+    """
+    from lysis.tools.provenance.binary import query_binary_version
+
+    _commit, _dirty, compiler = query_binary_version(binary)
+    return 0 if "Compiler Classic" in compiler else _CROSS_COMPILER_MAX_ULPS
+
+
+def _ulp_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Element-wise distance between two float64 arrays in ULP."""
+    def ordered(x):
+        i = np.ascontiguousarray(x, dtype=np.float64).view(np.int64)
+        return np.where(i < 0, np.iinfo(np.int64).min - i, i)
+    return np.abs(ordered(a) - ordered(b))
+
+
+def _assert_float_close_in_ulps(actual, expected, max_ulps: int) -> None:
+    """Assert equal shape and NaN pattern, and finite values within *max_ulps*.
+
+    With *max_ulps* 0 this is plain exact equality.
+    """
+    actual = np.asarray(actual)
+    expected = np.asarray(expected)
+    assert np.issubdtype(actual.dtype, np.floating), actual.dtype
+    assert actual.shape == expected.shape
+    if max_ulps == 0:
+        np.testing.assert_array_equal(actual, expected)
+        return
+    np.testing.assert_array_equal(np.isnan(actual), np.isnan(expected))
+    finite = ~np.isnan(expected)
+    ulps = _ulp_distance(actual[finite], expected[finite])
+    worst = int(ulps.max(initial=0))
+    assert worst <= max_ulps, (
+        f"{int(np.count_nonzero(ulps))} values differ, by up to {worst} ULP "
+        f"(bound {max_ulps})"
+    )
+
 
 @pytest.mark.fortran_binary
 class TestFortranBinaryExecution:
@@ -784,7 +840,10 @@ class TestFortranBinaryExecution:
     These tests compile-and-run the microscale simulation with the same
     parameters as the ``tests/fixtures/fortran_sample/`` fixture but only
     1,000 simulations (instead of 50,000) and compare the output to the
-    first 1,000 elements of the fixture reference data.
+    first 1,000 elements of the fixture reference data.  Integer and
+    boolean datasets must match exactly.  Float datasets must match exactly
+    for an ifort build, which made the fixture, and within
+    :data:`_CROSS_COMPILER_MAX_ULPS` for any other compiler.
 
     Requires:
 
@@ -802,6 +861,7 @@ class TestFortranBinaryExecution:
             pytest.skip("Compiled Fortran binary not found at bin/micro_rates")
 
     _SKIP_DATASETS = {"params", "micro_log"}
+    _BINARY = _REPO_ROOT / "bin" / "micro_rates"
 
     @pytest.fixture(scope="class")
     def reference(self, fortran_sample_path):
@@ -860,7 +920,9 @@ class TestFortranBinaryExecution:
         from lysis.dataio.dataspec import dataspec
         loc = dataspec["v2.0.0"]["microscale_out"].data["pli_first_time"].data_location
         with h5py.File(str(executed_hdf5), "r") as f:
-            np.testing.assert_array_equal(f[loc][...], reference["pli_first_time"])
+            _assert_float_close_in_ulps(
+                f[loc][...], reference["pli_first_time"], _fixture_max_ulps(self._BINARY)
+            )
 
     def test_tpa_final_num_matches(self, executed_hdf5, reference):
         from lysis.dataio.dataspec import dataspec
@@ -878,7 +940,9 @@ class TestFortranBinaryExecution:
         from lysis.dataio.dataspec import dataspec
         loc = dataspec["v2.0.0"]["microscale_out"].data["sim_final_time"].data_location
         with h5py.File(str(executed_hdf5), "r") as f:
-            np.testing.assert_array_equal(f[loc][...], reference["sim_final_time"])
+            _assert_float_close_in_ulps(
+                f[loc][...], reference["sim_final_time"], _fixture_max_ulps(self._BINARY)
+            )
 
     def test_pli_generated_num_matches(self, executed_hdf5, reference):
         from lysis.dataio.dataspec import dataspec
@@ -890,7 +954,9 @@ class TestFortranBinaryExecution:
         from lysis.dataio.dataspec import dataspec
         loc = dataspec["v2.0.0"]["microscale_out"].data["tpa_leaving_time"].data_location
         with h5py.File(str(executed_hdf5), "r") as f:
-            np.testing.assert_array_equal(f[loc][...], reference["tpa_leaving_time"])
+            _assert_float_close_in_ulps(
+                f[loc][...], reference["tpa_leaving_time"], _fixture_max_ulps(self._BINARY)
+            )
 
     def test_tpa_unbound_by_pli_matches(self, executed_hdf5, reference):
         from lysis.dataio.dataspec import dataspec
