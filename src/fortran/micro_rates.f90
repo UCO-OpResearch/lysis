@@ -236,7 +236,7 @@ program micromodel
 
     integer  :: PLGbind, PLGunbind
 
-    character(40) :: filetype, formatted
+    character(40) :: filetype, fileaccess, formatted
     character(70) :: filename1
     logical       :: isBinary = .True.      ! flag for binary output
     integer       :: lysunit = 22
@@ -542,10 +542,14 @@ program micromodel
     !! END BRAD
 
     if (isBinary) then
-        !filetype = 'unformatted' !if you compile with gfortran or f95
-        filetype = 'binary'      !if you compile with ifort
+        ! Unformatted stream access writes raw values with no record markers.
+        ! It is standard Fortran 2003, so ifx, ifort and gfortran all write the
+        ! same bytes the Intel-only form='binary' used to.
+        filetype = 'unformatted'
+        fileaccess = 'stream'
     else
         filetype = 'formatted'
+        fileaccess = 'sequential'
     end if
     write (*, *) ' filetype=', filetype
 
@@ -688,22 +692,22 @@ program micromodel
             write (tPAunbdfile, '(61a)') 'data/'//trim(runCode)//'/tPAunbind'//trim(outFileCode)//'.dat'
             write (s2file, '(67a)') 'data/'//trim(runCode)//'/lasttPA'//trim(outFileCode)//'.dat'
             write (fpfile, '(77a)') 'data/'//trim(runCode)//'/firstPLi'//trim(outFileCode)//'.dat'
-            open (lysunit, file=lysfile, form=filetype)
-            open (tPAunit, file=tPAfile, form=filetype)
-            open (PLiunit, file=PLifile, form=filetype)
-            open (endunit, file=endfile, form=filetype)
+            open (lysunit, file=lysfile, form=filetype, access=fileaccess)
+            open (tPAunit, file=tPAfile, form=filetype, access=fileaccess)
+            open (PLiunit, file=PLifile, form=filetype, access=fileaccess)
+            open (endunit, file=endfile, form=filetype, access=fileaccess)
             !open(plgunit,file=plgfile,form=filetype)
             !open(ctunit,file=ctfile,form=filetype)
             !open(plgbdunit,file=plgbdfile,form=filetype)
             !open(plgunbdunit,file=plgunbdfile,form=filetype)
             !open(plitimeunit,file=plitimefile,form=filetype)
-            open (tPAPLiunit, file=tPAPLifile, form=filetype)
+            open (tPAPLiunit, file=tPAPLifile, form=filetype, access=fileaccess)
             !open(sunlit,file=sfile,form=filetype)
             !open(permit,file=perfile,form=filetype)
             !open(t2unit,file=t2file,form=filetype)
-            open (tPAunbdunit, file=tPAunbdfile, form=filetype)
-            open (s2unit, file=s2file, form=filetype)
-            open (fpunit, file=fpfile, form=filetype)
+            open (tPAunbdunit, file=tPAunbdfile, form=filetype, access=fileaccess)
+            open (s2unit, file=s2file, form=filetype, access=fileaccess)
+            open (fpunit, file=fpfile, form=filetype, access=fileaccess)
 
             write (*, *) ' kncat=', kncat
             write (*, *) ' kapcat=', kapcat
