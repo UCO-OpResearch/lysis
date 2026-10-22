@@ -44,7 +44,9 @@ This builds ``bin/micro_rates`` (and the macroscale binaries) with ``ifx``,
 the default compiler.  To use ``ifort`` or ``gfortran`` instead, run
 ``make LYSIS_COMPILER=gfortran`` for one build, or
 ``make configure LYSIS_COMPILER=gfortran`` to keep the choice for later
-builds; ``gfortran`` comes from ``module load GCC/12.3.0``.  Always build
+builds; ``gfortran`` comes from ``module load GCC/12.3.0``.  (``gfortran``
+works for microscale runs; macroscale runs with it are not yet supported,
+see `#140 <https://github.com/UCO-OpResearch/lysis/issues/140>`_.)  Always build
 with ``make`` rather than calling a compiler by hand: the ``Makefile``
 supplies flags the model depends on (8-byte reals, no line-length limit),
 links the KISS random number generator, and embeds the version stamp that

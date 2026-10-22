@@ -363,6 +363,14 @@ time, and again any time the Fortran source changes (for example, after a
      ignores that file, so it stays on your machine. Plain ``make`` then
      uses it until you run ``make unconfigure``. ``make clean`` keeps it.
 
+   .. note::
+
+      ``gfortran`` currently works for **microscale** runs only.
+      ``lysis run-macro`` fails with a ``gfortran``-built macroscale binary,
+      because ``gfortran`` rejects one of the input files ``lysis`` prepares
+      for it (`#140 <https://github.com/UCO-OpResearch/lysis/issues/140>`_).
+      Use ``ifx`` or ``ifort`` for macroscale runs.
+
    A compiler named on the command line beats a saved one, which beats the
    default. ``make help`` shows which compiler the next build will use and
    where that choice came from. Changing compiler rebuilds every Fortran

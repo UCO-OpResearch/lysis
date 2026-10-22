@@ -83,10 +83,11 @@ from the repository root. On the UCO HPC cluster::
     module load intel-compilers/2024.2.0
     make
 
-This builds with ``ifx``. ``ifort`` and ``gfortran`` also work: choose one
-with ``make LYSIS_COMPILER=gfortran`` for a single build, or
-``make configure LYSIS_COMPILER=gfortran`` to keep it. ``make help`` shows
-the compiler in use. See *System Onboarding* (Step 6) in the documentation.
+This builds with ``ifx``. ``ifort`` also works, and so does ``gfortran`` for
+the microscale model (macroscale runs with ``gfortran`` are not yet supported,
+#140): choose one with ``make LYSIS_COMPILER=gfortran`` for a single build,
+or ``make configure LYSIS_COMPILER=gfortran`` to keep it. ``make help``
+shows the compiler in use. See *System Onboarding* (Step 6) in the documentation.
 
 
 Quick start

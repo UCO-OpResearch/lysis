@@ -24,6 +24,9 @@
 # exported variable cannot pick a compiler nobody asked for.  Changing the
 # compiler, its flags or its version rebuilds every Fortran binary.
 #
+# gfortran builds every binary, but `lysis run-macro` cannot yet drive the
+# gfortran macroscale binaries: one staged input file is rejected (#140).
+#
 # Requirements: the chosen compiler on PATH.  On the cluster,
 # `module load intel-compilers/2024.2.0` provides ifx and ifort; gfortran
 # is in the default environment.  `shared` needs only gcc.

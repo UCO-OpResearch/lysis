@@ -103,11 +103,13 @@ Changed
 Fixed
 -----
 
-- ``gfortran`` builds now work. The Fortran programs no longer fail at run
-  time under ``gfortran``, and the ``Makefile`` gives it the flags the model
-  needs (8-byte reals, no line-length limit, floating-point traps, ``-O2``).
-  The old ``gfortran`` line computed the model's constants in single
-  precision. (#137)
+- ``gfortran`` builds now work for the microscale program. The Fortran
+  programs no longer fail at run time under ``gfortran``, and the ``Makefile``
+  gives it the flags the model needs (8-byte reals, no line-length limit,
+  floating-point traps, ``-O2``). The old ``gfortran`` line computed the
+  model's constants in single precision. ``lysis run-macro`` does not yet work
+  with ``gfortran``-built binaries: one of the input files it stages is
+  rejected by ``gfortran`` (#140). (#137)
 - Changing the Fortran compiler, its flags or its version now rebuilds every
   Fortran binary; previously ``make`` kept the old binaries. (#137)
 - ``lysis run-macro`` passes the binding-site concentration (``--bs``) as the
