@@ -109,6 +109,14 @@ class FortranMacro(FortranRunner):
         visited by the :class:`~lysis.config.parameters.MacroParameters`
         argument loop.
 
+        ``--bs`` is an ``INTEGER`` in the Fortran programs, but
+        ``binding_sites`` is computed as a real (426.69... µM by default).
+        It is passed truncated toward zero, because that is what ifx and
+        ifort have always done when reading the real value into the integer
+        (426 by default).  gfortran rejects a real literal for an integer
+        read, so passing the integer keeps every compiler on the same value
+        (#137).
+
         :param params: Unused; present for interface conformance.
         :type params: dict
         :return: CLI arguments for radius, binding sites, and nummicro.
@@ -121,9 +129,9 @@ class FortranMacro(FortranRunner):
                 micro_units["fiber_radius"]
             )),
             "--bs",
-            str(self.run.micro_params.binding_sites.m_as(
+            str(int(self.run.micro_params.binding_sites.m_as(
                 micro_units["binding_sites"]
-            )),
+            ))),
             "--nummicro",
             str(self.run.micro_params.micro_simulations // CONST.TPA_LEAVE_TIME_BINS),
         ]
