@@ -23,7 +23,7 @@ Basic usage
     lysis run-macro data/my-experiment/ \
         --executable macro_diffuse_into_and_along__internal \
         --fortran-commit 60d200f \
-        --slurm --modules intel-compilers/2024
+        --slurm --modules intel-compilers/2024.2.0
 
 When ``--fortran-commit`` is set:
 
@@ -58,6 +58,43 @@ When ``--fortran-commit`` is set:
   pins only the Fortran half of the stack; the Python wrapper is current
   code and must be coherent with the file's init stamp.
 
+Choosing the compiler
+---------------------
+
+``--fortran-compiler {ifx,ifort,gfortran}`` chooses the compiler for the
+historical build; it is passed to that commit's ``Makefile`` as
+``make LYSIS_COMPILER=<compiler>``.  Without it, the commit's own
+``Makefile`` decides:
+
+* **Commits with compiler selection** (#137 onward) build with ``ifx``, the
+  ``Makefile`` default.  Any of the three compilers can be chosen.
+* **Commits from before #137** have a ``Makefile`` that hard-codes
+  ``ifort``.  They build only with ``ifort``, so ``--fortran-compiler``
+  must be omitted or ``ifort``; asking for ``ifx`` or ``gfortran`` stops
+  with an error before anything is built.  ``ifort`` must be on ``PATH``
+  (local mode) or in ``--modules`` (Slurm).  ``intel-compilers/2024.2.0``
+  is the newest module on the cluster that ships it; 2025.x and 2026.x
+  have only ``ifx``.  If ``ifort`` is missing, the error says so and names
+  that module.
+
+``--fortran-compiler`` is refused without ``--fortran-commit``: the binary
+in ``bin/`` is built by you, so choose its compiler with
+``make LYSIS_COMPILER=...`` (see :doc:`system_onboarding`, Step 6).
+
+Examples::
+
+    # A current commit, built with gfortran.
+    lysis run-micro data/run01.h5 \
+        --executable micro_rates \
+        --fortran-commit main \
+        --fortran-compiler gfortran
+
+    # A commit from before #137 on Slurm: ifort from the default module.
+    lysis run-micro data/run01.h5 \
+        --executable micro_rates \
+        --fortran-commit v0.3.1 \
+        --slurm --modules intel-compilers/2024.2.0
+
 Lifecycle
 ---------
 
@@ -75,16 +112,18 @@ Lifecycle
 LMod modules
 ------------
 
-The ``--modules`` flag (default ``intel-compilers/2023``) tells generated
+The ``--modules`` flag (default ``intel-compilers/2024.2.0``) tells generated
 Slurm scripts which LMod modules to ``module load`` before invoking the
 Fortran binary.  The value is forwarded verbatim to ``module load``, which
 itself accepts a space-separated list, so you can request several modules
 at once — be sure to quote the list so the shell keeps it as one argument::
 
-    --modules "intel-compilers/2024 SciPy-bundle/2023.07"
+    --modules "intel-compilers/2024.2.0 SciPy-bundle/2023.07"
 
-Include a Fortran compiler module so the binary finds its runtime; add any
-other modules the job needs.  With ``--fortran-commit --slurm`` the build
+Include the module for the compiler that builds the binary, so the build
+finds it and the binary finds its runtime; add any other modules the job
+needs.  The default, ``intel-compilers/2024.2.0``, provides both ``ifx`` and
+``ifort``.  For a ``gfortran`` build use ``--modules "GCC/12.3.0"``.  With ``--fortran-commit --slurm`` the build
 step is *also* wrapped in ``module purge && module load <modules>`` so the
 binary links against the exact toolchain the Slurm preamble will load at
 runtime.
@@ -95,22 +134,23 @@ loaded with ``module load`` before running ``lysis`` governs both steps.
 
 Examples::
 
-    # Local — uses whatever compiler is on PATH for both build and run.
+    # Local — the modules you have loaded serve both build and run; the
+    # compiler is the commit's Makefile default (see Choosing the compiler).
     lysis run-micro data/run01.h5 \
         --executable micro_rates \
         --fortran-commit v0.3.1
 
-    # Slurm — load Intel 2024 for both the build and the array tasks.
+    # Slurm — load Intel 2024.2.0 for both the build and the array tasks.
     lysis run-macro data/run01.h5 \
         --executable macro_diffuse_into_and_along__internal \
         --fortran-commit 60d200f \
-        --slurm --modules intel-compilers/2024
+        --slurm --modules intel-compilers/2024.2.0
 
     # Slurm — load several modules at once (quote the list).
     lysis run-macro data/run01.h5 \
         --executable macro_diffuse_into_and_along__internal \
         --fortran-commit 60d200f \
-        --slurm --modules "intel-compilers/2024 SciPy-bundle/2023.07"
+        --slurm --modules "intel-compilers/2024.2.0 SciPy-bundle/2023.07"
 
 Limitations and caveats
 -----------------------

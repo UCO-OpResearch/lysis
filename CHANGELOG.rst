@@ -37,9 +37,38 @@ The format is based on `Keep a Changelog
 Unreleased
 ==========
 
+Added
+-----
+
+- Choose the Fortran compiler without editing the ``Makefile``:
+  ``make LYSIS_COMPILER=gfortran`` for one build, or
+  ``make configure LYSIS_COMPILER=gfortran`` to save the choice in an
+  untracked ``config.mk`` (``make unconfigure`` forgets it). The values are
+  ``ifx``, ``ifort`` and ``gfortran``. A command-line value beats a saved one,
+  which beats the default; ``LYSIS_COMPILER`` in the environment is ignored.
+  ``make help`` shows the compiler in use and where the choice came from.
+  (#137)
+- ``lysis run-micro`` / ``run-macro`` take ``--fortran-compiler`` to choose
+  the compiler for a ``--fortran-commit`` build. Commits from before this
+  change build only with ``ifort``; asking them for another compiler, or
+  building one without ``ifort`` available, fails with a message naming the
+  module to load. (#137)
+
 Changed
 -------
 
+- The Fortran binaries now build with ``ifx`` by default instead of
+  ``ifort``. Output matches ``ifort`` except that ``ifx`` 2024.2 and later
+  round about 1-2% of lysis and tPA leaving times differently, by at most 4
+  units in the last place; no count, flag or event changes. (#137)
+- The default ``--modules`` for Slurm runs is now
+  ``intel-compilers/2024.2.0`` (was ``intel-compilers/2023``). It provides
+  ``ifx`` and ``ifort``. A ``gfortran``-built binary should be run with
+  ``--modules "GCC/12.3.0"``. (#137)
+- The Fortran programs write their binary ``.dat`` files with the standard
+  ``form='unformatted', access='stream'`` instead of the Intel-only
+  ``form='binary'``. The files are byte-for-byte the same; the console log
+  now reads ``filetype=unformatted``. (#137)
 - Cleaned up the HDF5 provenance attribute schema stamped onto the
   ``micro_data`` / ``macro_data`` groups. The ``execution_*`` family is renamed
   to ``pipeline_*`` (it records the lysis Python pipeline, not the simulation
@@ -74,6 +103,13 @@ Changed
 Fixed
 -----
 
+- ``gfortran`` builds now work. The Fortran programs no longer fail at run
+  time under ``gfortran``, and the ``Makefile`` gives it the flags the model
+  needs (8-byte reals, no line-length limit, floating-point traps, ``-O2``).
+  The old ``gfortran`` line computed the model's constants in single
+  precision. (#137)
+- Changing the Fortran compiler, its flags or its version now rebuilds every
+  Fortran binary; previously ``make`` kept the old binaries. (#137)
 - ``lysis run-micro`` / ``run-macro`` (especially under ``--slurm``) no longer
   abort with a spurious ``StaleBinaryError`` when the staging directory lives
   outside the source repository. The Slurm master now resolves the

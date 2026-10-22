@@ -36,6 +36,13 @@ _lysis_repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Octave backs the octave-kernel; the Intel compilers are needed for the
 # Fortran binaries. Done before venv activation so .venv/bin stays at the
 # front of PATH for the bare `jupyter-lab` call.
+#
+# intel-compilers/2024.2.0 is the project default (ifx; ifort too). It
+# depends on GCCcore/13.3.0, so Lmod swaps Octave's GCCcore/12.3.0 for it
+# when it loads; Octave and its packages still load and run afterwards
+# (checked 2026-10-22). Loading Intel last keeps its runtime libraries
+# first for the Fortran binaries, which must match the compiler that built
+# them.
 if ! command -v module >/dev/null 2>&1; then
     echo "ood_jupyter_lab.sh: 'module' (LMod) not available; cannot load modules." >&2
     unset _lysis_repo_root
@@ -44,7 +51,7 @@ fi
 
 module purge
 module load Octave/10.1.0-foss-2023a
-module load intel-compilers/2023.1.0
+module load intel-compilers/2024.2.0
 
 # --- Provision the uv env (including the notebooks extra -> jupyterlab). -----
 # Run in a subshell so the caller's working directory is left unchanged.

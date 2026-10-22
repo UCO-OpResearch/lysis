@@ -108,9 +108,10 @@ def _require_gs():
 #: default compiler -- and ifort 2021.13, so it is also the runtime for
 #: ifort builds and the module for building pre-#137 commits, which need
 #: ifort.  It is deliberately not the cluster default (2026.1.0): 2025.x
-#: and later ship no ifort and load a different GCCcore stack, while their
-#: ifx output is byte-identical to 2024.2's.  A gfortran-built binary
-#: should add the GCC module it was built with (``GCC/12.3.0``).
+#: and later ship no ifort, while their ifx output is byte-identical to
+#: 2024.2's.  A binary must run under the runtime of the compiler that
+#: built it, so a gfortran-built binary should use the GCC module it was
+#: built with (``GCC/12.3.0``) instead.
 DEFAULT_MODULES: str = "intel-compilers/2024.2.0"
 
 

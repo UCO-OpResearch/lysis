@@ -242,13 +242,21 @@ Step 5: Configure ``.bashrc`` and Initialize ``uv``
 
    .. code-block:: bash
 
-       echo 'module load intel-compilers/2023' >> ~/.bashrc
+       echo 'module load intel-compilers/2024.2.0' >> ~/.bashrc
 
    Buddy uses a system called **LMod** to manage optional software
    ("modules"): software is not on your ``PATH`` until you ``module load``
-   it. This line loads the Intel Fortran compiler automatically every time
-   you open a new terminal on Buddy, since you will need it to build the
-   Fortran simulation code in Step 6.
+   it. This line loads the Intel Fortran compilers automatically every time
+   you open a new terminal on Buddy, since you will need one to build the
+   Fortran simulation code in Step 6. The module provides ``ifx``, the
+   project's default compiler, and the older ``ifort``. Use exactly this
+   version: it is the project default, and newer ``intel-compilers``
+   modules no longer include ``ifort``.
+
+   If you will build with ``gfortran`` instead (see Step 6), load
+   ``GCC/12.3.0`` here in place of the Intel module. That is the
+   ``gfortran`` version the project was checked against; the ``gfortran``
+   you get without it depends on which other modules you load.
 
 2. Reload the terminal afterward (close and reopen it, or run
    ``source ~/.bashrc``) so the change takes effect.
@@ -308,7 +316,7 @@ time, and again any time the Fortran source changes (for example, after a
 
    .. code-block:: bash
 
-       module load intel-compilers/2023
+       module load intel-compilers/2024.2.0
 
 2. From the project directory, build everything:
 
@@ -324,15 +332,42 @@ time, and again any time the Fortran source changes (for example, after a
 
        mkdir -p bin
        gcc -std=c99 -c ./src/c/kiss.c -o ./bin/kiss.o
-       ifort -r8 -mcmodel medium -traceback -fpe0 -diag-disable=10448 ./bin/kiss.o ./src/fortran/version_stamp.f90 ./src/fortran/micro_rates.f90 -o ./bin/micro_rates
-       ifort ... -o ./bin/macro_diffuse_into_and_along__internal
-       ifort ... -o ./bin/macro_diffuse_into_and_along__external
+       Fortran compiler: ifx (default)
+       ifx -r8 -mcmodel medium -traceback -fpe0 ./bin/kiss.o ./src/fortran/version_stamp.f90 ./src/fortran/micro_rates.f90 -o ./bin/micro_rates
+       ifx ... -o ./bin/macro_diffuse_into_and_along__internal
+       ifx ... -o ./bin/macro_diffuse_into_and_along__external
        mkdir -p lib
        gcc -std=c99 -fPIC -shared -o ./lib/kiss.so ./src/c/kiss.c
 
    No output line should contain ``Error`` or ``Fatal Error``. ``make``
    creates the ``bin/`` and ``lib/`` directories itself — you do not need
    to create them first.
+
+   ``make`` builds with ``ifx`` unless you choose another compiler. The
+   choices are ``ifx`` (the default), ``ifort`` and ``gfortran``, and you
+   never edit the ``Makefile`` to pick one:
+
+   - **For one build**, name it on the command line:
+
+     .. code-block:: bash
+
+         make LYSIS_COMPILER=gfortran
+
+   - **For every later build**, save it once:
+
+     .. code-block:: bash
+
+         make configure LYSIS_COMPILER=gfortran
+
+     This writes the choice to ``config.mk`` in the project directory. Git
+     ignores that file, so it stays on your machine. Plain ``make`` then
+     uses it until you run ``make unconfigure``. ``make clean`` keeps it.
+
+   A compiler named on the command line beats a saved one, which beats the
+   default. ``make help`` shows which compiler the next build will use and
+   where that choice came from. Changing compiler rebuilds every Fortran
+   binary; there is no need to ``make clean`` first. ``ifx`` and ``ifort``
+   come from ``intel-compilers/2024.2.0``; ``gfortran`` from ``GCC/12.3.0``.
 
 3. Confirm the binaries were created:
 
@@ -345,10 +380,18 @@ time, and again any time the Fortran source changes (for example, after a
    ``macro_diffuse_into_and_along__external`` under ``bin/``, and
    ``kiss.so`` under ``lib/``.
 
-Keep the Intel compiler module loaded for any later command that executes a
+Keep the compiler's module loaded for any later command that executes a
 Simulation (``lysis run-micro`` / ``lysis run-macro``), not just for the
-build — the compiled binaries need the Intel runtime libraries to execute,
-not only to compile.
+build: the compiled binaries need that compiler's runtime libraries to
+execute, not only to compile. ``ifx`` and ``ifort`` builds need
+``intel-compilers/2024.2.0``. A ``gfortran`` build needs the ``GCC`` module
+it was built with (``GCC/12.3.0``). Without it, the binary may still start
+against a different system ``libgfortran``, which is not the one it was
+checked against.
+
+Slurm jobs submitted with ``--slurm`` load ``intel-compilers/2024.2.0`` by
+default, which covers ``ifx`` and ``ifort`` builds. For a ``gfortran``
+build, pass ``--modules "GCC/12.3.0"``.
 
 .. note::
 
@@ -395,6 +438,9 @@ Verify the following before continuing:
   ``Fatal Error`` lines, and ``bin/`` contains ``micro_rates``,
   ``macro_diffuse_into_and_along__internal``, and
   ``macro_diffuse_into_and_along__external``
+- **Development path only.** ``bin/micro_rates --version`` prints one line
+  ending with the compiler you built with: ``Intel(R) Fortran Compiler ...
+  Version 2024.2.0`` for the default ``ifx``
 - **Development path only.** The test suite runs:
   ``uv run --extra test pytest`` completes (this can take a while — some
   tests execute the compiled Fortran binaries). Do **not** run a bare
@@ -545,3 +591,39 @@ build ...``, your compiled binaries are older than the checked-out
 Fortran changes since your last ``make``. See the note in `Step 6: Build
 the Fortran Binaries`_ above: the fix is always to rebuild with ``make``,
 never the override flag mentioned in the error message.
+
+``Fortran compiler '...' not found on PATH``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``make`` stops with this error when the compiler it was asked to use is
+not loaded. The message names the compiler and the module to load:
+``intel-compilers/2024.2.0`` for ``ifx`` and ``ifort``, a ``GCC`` module
+for ``gfortran``. Load it and run ``make`` again, or choose a compiler you
+do have (`Step 6: Build the Fortran Binaries`_). ``make help`` shows which
+compiler ``make`` will use and why.
+
+``Unknown LYSIS_COMPILER``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The value given on the command line, or saved by ``make configure``, is
+not one of ``ifx``, ``ifort`` or ``gfortran``. The message lists the valid
+values. If a saved value is wrong, ``make unconfigure`` removes it.
+
+Rebuilding After Changing Compiler
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Switching compiler (``make LYSIS_COMPILER=...``, ``make configure``, or
+loading a different version of the same compiler) rebuilds every Fortran
+binary on the next ``make``. You do not need ``make clean``. To check which
+compiler built a binary, run it with ``--version``: the end of the line
+names the compiler and its version. Binaries from different compilers give
+the same results, apart from rounding of the last digit or two of a few
+floating-point values; the counts and flags are identical.
+
+``LYSIS_COMPILER ... in the environment is ignored``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``make`` ignores ``LYSIS_COMPILER`` set as an environment variable (for
+example with ``export``), so a stray setting cannot choose a compiler
+behind your back. Pass it on the ``make`` command line, or save it with
+``make configure``.
