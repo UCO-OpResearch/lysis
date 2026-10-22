@@ -12,7 +12,12 @@ Backs the ``--fortran-commit <ref>`` flag on ``lysis run-micro`` and
    ``.build_log``.  When *modules* is supplied, the build is
    wrapped in ``bash -c 'module purge && module load <modules> && …'``
    so the binary links against the same toolchain that Slurm jobs will
-   load at runtime.
+   load at runtime.  When *compiler* is supplied, it is passed as
+   ``make LYSIS_COMPILER=<compiler>``; otherwise the commit's own
+   Makefile default applies (ifx since #137).  Commits from before #137
+   have a Makefile that hard-codes ``ifort`` and ignores
+   ``LYSIS_COMPILER``: they build only with ifort, which needs a module
+   that still ships it (``intel-compilers/2024.2.0`` or older).
 4. Compute a synthesised provenance dict via
    :func:`~lysis.tools.provenance.gather_historical_backend_provenance`.
 5. Yield ``(binary_path, provenance_dict)`` for the caller to thread
@@ -28,6 +33,7 @@ users whose ``/tmp`` is small/ramdisk are already expected to point
 """
 
 import contextlib
+import os
 import shutil
 import subprocess
 import tempfile
@@ -38,10 +44,25 @@ from ..tools.provenance import gather_historical_backend_provenance
 from ..tools.provenance._git import _git, _package_repo_root
 
 __all__ = [
+    "DEFAULT_FORTRAN_COMPILER",
+    "FORTRAN_COMPILERS",
     "HistoricalBuildError",
     "resolve_ref",
     "build_historical_binary",
 ]
+
+#: Fortran compilers the Makefile's ``LYSIS_COMPILER`` accepts.
+FORTRAN_COMPILERS: tuple[str, ...] = ("ifx", "ifort", "gfortran")
+
+#: The Makefile's default ``LYSIS_COMPILER``.  Informational: when no
+#: compiler is requested, nothing is passed to ``make`` and the built
+#: commit's own Makefile default applies.  A test keeps this in step with
+#: ``LYSIS_COMPILER_DEFAULT`` in the Makefile.
+DEFAULT_FORTRAN_COMPILER: str = "ifx"
+
+#: Module suggested when a pre-#137 commit needs ifort.  The newest
+#: ``intel-compilers`` module on the cluster that still ships ifort.
+_IFORT_MODULE_HINT = "intel-compilers/2024.2.0"
 
 
 class HistoricalBuildError(RuntimeError):
@@ -130,22 +151,103 @@ def _archive_into(sha: str, repo_root: Path, build_dir: Path) -> None:
         )
 
 
-def _make_argv(build_dir: Path, modules: Optional[str]) -> list[str]:
+def _makefile_supports_compiler_choice(build_dir: Path) -> bool:
+    """Return ``True`` if the extracted Makefile understands ``LYSIS_COMPILER``.
+
+    Makefiles from before #137 hard-code ``ifort`` and silently ignore the
+    variable.  A missing or unreadable Makefile counts as not supporting it.
+    """
+    try:
+        text = (build_dir / "Makefile").read_text(errors="replace")
+    except OSError:
+        return False
+    return "LYSIS_COMPILER" in text
+
+
+def _make_argv(
+    build_dir: Path,
+    modules: Optional[str],
+    compiler: Optional[str] = None,
+) -> list[str]:
     """Build the argv that runs ``make`` in *build_dir*, optionally module-wrapped.
 
     When *modules* is given, the build is invoked inside a
     short bash script that ``module load``s the requested
-    (space-separated) LMod modules first.
+    (space-separated) LMod modules first.  When *compiler* is given, it is
+    passed on the ``make`` command line as ``LYSIS_COMPILER=<compiler>``,
+    which the Makefile ranks above any other source of the choice.
     """
+    make_args = ["make", "-C", str(build_dir)]
+    if compiler is not None:
+        make_args.append(f"LYSIS_COMPILER={compiler}")
     if modules is None:
-        return ["make", "-C", str(build_dir)]
+        return make_args
     script = (
         "[ -z \"${LMOD_CMD:-}\" ] && [ -f /etc/profile.d/lmod.sh ] "
         "&& source /etc/profile.d/lmod.sh; "
         f"module purge && module load {modules} && "
-        f'make -C "{build_dir}"'
+        + " ".join(f'"{a}"' for a in make_args)
     )
     return ["bash", "-c", script]
+
+
+def _make_env() -> dict:
+    """Return the environment for ``make``, without ``LYSIS_COMPILER``.
+
+    The Makefile ignores ``LYSIS_COMPILER`` from the environment but warns
+    about it, and that warning would name a compiler in the build log ahead
+    of the one that ran, misleading
+    :func:`~lysis.tools.provenance.binary._identify_compiler_binary`.
+    """
+    env = dict(os.environ)
+    env.pop("LYSIS_COMPILER", None)
+    return env
+
+
+def _check_compiler_supported(
+    sha: str, compiler: Optional[str], supports_choice: bool
+) -> None:
+    """Reject a compiler choice the commit's Makefile cannot honour.
+
+    :raises HistoricalBuildError: If *compiler* is not a known value, or if
+        a compiler other than ifort is requested for a pre-#137 commit.
+    """
+    if compiler is None:
+        return
+    if compiler not in FORTRAN_COMPILERS:
+        raise HistoricalBuildError(
+            f"Unknown Fortran compiler {compiler!r}; valid values: "
+            f"{', '.join(FORTRAN_COMPILERS)}."
+        )
+    if not supports_choice and compiler != "ifort":
+        raise HistoricalBuildError(
+            f"Commit {sha[:7]} predates Fortran compiler selection: its "
+            f"Makefile hard-codes ifort and cannot build with {compiler}.  "
+            f"Omit the compiler choice (or choose ifort) and load a module "
+            f"that ships ifort, e.g. {_IFORT_MODULE_HINT}."
+        )
+
+
+def _legacy_ifort_hint(build_log: Path, modules: Optional[str]) -> str:
+    """Explain a failed pre-#137 build whose log shows ifort was missing."""
+    try:
+        text = build_log.read_text(errors="replace")
+    except OSError:
+        return ""
+    missing = (
+        "ifort: command not found" in text
+        or "ifort: No such file or directory" in text
+        or ("ifort" in text and "not found" in text)
+    )
+    if not missing:
+        return ""
+    where = f"in modules {modules!r}" if modules else "on PATH"
+    return (
+        f"\nThis commit predates Fortran compiler selection (#137): its "
+        f"Makefile hard-codes ifort, which was not found {where}.  Load a "
+        f"module that still ships ifort, e.g. {_IFORT_MODULE_HINT}; "
+        f"intel-compilers 2025.x and 2026.x have only ifx."
+    )
 
 
 def _format_build_failure(build_log: Path, returncode: int) -> str:
@@ -167,13 +269,15 @@ def build_historical_binary(
     executable_name: str,
     *,
     modules: Optional[str] = None,
+    compiler: Optional[str] = None,
     keep_dir: bool = False,
     repo_root: Optional[Path] = None,
 ) -> Iterator[tuple[Path, dict]]:
     """Build Fortran binaries at *ref* and yield ``(binary_path, provenance_dict)``.
 
     On context entry: resolves *ref*, extracts source via ``git archive``,
-    runs ``make`` (optionally inside ``module load <modules>``),
+    runs ``make`` (optionally inside ``module load <modules>``, and with
+    ``LYSIS_COMPILER=<compiler>`` when *compiler* is given),
     and computes a synthesised provenance dict.
 
     On context exit: removes the build directory unless ``keep_dir=True``.
@@ -187,13 +291,21 @@ def build_historical_binary(
         ``<build_dir>/bin/<basename>``.
     :type executable_name: str
     :param modules: Space-separated list of LMod module specs (e.g.
-        ``"intel-compilers/2023"`` or
-        ``"intel-compilers/2024 SciPy-bundle/2023.07"``) to load around
-        ``make`` and the compiler-version probe.  Include a Fortran
-        compiler module so the build succeeds.  ``None`` (default) uses
-        the current environment; appropriate for local-mode runs where the
-        same environment will execute the binary.
+        ``"intel-compilers/2024.2.0"`` or
+        ``"intel-compilers/2024.2.0 GCC/12.3.0"``) to load around
+        ``make`` and the compiler-version probe.  Include a module that
+        provides the chosen Fortran compiler so the build succeeds.
+        ``None`` (default) uses the current environment; appropriate for
+        local-mode runs where the same environment will execute the binary.
     :type modules: str or None
+    :param compiler: Fortran compiler to build with: one of
+        :data:`FORTRAN_COMPILERS`.  ``None`` (default) passes nothing to
+        ``make``, so the commit's own Makefile default applies: ifx
+        (:data:`DEFAULT_FORTRAN_COMPILER`) for commits with compiler
+        selection, and ifort for commits from before it.  Requesting
+        anything but ifort for such an older commit raises
+        :class:`HistoricalBuildError`.
+    :type compiler: str or None
     :param keep_dir: Preserve the build directory after the context
         exits.  Useful for debugging.  Defaults to ``False``.
     :type keep_dir: bool, optional
@@ -205,7 +317,8 @@ def build_historical_binary(
         and *provenance_dict* is the result of
         :func:`~lysis.tools.provenance.gather_historical_backend_provenance`.
     :raises HistoricalBuildError: If ref resolution, source extraction,
-        ``make``, or binary lookup fails.
+        ``make``, or binary lookup fails, or if *compiler* is unknown or
+        cannot be used for the commit.
     """
     if repo_root is None:
         repo_root = _package_repo_root()
@@ -227,18 +340,26 @@ def build_historical_binary(
         # create them here to keep the historical build self-contained.
         (build_dir / "bin").mkdir(exist_ok=True)
         (build_dir / "lib").mkdir(exist_ok=True)
+        supports_choice = _makefile_supports_compiler_choice(build_dir)
+        _check_compiler_supported(resolved_sha, compiler, supports_choice)
         build_log = build_dir / ".build_log"
         with build_log.open("w") as fh:
             result = subprocess.run(
-                _make_argv(build_dir, modules),
+                _make_argv(
+                    build_dir,
+                    modules,
+                    compiler if supports_choice else None,
+                ),
                 stdout=fh,
                 stderr=subprocess.STDOUT,
                 check=False,
+                env=_make_env(),
             )
         if result.returncode != 0:
-            raise HistoricalBuildError(
-                _format_build_failure(build_log, result.returncode)
-            )
+            message = _format_build_failure(build_log, result.returncode)
+            if not supports_choice:
+                message += _legacy_ifort_hint(build_log, modules)
+            raise HistoricalBuildError(message)
 
         binary_path = build_dir / "bin" / binary_basename
         if not binary_path.is_file():

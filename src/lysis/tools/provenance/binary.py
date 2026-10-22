@@ -343,7 +343,7 @@ def _probe_iso_fortran_env_compiler_version(
     :type compiler: str
     :param module_wrapper: Optional argv prefix that wraps the compile
         and run steps in an LMod-aware shell, e.g.
-        ``["bash", "-c", "module purge && module load intel-compilers/2023 && exec \"$@\"", "--"]``.
+        ``["bash", "-c", "module purge && module load intel-compilers/2024.2.0 && exec \"$@\"", "--"]``.
         ``None`` (the default) invokes the compiler directly in the
         current environment.
     :type module_wrapper: list[str] or None
@@ -403,8 +403,8 @@ def _module_wrapper_argv(modules: Optional[str]) -> Optional[list[str]]:
     """Build the bash-wrapper argv used to load LMod modules around a subprocess.
 
     :param modules: Space-separated list of LMod module specs, e.g.
-        ``"intel-compilers/2023"`` or
-        ``"intel-compilers/2024 SciPy-bundle/2023.07"``, forwarded verbatim
+        ``"intel-compilers/2024.2.0"`` or
+        ``"intel-compilers/2024.2.0 SciPy-bundle/2023.07"``, forwarded verbatim
         to ``module load``; or ``None`` to skip wrapping.
     :type modules: str or None
     :return: argv list with ``"exec \"$@\""`` as the bash body so the
@@ -463,7 +463,7 @@ def gather_historical_backend_provenance(
         synthesis path.
     :type build_log: pathlib.Path or None
     :param modules: Space-separated list of LMod module specs to load
-        around the stub compile/run pair (e.g. ``"intel-compilers/2023"``).
+        around the stub compile/run pair (e.g. ``"intel-compilers/2024.2.0"``).
         Should match the modules that wrapped ``make``.  ``None`` (default)
         runs the probe in the current environment.
     :type modules: str or None

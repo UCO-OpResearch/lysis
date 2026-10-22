@@ -103,7 +103,15 @@ def _require_gs():
 #: ``modules`` keyword argument on the public submit/generate functions
 #: (exposed as ``--modules`` on the ``lysis run-micro`` and
 #: ``lysis run-macro`` CLI commands).
-DEFAULT_MODULES: str = "intel-compilers/2023"
+#:
+#: ``intel-compilers/2024.2.0`` provides ifx 2024.2 -- the Makefile's
+#: default compiler -- and ifort 2021.13, so it is also the runtime for
+#: ifort builds and the module for building pre-#137 commits, which need
+#: ifort.  It is deliberately not the cluster default (2026.1.0): 2025.x
+#: and later ship no ifort and load a different GCCcore stack, while their
+#: ifx output is byte-identical to 2024.2's.  A gfortran-built binary
+#: should add the GCC module it was built with (``GCC/12.3.0``).
+DEFAULT_MODULES: str = "intel-compilers/2024.2.0"
 
 
 def _repo_root() -> Path:
@@ -144,8 +152,8 @@ def _env_preamble(
         like ``cd`` into the repo).
     :type repo_root: Path
     :param modules: Space-separated list of LMod module specs to load (e.g.
-        ``"intel-compilers/2023"`` or
-        ``"intel-compilers/2024 SciPy-bundle/2023.07"``).  Forwarded
+        ``"intel-compilers/2024.2.0"`` or
+        ``"intel-compilers/2024.2.0 SciPy-bundle/2023.07"``).  Forwarded
         verbatim to ``module load``.  See :data:`DEFAULT_MODULES` for the
         project default.
     :type modules: str
