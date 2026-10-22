@@ -28,8 +28,9 @@
 # gfortran macroscale binaries: one staged input file is rejected (#140).
 #
 # Requirements: the chosen compiler on PATH.  On the cluster,
-# `module load intel-compilers/2024.2.0` provides ifx and ifort; gfortran
-# is in the default environment.  `shared` needs only gcc.
+# `module load intel-compilers/2024.2.0` provides ifx and ifort, and
+# `module load GCC/12.3.0` the gfortran version this was checked with.
+# `shared` needs only gcc.
 # Neither ./bin nor ./lib is tracked in git -- both are created on demand.
 
 # Environment
