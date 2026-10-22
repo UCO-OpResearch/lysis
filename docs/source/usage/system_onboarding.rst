@@ -115,6 +115,10 @@ Step 2: Create Local SSH Key and Add It to Buddy
 3. Press Enter at each prompt to accept the default file location and skip
    the passphrase, unless you have a specific reason to set one.
 
+   If it asks ``Overwrite (y/n)?``, type ``n`` — you already have a key,
+   and overwriting it would break anything that uses it. Carry on with the
+   next instruction; it will use the key you already have.
+
 4. Add the newly created public key to your Buddy account, using the
    instructions for your operating system below.
 
@@ -155,15 +159,27 @@ Step 3: Create Buddy SSH Key and Add It to GitHub
 skip this step — Step 4 below shows you how to clone over HTTPS instead,
 which needs no GitHub SSH key.
 
-1. From the Buddy terminal, generate a new SSH key:
+1. From the Buddy terminal, check whether Buddy can already reach GitHub:
+
+   .. code-block:: bash
+
+       ssh -T git@github.com
+
+   If it replies ``Hi`` followed by your GitHub username, you are already
+   set up — skip to Step 4. Otherwise (for example, ``Permission denied
+   (publickey)``), continue below. If it asks you to confirm GitHub's host
+   fingerprint, type ``yes``.
+
+2. Generate a new SSH key:
 
    .. code-block:: bash
 
        ssh-keygen -t ed25519
 
-   As in Step 2, press Enter to accept the defaults.
+   As in Step 2, press Enter to accept the defaults, and type ``n`` if it
+   asks ``Overwrite (y/n)?``.
 
-2. Display the public key:
+3. Display the public key:
 
    .. code-block:: bash
 
@@ -172,14 +188,14 @@ which needs no GitHub SSH key.
    You should see a single line of text starting with ``ssh-ed25519 AAAA...``.
    Copy this whole line.
 
-3. While logged into GitHub in a web browser, navigate to:
+4. While logged into GitHub in a web browser, navigate to:
 
    https://github.com/settings/keys
 
-4. Click **New SSH Key**.
-5. Enter a title of your choice.
-6. Paste the copied public key into the **Key** field.
-7. Save the key.
+5. Click **New SSH Key**.
+6. Enter a title of your choice.
+7. Paste the copied public key into the **Key** field.
+8. Save the key.
 
 See the `VS Code Setup`_ section below for connecting your IDE to the
 GitHub repository.
@@ -504,6 +520,11 @@ Test GitHub SSH access with:
 .. code-block:: bash
 
     ssh -T git@github.com
+
+If it replies ``Hi`` followed by a username, check that the name is
+*your* GitHub account. If it greets you as a different account, an older
+key on Buddy is registered to that account and is being used instead of
+the one from Step 3.
 
 Permission Denied When Cloning the Repository
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
