@@ -98,19 +98,23 @@ def _b58decode_int(payload: str) -> int:
 def parse_seed(token) -> int:
     """Parse a stored/typed seed into the non-negative integer entropy.
 
-    Accepts an integer (legacy numeric HDF5 attr) or a string in one of two forms:
-    a bare decimal, or a ``base58:``-prefixed Base58 payload.  The sigil match is
-    case-insensitive; the payload is case-sensitive.  Negative integers (legacy
-    signed seeds) are folded to their ``uint32`` bit pattern.
+    Accepts an integer, a finite integral float (legacy numeric HDF5 attrs), or a
+    string in one of two forms: a bare decimal, or a ``base58:``-prefixed Base58
+    payload.  The sigil match is case-insensitive; the payload is case-sensitive.
+    Negative numeric seeds are folded to their ``uint32`` bit pattern.
 
-    :param token: An ``int``/:class:`numpy.integer`, or a ``str`` seed.
-    :type token: int or numpy.integer or str
+    :param token: An integer, an exactly integral float, or a ``str`` seed.
+    :type token: int or numpy.integer or float or numpy.floating or str
     :return: The non-negative integer entropy to feed to ``SeedSequence``.
     :rtype: int
-    :raises ValueError: If ``token`` is an empty/blank string or malformed.
-    :raises TypeError: If ``token`` is neither an integer nor a string.
+    :raises ValueError: If ``token`` is malformed, non-integral, or non-finite.
+    :raises TypeError: If ``token`` is not a supported numeric or string type.
     """
     if isinstance(token, (int, np.integer)):
+        return _normalize_int(int(token))
+    if isinstance(token, (float, np.floating)):
+        if not np.isfinite(token) or not token.is_integer():
+            raise ValueError(f"floating-point seed must be a finite integer: {token!r}")
         return _normalize_int(int(token))
     if isinstance(token, str):
         text = token.strip()
@@ -122,7 +126,9 @@ def parse_seed(token) -> int:
             return _normalize_int(int(text, 10))
         except ValueError:
             raise ValueError(f"malformed seed token: {token!r}") from None
-    raise TypeError(f"seed must be an int or str, got {type(token).__name__}")
+    raise TypeError(
+        f"seed must be an int, integral float or str, got {type(token).__name__}"
+    )
 
 
 def encode_seed(value) -> str:

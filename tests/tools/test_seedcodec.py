@@ -57,6 +57,18 @@ class TestParseSeed:
         assert parse_seed(99) == 99
         assert parse_seed(np.uint32(99)) == 99
 
+    @pytest.mark.parametrize(
+        "seed", [1093845299.0, np.float64(1093845299.0), np.float32(99), -1.0]
+    )
+    def test_legacy_integral_float(self, seed):
+        expected = int(seed) & _UINT32_MAX if seed < 0 else int(seed)
+        assert parse_seed(seed) == expected
+
+    @pytest.mark.parametrize("seed", [1.5, np.float64(1.5), np.nan, np.inf, -np.inf])
+    def test_invalid_float_rejected(self, seed):
+        with pytest.raises(ValueError, match="finite integer"):
+            parse_seed(seed)
+
     def test_negative_int_folds_to_uint32(self):
         """A signed-negative legacy seed maps to its uint32 bit pattern."""
         assert parse_seed(-1) == _UINT32_MAX
@@ -83,7 +95,7 @@ class TestParseSeed:
 
     def test_wrong_type_raises(self):
         with pytest.raises(TypeError):
-            parse_seed(1.5)
+            parse_seed(object())
 
 
 class TestBase58Helpers:
