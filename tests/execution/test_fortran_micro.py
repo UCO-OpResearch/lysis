@@ -804,11 +804,22 @@ def _fixture_max_ulps(binary: "Path | str") -> int:
 
 
 def _ulp_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Element-wise distance between two float64 arrays in ULP."""
+    """Element-wise distance between two float64 arrays in ULP, as uint64.
+
+    Each value's bits are mapped to an unsigned integer that increases with
+    the float (negatives inverted, positives offset by the sign bit), so
+    -0.0 and +0.0 are 1 apart and every distance fits in uint64.  The
+    subtraction is always larger minus smaller, so it cannot wrap: a sign
+    change or a large error gives a large distance, never a small one.
+    """
+    sign = np.uint64(1 << 63)
+
     def ordered(x):
-        i = np.ascontiguousarray(x, dtype=np.float64).view(np.int64)
-        return np.where(i < 0, np.iinfo(np.int64).min - i, i)
-    return np.abs(ordered(a) - ordered(b))
+        u = np.ascontiguousarray(x, dtype=np.float64).view(np.uint64)
+        return np.where(u & sign, ~u, u | sign)
+
+    oa, ob = ordered(a), ordered(b)
+    return np.where(oa >= ob, oa - ob, ob - oa)
 
 
 def _assert_float_close_in_ulps(actual, expected, max_ulps: int) -> None:
@@ -831,6 +842,60 @@ def _assert_float_close_in_ulps(actual, expected, max_ulps: int) -> None:
         f"{int(np.count_nonzero(ulps))} values differ, by up to {worst} ULP "
         f"(bound {max_ulps})"
     )
+
+
+class TestUlpComparison:
+    """The ULP helpers used by :class:`TestFortranBinaryExecution`."""
+
+    def test_identical_values_are_zero_apart(self):
+        x = np.array([0.0, 1.0, -3.5, 1e-300, np.inf, -np.inf])
+        assert _ulp_distance(x, x).tolist() == [0] * x.size
+
+    def test_adjacent_values_are_one_apart(self):
+        x = np.array([1.0, -1.0, 1e300, 5e-324])
+        assert _ulp_distance(x, np.nextafter(x, np.inf)).tolist() == [1] * x.size
+
+    def test_signed_zeros_are_one_apart(self):
+        assert _ulp_distance(np.array([0.0]), np.array([-0.0])).tolist() == [1]
+
+    def test_distance_is_symmetric(self):
+        a = np.array([2.0, -7.25, 1e-10])
+        b = np.array([-2.0, 3.0, 1e10])
+        assert _ulp_distance(a, b).tolist() == _ulp_distance(b, a).tolist()
+
+    @pytest.mark.parametrize(
+        "a, b",
+        [
+            (2.0, -2.0),
+            (np.inf, -np.inf),
+            (1.0, 1e300),
+            (-1e300, 1e300),
+            (1e-300, -1e-300),
+        ],
+    )
+    def test_far_apart_values_exceed_the_bound(self, a, b):
+        """Opposite signs and widely separated values must not wrap round."""
+        assert _ulp_distance(np.array([a]), np.array([b]))[0] > _CROSS_COMPILER_MAX_ULPS
+        with pytest.raises(AssertionError):
+            _assert_float_close_in_ulps(
+                np.array([a]), np.array([b]), _CROSS_COMPILER_MAX_ULPS
+            )
+
+    def test_tiny_opposite_signs_straddling_zero(self):
+        """The smallest subnormals of opposite sign are 3 ULP apart via both zeros."""
+        assert _ulp_distance(np.array([5e-324]), np.array([-5e-324])).tolist() == [3]
+
+    def test_within_bound_passes(self):
+        expected = np.array([1.0, 2.5, np.nan, -4.0])
+        actual = expected.copy()
+        actual[0] = np.nextafter(np.nextafter(1.0, 2.0), 2.0)
+        _assert_float_close_in_ulps(actual, expected, _CROSS_COMPILER_MAX_ULPS)
+
+    def test_nan_pattern_must_match(self):
+        with pytest.raises(AssertionError):
+            _assert_float_close_in_ulps(
+                np.array([1.0, np.nan]), np.array([1.0, 2.0]), _CROSS_COMPILER_MAX_ULPS
+            )
 
 
 @pytest.mark.fortran_binary
