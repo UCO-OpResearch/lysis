@@ -242,15 +242,18 @@ class TestGenerateMicroChildScript:
         assert f"module load {DEFAULT_MODULES}" in script
 
     def test_custom_modules_in_preamble(self, tmp_path):
-        """modules override must appear in the module-load line."""
+        """modules override must replace the default in the module-load line."""
+        from lysis.tools.slurm import DEFAULT_MODULES
+        override = "intel-compilers/2023"
+        assert override != DEFAULT_MODULES  # else the test proves nothing
         staging = tmp_path / "staging"
         script = generate_micro_child_script(
             staging, "run-01", tmp_path / "run-01.h5",
             "/bin/micro.exe", "",
-            modules="intel-compilers/2024.2.0",
+            modules=override,
         )
-        assert "module load intel-compilers/2024.2.0" in script
-        assert "module load intel-compilers/2023" not in script
+        assert f"module load {override}" in script
+        assert f"module load {DEFAULT_MODULES}" not in script
 
     def test_space_separated_modules_in_preamble(self, tmp_path):
         """A space-separated module list is forwarded verbatim to module load."""

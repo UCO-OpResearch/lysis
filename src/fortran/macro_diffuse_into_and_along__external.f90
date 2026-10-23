@@ -107,7 +107,7 @@ program macrolysis
     double precision     :: r, r1, r3, r2, r4, r5
     double precision     :: snan  !signalling NaN used as source= for real allocates
 
-    character(:), allocatable :: filetype, formatted
+    character(:), allocatable :: filetype, fileaccess, formatted
     character(:), allocatable :: filename1
     character(:), allocatable :: filename2
     character(:), allocatable :: filename3
@@ -491,10 +491,14 @@ program macrolysis
     !! BRAD END
 
     if (isBinary) then
-        ! filetype = 'unformatted' ! if you compile with gfortran or f95
-        filetype = 'binary'      ! if you compile with ifort
+        ! Unformatted stream access writes raw values with no record markers.
+        ! It is standard Fortran 2003, so ifx, ifort and gfortran all write the
+        ! same bytes the Intel-only form='binary' used to.
+        filetype = 'unformatted'
+        fileaccess = 'stream'
     else
         filetype = 'formatted'
+        fileaccess = 'sequential'
     end if
     write (*, *) ' filetype=', filetype
 
@@ -786,17 +790,17 @@ program macrolysis
     ! write(cindfile,'(57a)') 'numindbind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     ! write(bind1file,'(57a)') 'bind_tPA425_PLG2_tPA01_into_and_along_Q2.dat'
     ! open(degunit,file=ADJUSTL('data/' //TRIM(runCode)// '/deg' //TRIM(outFileCode)//'.dat'),form=filetype)
-    open (Nunit, file=ADJUSTL('data/'//TRIM(runCode)//'/Nsave'//TRIM(outFileCode)//'.dat'), form=filetype)
-    open (tunit, file=ADJUSTL('data/'//TRIM(runCode)//'/tsave'//TRIM(outFileCode)//'.dat'), form=filetype)
+    open (Nunit, file=ADJUSTL('data/'//TRIM(runCode)//'/Nsave'//TRIM(outFileCode)//'.dat'), form=filetype, access=fileaccess)
+    open (tunit, file=ADJUSTL('data/'//TRIM(runCode)//'/tsave'//TRIM(outFileCode)//'.dat'), form=filetype, access=fileaccess)
     ! open(moveunit,file=ADJUSTL('data/' //TRIM(runCode)// '/move' //TRIM(outFileCode)//'.dat'),form=filetype)
     ! open(lastmoveunit,file=ADJUSTL('data/' //TRIM(runCode)// '/lastmove' //TRIM(outFileCode)//'.dat'),form=filetype)
     ! open(plotunit,file=ADJUSTL('data/' //TRIM(runCode)// '/plot' //TRIM(outFileCode)//'.dat'),form=filetype)
-    open (mfptunit, file=ADJUSTL('data/'//TRIM(runCode)//'/mfpt'//TRIM(outFileCode)//'.dat'), form=filetype)
+    open (mfptunit, file=ADJUSTL('data/'//TRIM(runCode)//'/mfpt'//TRIM(outFileCode)//'.dat'), form=filetype, access=fileaccess)
 
     !! BRAD 2023-01-21:
     ! open(t_degrade_unit,file=ADJUSTL('data/' //TRIM(runCode)// '/f_deg_time' //TRIM(outFileCode)//'.dat'),form=filetype)
-    open (m_location_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/m_loc'//TRIM(outFileCode)//'.dat'), form=filetype)
-    open (m_bound_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/m_bound'//TRIM(outFileCode)//'.dat'), form=filetype)
+    open (m_location_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/m_loc'//TRIM(outFileCode)//'.dat'), form=filetype, access=fileaccess)
+    open (m_bound_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/m_bound'//TRIM(outFileCode)//'.dat'), form=filetype, access=fileaccess)
 
     !! BRAD 2023-06-09:
     open (m_bind_time_unit, file=ADJUSTL('data/'//TRIM(runCode)//'/m_bind_t'//TRIM(outFileCode)//'.dat'), form='formatted')

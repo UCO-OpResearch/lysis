@@ -34,6 +34,10 @@ from lysis.cli._provenance import (
     enforce_init_commit_match,
     enforce_lysis_clean,
 )
+from lysis.execution.historical_build import (
+    DEFAULT_FORTRAN_COMPILER,
+    FORTRAN_COMPILERS,
+)
 from lysis.tools.slurm import DEFAULT_MODULES, parse_sbatch_tokens
 
 
@@ -133,9 +137,12 @@ from lysis.tools.slurm import DEFAULT_MODULES, parse_sbatch_tokens
     metavar="MODULES",
     help=(
         "Space-separated list of LMod module specs to ``module load`` in "
-        "each generated Slurm script (e.g. ``\"intel-compilers/2024 "
-        "SciPy-bundle/2023.07\"``).  Include a Fortran compiler module so "
-        "the simulation binary finds its runtime.  With --slurm, the same "
+        "each generated Slurm script (e.g. ``\"intel-compilers/2024.2.0 "
+        "SciPy-bundle/2023.07\"``).  Include the module that provides the "
+        "runtime of the compiler that built the binary: the default covers "
+        "ifx and ifort builds; for a gfortran build add the GCC module it "
+        "was built with (``GCC/12.3.0`` on the cluster) so it runs "
+        "against its own libgfortran.  With --slurm, the same "
         "list also wraps the historical-build ``make`` invocation of "
         "--fortran-commit so the binary links against the matching "
         "toolchain.  Only meaningful with --slurm."
@@ -157,6 +164,21 @@ from lysis.tools.slurm import DEFAULT_MODULES, parse_sbatch_tokens
         "``iso_fortran_env`` compiler string, and ``backend_historical = "
         "True``) is stamped into the HDF5 file in place of the binary's "
         "own --version output."
+    ),
+)
+@click.option(
+    "--fortran-compiler",
+    "fortran_compiler",
+    type=click.Choice(FORTRAN_COMPILERS),
+    default=None,
+    help=(
+        "Fortran compiler for the --fortran-commit build, passed to its "
+        "Makefile as LYSIS_COMPILER.  Defaults to that commit's Makefile "
+        f"default: {DEFAULT_FORTRAN_COMPILER} since compiler selection was "
+        "added (#137), ifort before it.  Older commits build only with "
+        "ifort, which needs a module that still ships it, e.g. "
+        "intel-compilers/2024.2.0.  Only meaningful with --fortran-commit; "
+        "choose the compiler for bin/ with `make LYSIS_COMPILER=...`."
     ),
 )
 @click.option(
@@ -192,7 +214,7 @@ from lysis.tools.slurm import DEFAULT_MODULES, parse_sbatch_tokens
 def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
               fast_tmp_root, keep_tmpdir, file_code, num_children, direct, modules,
               fortran_commit, sbatch_tokens, allow_stale_binary, allow_dirty,
-              allow_commit_mismatch):
+              allow_commit_mismatch, fortran_compiler):
     """Execute the Fortran microscale simulation for a Run or Experiment.
 
     PATH may be either:
@@ -246,6 +268,12 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
     # path across every run in this invocation, tear down at the end.  Only
     # load the modules around the build when Slurm jobs (which load the same
     # modules via the preamble) will be executing the binary.
+    if fortran_compiler is not None and fortran_commit is None:
+        raise click.UsageError(
+            "--fortran-compiler only applies to a --fortran-commit build; "
+            "choose the compiler for bin/ with `make LYSIS_COMPILER=...`."
+        )
+
     with contextlib.ExitStack() as stack:
         if fortran_commit is not None:
             from lysis.execution.historical_build import (
@@ -258,6 +286,7 @@ def run_micro(ctx, target_path, executable, use_slurm, partition, staging_root,
                         fortran_commit,
                         executable,
                         modules=modules if use_slurm else None,
+                        compiler=fortran_compiler,
                         keep_dir=keep_tmpdir,
                     )
                 )

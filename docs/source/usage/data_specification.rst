@@ -67,7 +67,12 @@ For Fortran runs these come from the binary's ``--version`` output:
     ``"fortran"`` (or ``"python"`` for the future Python backend).
   ``backend_commit``, ``backend_dirty``, ``backend_compiler``
     The ``src/fortran/`` commit, dirty bit, and compiler string the binary
-    was built from/with.
+    was built from/with.  The compiler string is the compiler's own
+    ``compiler_version()``, for example ``Intel(R) Fortran Compiler for
+    applications running on Intel(R) 64, Version 2024.2.0 ...`` for ``ifx``,
+    ``Intel(R) Fortran Intel(R) 64 Compiler Classic ... Version 2021.13.0
+    ...`` for ``ifort`` (the word "Classic" marks it), and
+    ``GCC version 12.3.0`` for ``gfortran``.
   ``backend_historical``
     ``True`` only when the binary was rebuilt from an older commit via
     ``run-{micro,macro} --fortran-commit <ref>``; absent otherwise.  The SHA

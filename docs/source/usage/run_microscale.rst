@@ -35,13 +35,29 @@ Compiled binary
 
 The Fortran microscale binary (``micro_rates``) must be compiled before
 running any simulations.  The source is at ``src/fortran/micro_rates.f90``.
-A typical one-time build on the UCO HPC cluster::
+Build it with ``make`` from the repository root; on the UCO HPC cluster::
 
-    module load gcc
-    gfortran -O2 -o bin/micro_rates src/fortran/micro_rates.f90
+    module load intel-compilers/2024.2.0
+    make
 
-Place the resulting binary anywhere accessible; the ``--executable`` option
-accepts an absolute or relative path.
+This builds ``bin/micro_rates`` (and the macroscale binaries) with ``ifx``,
+the default compiler.  To use ``ifort`` or ``gfortran`` instead, run
+``make LYSIS_COMPILER=gfortran`` for one build, or
+``make configure LYSIS_COMPILER=gfortran`` to keep the choice for later
+builds; ``gfortran`` comes from ``module load GCC/12.3.0``.  (``gfortran``
+works for microscale runs; macroscale runs with it are not yet supported,
+see `#140 <https://github.com/UCO-OpResearch/lysis/issues/140>`_.)  Always build
+with ``make`` rather than calling a compiler by hand: the ``Makefile``
+supplies flags the model depends on (8-byte reals, no line-length limit),
+links the KISS random number generator, and embeds the version stamp that
+``run-micro`` checks before it starts.  See
+:doc:`system_onboarding` (Step 6) for details.
+
+The ``--executable`` option accepts an absolute or relative path to the
+binary.  The binary needs its compiler's runtime when it runs, so keep the
+same module loaded.  Slurm jobs load ``intel-compilers/2024.2.0`` by
+default, which covers ``ifx`` and ``ifort`` builds; for a ``gfortran``
+build pass ``--modules "GCC/12.3.0"`` (see ``lysis run-micro --help``).
 
 HDF5 run file
 ~~~~~~~~~~~~~
